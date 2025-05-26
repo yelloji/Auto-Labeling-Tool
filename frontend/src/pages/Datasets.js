@@ -294,7 +294,7 @@ const Datasets = () => {
               </p>
               <p className="ant-upload-text">Click or drag images to this area to upload</p>
               <p className="ant-upload-hint">
-                Support for JPG, JPEG, PNG, BMP, TIFF, WEBP formats. Max 500MB per file, up to 10,000 images.
+                Support for JPG, JPEG, PNG, BMP, TIFF, WEBP formats. Max 100MB per file, up to 10,000 images.
               </p>
             </Upload.Dragger>
           </Form.Item>

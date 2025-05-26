@@ -71,7 +71,7 @@ start.bat
 - **API Documentation:** http://localhost:12000/docs
 
 ### File Upload Specifications
-- **Maximum file size:** 500MB per image
+- **Maximum file size:** 100MB per image
 - **Maximum batch size:** 10,000 images per upload
 - **Supported formats:** .jpg, .jpeg, .png, .bmp, .tiff, .webp
 
