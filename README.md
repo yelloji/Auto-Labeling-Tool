@@ -178,6 +178,50 @@ Open your browser: http://localhost:12001
 - ✅ All website files needed
 - ✅ Everything else required
 
+#### 🕐 **Why Node.js Installation Takes 3-5 Minutes**
+
+**This is normal for first-time setup!** Here's what's happening:
+
+1. **📥 Downloading Node.js:** ~30-50MB download from nodejs.org
+2. **💾 Installing Node.js:** Windows installer sets up files and registry
+3. **🔧 Setting up npm:** Package manager installation and configuration
+4. **🌐 Network Speed:** Depends on your internet connection
+
+#### ⚡ **Speed It Up - Alternative Options:**
+
+**🚀 Option 1: Manual Node.js Install (Fastest)**
+1. **Stop current process:** Press `Ctrl+C`
+2. **Download Node.js:** Go to https://nodejs.org/en/download/
+3. **Install Node.js:** Run the downloaded `.msi` file
+4. **Run app again:** `python start.py` (much faster now!)
+
+**🔧 Option 2: Let It Finish (Recommended)**
+Just wait 2-3 more minutes. You'll see:
+```
+✅ Node.js installed successfully!
+📦 Installing Python packages...
+📦 Installing frontend dependencies...
+🚀 Starting the app...
+```
+
+**📊 Option 3: Check Progress**
+Open another terminal and check:
+```cmd
+node --version
+npm --version
+```
+
+#### 📦 **What's Being Downloaded:**
+```
+📦 Node.js (~50MB) - JavaScript runtime
+📦 npm packages (~100MB) - Frontend dependencies  
+📦 Python packages (~200MB) - Backend dependencies
+```
+**Total:** ~350MB download + installation time
+
+#### 💡 **Important:**
+This 3-5 minute wait is a **one-time investment**! After the first install, starting the app takes only 10-20 seconds.
+
 ---
 
 ### ⚡ **Second Time Running (Takes 10-20 seconds)**
@@ -239,6 +283,12 @@ Auto-Labeling-Tool/
 
 **Q: Do I need to install Node.js myself?**  
 A: No! The app installs it automatically if you don't have it.
+
+**Q: Node.js installation is taking too long (3+ minutes). What can I do?**  
+A: You have 3 options:
+- **🚀 FASTEST:** Install Node.js manually from https://nodejs.org/en/download/ then run `python start.py` again
+- **⏳ WAIT:** Let it finish (3-5 minutes) - this only happens once
+- **🔄 RESTART:** Press `Ctrl+C` and try `python start.py` again
 
 **Q: What if something goes wrong?**  
 A: Just run `python start.py` again. It will fix itself.
