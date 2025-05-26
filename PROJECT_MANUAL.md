@@ -3,32 +3,40 @@
 ## 📋 TABLE OF CONTENTS
 1. [Project Overview](#project-overview)
 2. [Project Structure](#project-structure)
-3. [Backend Documentation](#backend-documentation)
-4. [Frontend Documentation](#frontend-documentation)
-5. [Configuration Files](#configuration-files)
-6. [User Manual](#user-manual)
-7. [Model Import Guide](#model-import-guide)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Development Guide](#development-guide)
+3. [New Advanced Features](#new-advanced-features)
+4. [Backend Documentation](#backend-documentation)
+5. [Frontend Documentation](#frontend-documentation)
+6. [Configuration Files](#configuration-files)
+7. [User Manual](#user-manual)
+8. [Model Import Guide](#model-import-guide)
+9. [Troubleshooting Guide](#troubleshooting-guide)
+10. [Development Guide](#development-guide)
 
 ---
 
 ## 🎯 PROJECT OVERVIEW
 
-**Auto-Labeling-Tool** is a comprehensive local auto-labeling application similar to Roboflow but fully local with CPU/GPU support. It allows users to:
-- Upload image datasets
-- Auto-label images using YOLO models
-- Manually annotate images
-- Export annotations in multiple formats
-- Manage multiple projects and datasets
+**Auto-Labeling-Tool** is a comprehensive local auto-labeling application that **rivals and exceeds cloud-based solutions like Roboflow**. Built for professional dataset management with advanced features and complete local control.
 
-**Key Features:**
-- ✅ Fully local (no cloud dependency)
-- ✅ CPU/GPU support
-- ✅ Custom YOLO model import
-- ✅ Multiple annotation formats
-- ✅ Web-based interface
-- ✅ Batch processing
+### 🚀 CORE CAPABILITIES
+- **Advanced Analytics**: Class distribution analysis, imbalance detection, labeling progress tracking
+- **Data Augmentation**: 15+ augmentation types with smart presets and real-time preview
+- **Dataset Management**: Train/Val/Test splitting with percentage controls and validation
+- **Auto-labeling**: YOLOv8 integration with custom model import capabilities
+- **Visual Indicators**: Clear status indicators for labeled/unlabeled images
+- **Professional UI**: Enhanced tables, modal workflows, advanced filtering
+
+### ✅ KEY FEATURES
+- ✅ **Fully Local**: Complete privacy - no data leaves your machine
+- ✅ **CPU/GPU Support**: Optimized for both CPU and GPU acceleration
+- ✅ **Advanced Analytics**: Professional-grade dataset insights and health scoring
+- ✅ **Data Augmentation**: Comprehensive augmentation pipeline with 15+ types
+- ✅ **Smart Splitting**: Intelligent Train/Val/Test splitting with validation
+- ✅ **Custom Models**: Easy YOLO model import with validation
+- ✅ **Multiple Formats**: Export to YOLO, COCO, Pascal VOC formats
+- ✅ **Professional UI**: Modern React interface with Ant Design components
+- ✅ **Batch Processing**: Efficient handling of large datasets
+- ✅ **Real-time Updates**: Live data updates without page refresh
 
 ---
 
@@ -43,17 +51,39 @@ Auto-Labeling-Tool/
 │
 ├── 🔧 BACKEND (FastAPI + Python)
 │   ├── main.py           # FastAPI application entry point
-│   ├── api/              # API endpoints
+│   ├── api/
+│   │   ├── routes/       # API endpoints
+│   │   │   ├── analytics.py          # 📊 Dataset analytics & insights
+│   │   │   ├── augmentation.py       # 🔄 Data augmentation pipeline
+│   │   │   ├── dataset_management.py # 📈 Train/Val/Test splitting
+│   │   │   ├── dashboard.py          # 🏠 Dashboard statistics
+│   │   │   ├── models.py             # 🤖 AI model management
+│   │   │   ├── projects.py           # 📁 Project management
+│   │   │   ├── datasets.py           # 📊 Dataset operations
+│   │   │   └── annotations.py        # ✏️ Annotation management
+│   │   └── __init__.py
 │   ├── core/             # Core configuration and utilities
-│   ├── database/         # Database models and operations
+│   ├── database/         # Database models and operations (10 tables)
 │   ├── models/           # AI model handling
 │   ├── utils/            # Utility functions
+│   │   └── augmentation_utils.py     # Advanced augmentation utilities
 │   └── venv/             # Python virtual environment
 │
 ├── 🎨 FRONTEND (React + Ant Design)
 │   ├── src/              # React source code
+│   │   ├── components/   # React components
+│   │   │   ├── DatasetAnalytics.js    # 📊 Analytics dashboard
+│   │   │   ├── DataAugmentation.js    # 🔄 Augmentation interface
+│   │   │   └── DatasetManagement.js   # 📈 Dataset splitting UI
+│   │   ├── pages/        # Page components
+│   │   │   ├── Dashboard.js           # 🏠 Main dashboard
+│   │   │   ├── Datasets.js            # 📊 Enhanced dataset management
+│   │   │   ├── Projects.js            # 📁 Project management
+│   │   │   ├── Models.js              # 🤖 Model management
+│   │   │   └── Annotate.js            # ✏️ Annotation interface
+│   │   └── utils/        # Frontend utilities
 │   ├── public/           # Static files
-│   ├── package.json      # Node.js dependencies
+│   ├── package.json      # Node.js dependencies (includes @ant-design/plots)
 │   └── build/            # Production build
 │
 ├── 📊 DATA DIRECTORIES
@@ -74,6 +104,162 @@ Auto-Labeling-Tool/
     ├── scripts/          # Utility scripts
     └── docs/             # Additional documentation
 ```
+
+---
+
+## 🚀 NEW ADVANCED FEATURES
+
+### 📊 DATASET ANALYTICS & INSIGHTS
+
+**Location:** `/backend/api/routes/analytics.py` + `/frontend/src/components/DatasetAnalytics.js`
+
+**Purpose:** Comprehensive dataset analysis and health monitoring
+
+#### 🔍 Key Features:
+- **Class Distribution Analysis**: Visual charts showing label distribution across classes
+- **Imbalance Detection**: Automatic detection of class imbalances with actionable recommendations
+- **Labeling Progress Tracking**: Real-time progress monitoring with completion percentages
+- **Split Analysis**: Train/Val/Test split statistics and validation
+- **Dataset Health Scoring**: Overall dataset quality assessment with scoring metrics
+
+#### 📡 API Endpoints:
+```python
+GET /api/analytics/dataset/{id}/class-distribution    # Class distribution data
+GET /api/analytics/dataset/{id}/imbalance-report     # Imbalance detection
+GET /api/analytics/dataset/{id}/labeling-progress    # Progress tracking
+GET /api/analytics/dataset/{id}/split-analysis       # Split statistics
+```
+
+#### 🎨 UI Components:
+- **Interactive Charts**: Pie charts, bar charts using @ant-design/plots
+- **Health Score Cards**: Visual health indicators with color coding
+- **Recommendation Engine**: Smart suggestions for dataset improvement
+- **Export Capabilities**: Export analytics reports in multiple formats
+
+---
+
+### 🔄 DATA AUGMENTATION PIPELINE
+
+**Location:** `/backend/api/routes/augmentation.py` + `/frontend/src/components/DataAugmentation.js`
+
+**Purpose:** Professional-grade data augmentation with 15+ augmentation types
+
+#### 🎯 Augmentation Types:
+1. **Geometric Transformations**:
+   - Rotation, Horizontal/Vertical Flip, Scale, Shear, Translation
+2. **Color Adjustments**:
+   - Brightness, Contrast, Saturation, Hue
+3. **Noise & Effects**:
+   - Gaussian Noise, Motion Blur, Gaussian Blur
+4. **Weather Effects**:
+   - Rain, Snow, Fog, Shadow
+5. **Advanced Techniques**:
+   - Cutout, Elastic Transform, Grid Distortion
+
+#### 🎛️ Smart Presets:
+- **Light Augmentation**: Subtle changes for sensitive datasets
+- **Medium Augmentation**: Balanced approach for general use
+- **Heavy Augmentation**: Aggressive augmentation for robust training
+
+#### 📡 API Endpoints:
+```python
+POST /api/augmentation/preview                        # Preview augmentations
+POST /api/augmentation/apply                         # Apply to dataset
+GET /api/augmentation/presets                        # Get preset configurations
+POST /api/augmentation/jobs                          # Create augmentation job
+GET /api/augmentation/jobs/{id}/status               # Check job status
+```
+
+#### 🎨 UI Features:
+- **Real-time Preview**: See augmentation effects before applying
+- **Parameter Controls**: Fine-tune each augmentation type
+- **Batch Processing**: Apply to entire datasets efficiently
+- **Progress Monitoring**: Track augmentation job progress
+
+---
+
+### 📈 DATASET MANAGEMENT & SPLITTING
+
+**Location:** `/backend/api/routes/dataset_management.py` + `/frontend/src/components/DatasetManagement.js`
+
+**Purpose:** Intelligent Train/Val/Test splitting with advanced controls
+
+#### 🎯 Key Features:
+- **Percentage Controls**: Precise control over split ratios
+- **Stratified Splitting**: Maintain class distribution across splits
+- **Validation Rules**: Ensure minimum samples per class in each split
+- **Visual Feedback**: Real-time preview of split results
+- **Bulk Operations**: Move, copy, or modify multiple images
+
+#### 📊 Split Strategies:
+1. **Random Split**: Simple random distribution
+2. **Stratified Split**: Maintains class proportions
+3. **Custom Split**: Manual assignment with validation
+
+#### 📡 API Endpoints:
+```python
+POST /api/dataset-management/split                   # Create dataset split
+GET /api/dataset-management/split-preview           # Preview split results
+POST /api/dataset-management/apply-split            # Apply split to dataset
+GET /api/dataset-management/statistics              # Get split statistics
+POST /api/dataset-management/bulk-operations        # Bulk image operations
+```
+
+#### 🎨 UI Components:
+- **Interactive Sliders**: Adjust split percentages with real-time feedback
+- **Validation Indicators**: Visual warnings for invalid splits
+- **Statistics Dashboard**: Comprehensive split statistics
+- **Bulk Action Tools**: Select and modify multiple images
+
+---
+
+### 🎯 ENHANCED DATASET TABLE
+
+**Location:** `/frontend/src/pages/Datasets.js`
+
+**Purpose:** Professional dataset management interface with advanced features
+
+#### 🔍 New Features:
+- **Status Column**: Visual indicators for dataset completion status
+  - ✅ **Complete**: All images labeled and split
+  - 🔄 **In Progress**: Partially labeled or split
+  - ⭕ **Not Started**: No labels or splits applied
+- **Advanced Actions Menu**: Dropdown with comprehensive options
+  - 📊 **Analytics**: Open dataset analytics modal
+  - 🔄 **Augmentation**: Access data augmentation tools
+  - 📈 **Train/Val/Test Split**: Configure dataset splitting
+  - 📤 **Export**: Export in multiple formats
+  - 🗑️ **Delete**: Remove dataset with confirmation
+- **Enhanced Filtering**: Filter by status, split type, completion
+- **Bulk Operations**: Select multiple datasets for batch operations
+
+#### 🎨 Visual Enhancements:
+- **Status Icons**: Clear visual indicators with tooltips
+- **Progress Bars**: Show completion percentages
+- **Color Coding**: Status-based color schemes
+- **Responsive Design**: Works on all screen sizes
+
+---
+
+### 🗄️ EXTENDED DATABASE SCHEMA
+
+**Location:** `/backend/database/models.py`
+
+#### 📊 New Tables:
+1. **DataAugmentation**: Store augmentation configurations and jobs
+2. **DatasetSplit**: Track Train/Val/Test split assignments
+3. **LabelAnalytics**: Cache analytics data for performance
+
+#### 🔧 Enhanced Models:
+- **Image Model**: Added `split_type` field for Train/Val/Test assignment
+- **Extended Relationships**: Improved foreign key relationships
+- **Performance Indexes**: Optimized database queries
+
+#### 📝 CRUD Operations:
+**Location:** `/backend/database/operations.py`
+- Complete CRUD operations for all new models
+- Optimized queries for analytics and reporting
+- Bulk operation support for large datasets
 
 ---
 
