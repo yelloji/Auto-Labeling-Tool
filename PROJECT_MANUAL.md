@@ -1209,40 +1209,213 @@ GPU_MEMORY_FRACTION: float = 0.8  # Adjust GPU memory usage
 
 ## 🤖 MODEL IMPORT GUIDE
 
-### 📥 Importing Custom YOLO Models
+### 🚀 **YOLO11 Custom Model Import - Complete Guide**
 
-#### Supported Model Formats
-- ✅ **PyTorch (.pt):** Native YOLO format
-- ✅ **ONNX (.onnx):** Cross-platform format
-- ✅ **TensorRT (.engine):** NVIDIA GPU optimized
+**This is the most powerful feature of the Auto-Labeling Tool!** Import your custom YOLO11 models for superior accuracy on your specific objects.
 
-#### Method 1: Web Interface Upload
-1. Go to **Models** page
-2. Click **"Upload Custom Model"** button
-3. Select your model file (.pt, .onnx, or .engine)
-4. Fill in model details:
-   - **Model Name:** Descriptive name
-   - **Description:** What the model detects
-   - **Classes:** Number of classes (e.g., 80 for COCO)
-5. Click **"Upload"**
+#### ✅ **Supported Model Formats**
+- 🔥 **PyTorch (.pt):** Native YOLO11/YOLOv8 format (RECOMMENDED)
+- ⚡ **ONNX (.onnx):** Cross-platform optimized format
+- 🚀 **TensorRT (.engine):** NVIDIA GPU ultra-fast format
 
-#### Method 2: Direct File Copy
-1. Copy your model file to `/models/custom/` directory
-2. Update `/models/models_config.json`:
-```json
-{
-  "yolo_models": {
-    "your_model.pt": {
-      "name": "Your Custom Model",
-      "description": "Description of what it detects",
-      "classes": 10,
-      "input_size": 640,
-      "custom": true
-    }
-  }
-}
+#### 🎯 **Supported YOLO Versions**
+- ✅ **YOLO11** (Latest - Ultralytics)
+- ✅ **YOLOv8** (All variants: n, s, m, l, x)
+- ✅ **YOLOv5** (All variants)
+- ✅ **Custom trained models** from any YOLO version
+
+---
+
+### 🌟 **Method 1: Web Interface Upload (Easiest)**
+
+**Perfect for beginners and quick imports!**
+
+1. **Start the application:**
+   ```bash
+   python start.py
+   ```
+
+2. **Open your browser:** http://localhost:12001
+
+3. **Navigate to Models page** → Click **"Import Custom Model"** button
+
+4. **Upload your YOLO11 model:**
+   - **Select File:** Choose your `.pt` file (e.g., `my_yolo11_model.pt`)
+   - **Model Name:** Enter descriptive name (e.g., "Custom Product Detector")
+   - **Model Type:** Select "Object Detection" or "Instance Segmentation"
+   - **Class Names:** Enter comma-separated classes: `product,defect,logo,text`
+   - **Description:** Brief description of what the model detects
+   - **Confidence Threshold:** Default 0.5 (adjust as needed)
+
+5. **Click "Import Model"** → Done! Your model is ready for use
+
+6. **Verify Import:** Your model will appear in the Models list with a "Custom" badge
+
+---
+
+### 📁 **Method 2: Direct File Copy (Advanced)**
+
+**Perfect for batch imports and automation!**
+
+1. **Copy your YOLO11 model** to the custom models directory:
+   ```bash
+   cp your_yolo11_model.pt Auto-Labeling-Tool/models/custom/
+   ```
+
+2. **Edit the models configuration** file `models/models_config.json`:
+   ```json
+   {
+     "your_yolo11_model": {
+       "id": "your_yolo11_model",
+       "name": "My Custom YOLO11 Model",
+       "type": "object_detection",
+       "format": "pytorch",
+       "path": "/workspace/Auto-Labeling-Tool/models/custom/your_yolo11_model.pt",
+       "classes": [
+         "person", "car", "bicycle", "dog", "cat",
+         "product", "defect", "logo", "text"
+       ],
+       "input_size": [640, 640],
+       "confidence_threshold": 0.5,
+       "iou_threshold": 0.45,
+       "description": "Custom YOLO11 model for specific object detection",
+       "created_at": "2024-01-01",
+       "is_custom": true
+     }
+   }
+   ```
+
+3. **Restart the application:** `python start.py`
+
+---
+
+### 🔧 **Method 3: API Import (Programmatic)**
+
+**Perfect for automation and integration!**
+
+```python
+import requests
+import json
+
+# Upload model via REST API
+def import_yolo11_model(model_path, model_name, classes_list, description=""):
+    url = "http://localhost:12000/api/models/import"
+    
+    # Prepare files and data
+    with open(model_path, 'rb') as f:
+        files = {'model_file': f}
+        data = {
+            'model_name': model_name,
+            'model_type': 'object_detection',  # or 'instance_segmentation'
+            'classes': ','.join(classes_list),  # comma-separated string
+            'description': description,
+            'confidence_threshold': 0.5,
+            'iou_threshold': 0.45
+        }
+        
+        response = requests.post(url, files=files, data=data)
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ Model imported successfully!")
+            print(f"Model ID: {result['model_id']}")
+            print(f"Model Name: {result['model_name']}")
+            return result['model_id']
+        else:
+            print(f"❌ Import failed: {response.text}")
+            return None
+
+# Example usage
+model_id = import_yolo11_model(
+    model_path="path/to/your_yolo11_model.pt",
+    model_name="Custom Product Detector",
+    classes_list=["product", "defect", "logo", "text"],
+    description="YOLO11 model trained on custom product dataset"
+)
 ```
-3. Restart the application
+
+---
+
+### 🎯 **Real-World Example Class Lists**
+
+#### 🏭 **Industrial Inspection**
+```python
+classes = [
+    "screw", "bolt", "nut", "washer",
+    "crack", "corrosion", "dent", "scratch",
+    "good_part", "defective_part"
+]
+```
+
+#### 🏥 **Medical Imaging**
+```python
+classes = [
+    "tumor", "normal_tissue", "bone", "organ",
+    "lesion", "fracture", "implant", "abnormality"
+]
+```
+
+#### 🛒 **Retail/E-commerce**
+```python
+classes = [
+    "shirt", "pants", "dress", "shoes",
+    "bag", "hat", "jewelry", "accessories",
+    "logo", "brand_text", "price_tag"
+]
+```
+
+#### 🚗 **Automotive**
+```python
+classes = [
+    "car", "truck", "motorcycle", "bicycle",
+    "license_plate", "headlight", "tire", "damage",
+    "person", "traffic_sign", "traffic_light"
+]
+```
+
+#### 🏠 **Security/Surveillance**
+```python
+classes = [
+    "person", "face", "vehicle", "package",
+    "weapon", "suspicious_object", "fire", "smoke",
+    "intruder", "authorized_person"
+]
+```
+
+---
+
+### 🔍 **Model Validation and Testing**
+
+After importing your YOLO11 model, the system automatically:
+
+1. **✅ Validates Model Format:** Ensures .pt file is valid YOLO format
+2. **✅ Extracts Model Info:** Auto-detects classes, input size, architecture
+3. **✅ Tests Inference:** Runs a test prediction to verify functionality
+4. **✅ Optimizes Loading:** Caches model for faster subsequent use
+
+#### **Manual Testing Your Imported Model:**
+
+```python
+# Test your imported model via API
+import requests
+
+test_response = requests.post(
+    "http://localhost:12000/api/models/test",
+    json={
+        "model_id": "your_yolo11_model",
+        "test_image_path": "path/to/test/image.jpg"
+    }
+)
+
+if test_response.status_code == 200:
+    results = test_response.json()
+    print(f"✅ Model test successful!")
+    print(f"Detected objects: {len(results['detections'])}")
+    for detection in results['detections']:
+        print(f"- {detection['class']}: {detection['confidence']:.2f}")
+else:
+    print(f"❌ Model test failed: {test_response.text}")
+```
 
 ### 🏋️ Training Your Own YOLO Model
 

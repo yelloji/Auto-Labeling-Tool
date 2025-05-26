@@ -15,7 +15,7 @@ This tool can:
 - 🎨 **Augment your data** with 15+ effects
 - 📈 **Show analytics** about your labels
 - 💾 **Export in any format** (YOLO, COCO, etc.)
-- 🎯 **Import custom models** for better accuracy
+- 🎯 **Import YOLO11 models** - Easy custom model import for better accuracy
 
 ## 🚀 Features
 
@@ -251,6 +251,109 @@ A: Just run `python start.py` again. It will be much faster the second time.
 
 **Q: Can I use this on Windows/Mac/Linux?**  
 A: Yes! It works on all operating systems.
+
+---
+
+## 🤖 **How to Import Your Own YOLO11 Model**
+
+**This is one of the most important features!** You can easily import your custom YOLO11 models for better accuracy on your specific objects.
+
+### 🚀 **Method 1: Web Interface (Easiest)**
+
+1. **Start the app:** `python start.py`
+2. **Open browser:** http://localhost:12001
+3. **Go to Models page** → Click **"Import Custom Model"**
+4. **Upload your YOLO11 model:**
+   - Select your `.pt` file (e.g., `my_yolo11_model.pt`)
+   - Enter model name (e.g., "My Custom YOLO11")
+   - Add class names (comma-separated: `person,car,bike,dog,cat`)
+   - Click **"Import Model"**
+5. **Done!** Your model is now available for auto-labeling
+
+### 📁 **Method 2: Direct File Copy**
+
+1. **Copy your model** to the custom folder:
+   ```bash
+   cp your_yolo11_model.pt Auto-Labeling-Tool/models/custom/
+   ```
+
+2. **Add to config file** `models/models_config.json`:
+   ```json
+   {
+     "your_yolo11_model": {
+       "id": "your_yolo11_model",
+       "name": "My Custom YOLO11 Model",
+       "type": "object_detection",
+       "format": "pytorch",
+       "path": "/workspace/Auto-Labeling-Tool/models/custom/your_yolo11_model.pt",
+       "classes": ["class1", "class2", "class3"],
+       "input_size": [640, 640],
+       "confidence_threshold": 0.5,
+       "is_custom": true
+     }
+   }
+   ```
+
+3. **Restart the app:** `python start.py`
+
+### 🔧 **Method 3: API Import (Programmatic)**
+
+```python
+import requests
+
+# Upload model via API
+with open('your_yolo11_model.pt', 'rb') as f:
+    files = {'model_file': f}
+    data = {
+        'model_name': 'My YOLO11 Model',
+        'model_type': 'object_detection',
+        'classes': 'person,car,bike,dog,cat',  # comma-separated
+        'description': 'Custom YOLO11 for my specific use case'
+    }
+    
+    response = requests.post(
+        'http://localhost:12000/api/models/import',
+        files=files,
+        data=data
+    )
+    
+    print(f"Model imported with ID: {response.json()['model_id']}")
+```
+
+### ✅ **What Your YOLO11 Model Needs:**
+
+- **File Format:** `.pt` (PyTorch format)
+- **YOLO Version:** YOLO11, YOLOv8, YOLOv5 all supported
+- **Model Types:** Object Detection, Instance Segmentation
+- **Classes:** Will auto-detect or you can specify manually
+
+### 🎯 **Example Class Lists:**
+
+```python
+# For custom object detection
+classes = ["product", "defect", "logo", "text"]
+
+# For medical imaging  
+classes = ["tumor", "normal_tissue", "bone", "organ"]
+
+# For industrial inspection
+classes = ["screw", "bolt", "crack", "corrosion"]
+
+# For retail/e-commerce
+classes = ["shirt", "pants", "shoes", "accessories"]
+```
+
+### 🚀 **After Import:**
+
+1. **Your model appears** in the Models page
+2. **Select it** when creating new projects
+3. **Auto-label images** with your custom model
+4. **Fine-tune** with your own data
+5. **Export** in multiple formats (YOLO, COCO, Pascal VOC)
+
+**📖 For more details, see the complete Model Import Guide in PROJECT_MANUAL.md**
+
+---
 
 ## 🎯 Roadmap
 
