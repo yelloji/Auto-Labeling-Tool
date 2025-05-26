@@ -283,7 +283,7 @@ const Datasets = () => {
           >
             <Upload.Dragger
               multiple
-              accept="image/*"
+              accept=".jpg,.jpeg,.png,.bmp,.tiff,.webp"
               beforeUpload={() => false} // Prevent auto upload
               onChange={(info) => {
                 form.setFieldsValue({ files: info.fileList });
@@ -294,7 +294,7 @@ const Datasets = () => {
               </p>
               <p className="ant-upload-text">Click or drag images to this area to upload</p>
               <p className="ant-upload-hint">
-                Support for JPG, PNG, and other image formats. You can select multiple files.
+                Support for JPG, JPEG, PNG, BMP, TIFF, WEBP formats. Max 500MB per file, up to 10,000 images.
               </p>
             </Upload.Dragger>
           </Form.Item>

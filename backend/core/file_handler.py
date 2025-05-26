@@ -21,7 +21,7 @@ class FileHandler:
     """Handle file uploads and processing"""
     
     ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
-    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+    MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
     
     def __init__(self):
         # Ensure upload directory exists

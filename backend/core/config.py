@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     GPU_MEMORY_FRACTION: float = 0.8
     
     # File upload limits
-    MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100MB
-    MAX_BATCH_SIZE: int = 1000
+    MAX_FILE_SIZE: int = 500 * 1024 * 1024  # 500MB
+    MAX_BATCH_SIZE: int = 10000  # 10,000 images
     
     class Config:
         env_file = ".env"

@@ -18,7 +18,30 @@ A comprehensive local auto and semi-automatic labeling tool for computer vision 
 - Node.js 16+
 - Git
 
-### Installation & Setup
+### One-Command Startup 🚀
+
+**Option 1: Python Launcher (Recommended - Cross-platform)**
+```bash
+git clone https://github.com/yelloji/Auto-Labeling-Tool.git
+cd Auto-Labeling-Tool
+python start.py
+```
+
+**Option 2: Shell Script (Linux/Mac)**
+```bash
+git clone https://github.com/yelloji/Auto-Labeling-Tool.git
+cd Auto-Labeling-Tool
+./start.sh
+```
+
+**Option 3: Batch File (Windows)**
+```bash
+git clone https://github.com/yelloji/Auto-Labeling-Tool.git
+cd Auto-Labeling-Tool
+start.bat
+```
+
+### Manual Installation & Setup (Alternative)
 
 1. **Clone the repository**
    ```bash
@@ -41,6 +64,16 @@ A comprehensive local auto and semi-automatic labeling tool for computer vision 
    npm start
    ```
    Frontend will start on `http://localhost:12001`
+
+### Access the Application
+- **Frontend UI:** http://localhost:12001
+- **Backend API:** http://localhost:12000  
+- **API Documentation:** http://localhost:12000/docs
+
+### File Upload Specifications
+- **Maximum file size:** 500MB per image
+- **Maximum batch size:** 10,000 images per upload
+- **Supported formats:** .jpg, .jpeg, .png, .bmp, .tiff, .webp
 
 4. **Start Labeling!**
    - Visit the frontend URL
