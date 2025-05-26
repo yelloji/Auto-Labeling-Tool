@@ -21,9 +21,11 @@ class Settings(BaseSettings):
     MODELS_DIR: Path = BASE_DIR / "models"
     STATIC_FILES_DIR: Path = BASE_DIR / "static"
     TEMP_DIR: Path = BASE_DIR / "temp"
+    UPLOAD_DIR: Path = BASE_DIR / "uploads"
     
     # Database
-    DATABASE_URL: str = f"sqlite:///{BASE_DIR}/database.db"
+    DATABASE_PATH: Path = BASE_DIR / "database.db"
+    DATABASE_URL: str = f"sqlite:///{DATABASE_PATH}"
     
     # Model settings
     DEFAULT_CONFIDENCE_THRESHOLD: float = 0.5
@@ -53,7 +55,7 @@ class Settings(BaseSettings):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Create directories if they don't exist
-        for dir_path in [self.DATA_DIR, self.MODELS_DIR, self.STATIC_FILES_DIR, self.TEMP_DIR]:
+        for dir_path in [self.DATA_DIR, self.MODELS_DIR, self.STATIC_FILES_DIR, self.TEMP_DIR, self.UPLOAD_DIR]:
             dir_path.mkdir(parents=True, exist_ok=True)
 
 # Global settings instance
