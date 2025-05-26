@@ -4,14 +4,12 @@ Defines all database tables and relationships
 """
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, JSON
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
 from typing import List, Optional
 import uuid
-
-Base = declarative_base()
+from .base import Base
 
 
 class Project(Base):

@@ -53,6 +53,59 @@ async def get_models():
         raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")
 
 
+@router.get("/types/supported")
+async def get_supported_model_types():
+    """Get list of supported model types and formats"""
+    return {
+        "model_types": [
+            {
+                "value": ModelType.OBJECT_DETECTION,
+                "label": "Object Detection",
+                "description": "Detect and classify objects with bounding boxes"
+            },
+            {
+                "value": ModelType.INSTANCE_SEGMENTATION,
+                "label": "Instance Segmentation", 
+                "description": "Detect objects and generate pixel-level masks"
+            },
+            {
+                "value": ModelType.SEMANTIC_SEGMENTATION,
+                "label": "Semantic Segmentation",
+                "description": "Classify each pixel in the image"
+            },
+            {
+                "value": ModelType.CLASSIFICATION,
+                "label": "Image Classification",
+                "description": "Classify entire images into categories"
+            },
+            {
+                "value": ModelType.POSE_ESTIMATION,
+                "label": "Pose Estimation",
+                "description": "Detect human poses and keypoints"
+            }
+        ],
+        "model_formats": [
+            {
+                "value": ModelFormat.PYTORCH,
+                "label": "PyTorch (.pt)",
+                "description": "Native PyTorch model format"
+            },
+            {
+                "value": ModelFormat.ONNX,
+                "label": "ONNX (.onnx)",
+                "description": "Open Neural Network Exchange format"
+            },
+            {
+                "value": ModelFormat.TENSORRT,
+                "label": "TensorRT (.engine)",
+                "description": "NVIDIA TensorRT optimized format"
+            }
+        ],
+        "supported_extensions": [".pt", ".onnx", ".engine"],
+        "max_file_size_mb": settings.MAX_FILE_SIZE / (1024 * 1024)
+    }
+
+
 @router.post("/import")
 async def import_custom_model(
     file: UploadFile = File(...),
@@ -244,56 +297,3 @@ async def delete_model(model_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete model: {str(e)}")
-
-
-@router.get("/types/supported")
-async def get_supported_model_types():
-    """Get list of supported model types and formats"""
-    return {
-        "model_types": [
-            {
-                "value": ModelType.OBJECT_DETECTION,
-                "label": "Object Detection",
-                "description": "Detect and classify objects with bounding boxes"
-            },
-            {
-                "value": ModelType.INSTANCE_SEGMENTATION,
-                "label": "Instance Segmentation", 
-                "description": "Detect objects and generate pixel-level masks"
-            },
-            {
-                "value": ModelType.SEMANTIC_SEGMENTATION,
-                "label": "Semantic Segmentation",
-                "description": "Classify each pixel in the image"
-            },
-            {
-                "value": ModelType.CLASSIFICATION,
-                "label": "Image Classification",
-                "description": "Classify entire images into categories"
-            },
-            {
-                "value": ModelType.POSE_ESTIMATION,
-                "label": "Pose Estimation",
-                "description": "Detect human poses and keypoints"
-            }
-        ],
-        "model_formats": [
-            {
-                "value": ModelFormat.PYTORCH,
-                "label": "PyTorch (.pt)",
-                "description": "Native PyTorch model format"
-            },
-            {
-                "value": ModelFormat.ONNX,
-                "label": "ONNX (.onnx)",
-                "description": "Open Neural Network Exchange format"
-            },
-            {
-                "value": ModelFormat.TENSORRT,
-                "label": "TensorRT (.engine)",
-                "description": "NVIDIA TensorRT optimized format"
-            }
-        ],
-        "supported_extensions": [".pt", ".onnx", ".engine"],
-        "max_file_size_mb": settings.MAX_FILE_SIZE / (1024 * 1024)
-    }
