@@ -420,18 +420,75 @@ classes = ["shirt", "pants", "shoes", "accessories"]
 - [x] **Visual Indicators**: Status indicators for labeled/unlabeled images
 - [x] **Enhanced UI**: Modal-based workflows, advanced filtering, bulk operations
 
+### 🚧 NEXT PRIORITY FEATURES
+- [ ] **🧠 Active Learning Pipeline** - Train custom models iteratively with small datasets
+- [ ] **🎯 Model Training Integration** - Fine-tune YOLO models on your labeled data
+- [ ] **🔄 Human-in-the-Loop Workflow** - Review predictions, correct labels, retrain automatically
+- [ ] **📊 Uncertainty Sampling** - Smart selection of most informative images to label next
+
 ### 🚧 FUTURE ENHANCEMENTS
 - [ ] Label editing capabilities in annotation interface
 - [ ] Video annotation support
-- [ ] Active learning with intelligent sample selection
-- [ ] Model training pipeline integration
 - [ ] Advanced export formats (CVAT, Labelbox)
 - [ ] Multi-user collaboration features
 - [ ] Cloud storage integration (optional)
 - [ ] Mobile app for annotation review
 
+### 🧠 **ACTIVE LEARNING - Coming Soon!**
+
+**Your exact workflow will be supported:**
+
+1. **📝 Label 10-20 images** manually (complex defects/objects)
+2. **🤖 Train custom model** on your small dataset
+3. **🔍 Auto-label new images** with your trained model
+4. **✅ Review & correct** predictions in the interface
+5. **🔄 Retrain model** with corrected labels automatically
+6. **📈 Repeat until perfect** - model gets smarter each iteration
+7. **🚀 Deploy final model** for full auto-labeling
+
+**Perfect for:**
+- 🏭 Complex industrial defects
+- 🔬 Medical imaging anomalies  
+- 🎯 Custom object detection
+- 📱 Product quality inspection
+- 🚗 Specialized automotive parts
+
+### 🔧 **Temporary Workaround (Until Active Learning is Ready)**
+
+**For now, you can achieve similar results manually:**
+
+1. **📝 Label 10-20 images** using the annotation interface
+2. **📤 Export dataset** in YOLO format
+3. **🤖 Train YOLO model** externally using Ultralytics:
+   ```bash
+   pip install ultralytics
+   yolo train data=your_dataset.yaml model=yolov8n.pt epochs=50
+   ```
+4. **📥 Import trained model** back into the tool
+5. **🔍 Use for auto-labeling** new images
+6. **🔄 Repeat process** with corrected labels
+
+**External Training Script Example:**
+```python
+from ultralytics import YOLO
+
+# Load a model
+model = YOLO('yolov8n.pt')  # or yolo11n.pt
+
+# Train the model
+results = model.train(
+    data='path/to/your/dataset.yaml',
+    epochs=50,
+    imgsz=640,
+    batch=16
+)
+
+# The trained model will be saved as runs/detect/train/weights/best.pt
+# Import this back into the Auto-Labeling-Tool
+```
+
 ### 🎯 CURRENT FOCUS
-The tool is now **production-ready** with comprehensive features that rival and exceed cloud-based solutions like Roboflow. All core functionality is implemented and tested.
+The tool is now **production-ready** with comprehensive features. **Active Learning is the next major feature** to make it perfect for complex, domain-specific use cases.
 
 ## 📄 License
 
