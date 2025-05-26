@@ -9,6 +9,7 @@ import Models from './pages/Models';
 import Projects from './pages/Projects';
 import Datasets from './pages/Datasets';
 import Annotate from './pages/Annotate';
+import ActiveLearningDashboard from './components/ActiveLearning/ActiveLearningDashboard';
 
 const { Header, Content } = Layout;
 
@@ -26,6 +27,7 @@ function App() {
             <Route path="/projects" element={<Projects />} />
             <Route path="/datasets" element={<Datasets />} />
             <Route path="/annotate/:datasetId?" element={<Annotate />} />
+            <Route path="/active-learning" element={<ActiveLearningDashboard />} />
           </Routes>
         </Content>
       </Layout>

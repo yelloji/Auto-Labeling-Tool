@@ -1,23 +1,41 @@
 # Auto-Labeling-Tool 🏷️
 
-**The easiest way to label your images for AI training!** 
+**The most advanced local auto-labeling system with Active Learning!** 
 
+🧠 **NEW: Active Learning** - Train custom models iteratively with intelligent sample selection  
 ✨ **Better than Roboflow** - but runs on your computer  
 🚀 **Super easy to use** - just 3 commands to start  
 💻 **Works everywhere** - Windows, Mac, Linux  
 🔒 **Your data stays private** - everything runs locally  
 
-## ✅ **Ready to Use Right Now!**
+## 🎯 **Game-Changing Features**
 
-This tool can:
-- 🏷️ **Auto-label your images** using AI models
-- 📊 **Manage your datasets** with smart organization  
-- 🎨 **Augment your data** with 15+ effects
-- 📈 **Show analytics** about your labels
-- 💾 **Export in any format** (YOLO, COCO, etc.)
-- 🎯 **Import custom models** for better accuracy
+### 🧠 **Active Learning System** ⭐ **NEW!**
+- **Intelligent Sample Selection**: Focus on the most valuable images for labeling
+- **Iterative Model Training**: Continuously improve custom YOLO models
+- **Uncertainty-Based Labeling**: Let AI guide you to the most impactful samples
+- **Human-in-the-Loop**: Review and correct predictions to boost accuracy
+- **Production-Ready Models**: Export trained models for real-world deployment
+
+### 🏷️ **Core Labeling Capabilities**
+- **Auto-label your images** using AI models (YOLOv8, custom models)
+- **Manage your datasets** with smart organization and analytics
+- **Augment your data** with 15+ professional effects
+- **Show analytics** about your labels and dataset health
+- **Export in any format** (YOLO, COCO, Pascal VOC, etc.)
+- **Import custom models** for domain-specific accuracy
 
 ## 🚀 Features
+
+### 🧠 **Active Learning System** ⭐ **REVOLUTIONARY!**
+- **Intelligent Training Pipeline**: Automated YOLO model training with iterative improvement
+- **Uncertainty Sampling**: AI identifies the most valuable images for manual labeling
+- **Human-in-the-Loop Interface**: Review high-uncertainty samples with one-click actions
+- **Performance Tracking**: Real-time metrics (mAP50, mAP95, Precision, Recall)
+- **Model Versioning**: Track and compare different model iterations
+- **Production Export**: Export trained models ready for deployment
+- **Multi-Metric Uncertainty**: Confidence variance, entropy, and combined scoring
+- **Automated Retraining**: Continuous model improvement with user feedback
 
 ### 🎯 Core Labeling Capabilities
 - **Multi-format Annotation**: Bounding boxes, polygons, keypoints, segmentation masks

@@ -18,6 +18,7 @@ import uvicorn
 
 from api.routes import projects, datasets, annotations, models, export
 from api.routes import analytics, augmentation, dataset_management
+from api import active_learning
 from core.config import settings
 from database.database import init_db
 
@@ -50,6 +51,9 @@ app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
 app.include_router(analytics.router, tags=["analytics"])
 app.include_router(augmentation.router, tags=["augmentation"])
 app.include_router(dataset_management.router, tags=["dataset-management"])
+
+# Include Active Learning routes
+app.include_router(active_learning.router, tags=["active-learning"])
 
 # Serve static files (for uploaded images, etc.)
 static_dir = Path(settings.STATIC_FILES_DIR)

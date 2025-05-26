@@ -6,7 +6,8 @@ import {
   RobotOutlined,
   ProjectOutlined,
   DatabaseOutlined,
-  EditOutlined
+  EditOutlined,
+  BrainOutlined
 } from '@ant-design/icons';
 
 const Navbar = () => {
@@ -38,6 +39,11 @@ const Navbar = () => {
       key: '/annotate',
       icon: <EditOutlined />,
       label: 'Annotate',
+    },
+    {
+      key: '/active-learning',
+      icon: <BrainOutlined />,
+      label: 'Active Learning',
     },
   ];
 
