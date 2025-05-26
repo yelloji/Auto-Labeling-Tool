@@ -4,7 +4,7 @@ Active Learning Training Models
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from backend.database.database import Base
+from database.database import Base
 
 
 class TrainingSession(Base):

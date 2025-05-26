@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from ultralytics import YOLO
 from sqlalchemy.orm import Session
-from backend.database.database import get_db
-from backend.models.training import TrainingSession, TrainingIteration, UncertainSample, ModelVersion
-from backend.core.dataset_manager import DatasetManager
+from database.database import get_db
+from models.training import TrainingSession, TrainingIteration, UncertainSample, ModelVersion
+from core.dataset_manager import DatasetManager
 import logging
 
 logger = logging.getLogger(__name__)

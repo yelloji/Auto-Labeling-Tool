@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
-from backend.database.database import get_db
-from backend.core.active_learning import ActiveLearningPipeline
-from backend.models.training import TrainingSession, TrainingIteration, UncertainSample
+from database.database import get_db
+from core.active_learning import ActiveLearningPipeline
+from models.training import TrainingSession, TrainingIteration, UncertainSample
 
 router = APIRouter(prefix="/api/active-learning", tags=["active-learning"])
 pipeline = ActiveLearningPipeline()
