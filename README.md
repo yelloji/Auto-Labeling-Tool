@@ -199,7 +199,7 @@ Auto-Labeling-Tool/
 
 ## 🚀 Quick Start
 
-### ⚡ **ONE-COMMAND SETUP - NO MANUAL WORK NEEDED!**
+### ⚡ **ZERO-SETUP INSTALLATION - TRULY AUTOMATIC!**
 
 ```bash
 git clone https://github.com/yelloji/Auto-Labeling-Tool.git
@@ -207,7 +207,12 @@ cd Auto-Labeling-Tool
 python start.py
 ```
 
-**That's it!** No conda environments, no manual dependency installation, no configuration needed.
+**That's literally it!** 🎉 
+- ✅ **No manual Node.js installation**
+- ✅ **No conda environments** 
+- ✅ **No dependency hunting**
+- ✅ **No configuration files**
+- ✅ **Works on Windows, macOS, Linux**
 
 ### 🧠 **Smart Environment Management**
 
@@ -217,21 +222,28 @@ The `start.py` script uses **Python's built-in `venv`** (not Conda) and is desig
 
 | Component | First Run | Subsequent Runs |
 |-----------|-----------|-----------------|
+| **Node.js Runtime** | 📦 **Auto-detects & installs if missing** | ✅ Uses existing installation |
+| **Git** | 📦 **Auto-detects & installs if missing** | ✅ Uses existing installation |
 | **Python Environment** | ✅ Creates `backend/venv/` | ♻️ Reuses existing environment |
 | **Python Dependencies** | 📦 Downloads & installs all packages | ⚡ Quick check/update only |
 | **Node.js Dependencies** | 📦 Downloads & installs `node_modules/` | ⚡ Reuses existing packages |
-| **Startup Time** | 🐌 2-3 minutes (first setup) | 🚀 10-20 seconds |
+| **Startup Time** | 🐌 3-5 minutes (first setup with installs) | 🚀 10-20 seconds |
 
 #### 📅 **Timeline Example:**
 
-**First Run:**
+**First Run (with automatic installations):**
 ```bash
 python start.py
 ```
 ```
 🏷️ Starting Auto-Labeling-Tool...
 ==================================
-Creating virtual environment...        ← Creates new venv folder
+🔍 Checking prerequisites...
+📦 Node.js not found. Installing automatically...
+✅ Node.js installed via winget!        ← Automatic Node.js installation
+✅ Git found: git version 2.39.5
+✅ All prerequisites are ready!
+Creating virtual environment...         ← Creates new venv folder
 Installing/updating backend dependencies...
 Installing frontend dependencies...
 Starting FastAPI backend on port 12000...
@@ -240,6 +252,7 @@ Starting React frontend on port 12001...
 ✅ Frontend started successfully on port 12001
 
 🎉 Auto-Labeling-Tool is now running!
+✨ Everything was set up automatically!
 Backend API:  http://localhost:12000
 Frontend UI:  http://localhost:12001
 ```
@@ -251,6 +264,10 @@ python start.py
 ```
 🏷️ Starting Auto-Labeling-Tool...
 ==================================
+🔍 Checking prerequisites...
+✅ Node.js found: v18.17.0            ← Skips installation
+✅ Git found: git version 2.39.5      ← Skips installation  
+✅ All prerequisites are ready!
 Installing/updating backend dependencies...  ← Skips venv creation
 Starting FastAPI backend on port 12000...
 ✅ Backend started successfully on port 12000
@@ -260,11 +277,13 @@ Starting React frontend on port 12001...
 🎉 Auto-Labeling-Tool is now running!
 ```
 
-### 🎯 **Requirements (You probably already have these):**
+### 🎯 **Requirements (Only Python needed!):**
 
 - ✅ **Python 3.8+** (standard Python installation - NOT Anaconda/Conda)
-- ✅ **Node.js 16+** (for the frontend)
-- ✅ **Git** (to clone the repository)
+- 🤖 **Node.js 16+** ← **Installed automatically if missing**
+- 🤖 **Git** ← **Installed automatically if missing**
+
+**You literally only need Python!** Everything else is handled automatically. 🚀
 
 ### 🔧 **Alternative Startup Methods:**
 
@@ -281,6 +300,19 @@ cd backend && python main.py &
 cd frontend && npm start
 ```
 
+### 🤖 **Automatic Installation Features:**
+
+| Platform | Node.js Installation Method | Git Installation Method |
+|----------|----------------------------|------------------------|
+| **Windows** | `winget install OpenJS.NodeJS` or `choco install nodejs` | `winget install Git.Git` |
+| **macOS** | `brew install node` | `brew install git` |
+| **Linux** | `apt/yum/dnf/pacman install nodejs npm` | `apt/yum/dnf/pacman install git` |
+
+**Smart Fallbacks:**
+- 🔄 **Multiple package managers**: Tries winget → chocolatey on Windows, brew on macOS, apt → yum → dnf → pacman on Linux
+- 📋 **Manual instructions**: If auto-install fails, provides clear manual installation steps
+- ⚡ **Skip if present**: Only installs what's actually missing
+
 ### 🗂️ **What Gets Created (automatically):**
 ```
 Auto-Labeling-Tool/
@@ -294,6 +326,10 @@ Auto-Labeling-Tool/
 │   └── ...
 └── database.db           ← SQLite database (created on first use)
 ```
+
+**System-wide installations (if needed):**
+- 🌐 **Node.js** → Installed to system PATH
+- 🔧 **Git** → Installed to system PATH
 
 ## 🎯 Roadmap
 

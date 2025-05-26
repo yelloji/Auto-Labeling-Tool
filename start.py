@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Auto-Labeling-Tool Launcher
-Cross-platform startup script for both backend and frontend
+Cross-platform startup script with automatic prerequisite installation
 """
 
 import os
@@ -10,6 +10,9 @@ import time
 import signal
 import subprocess
 import platform
+import shutil
+import urllib.request
+import json
 from pathlib import Path
 
 class AutoLabelingToolLauncher:
@@ -62,6 +65,223 @@ class AutoLabelingToolLauncher:
                 pass
         
         time.sleep(2)
+    
+    def is_nodejs_installed(self):
+        """Check if Node.js is installed"""
+        try:
+            result = subprocess.run(["node", "--version"], capture_output=True, text=True)
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                self.print_colored(f"✅ Node.js found: {version}", "green")
+                return True
+        except FileNotFoundError:
+            pass
+        return False
+    
+    def is_git_installed(self):
+        """Check if Git is installed"""
+        try:
+            result = subprocess.run(["git", "--version"], capture_output=True, text=True)
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                self.print_colored(f"✅ Git found: {version}", "green")
+                return True
+        except FileNotFoundError:
+            pass
+        return False
+    
+    def install_nodejs_windows(self):
+        """Install Node.js on Windows"""
+        self.print_colored("🔍 Attempting to install Node.js on Windows...", "yellow")
+        
+        # Try winget first (Windows 10+)
+        try:
+            result = subprocess.run(["winget", "install", "OpenJS.NodeJS"], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                self.print_colored("✅ Node.js installed via winget!", "green")
+                return True
+        except FileNotFoundError:
+            pass
+        
+        # Try chocolatey
+        try:
+            result = subprocess.run(["choco", "install", "nodejs", "-y"], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                self.print_colored("✅ Node.js installed via chocolatey!", "green")
+                return True
+        except FileNotFoundError:
+            pass
+        
+        # Fallback to manual instructions
+        self.print_colored("❌ Automatic installation failed.", "red")
+        self.print_colored("Please install Node.js manually:", "yellow")
+        self.print_colored("1. Go to https://nodejs.org/", "white")
+        self.print_colored("2. Download and install the LTS version", "white")
+        self.print_colored("3. Restart your terminal and run this script again", "white")
+        return False
+    
+    def install_nodejs_macos(self):
+        """Install Node.js on macOS"""
+        self.print_colored("🔍 Attempting to install Node.js on macOS...", "yellow")
+        
+        # Try homebrew
+        try:
+            result = subprocess.run(["brew", "install", "node"], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                self.print_colored("✅ Node.js installed via homebrew!", "green")
+                return True
+        except FileNotFoundError:
+            pass
+        
+        # Fallback to manual instructions
+        self.print_colored("❌ Homebrew not found or installation failed.", "red")
+        self.print_colored("Please install Node.js manually:", "yellow")
+        self.print_colored("1. Install Homebrew: /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"", "white")
+        self.print_colored("2. Run: brew install node", "white")
+        self.print_colored("3. Or download from https://nodejs.org/", "white")
+        return False
+    
+    def install_nodejs_linux(self):
+        """Install Node.js on Linux"""
+        self.print_colored("🔍 Attempting to install Node.js on Linux...", "yellow")
+        
+        # Try different package managers
+        package_managers = [
+            (["sudo", "apt", "update"], ["sudo", "apt", "install", "-y", "nodejs", "npm"]),  # Ubuntu/Debian
+            (["sudo", "yum", "update"], ["sudo", "yum", "install", "-y", "nodejs", "npm"]),  # CentOS/RHEL
+            (["sudo", "dnf", "update"], ["sudo", "dnf", "install", "-y", "nodejs", "npm"]),  # Fedora
+            (["sudo", "pacman", "-Sy"], ["sudo", "pacman", "-S", "--noconfirm", "nodejs", "npm"]),  # Arch
+        ]
+        
+        for update_cmd, install_cmd in package_managers:
+            try:
+                # Try update first
+                subprocess.run(update_cmd, capture_output=True, text=True, timeout=30)
+                # Then install
+                result = subprocess.run(install_cmd, capture_output=True, text=True, timeout=120)
+                if result.returncode == 0:
+                    self.print_colored(f"✅ Node.js installed via {install_cmd[1]}!", "green")
+                    return True
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+        
+        # Try NodeSource repository (universal Linux)
+        try:
+            self.print_colored("🔍 Trying NodeSource repository...", "yellow")
+            # Download and run NodeSource setup script
+            subprocess.run(["curl", "-fsSL", "https://deb.nodesource.com/setup_lts.x", "|", "sudo", "-E", "bash", "-"], 
+                         shell=True, capture_output=True, text=True, timeout=60)
+            result = subprocess.run(["sudo", "apt-get", "install", "-y", "nodejs"], 
+                                  capture_output=True, text=True, timeout=120)
+            if result.returncode == 0:
+                self.print_colored("✅ Node.js installed via NodeSource!", "green")
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        
+        # Fallback to manual instructions
+        self.print_colored("❌ Automatic installation failed.", "red")
+        self.print_colored("Please install Node.js manually:", "yellow")
+        self.print_colored("Ubuntu/Debian: sudo apt update && sudo apt install nodejs npm", "white")
+        self.print_colored("CentOS/RHEL: sudo yum install nodejs npm", "white")
+        self.print_colored("Fedora: sudo dnf install nodejs npm", "white")
+        self.print_colored("Or download from https://nodejs.org/", "white")
+        return False
+    
+    def install_git_windows(self):
+        """Install Git on Windows"""
+        try:
+            result = subprocess.run(["winget", "install", "Git.Git"], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                self.print_colored("✅ Git installed via winget!", "green")
+                return True
+        except FileNotFoundError:
+            pass
+        
+        self.print_colored("Please install Git manually from https://git-scm.com/", "yellow")
+        return False
+    
+    def install_git_unix(self):
+        """Install Git on Unix-like systems"""
+        system = platform.system().lower()
+        
+        if system == "darwin":  # macOS
+            try:
+                result = subprocess.run(["brew", "install", "git"], 
+                                      capture_output=True, text=True)
+                if result.returncode == 0:
+                    self.print_colored("✅ Git installed via homebrew!", "green")
+                    return True
+            except FileNotFoundError:
+                pass
+        else:  # Linux
+            package_managers = [
+                ["sudo", "apt", "install", "-y", "git"],
+                ["sudo", "yum", "install", "-y", "git"],
+                ["sudo", "dnf", "install", "-y", "git"],
+                ["sudo", "pacman", "-S", "--noconfirm", "git"],
+            ]
+            
+            for cmd in package_managers:
+                try:
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                    if result.returncode == 0:
+                        self.print_colored(f"✅ Git installed via {cmd[1]}!", "green")
+                        return True
+                except (FileNotFoundError, subprocess.TimeoutExpired):
+                    continue
+        
+        self.print_colored("Please install Git manually from https://git-scm.com/", "yellow")
+        return False
+    
+    def check_and_install_prerequisites(self):
+        """Check and auto-install all prerequisites"""
+        self.print_colored("🔍 Checking prerequisites...", "blue")
+        
+        all_good = True
+        
+        # Check Node.js
+        if not self.is_nodejs_installed():
+            self.print_colored("📦 Node.js not found. Installing automatically...", "yellow")
+            
+            system = platform.system().lower()
+            if system == "windows":
+                success = self.install_nodejs_windows()
+            elif system == "darwin":
+                success = self.install_nodejs_macos()
+            else:
+                success = self.install_nodejs_linux()
+            
+            if not success:
+                all_good = False
+            else:
+                # Refresh PATH and check again
+                if not self.is_nodejs_installed():
+                    self.print_colored("⚠️ Node.js installed but not in PATH. Please restart terminal.", "yellow")
+                    all_good = False
+        
+        # Check Git (optional, mainly for development)
+        if not self.is_git_installed():
+            self.print_colored("📦 Git not found. Installing automatically...", "yellow")
+            
+            if self.is_windows:
+                success = self.install_git_windows()
+            else:
+                success = self.install_git_unix()
+            
+            if not success:
+                self.print_colored("⚠️ Git installation failed, but it's optional for running the app.", "yellow")
+        
+        if not all_good:
+            self.print_colored("❌ Some prerequisites failed to install automatically.", "red")
+            self.print_colored("Please install them manually and run this script again.", "yellow")
+            sys.exit(1)
+        
+        self.print_colored("✅ All prerequisites are ready!", "green")
     
     def start_backend(self):
         """Start the backend server"""
@@ -175,6 +395,9 @@ class AutoLabelingToolLauncher:
         try:
             self.print_colored("🏷️ Starting Auto-Labeling-Tool...", "blue")
             self.print_colored("==================================", "blue")
+            
+            # Check and install prerequisites automatically
+            self.check_and_install_prerequisites()
             
             # Check and kill existing processes
             if self.check_port(12000):
