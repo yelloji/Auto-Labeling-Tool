@@ -199,22 +199,100 @@ Auto-Labeling-Tool/
 
 ## 🚀 Quick Start
 
+### ⚡ **ONE-COMMAND SETUP - NO MANUAL WORK NEEDED!**
+
 ```bash
-# Clone the repository
 git clone https://github.com/yelloji/Auto-Labeling-Tool.git
 cd Auto-Labeling-Tool
+python start.py
+```
 
-# Install dependencies
-pip install -r requirements.txt
+**That's it!** No conda environments, no manual dependency installation, no configuration needed.
 
-# Start the backend
-cd backend
-python main.py
+### 🧠 **Smart Environment Management**
 
-# Start the frontend (in another terminal)
-cd frontend
-npm install
-npm start
+The `start.py` script uses **Python's built-in `venv`** (not Conda) and is designed to be intelligent:
+
+#### 🔍 **What happens automatically:**
+
+| Component | First Run | Subsequent Runs |
+|-----------|-----------|-----------------|
+| **Python Environment** | ✅ Creates `backend/venv/` | ♻️ Reuses existing environment |
+| **Python Dependencies** | 📦 Downloads & installs all packages | ⚡ Quick check/update only |
+| **Node.js Dependencies** | 📦 Downloads & installs `node_modules/` | ⚡ Reuses existing packages |
+| **Startup Time** | 🐌 2-3 minutes (first setup) | 🚀 10-20 seconds |
+
+#### 📅 **Timeline Example:**
+
+**First Run:**
+```bash
+python start.py
+```
+```
+🏷️ Starting Auto-Labeling-Tool...
+==================================
+Creating virtual environment...        ← Creates new venv folder
+Installing/updating backend dependencies...
+Installing frontend dependencies...
+Starting FastAPI backend on port 12000...
+✅ Backend started successfully on port 12000
+Starting React frontend on port 12001...
+✅ Frontend started successfully on port 12001
+
+🎉 Auto-Labeling-Tool is now running!
+Backend API:  http://localhost:12000
+Frontend UI:  http://localhost:12001
+```
+
+**Second Run (and all future runs):**
+```bash
+python start.py
+```
+```
+🏷️ Starting Auto-Labeling-Tool...
+==================================
+Installing/updating backend dependencies...  ← Skips venv creation
+Starting FastAPI backend on port 12000...
+✅ Backend started successfully on port 12000
+Starting React frontend on port 12001...
+✅ Frontend started successfully on port 12001
+
+🎉 Auto-Labeling-Tool is now running!
+```
+
+### 🎯 **Requirements (You probably already have these):**
+
+- ✅ **Python 3.8+** (standard Python installation - NOT Anaconda/Conda)
+- ✅ **Node.js 16+** (for the frontend)
+- ✅ **Git** (to clone the repository)
+
+### 🔧 **Alternative Startup Methods:**
+
+```bash
+# Cross-platform Python script (recommended)
+python start.py
+
+# Shell scripts
+./start.sh    # Linux/Mac
+start.bat     # Windows
+
+# Manual startup (if needed)
+cd backend && python main.py &
+cd frontend && npm start
+```
+
+### 🗂️ **What Gets Created (automatically):**
+```
+Auto-Labeling-Tool/
+├── backend/
+│   ├── venv/              ← Python virtual environment (created once)
+│   │   ├── bin/python     ← Isolated Python interpreter
+│   │   └── lib/           ← All Python packages stored here
+│   └── ...
+├── frontend/
+│   ├── node_modules/      ← Node.js packages (created once)
+│   └── ...
+└── database.db           ← SQLite database (created on first use)
 ```
 
 ## 🎯 Roadmap
