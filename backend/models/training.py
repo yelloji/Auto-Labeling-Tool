@@ -102,6 +102,7 @@ class UncertainSample(Base):
     reviewed = Column(Boolean, default=False)
     accepted = Column(Boolean, default=False)
     corrected = Column(Boolean, default=False)
+    corrected_labels = Column(Text)  # JSON string of corrected labels
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -119,9 +120,9 @@ class ModelVersion(Base):
     session_id = Column(Integer, ForeignKey("training_sessions.id"), nullable=False)
     iteration_id = Column(Integer, ForeignKey("training_iterations.id"))
     
-    version_number = Column(String(50), nullable=False)
+    version_name = Column(String(50), nullable=False)
     model_path = Column(String(500), nullable=False)
-    weights_path = Column(String(500), nullable=False)
+    export_format = Column(String(50), nullable=False)
     
     # Performance metrics
     map50 = Column(Float)

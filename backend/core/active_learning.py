@@ -421,3 +421,228 @@ class ActiveLearningPipeline:
                 for it in iterations
             ]
         }
+    
+    async def calculate_uncertainty_scores(
+        self,
+        model: YOLO,
+        images: List[str],
+        threshold: float = 0.5
+    ) -> List[Dict]:
+        """Calculate uncertainty scores for images using model predictions"""
+        
+        uncertain_samples = []
+        
+        for image_path in images:
+            try:
+                # Run inference
+                results = model(image_path, conf=threshold, verbose=False)
+                
+                if not results or len(results) == 0:
+                    continue
+                
+                result = results[0]
+                
+                if result.boxes is None or len(result.boxes) == 0:
+                    # No detections - high uncertainty
+                    uncertain_samples.append({
+                        'image_path': image_path,
+                        'uncertainty_score': 0.9,
+                        'confidence_variance': 0.0,
+                        'entropy_score': 0.9,
+                        'max_confidence': 0.0,
+                        'min_confidence': 0.0,
+                        'predicted_boxes': []
+                    })
+                    continue
+                
+                # Extract confidence scores
+                confidences = result.boxes.conf.cpu().numpy()
+                
+                # Calculate uncertainty metrics
+                confidence_variance = float(np.var(confidences))
+                entropy_score = float(-np.sum(confidences * np.log(confidences + 1e-8)))
+                max_confidence = float(np.max(confidences))
+                min_confidence = float(np.min(confidences))
+                
+                # Overall uncertainty score (higher = more uncertain)
+                uncertainty_score = 1.0 - max_confidence + confidence_variance + (entropy_score / len(confidences))
+                
+                # Extract predicted boxes
+                boxes = result.boxes.xyxy.cpu().numpy()
+                classes = result.boxes.cls.cpu().numpy()
+                
+                predicted_boxes = [
+                    {
+                        'bbox': box.tolist(),
+                        'class': int(cls),
+                        'confidence': float(conf)
+                    }
+                    for box, cls, conf in zip(boxes, classes, confidences)
+                ]
+                
+                uncertain_samples.append({
+                    'image_path': image_path,
+                    'uncertainty_score': float(uncertainty_score),
+                    'confidence_variance': confidence_variance,
+                    'entropy_score': entropy_score,
+                    'max_confidence': max_confidence,
+                    'min_confidence': min_confidence,
+                    'predicted_boxes': predicted_boxes
+                })
+                
+            except Exception as e:
+                logger.error(f"Error calculating uncertainty for {image_path}: {e}")
+                continue
+        
+        # Sort by uncertainty score (highest first)
+        uncertain_samples.sort(key=lambda x: x['uncertainty_score'], reverse=True)
+        
+        return uncertain_samples
+    
+    async def update_sample_review(
+        self,
+        db: Session,
+        sample_id: int,
+        accepted: bool,
+        corrected: bool = False,
+        corrected_labels: Optional[List[Dict]] = None
+    ):
+        """Update sample review status and corrections"""
+        
+        sample = db.query(UncertainSample).filter(UncertainSample.id == sample_id).first()
+        if not sample:
+            raise ValueError(f"Uncertain sample {sample_id} not found")
+        
+        sample.reviewed = True
+        sample.accepted = accepted
+        sample.corrected = corrected
+        sample.reviewed_at = datetime.utcnow()
+        
+        if corrected_labels:
+            sample.corrected_labels = json.dumps(corrected_labels)
+        
+        db.commit()
+        
+        return sample
+    
+    async def get_session_progress(self, db: Session, session_id: int) -> Dict:
+        """Get detailed session progress and metrics"""
+        
+        session = db.query(TrainingSession).filter(TrainingSession.id == session_id).first()
+        if not session:
+            raise ValueError(f"Training session {session_id} not found")
+        
+        iterations = db.query(TrainingIteration).filter(
+            TrainingIteration.session_id == session_id
+        ).order_by(TrainingIteration.iteration_number).all()
+        
+        # Calculate progress metrics
+        total_samples_reviewed = db.query(UncertainSample).join(TrainingIteration).filter(
+            TrainingIteration.session_id == session_id,
+            UncertainSample.reviewed == True
+        ).count()
+        
+        total_samples_pending = db.query(UncertainSample).join(TrainingIteration).filter(
+            TrainingIteration.session_id == session_id,
+            UncertainSample.reviewed == False
+        ).count()
+        
+        progress_percentage = (session.current_iteration / session.max_iterations) * 100 if session.max_iterations > 0 else 0
+        
+        return {
+            'session_id': session.id,
+            'name': session.name,
+            'status': session.status,
+            'progress_percentage': progress_percentage,
+            'current_iteration': session.current_iteration,
+            'max_iterations': session.max_iterations,
+            'best_map50': session.best_map50,
+            'best_map95': session.best_map95,
+            'total_samples_reviewed': total_samples_reviewed,
+            'total_samples_pending': total_samples_pending,
+            'iterations': [
+                {
+                    'iteration_number': it.iteration_number,
+                    'status': it.status,
+                    'map50': it.map50,
+                    'map95': it.map95,
+                    'precision': it.precision,
+                    'recall': it.recall,
+                    'loss': it.loss,
+                    'training_time_seconds': it.training_time_seconds,
+                    'completed_at': it.completed_at
+                }
+                for it in iterations
+            ],
+            'created_at': session.created_at,
+            'started_at': session.started_at,
+            'completed_at': session.completed_at
+        }
+    
+    async def export_best_model(
+        self,
+        db: Session,
+        session_id: int,
+        export_format: str = "onnx"
+    ) -> str:
+        """Export the best model from the training session"""
+        
+        session = db.query(TrainingSession).filter(TrainingSession.id == session_id).first()
+        if not session:
+            raise ValueError(f"Training session {session_id} not found")
+        
+        # Find the best iteration (highest mAP50)
+        best_iteration = db.query(TrainingIteration).filter(
+            TrainingIteration.session_id == session_id,
+            TrainingIteration.status == "completed"
+        ).order_by(TrainingIteration.map50.desc()).first()
+        
+        if not best_iteration:
+            raise ValueError("No completed iterations found")
+        
+        # Load the best model
+        model_path = best_iteration.weights_path
+        if not os.path.exists(model_path):
+            raise ValueError(f"Model weights not found: {model_path}")
+        
+        model = YOLO(model_path)
+        
+        # Export model
+        export_dir = self.training_dir / f"session_{session_id}" / "exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        
+        export_path = export_dir / f"best_model.{export_format}"
+        
+        if export_format.lower() == "onnx":
+            model.export(format="onnx", imgsz=640)
+            # Move exported file to our desired location
+            exported_file = Path(model_path).parent / "best.onnx"
+            if exported_file.exists():
+                shutil.move(str(exported_file), str(export_path))
+        elif export_format.lower() == "torchscript":
+            model.export(format="torchscript", imgsz=640)
+            exported_file = Path(model_path).parent / "best.torchscript"
+            if exported_file.exists():
+                shutil.move(str(exported_file), str(export_path))
+        else:
+            # Just copy the PyTorch weights
+            shutil.copy2(model_path, export_path)
+        
+        # Create model version record
+        model_version = ModelVersion(
+            session_id=session_id,
+            iteration_id=best_iteration.id,
+            version_name=f"v{session.current_iteration}_best",
+            model_path=str(export_path),
+            export_format=export_format,
+            map50=best_iteration.map50,
+            map95=best_iteration.map95,
+            precision=best_iteration.precision,
+            recall=best_iteration.recall,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(model_version)
+        db.commit()
+        
+        return str(export_path)
