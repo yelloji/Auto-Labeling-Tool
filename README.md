@@ -1,88 +1,21 @@
 # Auto-Labeling-Tool 🏷️
 
-A comprehensive local auto-labeling tool for computer vision datasets that **rivals and exceeds cloud-based solutions like Roboflow**. Fully local, optimized, and user-friendly with advanced features for professional dataset management.
+**The easiest way to label your images for AI training!** 
 
-## 🎉 Current Status: **PRODUCTION READY** 
+✨ **Better than Roboflow** - but runs on your computer  
+🚀 **Super easy to use** - just 3 commands to start  
+💻 **Works everywhere** - Windows, Mac, Linux  
+🔒 **Your data stays private** - everything runs locally  
 
-✅ **Complete Full-Stack Implementation Achieved!**
-- **Advanced Analytics**: Class distribution, imbalance detection, labeling progress tracking
-- **Data Augmentation**: 15+ augmentation types with presets and real-time preview
-- **Dataset Management**: Train/Val/Test splitting with percentage controls
-- **Visual Indicators**: Clear status indicators for labeled/unlabeled images
-- **Professional UI**: Enhanced table views with advanced filtering and actions
-- **Auto-labeling Pipeline**: 4 pre-trained YOLO models with custom model import
-- **Database**: Extended with 10 tables for comprehensive data management
-- **Export Systems**: Multiple format support (YOLO, COCO, Pascal VOC)
+## ✅ **Ready to Use Right Now!**
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.8+
-- Node.js 16+
-- Git
-
-### One-Command Startup 🚀
-
-**Option 1: Python Launcher (Recommended - Cross-platform)**
-```bash
-git clone https://github.com/yelloji/Auto-Labeling-Tool.git
-cd Auto-Labeling-Tool
-python start.py
-```
-
-**Option 2: Shell Script (Linux/Mac)**
-```bash
-git clone https://github.com/yelloji/Auto-Labeling-Tool.git
-cd Auto-Labeling-Tool
-./start.sh
-```
-
-**Option 3: Batch File (Windows)**
-```bash
-git clone https://github.com/yelloji/Auto-Labeling-Tool.git
-cd Auto-Labeling-Tool
-start.bat
-```
-
-### Manual Installation & Setup (Alternative)
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yelloji/Auto-Labeling-Tool.git
-   cd Auto-Labeling-Tool
-   ```
-
-2. **Backend Setup**
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   python main.py
-   ```
-   Backend will start on `http://localhost:12000`
-
-3. **Frontend Setup** (in new terminal)
-   ```bash
-   cd frontend
-   npm install
-   npm start
-   ```
-   Frontend will start on `http://localhost:12001`
-
-### Access the Application
-- **Frontend UI:** http://localhost:12001
-- **Backend API:** http://localhost:12000  
-- **API Documentation:** http://localhost:12000/docs
-
-### File Upload Specifications
-- **Maximum file size:** 100MB per image
-- **Maximum batch size:** 10,000 images per upload
-- **Supported formats:** .jpg, .jpeg, .png, .bmp, .tiff, .webp
-
-4. **Start Labeling!**
-   - Visit the frontend URL
-   - Upload your first dataset
-   - Use pre-trained models for auto-labeling
-   - Manually refine annotations as needed
+This tool can:
+- 🏷️ **Auto-label your images** using AI models
+- 📊 **Manage your datasets** with smart organization  
+- 🎨 **Augment your data** with 15+ effects
+- 📈 **Show analytics** about your labels
+- 💾 **Export in any format** (YOLO, COCO, etc.)
+- 🎯 **Import custom models** for better accuracy
 
 ## 🚀 Features
 
@@ -197,139 +130,127 @@ Auto-Labeling-Tool/
     └── requirements.txt    # Python dependencies
 ```
 
-## 🚀 Quick Start
+## 🚀 How to Install and Run
 
-### ⚡ **ZERO-SETUP INSTALLATION - TRULY AUTOMATIC!**
+### ⚡ **SUPER SIMPLE - 3 COMMANDS ONLY!**
 
+**Step 1:** Download the code
 ```bash
 git clone https://github.com/yelloji/Auto-Labeling-Tool.git
+```
+
+**Step 2:** Go into the folder
+```bash
 cd Auto-Labeling-Tool
-python start.py
 ```
 
-**That's literally it!** 🎉 
-- ✅ **No manual Node.js installation**
-- ✅ **No conda environments** 
-- ✅ **No dependency hunting**
-- ✅ **No configuration files**
-- ✅ **Works on Windows, macOS, Linux**
-
-### 🧠 **Smart Environment Management**
-
-The `start.py` script uses **Python's built-in `venv`** (not Conda) and is designed to be intelligent:
-
-#### 🔍 **What happens automatically:**
-
-| Component | First Run | Subsequent Runs |
-|-----------|-----------|-----------------|
-| **Node.js Runtime** | 📦 **Auto-detects & installs if missing** | ✅ Uses existing installation |
-| **Git** | 📦 **Auto-detects & installs if missing** | ✅ Uses existing installation |
-| **Python Environment** | ✅ Creates `backend/venv/` | ♻️ Reuses existing environment |
-| **Python Dependencies** | 📦 Downloads & installs all packages | ⚡ Quick check/update only |
-| **Node.js Dependencies** | 📦 Downloads & installs `node_modules/` | ⚡ Reuses existing packages |
-| **Startup Time** | 🐌 3-5 minutes (first setup with installs) | 🚀 10-20 seconds |
-
-#### 📅 **Timeline Example:**
-
-**First Run (with automatic installations):**
+**Step 3:** Run it!
 ```bash
 python start.py
 ```
+
+**That's it! 🎉** The app will install everything automatically and start running.
+
+---
+
+### 🕐 **First Time Running (Takes 3-5 minutes)**
+
+When you run `python start.py` for the **first time**, here's what happens:
+
 ```
 🏷️ Starting Auto-Labeling-Tool...
 ==================================
-🔍 Checking prerequisites...
-📦 Node.js not found. Installing automatically...
-✅ Node.js installed via winget!        ← Automatic Node.js installation
-✅ Git found: git version 2.39.5
-✅ All prerequisites are ready!
-Creating virtual environment...         ← Creates new venv folder
-Installing/updating backend dependencies...
-Installing frontend dependencies...
-Starting FastAPI backend on port 12000...
-✅ Backend started successfully on port 12000
-Starting React frontend on port 12001...
-✅ Frontend started successfully on port 12001
+🔍 Checking what you need...
+📦 Installing Node.js... ✅ Done!
+📦 Installing Python packages... ✅ Done!
+📦 Installing website files... ✅ Done!
+🚀 Starting the app...
+✅ Backend started on port 12000
+✅ Frontend started on port 12001
 
 🎉 Auto-Labeling-Tool is now running!
-✨ Everything was set up automatically!
-Backend API:  http://localhost:12000
-Frontend UI:  http://localhost:12001
+Open your browser: http://localhost:12001
 ```
 
-**Second Run (and all future runs):**
-```bash
-python start.py
-```
+**What gets installed automatically:**
+- ✅ Node.js (if you don't have it)
+- ✅ All Python packages needed
+- ✅ All website files needed
+- ✅ Everything else required
+
+---
+
+### ⚡ **Second Time Running (Takes 10-20 seconds)**
+
+When you run `python start.py` **again**, it's super fast:
+
 ```
 🏷️ Starting Auto-Labeling-Tool...
 ==================================
-🔍 Checking prerequisites...
-✅ Node.js found: v18.17.0            ← Skips installation
-✅ Git found: git version 2.39.5      ← Skips installation  
-✅ All prerequisites are ready!
-Installing/updating backend dependencies...  ← Skips venv creation
-Starting FastAPI backend on port 12000...
-✅ Backend started successfully on port 12000
-Starting React frontend on port 12001...
-✅ Frontend started successfully on port 12001
+🔍 Checking what you need...
+✅ Node.js found - good!
+✅ Python packages found - good!
+✅ Website files found - good!
+🚀 Starting the app...
+✅ Backend started on port 12000
+✅ Frontend started on port 12001
 
 🎉 Auto-Labeling-Tool is now running!
+Open your browser: http://localhost:12001
 ```
 
-### 🎯 **Requirements (Only Python needed!):**
+**Why it's faster:**
+- ✅ Everything is already installed
+- ✅ Just starts the app directly
+- ✅ No downloading or installing needed
 
-- ✅ **Python 3.8+** (standard Python installation - NOT Anaconda/Conda)
-- 🤖 **Node.js 16+** ← **Installed automatically if missing**
-- 🤖 **Git** ← **Installed automatically if missing**
+---
 
-**You literally only need Python!** Everything else is handled automatically. 🚀
+### 🎯 **What You Need (Only Python!)**
 
-### 🔧 **Alternative Startup Methods:**
+**Required:**
+- ✅ **Python 3.8 or newer** (that's it!)
 
-```bash
-# Cross-platform Python script (recommended)
-python start.py
+**Installed Automatically:**
+- 🤖 Node.js (if missing)
+- 🤖 All other software needed
 
-# Shell scripts
-./start.sh    # Linux/Mac
-start.bat     # Windows
+**You only need Python installed on your computer!** Everything else is automatic. 🚀
 
-# Manual startup (if needed)
-cd backend && python main.py &
-cd frontend && npm start
-```
+---
 
-### 🤖 **Automatic Installation Features:**
+### 🗂️ **What Files Get Created:**
 
-| Platform | Node.js Installation Method | Git Installation Method |
-|----------|----------------------------|------------------------|
-| **Windows** | `winget install OpenJS.NodeJS` or `choco install nodejs` | `winget install Git.Git` |
-| **macOS** | `brew install node` | `brew install git` |
-| **Linux** | `apt/yum/dnf/pacman install nodejs npm` | `apt/yum/dnf/pacman install git` |
-
-**Smart Fallbacks:**
-- 🔄 **Multiple package managers**: Tries winget → chocolatey on Windows, brew on macOS, apt → yum → dnf → pacman on Linux
-- 📋 **Manual instructions**: If auto-install fails, provides clear manual installation steps
-- ⚡ **Skip if present**: Only installs what's actually missing
-
-### 🗂️ **What Gets Created (automatically):**
+After running the first time, you'll see these new folders:
 ```
 Auto-Labeling-Tool/
 ├── backend/
-│   ├── venv/              ← Python virtual environment (created once)
-│   │   ├── bin/python     ← Isolated Python interpreter
-│   │   └── lib/           ← All Python packages stored here
-│   └── ...
+│   └── venv/              ← Python packages stored here
 ├── frontend/
-│   ├── node_modules/      ← Node.js packages (created once)
-│   └── ...
-└── database.db           ← SQLite database (created on first use)
+│   └── node_modules/      ← Website files stored here
+└── database.db           ← Your data stored here
 ```
 
-**System-wide installations (if needed):**
-- 🌐 **Node.js** → Installed to system PATH
-- 🔧 **Git** → Installed to system PATH
+**Don't delete these folders!** They contain all the installed software and your data.
+
+---
+
+### ❓ **Common Questions:**
+
+**Q: Do I need to install Node.js myself?**  
+A: No! The app installs it automatically if you don't have it.
+
+**Q: What if something goes wrong?**  
+A: Just run `python start.py` again. It will fix itself.
+
+**Q: How do I stop the app?**  
+A: Press `Ctrl+C` in the terminal where you ran the command.
+
+**Q: How do I start it again later?**  
+A: Just run `python start.py` again. It will be much faster the second time.
+
+**Q: Can I use this on Windows/Mac/Linux?**  
+A: Yes! It works on all operating systems.
 
 ## 🎯 Roadmap
 
