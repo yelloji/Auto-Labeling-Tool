@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 import uvicorn
 
 from api.routes import projects, datasets, annotations, models, export
+from api.routes import analytics, augmentation, dataset_management
 from core.config import settings
 from database.database import init_db
 
@@ -44,6 +45,11 @@ app.include_router(datasets.router, prefix="/api/v1/datasets", tags=["datasets"]
 app.include_router(annotations.router, prefix="/api/v1/annotations", tags=["annotations"])
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
+
+# Include new feature routes
+app.include_router(analytics.router, tags=["analytics"])
+app.include_router(augmentation.router, tags=["augmentation"])
+app.include_router(dataset_management.router, tags=["dataset-management"])
 
 # Serve static files (for uploaded images, etc.)
 static_dir = Path(settings.STATIC_FILES_DIR)

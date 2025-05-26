@@ -12,7 +12,12 @@ import {
   Input,
   Select,
   Progress,
-  Spin
+  Spin,
+  Dropdown,
+  Menu,
+  Badge,
+  Tag,
+  Tooltip
 } from 'antd';
 import {
   UploadOutlined,
@@ -21,10 +26,19 @@ import {
   EyeOutlined,
   PlusOutlined,
   DownloadOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  BarChartOutlined,
+  ExperimentOutlined,
+  SplitCellsOutlined,
+  SettingOutlined,
+  CheckCircleOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { datasetsAPI, projectsAPI } from '../services/api';
 import { handleAPIError } from '../utils/errorHandler';
+import DatasetAnalytics from '../components/DatasetAnalytics';
+import DataAugmentation from '../components/DataAugmentation';
+import DatasetManagement from '../components/DatasetManagement';
 
 const { Title, Paragraph } = Typography;
 const { Dragger } = Upload;
@@ -37,6 +51,12 @@ const Datasets = () => {
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [form] = Form.useForm();
+  
+  // New feature states
+  const [analyticsVisible, setAnalyticsVisible] = useState(false);
+  const [augmentationVisible, setAugmentationVisible] = useState(false);
+  const [managementVisible, setManagementVisible] = useState(false);
+  const [selectedDatasetId, setSelectedDatasetId] = useState(null);
 
   // Load datasets and projects
   const loadData = async () => {
@@ -112,24 +132,103 @@ const Datasets = () => {
       },
     },
     {
+      title: 'Status',
+      key: 'status',
+      render: (_, record) => {
+        const total = record.image_count || 0;
+        const annotated = record.annotated_count || 0;
+        const percent = total > 0 ? Math.round((annotated / total) * 100) : 0;
+        
+        return (
+          <Space direction="vertical" size="small">
+            <div>
+              {percent === 100 ? (
+                <CheckCircleOutlined style={{ color: 'green' }} />
+              ) : percent > 0 ? (
+                <ExclamationCircleOutlined style={{ color: 'orange' }} />
+              ) : (
+                <ExclamationCircleOutlined style={{ color: 'red' }} />
+              )}
+              <span style={{ marginLeft: 4 }}>
+                {percent === 100 ? 'Complete' : percent > 0 ? 'In Progress' : 'Not Started'}
+              </span>
+            </div>
+            {record.has_split && <Tag size="small" color="blue">Split</Tag>}
+            {record.has_augmentation && <Tag size="small" color="green">Augmented</Tag>}
+          </Space>
+        );
+      },
+    },
+    {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
         <Space>
-          <Button icon={<EyeOutlined />} size="small">
-            View
-          </Button>
-          <Button icon={<DownloadOutlined />} size="small">
-            Export
-          </Button>
-          <Button 
-            icon={<DeleteOutlined />} 
-            size="small" 
-            danger
-            onClick={() => handleDelete(record.id)}
+          <Tooltip title="View Images">
+            <Button 
+              icon={<EyeOutlined />} 
+              size="small"
+              onClick={() => {
+                setSelectedDatasetId(record.id);
+                setManagementVisible(true);
+              }}
+            >
+              Manage
+            </Button>
+          </Tooltip>
+          
+          <Dropdown
+            overlay={
+              <Menu>
+                <Menu.Item 
+                  key="analytics" 
+                  icon={<BarChartOutlined />}
+                  onClick={() => {
+                    setSelectedDatasetId(record.id);
+                    setAnalyticsVisible(true);
+                  }}
+                >
+                  Analytics
+                </Menu.Item>
+                <Menu.Item 
+                  key="augmentation" 
+                  icon={<ExperimentOutlined />}
+                  onClick={() => {
+                    setSelectedDatasetId(record.id);
+                    setAugmentationVisible(true);
+                  }}
+                >
+                  Augmentation
+                </Menu.Item>
+                <Menu.Item 
+                  key="split" 
+                  icon={<SplitCellsOutlined />}
+                  onClick={() => {
+                    setSelectedDatasetId(record.id);
+                    setManagementVisible(true);
+                  }}
+                >
+                  Train/Val/Test Split
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item key="export" icon={<DownloadOutlined />}>
+                  Export
+                </Menu.Item>
+                <Menu.Item 
+                  key="delete" 
+                  icon={<DeleteOutlined />} 
+                  danger
+                  onClick={() => handleDelete(record.id)}
+                >
+                  Delete
+                </Menu.Item>
+              </Menu>
+            }
           >
-            Delete
-          </Button>
+            <Button icon={<SettingOutlined />} size="small">
+              More
+            </Button>
+          </Dropdown>
         </Space>
       ),
     },
@@ -299,6 +398,57 @@ const Datasets = () => {
             </Upload.Dragger>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Analytics Modal */}
+      <Modal
+        title="Dataset Analytics"
+        visible={analyticsVisible}
+        onCancel={() => setAnalyticsVisible(false)}
+        footer={null}
+        width={1200}
+        style={{ top: 20 }}
+      >
+        {analyticsVisible && selectedDatasetId && (
+          <DatasetAnalytics 
+            datasetId={selectedDatasetId} 
+            onClose={() => setAnalyticsVisible(false)}
+          />
+        )}
+      </Modal>
+
+      {/* Data Augmentation Modal */}
+      <Modal
+        title="Data Augmentation"
+        visible={augmentationVisible}
+        onCancel={() => setAugmentationVisible(false)}
+        footer={null}
+        width={1400}
+        style={{ top: 20 }}
+      >
+        {augmentationVisible && selectedDatasetId && (
+          <DataAugmentation 
+            datasetId={selectedDatasetId} 
+            onClose={() => setAugmentationVisible(false)}
+          />
+        )}
+      </Modal>
+
+      {/* Dataset Management Modal */}
+      <Modal
+        title="Dataset Management"
+        visible={managementVisible}
+        onCancel={() => setManagementVisible(false)}
+        footer={null}
+        width={1600}
+        style={{ top: 20 }}
+      >
+        {managementVisible && selectedDatasetId && (
+          <DatasetManagement 
+            datasetId={selectedDatasetId} 
+            onClose={() => setManagementVisible(false)}
+          />
+        )}
       </Modal>
     </div>
   );

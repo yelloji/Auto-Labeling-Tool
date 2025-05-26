@@ -11,7 +11,8 @@ import uuid
 
 from .models import (
     Project, Dataset, Image, Annotation, 
-    ModelUsage, ExportJob, AutoLabelJob
+    ModelUsage, ExportJob, AutoLabelJob,
+    DataAugmentation, DatasetSplit, LabelAnalytics
 )
 
 
@@ -402,3 +403,229 @@ class ModelUsageOperations:
     def get_model_usage_stats(db: Session) -> List[ModelUsage]:
         """Get usage statistics for all models"""
         return db.query(ModelUsage).order_by(desc(ModelUsage.last_used)).all()
+
+
+class DataAugmentationOperations:
+    """CRUD operations for DataAugmentation model"""
+    
+    @staticmethod
+    def create_data_augmentation(db: Session, data: Dict[str, Any]) -> DataAugmentation:
+        """Create a new data augmentation job"""
+        augmentation = DataAugmentation(**data)
+        db.add(augmentation)
+        db.commit()
+        db.refresh(augmentation)
+        return augmentation
+    
+    @staticmethod
+    def get_data_augmentation(db: Session, augmentation_id: str) -> Optional[DataAugmentation]:
+        """Get data augmentation by ID"""
+        return db.query(DataAugmentation).filter(DataAugmentation.id == augmentation_id).first()
+    
+    @staticmethod
+    def get_data_augmentations_by_dataset(db: Session, dataset_id: str) -> List[DataAugmentation]:
+        """Get all data augmentations for a dataset"""
+        return db.query(DataAugmentation).filter(DataAugmentation.dataset_id == dataset_id).all()
+    
+    @staticmethod
+    def update_data_augmentation(db: Session, augmentation_id: str, data: Dict[str, Any]) -> Optional[DataAugmentation]:
+        """Update data augmentation job"""
+        augmentation = db.query(DataAugmentation).filter(DataAugmentation.id == augmentation_id).first()
+        if augmentation:
+            for key, value in data.items():
+                setattr(augmentation, key, value)
+            db.commit()
+            db.refresh(augmentation)
+        return augmentation
+    
+    @staticmethod
+    def delete_data_augmentation(db: Session, augmentation_id: str) -> bool:
+        """Delete data augmentation job"""
+        augmentation = db.query(DataAugmentation).filter(DataAugmentation.id == augmentation_id).first()
+        if augmentation:
+            db.delete(augmentation)
+            db.commit()
+            return True
+        return False
+
+
+class DatasetSplitOperations:
+    """CRUD operations for DatasetSplit model"""
+    
+    @staticmethod
+    def create_dataset_split(db: Session, data: Dict[str, Any]) -> DatasetSplit:
+        """Create a new dataset split configuration"""
+        split = DatasetSplit(**data)
+        db.add(split)
+        db.commit()
+        db.refresh(split)
+        return split
+    
+    @staticmethod
+    def get_dataset_split_by_dataset(db: Session, dataset_id: str) -> Optional[DatasetSplit]:
+        """Get dataset split configuration by dataset ID"""
+        return db.query(DatasetSplit).filter(DatasetSplit.dataset_id == dataset_id).first()
+    
+    @staticmethod
+    def update_dataset_split(db: Session, split_id: str, data: Dict[str, Any]) -> Optional[DatasetSplit]:
+        """Update dataset split configuration"""
+        split = db.query(DatasetSplit).filter(DatasetSplit.id == split_id).first()
+        if split:
+            for key, value in data.items():
+                setattr(split, key, value)
+            split.updated_at = datetime.utcnow()
+            split.last_split_at = datetime.utcnow()
+            db.commit()
+            db.refresh(split)
+        return split
+    
+    @staticmethod
+    def delete_dataset_split(db: Session, split_id: str) -> bool:
+        """Delete dataset split configuration"""
+        split = db.query(DatasetSplit).filter(DatasetSplit.id == split_id).first()
+        if split:
+            db.delete(split)
+            db.commit()
+            return True
+        return False
+
+
+class LabelAnalyticsOperations:
+    """CRUD operations for LabelAnalytics model"""
+    
+    @staticmethod
+    def create_label_analytics(db: Session, dataset_id: str, analytics_data: Dict[str, Any]) -> LabelAnalytics:
+        """Create new label analytics"""
+        analytics = LabelAnalytics(
+            dataset_id=dataset_id,
+            class_distribution=analytics_data.get('class_distribution', {}),
+            total_annotations=analytics_data.get('total_annotations', 0),
+            num_classes=analytics_data.get('num_classes', 0),
+            most_common_class=analytics_data.get('most_common_class'),
+            most_common_count=analytics_data.get('most_common_count', 0),
+            least_common_class=analytics_data.get('least_common_class'),
+            least_common_count=analytics_data.get('least_common_count', 0),
+            gini_coefficient=analytics_data.get('gini_coefficient', 0.0),
+            entropy=analytics_data.get('entropy', 0.0),
+            imbalance_ratio=analytics_data.get('imbalance_ratio', 0.0),
+            is_balanced=analytics_data.get('is_balanced', True),
+            needs_augmentation=analytics_data.get('needs_augmentation', False),
+            recommended_techniques=analytics_data.get('recommendations', [])
+        )
+        db.add(analytics)
+        db.commit()
+        db.refresh(analytics)
+        return analytics
+    
+    @staticmethod
+    def get_label_analytics_by_dataset(db: Session, dataset_id: str) -> Optional[LabelAnalytics]:
+        """Get label analytics by dataset ID"""
+        return db.query(LabelAnalytics).filter(LabelAnalytics.dataset_id == dataset_id).first()
+    
+    @staticmethod
+    def update_label_analytics(db: Session, analytics_id: str, analytics_data: Dict[str, Any]) -> Optional[LabelAnalytics]:
+        """Update label analytics"""
+        analytics = db.query(LabelAnalytics).filter(LabelAnalytics.id == analytics_id).first()
+        if analytics:
+            analytics.class_distribution = analytics_data.get('class_distribution', analytics.class_distribution)
+            analytics.total_annotations = analytics_data.get('total_annotations', analytics.total_annotations)
+            analytics.num_classes = analytics_data.get('num_classes', analytics.num_classes)
+            analytics.most_common_class = analytics_data.get('most_common_class', analytics.most_common_class)
+            analytics.most_common_count = analytics_data.get('most_common_count', analytics.most_common_count)
+            analytics.least_common_class = analytics_data.get('least_common_class', analytics.least_common_class)
+            analytics.least_common_count = analytics_data.get('least_common_count', analytics.least_common_count)
+            analytics.gini_coefficient = analytics_data.get('gini_coefficient', analytics.gini_coefficient)
+            analytics.entropy = analytics_data.get('entropy', analytics.entropy)
+            analytics.imbalance_ratio = analytics_data.get('imbalance_ratio', analytics.imbalance_ratio)
+            analytics.is_balanced = analytics_data.get('is_balanced', analytics.is_balanced)
+            analytics.needs_augmentation = analytics_data.get('needs_augmentation', analytics.needs_augmentation)
+            analytics.recommended_techniques = analytics_data.get('recommendations', analytics.recommended_techniques)
+            analytics.updated_at = datetime.utcnow()
+            db.commit()
+            db.refresh(analytics)
+        return analytics
+
+
+# Additional helper functions for image operations
+class ImageOperations:
+    """Extended image operations"""
+    
+    @staticmethod
+    def update_image_split(db: Session, image_id: str, split_type: str) -> bool:
+        """Update image split assignment"""
+        image = db.query(Image).filter(Image.id == image_id).first()
+        if image:
+            image.split_type = split_type
+            image.updated_at = datetime.utcnow()
+            db.commit()
+            return True
+        return False
+    
+    @staticmethod
+    def get_annotations_by_images(db: Session, image_ids: List[str]) -> List[Annotation]:
+        """Get annotations for multiple images"""
+        return db.query(Annotation).filter(Annotation.image_id.in_(image_ids)).all()
+    
+    @staticmethod
+    def get_annotations_by_dataset(db: Session, dataset_id: str) -> List[Annotation]:
+        """Get all annotations for a dataset"""
+        return db.query(Annotation).join(Image).filter(Image.dataset_id == dataset_id).all()
+
+
+# Create convenience functions that match the API expectations
+def create_data_augmentation(db: Session, data: Dict[str, Any]) -> DataAugmentation:
+    return DataAugmentationOperations.create_data_augmentation(db, data)
+
+def get_data_augmentation(db: Session, augmentation_id: str) -> Optional[DataAugmentation]:
+    return DataAugmentationOperations.get_data_augmentation(db, augmentation_id)
+
+def get_data_augmentations_by_dataset(db: Session, dataset_id: str) -> List[DataAugmentation]:
+    return DataAugmentationOperations.get_data_augmentations_by_dataset(db, dataset_id)
+
+def update_data_augmentation(db: Session, augmentation_id: str, data: Dict[str, Any]) -> Optional[DataAugmentation]:
+    return DataAugmentationOperations.update_data_augmentation(db, augmentation_id, data)
+
+def delete_data_augmentation(db: Session, augmentation_id: str) -> bool:
+    return DataAugmentationOperations.delete_data_augmentation(db, augmentation_id)
+
+def create_dataset_split(db: Session, data: Dict[str, Any]) -> DatasetSplit:
+    return DatasetSplitOperations.create_dataset_split(db, data)
+
+def get_dataset_split_by_dataset(db: Session, dataset_id: str) -> Optional[DatasetSplit]:
+    return DatasetSplitOperations.get_dataset_split_by_dataset(db, dataset_id)
+
+def update_dataset_split(db: Session, split_id: str, data: Dict[str, Any]) -> Optional[DatasetSplit]:
+    return DatasetSplitOperations.update_dataset_split(db, split_id, data)
+
+def create_label_analytics(db: Session, dataset_id: str, analytics_data: Dict[str, Any]) -> LabelAnalytics:
+    return LabelAnalyticsOperations.create_label_analytics(db, dataset_id, analytics_data)
+
+def get_label_analytics_by_dataset(db: Session, dataset_id: str) -> Optional[LabelAnalytics]:
+    return LabelAnalyticsOperations.get_label_analytics_by_dataset(db, dataset_id)
+
+def update_label_analytics(db: Session, analytics_id: str, analytics_data: Dict[str, Any]) -> Optional[LabelAnalytics]:
+    return LabelAnalyticsOperations.update_label_analytics(db, analytics_id, analytics_data)
+
+def update_image_split(db: Session, image_id: str, split_type: str) -> bool:
+    return ImageOperations.update_image_split(db, image_id, split_type)
+
+def get_annotations_by_images(db: Session, image_ids: List[str]) -> List[Annotation]:
+    return ImageOperations.get_annotations_by_images(db, image_ids)
+
+def get_annotations_by_dataset(db: Session, dataset_id: str) -> List[Annotation]:
+    return ImageOperations.get_annotations_by_dataset(db, dataset_id)
+
+# Convenience functions for existing operations (avoiding circular imports)
+def get_dataset(db: Session, dataset_id: str):
+    return DatasetOperations.get_dataset(db, dataset_id)
+
+def get_images_by_dataset(db: Session, dataset_id: str, limit: Optional[int] = None):
+    if limit:
+        return db.query(Image).filter(Image.dataset_id == dataset_id).limit(limit).all()
+    return db.query(Image).filter(Image.dataset_id == dataset_id).all()
+
+def get_image(db: Session, image_id: str):
+    return db.query(Image).filter(Image.id == image_id).first()
+
+def get_annotations_by_image(db: Session, image_id: str):
+    return db.query(Annotation).filter(Annotation.image_id == image_id).all()

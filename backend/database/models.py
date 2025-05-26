@@ -86,6 +86,9 @@ class Image(Base):
     is_auto_labeled = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)
     
+    # Train/Val/Test split
+    split_type = Column(String(10), default="unassigned")  # train, val, test, unassigned
+    
     # Timestamps
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -222,3 +225,135 @@ class AutoLabelJob(Base):
     
     def __repr__(self):
         return f"<AutoLabelJob(id='{self.id}', dataset='{self.dataset_id}', status='{self.status}')>"
+
+
+class DataAugmentation(Base):
+    """Data augmentation configuration and jobs"""
+    __tablename__ = "data_augmentations"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    
+    # Augmentation parameters (JSON configuration)
+    augmentation_config = Column(JSON, nullable=False)
+    # Example config:
+    # {
+    #   "rotation": {"enabled": true, "range": [-15, 15]},
+    #   "flip": {"horizontal": true, "vertical": false},
+    #   "brightness": {"enabled": true, "range": [0.8, 1.2]},
+    #   "contrast": {"enabled": true, "range": [0.8, 1.2]},
+    #   "saturation": {"enabled": true, "range": [0.8, 1.2]},
+    #   "hue": {"enabled": true, "range": [-0.1, 0.1]},
+    #   "gaussian_blur": {"enabled": true, "kernel_size": [3, 7]},
+    #   "noise": {"enabled": true, "std": [0.01, 0.05]},
+    #   "crop": {"enabled": true, "scale": [0.8, 1.0]},
+    #   "zoom": {"enabled": true, "range": [0.9, 1.1]},
+    #   "shear": {"enabled": true, "range": [-5, 5]},
+    #   "perspective": {"enabled": true, "distortion": 0.1},
+    #   "elastic_transform": {"enabled": true, "alpha": 1, "sigma": 50},
+    #   "cutout": {"enabled": true, "num_holes": [1, 3], "hole_size": [0.1, 0.3]},
+    #   "mixup": {"enabled": true, "alpha": 0.2},
+    #   "cutmix": {"enabled": true, "alpha": 1.0}
+    # }
+    
+    # Generation settings
+    images_per_original = Column(Integer, default=5)  # How many augmented versions per original
+    apply_to_split = Column(String(20), default="train")  # train, val, test, all
+    preserve_annotations = Column(Boolean, default=True)
+    
+    # Job status
+    status = Column(String(20), default="pending")  # pending, processing, completed, failed
+    progress = Column(Float, default=0.0)  # 0-100
+    
+    # Statistics
+    total_original_images = Column(Integer, default=0)
+    total_augmented_images = Column(Integer, default=0)
+    successful_augmentations = Column(Integer, default=0)
+    failed_augmentations = Column(Integer, default=0)
+    
+    # Error handling
+    error_message = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    
+    def __repr__(self):
+        return f"<DataAugmentation(id='{self.id}', dataset='{self.dataset_id}', status='{self.status}')>"
+
+
+class DatasetSplit(Base):
+    """Dataset split configuration and statistics"""
+    __tablename__ = "dataset_splits"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False, unique=True)
+    
+    # Split configuration
+    train_percentage = Column(Float, default=70.0)  # 70%
+    val_percentage = Column(Float, default=20.0)    # 20%
+    test_percentage = Column(Float, default=10.0)   # 10%
+    
+    # Split method
+    split_method = Column(String(20), default="random")  # random, stratified, manual
+    random_seed = Column(Integer, default=42)
+    stratify_by_class = Column(Boolean, default=True)
+    
+    # Current statistics
+    train_count = Column(Integer, default=0)
+    val_count = Column(Integer, default=0)
+    test_count = Column(Integer, default=0)
+    unassigned_count = Column(Integer, default=0)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    last_split_at = Column(DateTime, nullable=True)
+    
+    def __repr__(self):
+        return f"<DatasetSplit(dataset='{self.dataset_id}', train={self.train_percentage}%, val={self.val_percentage}%, test={self.test_percentage}%)>"
+
+
+class LabelAnalytics(Base):
+    """Label analytics and class distribution statistics"""
+    __tablename__ = "label_analytics"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
+    
+    # Class distribution (JSON)
+    class_distribution = Column(JSON, nullable=False)
+    # Example: {"person": 150, "car": 89, "bicycle": 23}
+    
+    # Imbalance metrics
+    total_annotations = Column(Integer, default=0)
+    num_classes = Column(Integer, default=0)
+    most_common_class = Column(String(100))
+    most_common_count = Column(Integer, default=0)
+    least_common_class = Column(String(100))
+    least_common_count = Column(Integer, default=0)
+    
+    # Statistical measures
+    gini_coefficient = Column(Float, default=0.0)  # Measure of inequality (0 = perfect balance, 1 = maximum imbalance)
+    entropy = Column(Float, default=0.0)  # Information entropy
+    imbalance_ratio = Column(Float, default=0.0)  # Ratio of most common to least common class
+    
+    # Per-split statistics (JSON)
+    train_distribution = Column(JSON, nullable=True)
+    val_distribution = Column(JSON, nullable=True)
+    test_distribution = Column(JSON, nullable=True)
+    
+    # Recommendations
+    is_balanced = Column(Boolean, default=True)
+    needs_augmentation = Column(Boolean, default=False)
+    recommended_techniques = Column(JSON, nullable=True)  # List of recommended augmentation techniques
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    def __repr__(self):
+        return f"<LabelAnalytics(dataset='{self.dataset_id}', classes={self.num_classes}, balanced={self.is_balanced})>"
