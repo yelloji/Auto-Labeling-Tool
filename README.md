@@ -2,6 +2,52 @@
 
 A comprehensive local auto and semi-automatic labeling tool for computer vision datasets. Built to be better than Roboflow - fully local, optimized, and easy to use with both CPU and GPU support.
 
+## 🎉 Current Status: **FULLY FUNCTIONAL** 
+
+✅ **Complete Frontend-Backend Integration Achieved!**
+- All 5 main pages working with real backend data
+- Auto-labeling pipeline implemented and tested
+- 4 pre-trained YOLO models automatically loaded
+- Database with 7 tables fully operational
+- Upload, annotation, and export systems ready
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8+
+- Node.js 16+
+- Git
+
+### Installation & Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yelloji/Auto-Labeling-Tool.git
+   cd Auto-Labeling-Tool
+   ```
+
+2. **Backend Setup**
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   python main.py
+   ```
+   Backend will start on `http://localhost:12000`
+
+3. **Frontend Setup** (in new terminal)
+   ```bash
+   cd frontend
+   npm install
+   npm start
+   ```
+   Frontend will start on `http://localhost:12001`
+
+4. **Start Labeling!**
+   - Visit the frontend URL
+   - Upload your first dataset
+   - Use pre-trained models for auto-labeling
+   - Manually refine annotations as needed
+
 ## 🚀 Features
 
 ### Core Labeling Capabilities
