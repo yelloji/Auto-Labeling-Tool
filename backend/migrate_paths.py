@@ -285,7 +285,7 @@ def migrate_paths_if_needed():
     import sqlite3
     from pathlib import Path
     
-    db_path = Path(__file__).parent / "database.db"
+    db_path = Path(__file__).parent.parent / "database.db"
     if not db_path.exists():
         return
     

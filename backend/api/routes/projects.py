@@ -403,15 +403,29 @@ async def get_project_management_data(project_id: str, db: Session = Depends(get
             annotating_folder = os.path.join(project_folder, "annotating", dataset.name)
             dataset_folder = os.path.join(project_folder, "dataset", dataset.name)
             
-            # Categorize based on physical location and annotation status
-            if os.path.exists(annotating_folder):
+            # Debug logs
+            print(f"Dataset {dataset.name} (id={dataset.id}) in project {project.name}")
+            print(f"  Checking unassigned folder: {unassigned_folder} - exists: {os.path.exists(unassigned_folder)}")
+            print(f"  Checking annotating folder: {annotating_folder} - exists: {os.path.exists(annotating_folder)}")
+            print(f"  Checking dataset folder: {dataset_folder} - exists: {os.path.exists(dataset_folder)}")
+            
+            # LOGIC CHANGE: Prioritize unassigned folder check first
+            if os.path.exists(unassigned_folder):
+                # Explicitly check for unassigned folder first
+                print(f"  -> Adding to UNASSIGNED")
+                unassigned.append(dataset_info)
+            elif os.path.exists(annotating_folder):
                 # Dataset is assigned for annotation work - Annotating
+                print(f"  -> Adding to ANNOTATING")
                 annotating.append(dataset_info)
             elif os.path.exists(dataset_folder) or dataset.labeled_images == dataset.total_images:
                 # Fully annotated - Dataset (completed)
+                print(f"  -> Adding to COMPLETED")
                 completed.append(dataset_info)
             else:
-                # Default to unassigned (includes datasets in unassigned folder or no folder found)
+                # Default to unassigned if no folder found
+                print(f"WARNING: No folder found for dataset {dataset.name} in project {project.name}")
+                print(f"  -> Default to UNASSIGNED")
                 unassigned.append(dataset_info)
         
         return {

@@ -45,7 +45,7 @@ def fix_database_paths():
     """
     Fix all file_path entries in the database
     """
-    db_path = 'database.db'
+    db_path = Path(__file__).parent.parent / 'database.db'
     
     if not os.path.exists(db_path):
         print("❌ Database file not found!")
@@ -95,7 +95,7 @@ def verify_paths():
     Verify that all paths are now in correct format
     """
     try:
-        conn = sqlite3.connect('database.db')
+        conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
         
         cursor.execute("SELECT file_path FROM images WHERE file_path IS NOT NULL")

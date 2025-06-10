@@ -133,7 +133,10 @@ class AnnotationAPI {
    */
   static async updateAnnotation(annotationId, updates) {
     try {
+      console.log('Updating annotation:', annotationId, updates);
+      // The annotations router is mounted at /api/v1/images
       const response = await axios.put(`${API_BASE}/images/${annotationId}`, updates);
+      console.log('Update response:', response);
       return response.data;
     } catch (error) {
       console.error('Failed to update annotation:', error);
@@ -147,11 +150,28 @@ class AnnotationAPI {
    * @returns {Promise<boolean>} Success status
    */
   static async deleteAnnotation(annotationId) {
+    if (!annotationId) {
+      console.error('No annotation ID provided for deletion');
+      throw new Error('Annotation ID is required for deletion');
+    }
+    
     try {
-      await axios.delete(`${API_BASE}/annotations/${annotationId}`);
+      console.log('AnnotationAPI: Sending DELETE request for annotation:', annotationId);
+      
+      // The annotations router is mounted at /api/v1/images
+      // The delete endpoint is /{annotation_id}
+      // So the full path is /api/v1/images/{annotation_id}
+      const deleteUrl = `${API_BASE}/images/${annotationId}`;
+      console.log('DELETE URL:', deleteUrl);
+      
+      const response = await axios.delete(deleteUrl);
+      console.log('Delete annotation response:', response);
+      
       return true;
     } catch (error) {
       console.error('Failed to delete annotation:', error);
+      console.error('Error details:', error.message);
+      console.error('Error response:', error.response?.data);
       throw error;
     }
   }
@@ -383,9 +403,10 @@ class AnnotationAPI {
         label.color = this.generateLabelColor(label.name);
       }
       
-      // CRITICAL: Get the project ID from the dataset ID
-      // In this application, the datasetId parameter is actually the project ID
-      const projectId = parseInt(datasetId);
+      // First, get the project ID for this dataset
+      const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
+      const projectId = response.data.project_id;
+      console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
       
       // Prepare the label data
       const labelData = {
@@ -397,7 +418,7 @@ class AnnotationAPI {
       console.log('Prepared label data for API:', labelData);
       
       // First check if we already have this label in local storage
-      const storedLabelsStr = localStorage.getItem(`project_labels_${datasetId}`);
+      const storedLabelsStr = localStorage.getItem(`project_labels_${projectId}`);
       let existingLabel = null;
       
       if (storedLabelsStr) {
@@ -433,7 +454,7 @@ class AnnotationAPI {
         console.error('Failed to check existing labels from API:', e);
       }
       
-      let response;
+      let apiResponse;
       
       if (existingLabel) {
         console.log('Label already exists, updating if needed:', existingLabel);
@@ -441,15 +462,15 @@ class AnnotationAPI {
         // Update existing label if color is different
         if (existingLabel.color !== labelData.color) {
           console.log(`Updating label: PUT ${API_BASE}/projects/${projectId}/labels/${existingLabel.id}`);
-          response = await axios.put(
+          apiResponse = await axios.put(
             `${API_BASE}/projects/${projectId}/labels/${existingLabel.id}`, 
             labelData
           );
           
-          console.log('Label update response:', response.data);
+          console.log('Label update response:', apiResponse.data);
           
           // Store in local storage as backup
-          const updatedLabel = response.data;
+          const updatedLabel = apiResponse.data;
           this.storeProjectLabelLocally(datasetId, updatedLabel);
           
           return updatedLabel;
@@ -464,15 +485,15 @@ class AnnotationAPI {
         // CRITICAL: Force create new label with direct API call
         try {
           // Create new label
-          response = await axios.post(
+          apiResponse = await axios.post(
             `${API_BASE}/projects/${projectId}/labels`, 
             labelData
           );
           
-          console.log('Label creation response:', response.data);
+          console.log('Label creation response:', apiResponse.data);
           
           // Store in local storage as backup
-          const newLabel = response.data;
+          const newLabel = apiResponse.data;
           this.storeProjectLabelLocally(datasetId, newLabel);
           
           // CRITICAL: Verify the label was created by fetching it again
@@ -511,10 +532,23 @@ class AnnotationAPI {
    * @param {string} datasetId - Dataset ID
    * @param {Object} label - Label object
    */
-  static storeProjectLabelLocally(datasetId, label) {
+  static async storeProjectLabelLocally(datasetId, label) {
     try {
+      // First get the project ID for this dataset
+      let projectId;
+      try {
+        const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
+        projectId = response.data.project_id;
+        console.log(`For localStorage: Dataset ${datasetId} belongs to project ${projectId}`);
+      } catch (e) {
+        console.error('Failed to get project ID for localStorage, using datasetId as fallback:', e);
+        projectId = datasetId; // fallback
+      }
+      
       // Get existing labels from local storage
-      const storedLabelsStr = localStorage.getItem(`project_labels_${datasetId}`);
+      const storageKey = `project_labels_${projectId}`;
+      console.log(`Using localStorage key: ${storageKey}`);
+      const storedLabelsStr = localStorage.getItem(storageKey);
       let storedLabels = [];
       
       if (storedLabelsStr) {
@@ -536,9 +570,9 @@ class AnnotationAPI {
       }
       
       // Save back to local storage
-      localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(storedLabels));
+      localStorage.setItem(storageKey, JSON.stringify(storedLabels));
       
-      console.log('Stored label in local storage:', label);
+      console.log(`Stored label in local storage with key ${storageKey}:`, label);
     } catch (error) {
       console.error('Failed to store label in local storage:', error);
     }

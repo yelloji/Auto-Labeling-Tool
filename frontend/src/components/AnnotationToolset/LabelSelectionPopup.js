@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Modal, Select, Input, Button, Tag, Space, message } from 'antd';
-import { PlusOutlined, TagOutlined } from '@ant-design/icons';
+import { Modal, Select, Input, Button, Tag, Space, message, Divider } from 'antd';
+import { PlusOutlined, TagOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import AnnotationAPI from './AnnotationAPI';
 
 const { Option } = Select;
@@ -14,9 +14,11 @@ const LabelSelectionPopup = ({
   visible,
   onCancel,
   onConfirm,
+  onDelete,
   existingLabels = [],
   defaultLabel = null,
-  shapeType = 'box'
+  shapeType = 'box',
+  isEditing = false
 }) => {
   const [selectedLabel, setSelectedLabel] = useState(defaultLabel);
   const [newLabelName, setNewLabelName] = useState('');
@@ -28,11 +30,30 @@ const LabelSelectionPopup = ({
     console.log('🏷️ Default label:', defaultLabel);
     console.log('🏷️ Existing labels:', existingLabels);
     console.log('🏷️ Shape type:', shapeType);
+    console.log('🏷️ Is editing:', isEditing);
     
-    if (visible) {
-      // Reset state when popup opens
+    // Clear the flag when the popup closes
+    if (!visible) {
+      try {
+        document.getElementById('root').removeAttribute('data-label-popup-initialized');
+      } catch (e) {
+        // Ignore errors
+      }
+      return;
+    }
+    
+    // Only initialize state when first opening the popup
+    if (visible && !document.getElementById('root').hasAttribute('data-label-popup-initialized')) {
+      // Set a flag on the document to prevent state reset during typing
+      document.getElementById('root').setAttribute('data-label-popup-initialized', 'true');
+      
+      // Only reset name field when first opening, not during typing
       setNewLabelName('');
-      setIsCreatingNew(false);
+      
+      // Only reset the creation mode when first opening
+      if (!isCreatingNew) {
+        setIsCreatingNew(false);
+      }
       
       // If we have a default label, try to find it in existing labels
       if (defaultLabel) {
@@ -49,14 +70,14 @@ const LabelSelectionPopup = ({
           console.log('🏷️ No matching label found for default, using as is:', defaultLabel);
           setSelectedLabel(defaultLabel);
         }
-      } else {
-        // If no default label, just reset selection
+      } else if (!isCreatingNew) {
+        // If no default label and not creating new, reset selection
         setSelectedLabel(null);
       }
       
       console.log('🏷️ Popup opened and state reset');
     }
-  }, [visible, defaultLabel, existingLabels, shapeType]);
+  }, [visible]); // Only depend on visibility changes
 
   const handleConfirm = async () => {
     if (!selectedLabel && !newLabelName.trim()) {
@@ -95,7 +116,13 @@ const LabelSelectionPopup = ({
       
       console.log('Confirming with label:', labelToUse);
       await onConfirm(labelToUse);
-      message.success(`${shapeType} labeled as "${labelToUse}"`);
+      
+      // Show different success message based on whether we're editing or creating
+      if (isEditing) {
+        message.success(`Annotation updated to "${labelToUse}"`);
+      } else {
+        message.success(`${shapeType} labeled as "${labelToUse}"`);
+      }
     } catch (error) {
       message.error(`Failed to save annotation: ${error.message}`);
       console.error('Label assignment error:', error);
@@ -104,9 +131,48 @@ const LabelSelectionPopup = ({
     }
   };
 
+  const handleDelete = async () => {
+    console.log('Delete button clicked in popup');
+    console.log('onDelete function exists:', !!onDelete);
+    
+    if (onDelete) {
+      setLoading(true);
+      try {
+        console.log('Calling onDelete function');
+        await onDelete();
+        console.log('onDelete completed successfully');
+        message.success('Annotation deleted successfully');
+        // Close the popup after successful deletion
+        console.log('Calling onCancel to close popup');
+        onCancel();
+      } catch (error) {
+        console.error('Delete error in popup component:', error);
+        message.error(`Failed to delete annotation: ${error.message || 'Unknown error'}`);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      console.error('No onDelete handler provided to popup');
+    }
+  };
+
   const handleCreateNew = () => {
+    console.log('Switching to create new label mode');
+    
+    // Don't reset any text already entered
     setIsCreatingNew(true);
+    
+    // Only clear selected label if we're switching modes
     setSelectedLabel(null);
+    
+    // Set a flag to prevent useEffect from resetting our state
+    document.getElementById('root').setAttribute('data-creating-new-label', 'true');
+    
+    // Focus on the input field (will be rendered after state update)
+    setTimeout(() => {
+      const input = document.querySelector('input[placeholder="Enter new label name"]');
+      if (input) input.focus();
+    }, 100);
   };
 
   const handleSelectExisting = (value) => {
@@ -194,14 +260,16 @@ const LabelSelectionPopup = ({
       title={
         <Space>
           <TagOutlined />
-          {`Label ${shapeType.charAt(0).toUpperCase() + shapeType.slice(1)}`}
+          {isEditing 
+            ? `Edit ${shapeType.charAt(0).toUpperCase() + shapeType.slice(1)} Label` 
+            : `Label ${shapeType.charAt(0).toUpperCase() + shapeType.slice(1)}`}
         </Space>
       }
       open={visible}
       onCancel={onCancel}
       onOk={handleConfirm}
       confirmLoading={loading}
-      okText="Apply Label"
+      okText={isEditing ? "Update Label" : "Apply Label"}
       cancelText="Cancel"
       width={360}
       centered={false}
@@ -209,13 +277,40 @@ const LabelSelectionPopup = ({
       okButtonProps={{
         disabled: !selectedLabel && !newLabelName.trim()
       }}
+      footer={[
+        // Add delete button when editing
+        ...(isEditing && onDelete ? [
+          <Button 
+            key="delete" 
+            danger 
+            icon={<DeleteOutlined />} 
+            onClick={handleDelete}
+            loading={loading}
+          >
+            Delete
+          </Button>
+        ] : []),
+        <Button key="cancel" onClick={onCancel}>
+          Cancel
+        </Button>,
+        <Button
+          key="submit"
+          type="primary"
+          loading={loading}
+          onClick={handleConfirm}
+          disabled={!selectedLabel && !newLabelName.trim()}
+          icon={isEditing ? <EditOutlined /> : null}
+        >
+          {isEditing ? "Update Label" : "Apply Label"}
+        </Button>
+      ].filter(Boolean)} // Filter out falsy values (when isEditing is false)
     >
       <div style={{ padding: '8px 0' }}>
         {renderExistingLabels()}
 
         <div style={{ marginBottom: '16px' }}>
           <div style={{ marginBottom: '8px', fontWeight: '500' }}>
-            Select label:
+            {isEditing ? "Change label to:" : "Select label:"}
           </div>
           
           {!isCreatingNew ? (
@@ -259,12 +354,16 @@ const LabelSelectionPopup = ({
               <Input
                 placeholder="Enter new label name"
                 value={newLabelName}
-                onChange={(e) => setNewLabelName(e.target.value)}
+                onChange={(e) => {
+                  e.persist(); // Ensure the event persists
+                  setNewLabelName(e.target.value);
+                }}
                 onPressEnter={handleConfirm}
                 size="large"
                 style={{ flex: 1 }}
                 autoFocus
-                ref={(input) => input && input.focus()}
+                // Use a stable key to prevent component remounting
+                key="new-label-input"
               />
               <Button
                 onClick={() => setIsCreatingNew(false)}
@@ -276,40 +375,44 @@ const LabelSelectionPopup = ({
           )}
         </div>
 
-        {(selectedLabel || newLabelName.trim()) && (
-          <div
-            style={{
-              padding: '12px',
-              background: '#f6f8fa',
-              borderRadius: '6px',
-              border: '1px solid #e1e4e8'
-            }}
-          >
-            <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
-              Preview:
-            </div>
-            {isCreatingNew ? (
+        {/* Optimized preview that doesn't cause re-renders during typing */}
+        {(() => {
+          // Skip rendering if we don't have enough content to preview
+          if (!selectedLabel && (!newLabelName || newLabelName.trim().length <= 2)) {
+            return null;
+          }
+                // Use memoized values to prevent recalculations
+          const previewColor = isCreatingNew 
+            ? (newLabelName ? AnnotationAPI.generateLabelColor(newLabelName) : '#ccc')
+            : (selectedLabel && existingLabels.find(label => label.id === selectedLabel)?.color || 
+               AnnotationAPI.generateLabelColor(selectedLabel || ''));
+    
+               
+          const previewText = isCreatingNew 
+            ? newLabelName
+            : (selectedLabel && existingLabels.find(label => label.id === selectedLabel)?.name || selectedLabel);
+          
+          return (
+            <div
+              style={{
+                padding: '12px',
+                background: '#f6f8fa',
+                borderRadius: '6px',
+                border: '1px solid #e1e4e8'
+              }}
+            >
+              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+                Preview:
+              </div>
               <Tag
-                color={AnnotationAPI.generateLabelColor(newLabelName)}
+                color={previewColor}
                 style={{ fontSize: '14px', padding: '4px 12px' }}
               >
-                {newLabelName}
+                {previewText}
               </Tag>
-            ) : (
-              (() => {
-                const selectedLabelObj = existingLabels.find(label => label.id === selectedLabel);
-                return (
-                  <Tag
-                    color={selectedLabelObj ? selectedLabelObj.color : AnnotationAPI.generateLabelColor(selectedLabel)}
-                    style={{ fontSize: '14px', padding: '4px 12px' }}
-                  >
-                    {selectedLabelObj ? selectedLabelObj.name : selectedLabel}
-                  </Tag>
-                );
-              })()
-            )}
-          </div>
-        )}
+            </div>
+          );
+        })()}
 
         <div style={{ marginTop: '16px', fontSize: '12px', color: '#666' }}>
           💡 Tip: You can edit or delete this annotation later by clicking on it
