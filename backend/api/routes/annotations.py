@@ -34,6 +34,8 @@ class AnnotationUpdate(BaseModel):
     y_max: Optional[float] = None
     confidence: Optional[float] = None
     segmentation: Optional[List] = None
+    label: Optional[str] = None  # Added for frontend compatibility
+    image_id: Optional[str] = None  # Added for frontend compatibility
 
 # Removed duplicate route - using the one below that returns direct array
 
@@ -46,16 +48,86 @@ async def get_annotation(annotation_id: str):
     return {"annotation_id": annotation_id}
 
 @router.put("/{annotation_id}")
-async def update_annotation(annotation_id: str, annotation: AnnotationCreate):
+async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db: Session = Depends(get_db)):
     """Update annotation"""
-    # TODO: Implement annotation update
-    return {"message": "Annotation updated", "annotation_id": annotation_id}
+    try:
+        # Check if annotation exists
+        existing = db.query(Annotation).filter(Annotation.id == annotation_id).first()
+        if not existing:
+            raise HTTPException(status_code=404, detail=f"Annotation with ID {annotation_id} not found")
+        
+        # Prepare the update data
+        update_data = {}
+        
+        # Only include fields that are provided
+        if annotation.class_name is not None:
+            update_data["class_name"] = annotation.class_name
+        
+        if annotation.class_id is not None:
+            update_data["class_id"] = annotation.class_id
+            
+        if annotation.x_min is not None:
+            update_data["x_min"] = annotation.x_min
+            
+        if annotation.y_min is not None:
+            update_data["y_min"] = annotation.y_min
+            
+        if annotation.x_max is not None:
+            update_data["x_max"] = annotation.x_max
+            
+        if annotation.y_max is not None:
+            update_data["y_max"] = annotation.y_max
+            
+        if annotation.confidence is not None:
+            update_data["confidence"] = annotation.confidence
+            
+        if annotation.segmentation is not None:
+            update_data["segmentation"] = annotation.segmentation
+            
+        # Support for 'label' field (same as class_name)
+        if hasattr(annotation, "label") and annotation.label is not None:
+            update_data["class_name"] = annotation.label
+            
+        # Update the annotation
+        updated = AnnotationOperations.update_annotation(
+            db, 
+            annotation_id,
+            **update_data
+        )
+        
+        if not updated:
+            raise HTTPException(status_code=500, detail="Failed to update annotation")
+            
+        return {"message": "Annotation updated", "annotation": updated}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update annotation: {str(e)}")
 
 @router.delete("/{annotation_id}")
-async def delete_annotation(annotation_id: str):
+async def delete_annotation(annotation_id: str, db: Session = Depends(get_db)):
     """Delete annotation"""
-    # TODO: Implement annotation deletion
-    return {"message": "Annotation deleted", "annotation_id": annotation_id}
+    try:
+        # Get the annotation first to make sure it exists
+        annotation = db.query(Annotation).filter(Annotation.id == annotation_id).first()
+        if not annotation:
+            raise HTTPException(status_code=404, detail=f"Annotation with ID {annotation_id} not found")
+        
+        # Delete the annotation
+        db.query(Annotation).filter(Annotation.id == annotation_id).delete()
+        db.commit()
+        
+        # Check if the image has other annotations
+        image_id = annotation.image_id
+        remaining_annotations = db.query(Annotation).filter(Annotation.image_id == image_id).count()
+        
+        # Update image status if needed
+        if remaining_annotations == 0:
+            ImageOperations.update_image_status(db, image_id, is_labeled=False)
+            
+        return {"message": "Annotation deleted successfully", "annotation_id": annotation_id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete annotation: {str(e)}")
 
 # ==================== IMAGE-SPECIFIC ANNOTATION ENDPOINTS ====================
 

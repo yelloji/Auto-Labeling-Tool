@@ -144,13 +144,16 @@ const ManualLabeling = () => {
     try {
       console.log('Loading project labels for dataset ID:', datasetId);
       
-      // CRITICAL: In this application, datasetId is actually the project ID
-      const projectId = parseInt(datasetId);
+      // Get the project ID for this dataset to load labels
+      const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
+      const projectId = response.data.project_id;
       
-      // CRITICAL: Make a direct API call to get labels
+      console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
+      
+      // Now get the labels for this project
       console.log(`GET ${API_BASE}/projects/${projectId}/labels`);
-      const response = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
-      const apiLabels = Array.isArray(response.data) ? response.data : [];
+      const labelResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
+      const apiLabels = Array.isArray(labelResponse.data) ? labelResponse.data : [];
       
       console.log('Loaded project labels from API:', apiLabels);
       
@@ -167,11 +170,11 @@ const ManualLabeling = () => {
         console.log('Formatted project labels:', formattedLabels);
         setProjectLabels(formattedLabels);
         
-        // Store in local storage as backup
-        localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
+        // Store in local storage as backup using project ID
+        localStorage.setItem(`project_labels_${projectId}`, JSON.stringify(formattedLabels));
       } else {
         // If no labels from API, try to get from local storage
-        const storedLabelsStr = localStorage.getItem(`project_labels_${datasetId}`);
+        const storedLabelsStr = localStorage.getItem(`project_labels_${projectId}`);
         if (storedLabelsStr) {
           try {
             const storedLabels = JSON.parse(storedLabelsStr);
@@ -201,7 +204,9 @@ const ManualLabeling = () => {
       console.error('Error details:', error.response?.data || error.message);
       
       // Try to get from local storage as fallback
-      const storedLabelsStr = localStorage.getItem(`project_labels_${datasetId}`);
+      // We can't access response in the catch block, so just use dataset ID
+      const storageKey = `project_labels_${datasetId}`;
+      const storedLabelsStr = localStorage.getItem(storageKey);
       if (storedLabelsStr) {
         try {
           const storedLabels = JSON.parse(storedLabelsStr);
@@ -365,21 +370,28 @@ const ManualLabeling = () => {
   }, []);
 
   const handleLabelAssignment = useCallback(async (labelName) => {
-  if (!pendingShape) {
+  // Check if we're editing an existing annotation or creating a new one
+  const isEditing = !!editingAnnotation;
+  
+  if (!isEditing && !pendingShape) {
     console.error('No pending shape to label');
     return;
   }
+  
   if (!labelName || typeof labelName !== 'string') {
     console.error('Invalid label name:', labelName);
     throw new Error('Invalid label name');
   }
   
-  console.log('Assigning label:', labelName, 'to shape:', pendingShape);
+  if (isEditing) {
+    console.log('Editing annotation with new label:', labelName, 'annotation:', editingAnnotation);
+  } else {
+    console.log('Assigning label:', labelName, 'to shape:', pendingShape);
+  }
   
   try {
-    // CRITICAL: First, ensure the label exists in the project labels
-    // In this application, datasetId is actually the project ID
-    console.log(`Saving label "${labelName}" to project ${datasetId}`);
+    // First, ensure the label exists in the project labels
+    console.log(`Saving label "${labelName}" to dataset ${datasetId}`);
     const savedLabel = await AnnotationAPI.saveProjectLabel(datasetId, {
       name: labelName,
       color: AnnotationAPI.generateLabelColor(labelName)
@@ -387,6 +399,41 @@ const ManualLabeling = () => {
     
     console.log('Label saved to project:', savedLabel);
     
+    // Check if we're editing an existing annotation
+    if (isEditing) {
+      console.log('Updating existing annotation:', editingAnnotation);
+      
+      // Update the annotation in the UI immediately
+      setAnnotations(prev => prev.map(ann => 
+        ann.id === editingAnnotation.id ? {
+          ...ann,
+          label: labelName,
+          class_name: labelName,
+          color: savedLabel.color || AnnotationAPI.generateLabelColor(labelName)
+        } : ann
+      ));
+      
+      // Send update to API
+      try {
+        await AnnotationAPI.updateAnnotation(editingAnnotation.id, {
+          class_name: labelName,
+          label: labelName,
+          image_id: editingAnnotation.image_id || imageData.id
+        });
+        
+        message.success(`Annotation updated to "${labelName}"`);
+      } catch (error) {
+        console.error('Failed to update annotation:', error);
+        message.error('Failed to update annotation');
+      }
+      
+      // Clear editing state
+      setEditingAnnotation(null);
+      setShowLabelPopup(false);
+      return;
+    }
+    
+    // If we get here, we're creating a new annotation
     // Make a deep copy of the pending shape to avoid reference issues
     const shapeCopy = JSON.parse(JSON.stringify(pendingShape));
     
@@ -805,12 +852,14 @@ const ManualLabeling = () => {
     console.error('Save annotation error:', error);
   } finally {
     setShowLabelPopup(false);
+    // Clear editing state
+    setEditingAnnotation(null);
     // ✅ Delay clearing to allow canvas redraw to complete
     setTimeout(() => {
       setPendingShape(null);
     }, 100); // short delay is enough
   }
-}, [pendingShape, imageData, datasetId, imageLabels]);
+}, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation]);
 
   const handleAnnotationSelect = useCallback((annotation) => {
     setSelectedAnnotation(annotation);
@@ -824,9 +873,15 @@ const ManualLabeling = () => {
 
   const handleAnnotationDelete = useCallback(async (annotationId) => {
     try {
+      console.log('Deleting annotation with ID:', annotationId);
       await AnnotationAPI.deleteAnnotation(annotationId);
+      
+      // Update UI state
       setAnnotations(prev => prev.filter(ann => ann.id !== annotationId));
       setSelectedAnnotation(null);
+      setEditingAnnotation(null);
+      setShowLabelPopup(false);
+      
       message.success('Annotation deleted');
       
       // Update label counts
@@ -840,7 +895,7 @@ const ManualLabeling = () => {
       message.error('Failed to delete annotation');
       console.error('Delete annotation error:', error);
     }
-  }, [annotations]);
+  }, [annotations, setAnnotations, setSelectedAnnotation, setEditingAnnotation, setShowLabelPopup, setImageLabels]);
 
   const handleSplitChange = useCallback(async (newSplit) => {
     try {
@@ -1062,12 +1117,21 @@ const ManualLabeling = () => {
       <LabelSelectionPopup
         visible={showLabelPopup}
         onCancel={() => {
+          console.log('Cancel button clicked');
           setShowLabelPopup(false);
           setPendingShape(null);
+          setEditingAnnotation(null);
         }}
         onConfirm={handleLabelAssignment}
+        onDelete={editingAnnotation ? () => {
+          console.log('Delete triggered for annotation:', editingAnnotation);
+          console.log('Annotation ID:', editingAnnotation.id);
+          return handleAnnotationDelete(editingAnnotation.id);
+        } : null}
         existingLabels={projectLabels}
-        shapeType={pendingShape?.type || 'box'}
+        defaultLabel={editingAnnotation?.label || null}
+        shapeType={(editingAnnotation?.type || pendingShape?.type || 'box')}
+        isEditing={!!editingAnnotation}
       />
     </Layout>
   );

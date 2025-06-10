@@ -573,7 +573,7 @@ def main():
     print("=" * 50)
     
     # Check for database file
-    db_files = ["database.db", "backend/database.db"]
+    db_files = ["database.db"]
     db_path = None
     
     for db_file in db_files:
