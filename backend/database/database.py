@@ -22,7 +22,8 @@ async def init_db():
     # Import all models here to ensure they are registered
     from .models import (
         Project, Dataset, Image, Annotation, 
-        ModelUsage, ExportJob, AutoLabelJob
+        ModelUsage, ExportJob, AutoLabelJob,
+        Label, DataAugmentation, DatasetSplit, LabelAnalytics  # Include all models
     )
     
     # Create all tables

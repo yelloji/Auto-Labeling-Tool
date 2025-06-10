@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Layout,
   Menu,
@@ -59,10 +59,70 @@ const { Option } = Select;
 const ProjectWorkspace = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selectedKey, setSelectedKey] = useState('upload');
+  // Log location state for debugging
+  console.log('ProjectWorkspace location:', {
+    pathname: location.pathname,
+    state: location.state,
+    search: location.search
+  });
+  
+  // Log location state for debugging
+  console.log('ProjectWorkspace location:', {
+    pathname: location.pathname,
+    state: location.state,
+    search: location.search
+  });
+  
+  // Set initial selected key based on location state or default to 'upload'
+  const [selectedKey, setSelectedKey] = useState(
+    location.state?.selectedSection || 'upload'
+  );
+  
+  // Log the selected key
+  console.log('Initial selectedKey:', selectedKey);
+  
+  // Update selectedKey when location state changes
+  useEffect(() => {
+    // Check for state first
+    if (location.state?.selectedSection) {
+      console.log('Updating selectedKey from location state:', location.state.selectedSection);
+      setSelectedKey(location.state.selectedSection);
+    } 
+    // Then check URL search params
+    else {
+      const searchParams = new URLSearchParams(location.search);
+      const section = searchParams.get('section');
+      if (section) {
+        console.log('Updating selectedKey from URL parameter:', section);
+        setSelectedKey(section);
+      }
+    }
+  }, [location.state, location.search]);
+  
+  // Log the selected key
+  console.log('Initial selectedKey:', selectedKey);
+  
+  // Update selectedKey when location state changes
+  useEffect(() => {
+    // Check for state first
+    if (location.state?.selectedSection) {
+      console.log('Updating selectedKey from location state:', location.state.selectedSection);
+      setSelectedKey(location.state.selectedSection);
+    } 
+    // Then check URL search params
+    else {
+      const searchParams = new URLSearchParams(location.search);
+      const section = searchParams.get('section');
+      if (section) {
+        console.log('Updating selectedKey from URL parameter:', section);
+        setSelectedKey(section);
+      }
+    }
+  }, [location.state, location.search]);
   const [uploading, setUploading] = useState(false);
 
   // Load project details

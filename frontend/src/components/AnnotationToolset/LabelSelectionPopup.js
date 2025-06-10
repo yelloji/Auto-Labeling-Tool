@@ -30,9 +30,30 @@ const LabelSelectionPopup = ({
     console.log('🏷️ Shape type:', shapeType);
     
     if (visible) {
-      setSelectedLabel(defaultLabel);
+      // Reset state when popup opens
       setNewLabelName('');
       setIsCreatingNew(false);
+      
+      // If we have a default label, try to find it in existing labels
+      if (defaultLabel) {
+        // Try to find the label by ID first
+        const foundLabel = existingLabels.find(label => 
+          label.id === defaultLabel || 
+          (label.name && label.name.toLowerCase() === defaultLabel.toLowerCase())
+        );
+        
+        if (foundLabel) {
+          console.log('🏷️ Found matching label for default:', foundLabel);
+          setSelectedLabel(foundLabel.id);
+        } else {
+          console.log('🏷️ No matching label found for default, using as is:', defaultLabel);
+          setSelectedLabel(defaultLabel);
+        }
+      } else {
+        // If no default label, just reset selection
+        setSelectedLabel(null);
+      }
+      
       console.log('🏷️ Popup opened and state reset');
     }
   }, [visible, defaultLabel, existingLabels, shapeType]);
@@ -48,10 +69,23 @@ const LabelSelectionPopup = ({
       let labelToUse;
       
       if (isCreatingNew) {
+        // Using the new label name directly
         labelToUse = newLabelName.trim();
+        console.log('Using new label name:', labelToUse);
       } else {
+        // Find the selected label object by ID
         const selectedLabelObj = existingLabels.find(label => label.id === selectedLabel);
-        labelToUse = selectedLabelObj ? selectedLabelObj.name : selectedLabel;
+        console.log('Selected label object:', selectedLabelObj);
+        
+        // Use the name from the label object
+        if (selectedLabelObj) {
+          labelToUse = selectedLabelObj.name;
+          console.log('Using existing label name:', labelToUse);
+        } else {
+          // Fallback to using the ID directly if no matching object found
+          labelToUse = selectedLabel;
+          console.log('Using label ID as name (fallback):', labelToUse);
+        }
       }
       
       if (!labelToUse) {
@@ -76,42 +110,80 @@ const LabelSelectionPopup = ({
   };
 
   const handleSelectExisting = (value) => {
+    console.log('Selected existing label with ID:', value);
+    
+    // Find the label object by ID
+    const selectedLabelObj = existingLabels.find(label => label.id === value);
+    console.log('Found label object:', selectedLabelObj);
+    
+    if (selectedLabelObj) {
+      // Log the selected label details for debugging
+      console.log('Selected label details:', {
+        id: selectedLabelObj.id,
+        name: selectedLabelObj.name,
+        color: selectedLabelObj.color
+      });
+    } else {
+      console.warn('Could not find label object for ID:', value);
+    }
+    
     setSelectedLabel(value);
     setIsCreatingNew(false);
     setNewLabelName('');
   };
 
   const renderExistingLabels = () => {
-    if (existingLabels.length === 0) {
+    if (!existingLabels || existingLabels.length === 0) {
       return (
         <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
           <TagOutlined style={{ fontSize: '24px', marginBottom: '8px' }} />
-          <div>No labels used in this image yet</div>
+          <div>No labels available yet</div>
           <div style={{ fontSize: '12px' }}>Create your first label below</div>
         </div>
       );
     }
 
+    // Log the existing labels to help with debugging
+    console.log('Rendering existing labels in popup:', existingLabels);
+
+    // Sort labels by name for better organization
+    const sortedLabels = [...existingLabels].sort((a, b) => {
+      if (!a.name) return 1;
+      if (!b.name) return -1;
+      return a.name.localeCompare(b.name);
+    });
+
     return (
       <div style={{ marginBottom: '16px' }}>
         <div style={{ marginBottom: '8px', fontWeight: '500' }}>
-          Existing labels in this image:
+          Available labels ({sortedLabels.length}):
         </div>
-        <Space wrap>
-          {existingLabels.map(label => (
-            <Tag
-              key={label.id}
-              color={label.color}
-              style={{
-                cursor: 'pointer',
-                padding: '4px 12px',
-                border: selectedLabel === label.id ? '2px solid #1890ff' : 'none'
-              }}
-              onClick={() => handleSelectExisting(label.id)}
-            >
-              {label.name} ({label.count})
-            </Tag>
-          ))}
+        <Space wrap style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexWrap: 'wrap' }}>
+          {sortedLabels.map(label => {
+            // Skip labels without an ID or name
+            if (!label || (!label.id && !label.name)) {
+              console.warn('Invalid label found:', label);
+              return null;
+            }
+            
+            return (
+              <Tag
+                key={label.id || label.name}
+                color={label.color || AnnotationAPI.generateLabelColor(label.name)}
+                style={{
+                  cursor: 'pointer',
+                  padding: '4px 12px',
+                  margin: '4px',
+                  border: selectedLabel === label.id ? '2px solid #1890ff' : 'none',
+                  borderRadius: '4px',
+                  fontSize: '14px'
+                }}
+                onClick={() => handleSelectExisting(label.id)}
+              >
+                {label.name} {label.count > 0 ? `(${label.count})` : ''}
+              </Tag>
+            );
+          })}
         </Space>
       </div>
     );
@@ -156,7 +228,7 @@ const LabelSelectionPopup = ({
                 size="large"
                 allowClear
               >
-                {existingLabels.map(label => (
+                {existingLabels.sort((a, b) => a.name.localeCompare(b.name)).map(label => (
                   <Option key={label.id} value={label.id}>
                     <Space>
                       <div
@@ -168,7 +240,7 @@ const LabelSelectionPopup = ({
                           display: 'inline-block'
                         }}
                       />
-                      {label.name} ({label.count})
+                      {label.name} {label.count > 0 ? `(${label.count})` : ''}
                     </Space>
                   </Option>
                 ))}
@@ -216,12 +288,26 @@ const LabelSelectionPopup = ({
             <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
               Preview:
             </div>
-            <Tag
-              color={AnnotationAPI.generateLabelColor(selectedLabel || newLabelName)}
-              style={{ fontSize: '14px', padding: '4px 12px' }}
-            >
-              {selectedLabel || newLabelName}
-            </Tag>
+            {isCreatingNew ? (
+              <Tag
+                color={AnnotationAPI.generateLabelColor(newLabelName)}
+                style={{ fontSize: '14px', padding: '4px 12px' }}
+              >
+                {newLabelName}
+              </Tag>
+            ) : (
+              (() => {
+                const selectedLabelObj = existingLabels.find(label => label.id === selectedLabel);
+                return (
+                  <Tag
+                    color={selectedLabelObj ? selectedLabelObj.color : AnnotationAPI.generateLabelColor(selectedLabel)}
+                    style={{ fontSize: '14px', padding: '4px 12px' }}
+                  >
+                    {selectedLabelObj ? selectedLabelObj.name : selectedLabel}
+                  </Tag>
+                );
+              })()
+            )}
           </div>
         )}
 

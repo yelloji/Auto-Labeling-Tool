@@ -36,52 +36,80 @@ class AnnotationAPI {
         throw new Error('image_id is required for creating annotations');
       }
       
+      console.log('CREATING ANNOTATION WITH TYPE:', annotation.type);
+      console.log('FULL ANNOTATION DATA:', JSON.stringify(annotation));
+      
       // Convert annotation to the format expected by the backend
       const annotationData = {
         class_name: annotation.class_name || annotation.label,
         class_id: 0, // Default class ID
         confidence: annotation.confidence || 1.0,
-        type: annotation.type || 'box',
         image_id: annotation.image_id
       };
       
-      // Add defensive checks for polygon type
-      if (annotation.type === 'polygon') {
-        // Check if segmentation exists and is an array
-        if (!annotation.segmentation || !Array.isArray(annotation.segmentation)) {
-          console.error('Invalid segmentation data:', annotation.segmentation);
-          throw new Error('Invalid polygon data: segmentation is missing or invalid');
-        }
+      // CRITICAL FIX: Handle each type separately and explicitly
+      if (annotation.type === 'polygon' && Array.isArray(annotation.segmentation)) {
+        console.log('SAVING POLYGON WITH POINTS:', annotation.segmentation.length);
         
-        // Check if segmentation has points
-        if (annotation.segmentation.length === 0) {
-          console.error('Empty segmentation data');
-          throw new Error('Invalid polygon data: no points provided');
-        }
+        // CRITICAL: Set the type explicitly for the backend
+        annotationData.type = 'polygon';
         
-        // Validate each point has x and y coordinates
-        const validPoints = annotation.segmentation.every(
-          point => point && typeof point.x === 'number' && typeof point.y === 'number'
-        );
+        // For polygons, we MUST set the segmentation field
+        // Make a deep copy to avoid reference issues
+        annotationData.segmentation = JSON.parse(JSON.stringify(annotation.segmentation));
         
-        if (!validPoints) {
-          console.error('Invalid points in segmentation:', annotation.segmentation);
-          throw new Error('Invalid polygon data: points are missing or invalid');
-        }
+        // Calculate bounding box from points
+        const xs = annotation.segmentation.map(p => p.x);
+        const ys = annotation.segmentation.map(p => p.y);
         
-        annotationData.segmentation = annotation.segmentation;
-      } else {
-        // For box annotations
-        if (typeof annotation.x !== 'number' || typeof annotation.y !== 'number' ||
-            typeof annotation.width !== 'number' || typeof annotation.height !== 'number') {
-          console.error('Invalid box coordinates:', annotation);
-          throw new Error('Invalid box data: coordinates are missing or invalid');
-        }
+        // Set both coordinate formats for compatibility
+        annotationData.x = Math.min(...xs);
+        annotationData.y = Math.min(...ys);
+        annotationData.width = Math.max(...xs) - Math.min(...xs);
+        annotationData.height = Math.max(...ys) - Math.min(...ys);
+        
+        annotationData.x_min = Math.min(...xs);
+        annotationData.y_min = Math.min(...ys);
+        annotationData.x_max = Math.max(...xs);
+        annotationData.y_max = Math.max(...ys);
+        
+        console.log('POLYGON ANNOTATION DATA:', {
+          type: annotationData.type,
+          segmentation_points: annotationData.segmentation.length,
+          x_min: annotationData.x_min,
+          y_min: annotationData.y_min,
+          x_max: annotationData.x_max,
+          y_max: annotationData.y_max
+        });
+      } 
+      // CRITICAL FIX: Only handle box type in the else if, not in a generic else
+      else if (annotation.type === 'box') {
+        // CRITICAL: Set the type explicitly for the backend
+        annotationData.type = 'box';
+        
+        // For boxes, set both coordinate formats
+        annotationData.x = annotation.x;
+        annotationData.y = annotation.y;
+        annotationData.width = annotation.width;
+        annotationData.height = annotation.height;
         
         annotationData.x_min = annotation.x;
         annotationData.y_min = annotation.y;
         annotationData.x_max = annotation.x + annotation.width;
         annotationData.y_max = annotation.y + annotation.height;
+        
+        console.log('BOX ANNOTATION DATA:', {
+          type: annotationData.type,
+          x_min: annotationData.x_min,
+          y_min: annotationData.y_min,
+          x_max: annotationData.x_max,
+          y_max: annotationData.y_max
+        });
+      }
+      // CRITICAL FIX: Handle unknown types explicitly
+      else {
+        console.error('Unknown annotation type:', annotation.type);
+        throw new Error(`Unknown annotation type: ${annotation.type}`);
       }
 
       
@@ -204,17 +232,21 @@ class AnnotationAPI {
    */
   static async getDatasetImages(datasetId) {
     try {
-      // Get project ID from dataset - for now we'll use project 1
-      const response = await axios.get(`${API_BASE}/projects/1/images`);
+      console.log(`Fetching images for dataset ID: ${datasetId}`);
       
-      // Filter images by dataset ID
-      const filteredImages = response.data.images.filter(img => img.dataset_id === datasetId);
+      // First, get the dataset information to determine which project it belongs to
+      const datasetResponse = await axios.get(`${API_BASE}/datasets/${datasetId}`);
+      const dataset = datasetResponse.data;
+      const projectId = dataset.project_id;
       
-      return {
-        ...response.data,
-        images: filteredImages,
-        total: filteredImages.length
-      };
+      console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
+      
+      // Now fetch images for this specific dataset
+      const response = await axios.get(`${API_BASE}/datasets/${datasetId}/images`);
+      
+      console.log(`Found ${response.data.images?.length || 0} images for dataset ${datasetId}`);
+      
+      return response.data;
     } catch (error) {
       console.error('Failed to fetch dataset images:', error);
       throw error;
@@ -228,11 +260,287 @@ class AnnotationAPI {
    */
   static async getProjectLabels(datasetId) {
     try {
-      // For now, return empty array - labels will be created dynamically
-      return [];
+      // CRITICAL: In this application, datasetId is actually the project ID
+      const projectId = parseInt(datasetId);
+      
+      console.log(`Fetching project labels for project ID: ${projectId}`);
+      
+      // CRITICAL: Make a direct API call to get labels
+      console.log(`GET ${API_BASE}/projects/${projectId}/labels`);
+      const response = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
+      
+      // The API returns an array directly, not wrapped in a 'labels' property
+      const labels = Array.isArray(response.data) ? response.data : [];
+      console.log('Raw labels from API:', labels);
+      
+      if (labels.length === 0) {
+        console.log('No labels found in database, checking local storage');
+        // Try to get from local storage
+        const storedLabels = localStorage.getItem(`project_labels_${datasetId}`);
+        if (storedLabels) {
+          try {
+            const parsedLabels = JSON.parse(storedLabels);
+            console.log('Found labels in local storage:', parsedLabels);
+            
+            // CRITICAL: Save these labels to the database one by one
+            for (const label of parsedLabels) {
+              try {
+                console.log(`Saving local label to database: ${label.name}`);
+                await this.saveProjectLabel(projectId, {
+                  name: label.name,
+                  color: label.color || this.generateLabelColor(label.name)
+                });
+              } catch (e) {
+                console.error(`Failed to save local label to database: ${label.name}`, e);
+              }
+            }
+            
+            // After saving all labels, fetch them again from the API
+            console.log('Fetching labels again after saving local labels');
+            const refreshResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
+            const refreshedLabels = Array.isArray(refreshResponse.data) ? refreshResponse.data : [];
+            
+            if (refreshedLabels.length > 0) {
+              console.log('Successfully saved labels to database:', refreshedLabels);
+              
+              // Transform labels to the expected format
+              const formattedLabels = refreshedLabels.map(label => ({
+                id: label.id,
+                name: label.name,
+                color: label.color || this.generateLabelColor(label.name),
+                count: label.count || 0, // Use count from API if available
+                projectCount: label.count || 0 // Store project-wide count
+              }));
+              
+              // Store in local storage as backup
+              localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
+              
+              return formattedLabels;
+            }
+            
+            return parsedLabels;
+          } catch (parseError) {
+            console.error('Failed to parse stored labels:', parseError);
+          }
+        }
+      }
+      
+      // Transform labels to the expected format
+      const formattedLabels = labels.map(label => ({
+        id: label.id,
+        name: label.name,
+        color: label.color || this.generateLabelColor(label.name),
+        count: label.count || 0, // Use count from API if available
+        projectCount: label.count || 0 // Store project-wide count
+      }));
+      
+      console.log('Formatted labels:', formattedLabels);
+      
+      // Store in local storage as backup
+      localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
+      
+      return formattedLabels;
     } catch (error) {
       console.error('Failed to fetch project labels:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      
+      // Fallback to local storage if API fails
+      try {
+        const storedLabels = localStorage.getItem(`project_labels_${datasetId}`);
+        if (storedLabels) {
+          console.log('Using labels from local storage as fallback');
+          return JSON.parse(storedLabels);
+        }
+      } catch (e) {
+        console.error('Failed to parse stored labels:', e);
+      }
+      
       return [];
+    }
+  }
+  
+  /**
+   * Create or update a project label
+   * @param {string} datasetId - Dataset ID (or project ID)
+   * @param {Object} label - Label object with name, color, etc.
+   * @returns {Promise<Object>} Created or updated label
+   */
+  static async saveProjectLabel(datasetId, label) {
+    try {
+      console.log('Saving project label:', label, 'for dataset:', datasetId);
+      
+      // Validate inputs
+      if (!datasetId) {
+        throw new Error('Dataset ID is required');
+      }
+      
+      if (!label || !label.name) {
+        throw new Error('Label name is required');
+      }
+      
+      // Generate color if not provided
+      if (!label.color) {
+        label.color = this.generateLabelColor(label.name);
+      }
+      
+      // CRITICAL: Get the project ID from the dataset ID
+      // In this application, the datasetId parameter is actually the project ID
+      const projectId = parseInt(datasetId);
+      
+      // Prepare the label data
+      const labelData = {
+        name: label.name.trim(),
+        color: label.color,
+        project_id: parseInt(projectId)
+      };
+      
+      console.log('Prepared label data for API:', labelData);
+      
+      // First check if we already have this label in local storage
+      const storedLabelsStr = localStorage.getItem(`project_labels_${datasetId}`);
+      let existingLabel = null;
+      
+      if (storedLabelsStr) {
+        try {
+          const storedLabels = JSON.parse(storedLabelsStr);
+          existingLabel = storedLabels.find(l => 
+            l.name.toLowerCase() === label.name.toLowerCase()
+          );
+          
+          if (existingLabel) {
+            console.log('Found existing label in local storage:', existingLabel);
+          }
+        } catch (e) {
+          console.error('Failed to parse stored labels:', e);
+        }
+      }
+      
+      // CRITICAL: Always check the API directly to ensure we have the latest data
+      try {
+        console.log(`Checking for existing label in API: GET ${API_BASE}/projects/${projectId}/labels`);
+        const response = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
+        const apiLabels = Array.isArray(response.data) ? response.data : [];
+        console.log('API returned labels:', apiLabels);
+        
+        existingLabel = apiLabels.find(l => 
+          l.name.toLowerCase() === label.name.toLowerCase()
+        );
+        
+        if (existingLabel) {
+          console.log('Found existing label in API:', existingLabel);
+        }
+      } catch (e) {
+        console.error('Failed to check existing labels from API:', e);
+      }
+      
+      let response;
+      
+      if (existingLabel) {
+        console.log('Label already exists, updating if needed:', existingLabel);
+        
+        // Update existing label if color is different
+        if (existingLabel.color !== labelData.color) {
+          console.log(`Updating label: PUT ${API_BASE}/projects/${projectId}/labels/${existingLabel.id}`);
+          response = await axios.put(
+            `${API_BASE}/projects/${projectId}/labels/${existingLabel.id}`, 
+            labelData
+          );
+          
+          console.log('Label update response:', response.data);
+          
+          // Store in local storage as backup
+          const updatedLabel = response.data;
+          this.storeProjectLabelLocally(datasetId, updatedLabel);
+          
+          return updatedLabel;
+        }
+        
+        // If no update needed, return existing label
+        return existingLabel;
+      } else {
+        console.log(`Creating new label: POST ${API_BASE}/projects/${projectId}/labels`);
+        console.log('Label data:', labelData);
+        
+        // CRITICAL: Force create new label with direct API call
+        try {
+          // Create new label
+          response = await axios.post(
+            `${API_BASE}/projects/${projectId}/labels`, 
+            labelData
+          );
+          
+          console.log('Label creation response:', response.data);
+          
+          // Store in local storage as backup
+          const newLabel = response.data;
+          this.storeProjectLabelLocally(datasetId, newLabel);
+          
+          // CRITICAL: Verify the label was created by fetching it again
+          const verifyResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
+          console.log('Verification response:', verifyResponse.data);
+          
+          return newLabel;
+        } catch (createError) {
+          console.error('Error creating label:', createError);
+          console.error('Error response:', createError.response?.data);
+          throw createError;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save project label:', error);
+      
+      // Create a local version of the label as fallback
+      const localLabel = {
+        id: Date.now(), // Use timestamp as temporary ID
+        name: label.name,
+        color: label.color || this.generateLabelColor(label.name),
+        project_id: parseInt(datasetId)
+      };
+      
+      console.log('Created local label as fallback:', localLabel);
+      
+      // Store in local storage
+      this.storeProjectLabelLocally(datasetId, localLabel);
+      
+      return localLabel;
+    }
+  }
+  
+  /**
+   * Store a project label in local storage as backup
+   * @param {string} datasetId - Dataset ID
+   * @param {Object} label - Label object
+   */
+  static storeProjectLabelLocally(datasetId, label) {
+    try {
+      // Get existing labels from local storage
+      const storedLabelsStr = localStorage.getItem(`project_labels_${datasetId}`);
+      let storedLabels = [];
+      
+      if (storedLabelsStr) {
+        storedLabels = JSON.parse(storedLabelsStr);
+      }
+      
+      // Check if label already exists
+      const existingIndex = storedLabels.findIndex(l => l.name === label.name);
+      
+      if (existingIndex >= 0) {
+        // Update existing label
+        storedLabels[existingIndex] = {
+          ...storedLabels[existingIndex],
+          ...label
+        };
+      } else {
+        // Add new label
+        storedLabels.push(label);
+      }
+      
+      // Save back to local storage
+      localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(storedLabels));
+      
+      console.log('Stored label in local storage:', label);
+    } catch (error) {
+      console.error('Failed to store label in local storage:', error);
     }
   }
 

@@ -28,8 +28,20 @@ const LabelSidebar = ({
 
   // ✅ Map project labels to per-image usage count
   const labelsWithCounts = projectLabels.map(label => {
-    const count = imageAnnotations.filter(ann => ann.class_name === label.name).length;
-    return { ...label, count };
+    // Count how many annotations in the current image use this label
+    const imageCount = imageAnnotations.filter(ann => 
+      (ann.class_name && ann.class_name.toLowerCase() === label.name.toLowerCase()) || 
+      (ann.label && ann.label.toLowerCase() === label.name.toLowerCase())
+    ).length;
+    
+    // Use the image count for display, but keep the project-wide count for reference
+    return { 
+      ...label, 
+      imageCount, 
+      projectCount: label.projectCount || label.count || 0,
+      // If the label is used in this image, show the image count, otherwise show 0
+      count: imageCount
+    };
   });
 
   const renderEmptyState = () => (
@@ -40,10 +52,14 @@ const LabelSidebar = ({
     }}>
       <TagOutlined style={{ fontSize: '48px', marginBottom: '16px', color: '#7f8c8d' }} />
       <Title level={5} style={{ color: '#bdc3c7', marginBottom: '8px' }}>
-        No labels in this image
+        {projectLabels && projectLabels.length > 0 
+          ? 'Available Labels' 
+          : 'No labels in this project'}
       </Title>
       <Text style={{ fontSize: '12px', color: '#95a5a6' }}>
-        Draw shapes to create annotations
+        {projectLabels && projectLabels.length > 0 
+          ? 'Select a label to use for annotations' 
+          : 'Draw shapes to create annotations'}
       </Text>
     </div>
   );
@@ -51,7 +67,7 @@ const LabelSidebar = ({
   const renderLabelItem = (label) => {
     const isSelected = selectedLabel === label.id;
     const isHidden = hiddenLabels.includes(label.id);
-    const isActive = label.count > 0;
+    const isActive = label.imageCount > 0;
 
     return (
       <div
@@ -117,8 +133,9 @@ const LabelSidebar = ({
           </Space>
 
           <Space size={4}>
+            {/* Image count badge */}
             <Badge
-              count={label.count}
+              count={label.imageCount}
               style={{
                 backgroundColor: isActive ? '#52c41a' : '#d9d9d9',
                 color: '#fff',
@@ -127,6 +144,21 @@ const LabelSidebar = ({
                 height: '18px',
                 lineHeight: '18px'
               }}
+              title={`${label.imageCount} annotations in this image`}
+            />
+            
+            {/* Project count badge - always show project count */}
+            <Badge
+              count={`${label.projectCount}P`}
+              style={{
+                backgroundColor: '#3498db',
+                color: '#fff',
+                fontSize: '10px',
+                minWidth: '24px',
+                height: '18px',
+                lineHeight: '18px'
+              }}
+              title={`${label.projectCount} annotations in the project`}
             />
             <Tooltip title={isHidden ? 'Show annotations' : 'Hide annotations'}>
               <Button
@@ -148,24 +180,25 @@ const LabelSidebar = ({
           </Space>
         </div>
 
-        {isActive && (
-          <div style={{
-            fontSize: '11px',
-            color: '#8c8c8c',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <span>
-              {label.count} annotation{label.count !== 1 ? 's' : ''}
-            </span>
-            {isSelected && (
-              <Text style={{ fontSize: '10px', color: '#1890ff' }}>
-                ● Selected
-              </Text>
-            )}
-          </div>
-        )}
+        <div style={{
+          fontSize: '11px',
+          color: '#8c8c8c',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span>
+            {isActive ? 
+              `${label.imageCount} annotation${label.imageCount !== 1 ? 's' : ''} in this image` : 
+              `${label.projectCount} annotation${label.projectCount !== 1 ? 's' : ''} in project`
+            }
+          </span>
+          {isSelected && (
+            <Text style={{ fontSize: '10px', color: '#1890ff' }}>
+              ● Selected
+            </Text>
+          )}
+        </div>
       </div>
     );
   };
@@ -221,7 +254,7 @@ const LabelSidebar = ({
         <Text style={{ fontSize: '12px', color: '#95a5a6' }}>
           {labelsWithCounts.length > 0 ? (
             <>
-              {labelsWithCounts.filter(l => l.count > 0).length} of {labelsWithCounts.length} labels used
+              {labelsWithCounts.filter(l => l.imageCount > 0).length} of {labelsWithCounts.length} labels used
             </>
           ) : (
             'No labels created yet'
@@ -235,12 +268,27 @@ const LabelSidebar = ({
         padding: '16px',
         overflow: 'auto'
       }}>
-        {labelsWithCounts.length === 0 ? (
+        {!projectLabels || projectLabels.length === 0 ? (
           renderEmptyState()
         ) : (
           <div>
-            {/* Active labels */}
-            {labelsWithCounts.filter(l => l.count > 0).length > 0 && (
+            {/* Header for all project labels */}
+            <Text
+              style={{
+                fontSize: '11px',
+                color: '#3498db',
+                fontWeight: '600',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                marginBottom: '12px',
+                display: 'block'
+              }}
+            >
+              All Project Labels ({labelsWithCounts.length})
+            </Text>
+
+            {/* Active labels - used in this image */}
+            {labelsWithCounts.filter(l => l.imageCount > 0).length > 0 && (
               <div style={{ marginBottom: '24px' }}>
                 <Text
                   style={{
@@ -250,42 +298,42 @@ const LabelSidebar = ({
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
                     marginBottom: '12px',
-                    display: 'block'
+                    display: 'block',
+                    paddingLeft: '8px'
                   }}
                 >
-                  Used in this image
+                  Used in this image ({labelsWithCounts.filter(l => l.imageCount > 0).length})
                 </Text>
                 {labelsWithCounts
-                  .filter(l => l.count > 0)
-                  .sort((a, b) => b.count - a.count)
+                  .filter(l => l.imageCount > 0)
+                  .sort((a, b) => b.imageCount - a.imageCount)
                   .map(renderLabelItem)
                 }
               </div>
             )}
 
-            {/* Unused labels */}
-            {labelsWithCounts.filter(l => l.count === 0).length > 0 && (
-              <div>
-                <Text
-                  style={{
-                    fontSize: '11px',
-                    color: '#8c8c8c',
-                    fontWeight: '600',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    marginBottom: '12px',
-                    display: 'block'
-                  }}
-                >
-                  Available labels
-                </Text>
-                {labelsWithCounts
-                  .filter(l => l.count === 0)
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map(renderLabelItem)
-                }
-              </div>
-            )}
+            {/* Project labels - available for use */}
+            <div>
+              <Text
+                style={{
+                  fontSize: '11px',
+                  color: '#8c8c8c',
+                  fontWeight: '600',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '12px',
+                  display: 'block',
+                  paddingLeft: '8px'
+                }}
+              >
+                Other available labels ({labelsWithCounts.filter(l => l.imageCount === 0).length})
+              </Text>
+              {labelsWithCounts
+                .filter(l => l.imageCount === 0)
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(renderLabelItem)
+              }
+            </div>
           </div>
         )}
       </div>
@@ -297,7 +345,11 @@ const LabelSidebar = ({
         background: '#001529'
       }}>
         <Text style={{ fontSize: '11px', color: '#95a5a6' }}>
-          💡 Click labels to highlight annotations
+          💡 Click labels to select for new annotations
+        </Text>
+        <br />
+        <Text style={{ fontSize: '11px', color: '#95a5a6' }}>
+          🔍 Labels with green badges are used in this image
         </Text>
       </div>
     </div>

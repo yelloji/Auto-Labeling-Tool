@@ -65,7 +65,22 @@ const AnnotateLauncher = () => {
   };
 
   const handleGoBack = () => {
-    navigate(-1); // Go back to previous page
+    // Get the project ID from the dataset
+    // If dataset has a project_id property, use it; otherwise try to extract from the ID
+    const projectId = dataset?.project_id || 
+                     (datasetId.includes('-') ? datasetId.split('-')[0] : '1');
+    
+    console.log('Navigating back to project workspace:', {
+      projectId,
+      datasetId,
+      dataset
+    });
+    
+    // Navigate to the project workspace with management section selected
+    // Use both state and URL parameter for maximum compatibility
+    navigate(`/projects/${projectId}/workspace?section=management`, { 
+      state: { selectedSection: 'management' } 
+    });
   };
 
   if (loading) {

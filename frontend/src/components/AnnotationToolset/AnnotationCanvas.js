@@ -233,15 +233,26 @@ const AnnotationCanvas = ({
 
   // Draw a single annotation
   const drawAnnotation = (ctx, annotation, isSelected = false) => {
+    console.log('Drawing annotation:', annotation);
+    console.log('Annotation type:', annotation.type);
+    
+    // Set styles based on selection state
+    ctx.strokeStyle = isSelected ? '#ff4d4f' : (annotation.color || '#1890ff');
+    ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.fillStyle = isSelected ? 'rgba(255, 77, 79, 0.1)' : 'rgba(24, 144, 255, 0.1)';
+    
     const scale = zoomLevel / 100;
+    
+    // For all annotation types, we need these coordinates
     const x = imagePosition.x + (annotation.x * scale);
     const y = imagePosition.y + (annotation.y * scale);
     const width = annotation.width * scale;
     const height = annotation.height * scale;
-
-    ctx.strokeStyle = isSelected ? '#ff4d4f' : (annotation.color || '#1890ff');
-    ctx.lineWidth = isSelected ? 3 : 2;
-    ctx.fillStyle = isSelected ? 'rgba(255, 77, 79, 0.1)' : 'rgba(24, 144, 255, 0.1)';
+    
+    console.log(`Drawing annotation type: ${annotation.type}, coordinates: (${x}, ${y}, ${width}, ${height})`);
+    if (annotation.type === 'polygon') {
+      console.log('Polygon points:', annotation.points);
+    }
 
     if (annotation.type === 'box') {
       ctx.fillRect(x, y, width, height);
@@ -256,19 +267,70 @@ const AnnotationCanvas = ({
         ctx.fillText(annotation.label, x + 4, y - 6);
       }
     } else if (annotation.type === 'polygon' && annotation.points) {
+      console.log('Drawing polygon with points:', annotation.points);
+      
+      // Make sure we have valid points
+      if (!Array.isArray(annotation.points) || annotation.points.length < 3) {
+        console.warn('Not enough points to draw polygon:', annotation.points);
+        return;
+      }
+      
+      // Draw the polygon
       ctx.beginPath();
+      let validPointsCount = 0;
+      
       annotation.points.forEach((point, index) => {
+        // Check if point is valid
+        if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') {
+          console.warn('Invalid polygon point:', point);
+          return;
+        }
+        
+        validPointsCount++;
         const px = imagePosition.x + (point.x * scale);
         const py = imagePosition.y + (point.y * scale);
-        if (index === 0) {
+        
+        if (index === 0 || validPointsCount === 1) {
           ctx.moveTo(px, py);
         } else {
           ctx.lineTo(px, py);
         }
       });
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+      
+      // Only close and fill if we have enough valid points
+      if (validPointsCount >= 3) {
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw points at each vertex for better visibility
+        annotation.points.forEach(point => {
+          if (point && typeof point.x === 'number' && typeof point.y === 'number') {
+            const px = imagePosition.x + (point.x * scale);
+            const py = imagePosition.y + (point.y * scale);
+            
+            ctx.beginPath();
+            ctx.arc(px, py, 3, 0, 2 * Math.PI);
+            ctx.fillStyle = isSelected ? '#ff4d4f' : '#1890ff';
+            ctx.fill();
+          }
+        });
+      } else {
+        console.warn('Not enough valid points to draw polygon:', validPointsCount);
+      }
+      
+      // Draw label for polygon too
+      if (annotation.label) {
+        // Find the topmost point to place the label
+        const topY = Math.min(...annotation.points.map(p => p.y)) * scale + imagePosition.y;
+        const leftX = Math.min(...annotation.points.map(p => p.x)) * scale + imagePosition.x;
+        
+        ctx.fillStyle = annotation.color || '#1890ff';
+        ctx.fillRect(leftX, topY - 20, ctx.measureText(annotation.label).width + 8, 20);
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Arial';
+        ctx.fillText(annotation.label, leftX + 4, topY - 6);
+      }
     }
   };
 
@@ -321,6 +383,26 @@ const AnnotationCanvas = ({
     const imageX = (screenX - imagePosition.x) / scale;
     const imageY = (screenY - imagePosition.y) / scale;
     return { x: imageX, y: imageY };
+  };
+  
+  // Check if a point is inside a polygon using ray casting algorithm
+  const isPointInPolygon = (point, polygon) => {
+    if (!polygon || polygon.length < 3) return false;
+    
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].x;
+      const yi = polygon[i].y;
+      const xj = polygon[j].x;
+      const yj = polygon[j].y;
+      
+      const intersect = ((yi > point.y) !== (yj > point.y)) &&
+        (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+        
+      if (intersect) inside = !inside;
+    }
+    
+    return inside;
   };
 
   // Get mouse position relative to canvas
@@ -466,13 +548,29 @@ const AnnotationCanvas = ({
       const mousePos = getMousePos(e);
       const clickedAnnotation = annotations.find(ann => {
         const scale = zoomLevel / 100;
-        const x = imagePosition.x + (ann.x * scale);
-        const y = imagePosition.y + (ann.y * scale);
-        const width = ann.width * scale;
-        const height = ann.height * scale;
-
-        return mousePos.x >= x && mousePos.x <= x + width &&
-               mousePos.y >= y && mousePos.y <= y + height;
+        
+        // For box annotations
+        if (ann.type === 'box') {
+          const x = imagePosition.x + (ann.x * scale);
+          const y = imagePosition.y + (ann.y * scale);
+          const width = ann.width * scale;
+          const height = ann.height * scale;
+  
+          return mousePos.x >= x && mousePos.x <= x + width &&
+                 mousePos.y >= y && mousePos.y <= y + height;
+        } 
+        // For polygon annotations
+        else if (ann.type === 'polygon' && ann.points && ann.points.length > 0) {
+          // Use point-in-polygon algorithm
+          const scaledPoints = ann.points.map(point => ({
+            x: imagePosition.x + (point.x * scale),
+            y: imagePosition.y + (point.y * scale)
+          }));
+          
+          return isPointInPolygon(mousePos, scaledPoints);
+        }
+        
+        return false;
       });
 
       if (clickedAnnotation) {

@@ -71,11 +71,17 @@ async def get_image_annotations(image_id: str, db: Session = Depends(get_db)):
         # Convert to frontend format (x, y, width, height)
         annotation_list = []
         for ann in annotations:
+            # Determine the annotation type based on segmentation
+            annotation_type = "box"
+            if ann.segmentation:
+                annotation_type = "polygon"
+                
             annotation_list.append({
                 "id": ann.id,
                 "class_name": ann.class_name,
                 "class_id": ann.class_id,
                 "confidence": ann.confidence,
+                "type": annotation_type,  # CRITICAL: Add the type field
                 "x": ann.x_min,
                 "y": ann.y_min,
                 "width": ann.x_max - ann.x_min,
@@ -93,8 +99,9 @@ async def save_image_annotations(image_id: str, data: AnnotationData, db: Sessio
     try:
         annotations = data.annotations
         
-        # First, delete existing annotations for this image
-        AnnotationOperations.delete_annotations_by_image(db, image_id)
+        # CRITICAL FIX: Do NOT delete existing annotations
+        # We want to append new annotations, not replace them
+        # AnnotationOperations.delete_annotations_by_image(db, image_id)
         
         # Create new annotations
         saved_annotations = []
