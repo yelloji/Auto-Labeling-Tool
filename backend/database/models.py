@@ -28,6 +28,9 @@ class Project(Base):
     confidence_threshold = Column(Float, default=0.5)
     iou_threshold = Column(Float, default=0.45)
     
+    # Relationships - Add CASCADE delete for labels
+    labels = relationship("Label", back_populates="project", cascade="all, delete-orphan")
+    
     # Relationships
     datasets = relationship("Dataset", back_populates="project", cascade="all, delete-orphan")
     
@@ -87,8 +90,12 @@ class Image(Base):
     is_auto_labeled = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)
     
-    # Train/Val/Test split
-    split_type = Column(String(10), default="unassigned")  # train, val, test, unassigned
+    # Dataset section (workflow stage)
+    split_type = Column(String(10), default="unassigned")  # unassigned, annotating, dataset
+    
+    # Train/Val/Test split section
+    # Use nullable=True to handle cases where the column doesn't exist yet
+    split_section = Column(String(10), default="train", nullable=True)  # train, val, test
     
     # Timestamps
     created_at = Column(DateTime, default=func.now())
@@ -398,4 +405,7 @@ class Label(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
     color = Column(String(20), default="#ff0000")
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    
+    # Relationship back to project
+    project = relationship("Project", back_populates="labels")

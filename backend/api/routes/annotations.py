@@ -56,13 +56,63 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
         if not existing:
             raise HTTPException(status_code=404, detail=f"Annotation with ID {annotation_id} not found")
         
+        # Get image and dataset info to find project
+        from database.models import Image, Dataset, Label
+        image = db.query(Image).filter(Image.id == existing.image_id).first()
+        if not image:
+            raise HTTPException(status_code=404, detail=f"Image with ID {existing.image_id} not found")
+            
+        dataset = db.query(Dataset).filter(Dataset.id == image.dataset_id).first()
+        if not dataset:
+            raise HTTPException(status_code=404, detail=f"Dataset with ID {image.dataset_id} not found")
+            
+        project_id = dataset.project_id
+        print(f"Annotation {annotation_id} is on image {existing.image_id} in dataset {image.dataset_id}, project {project_id}")
+        
         # Prepare the update data
         update_data = {}
         
-        # Only include fields that are provided
+        # Get the new class name/label (if provided)
+        new_class_name = None
         if annotation.class_name is not None:
+            new_class_name = annotation.class_name
             update_data["class_name"] = annotation.class_name
         
+        # Support for 'label' field (same as class_name)
+        if annotation.label is not None:
+            new_class_name = annotation.label
+            update_data["class_name"] = annotation.label
+            
+        # If we have a new class name, ensure it exists in the labels table
+        if new_class_name:
+            # Check if label already exists for this project
+            existing_label = db.query(Label).filter(
+                Label.name == new_class_name,
+                Label.project_id == project_id
+            ).first()
+            
+            if not existing_label:
+                # Label doesn't exist, create it
+                import random
+                
+                # Generate a random color
+                r = random.randint(0, 255)
+                g = random.randint(0, 255)
+                b = random.randint(0, 255)
+                color = f"#{r:02x}{g:02x}{b:02x}"
+                
+                print(f"Creating new label '{new_class_name}' with color {color} for project {project_id}")
+                new_label = Label(
+                    name=new_class_name,
+                    color=color,
+                    project_id=project_id
+                )
+                
+                db.add(new_label)
+                db.commit()
+                print(f"Created new label with ID {new_label.id}")
+        
+        # Add other fields to update_data
         if annotation.class_id is not None:
             update_data["class_id"] = annotation.class_id
             
@@ -83,10 +133,6 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
             
         if annotation.segmentation is not None:
             update_data["segmentation"] = annotation.segmentation
-            
-        # Support for 'label' field (same as class_name)
-        if hasattr(annotation, "label") and annotation.label is not None:
-            update_data["class_name"] = annotation.label
             
         # Update the annotation
         updated = AnnotationOperations.update_annotation(
@@ -175,9 +221,57 @@ async def save_image_annotations(image_id: str, data: AnnotationData, db: Sessio
         # We want to append new annotations, not replace them
         # AnnotationOperations.delete_annotations_by_image(db, image_id)
         
+        # First, get the project_id for this image
+        from database.models import Image, Dataset
+        image = db.query(Image).filter(Image.id == image_id).first()
+        if not image:
+            raise HTTPException(status_code=404, detail=f"Image with ID {image_id} not found")
+            
+        dataset = db.query(Dataset).filter(Dataset.id == image.dataset_id).first()
+        if not dataset:
+            raise HTTPException(status_code=404, detail=f"Dataset with ID {image.dataset_id} not found")
+            
+        project_id = dataset.project_id
+        print(f"Image {image_id} is in dataset {image.dataset_id}, project {project_id}")
+        
         # Create new annotations
         saved_annotations = []
         for ann in annotations:
+            # Get the class name for this annotation
+            class_name = ann.get("class_name", "unknown")
+            
+            # CRITICAL: Ensure this label exists in the labels table for this project
+            from database.models import Label
+            
+            # First check if the label already exists
+            existing_label = db.query(Label).filter(
+                Label.name == class_name,
+                Label.project_id == project_id
+            ).first()
+            
+            if not existing_label:
+                # Label doesn't exist, create it
+                import random
+                
+                # Generate a random color if not provided
+                color = ann.get("color")
+                if not color:
+                    r = random.randint(0, 255)
+                    g = random.randint(0, 255)
+                    b = random.randint(0, 255)
+                    color = f"#{r:02x}{g:02x}{b:02x}"
+                
+                print(f"Creating new label '{class_name}' with color {color} for project {project_id}")
+                new_label = Label(
+                    name=class_name,
+                    color=color,
+                    project_id=project_id
+                )
+                
+                db.add(new_label)
+                db.commit()
+                print(f"Created new label with ID {new_label.id}")
+            
             # Convert from x, y, width, height to x_min, y_min, x_max, y_max
             x = float(ann.get("x", 0))
             y = float(ann.get("y", 0))
@@ -193,7 +287,7 @@ async def save_image_annotations(image_id: str, data: AnnotationData, db: Sessio
             new_annotation = AnnotationOperations.create_annotation(
                 db=db,
                 image_id=image_id,
-                class_name=ann.get("class_name", "unknown"),
+                class_name=class_name,
                 class_id=ann.get("class_id", 0),
                 x_min=x_min,
                 y_min=y_min,

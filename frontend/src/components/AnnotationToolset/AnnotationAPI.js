@@ -280,12 +280,24 @@ class AnnotationAPI {
    */
   static async getProjectLabels(datasetId) {
     try {
-      // CRITICAL: In this application, datasetId is actually the project ID
-      const projectId = parseInt(datasetId);
+      // First get the project ID from the dataset ID
+      let projectId;
+      
+      try {
+        // Try to get the dataset info first to find its project
+        console.log(`Getting dataset info for ID: ${datasetId}`);
+        const datasetResponse = await axios.get(`${API_BASE}/datasets/${datasetId}`);
+        projectId = datasetResponse.data.project_id;
+        console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
+      } catch (e) {
+        // If dataset lookup fails, try using the datasetId as projectId directly
+        console.log('Could not get dataset info, using datasetId as projectId');
+        projectId = parseInt(datasetId);
+      }
       
       console.log(`Fetching project labels for project ID: ${projectId}`);
       
-      // CRITICAL: Make a direct API call to get labels
+      // Make the API call to get all labels for this project
       console.log(`GET ${API_BASE}/projects/${projectId}/labels`);
       const response = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
       
@@ -629,9 +641,9 @@ class AnnotationAPI {
   }
 
   /**
-   * Update image split assignment
+   * Update image split assignment (workflow stage)
    * @param {string} imageId - Image ID
-   * @param {string} split - Split assignment (train/val/test)
+   * @param {string} split - Split assignment (unassigned/annotating/dataset)
    * @returns {Promise<boolean>} Success status
    */
   static async updateImageSplit(imageId, split) {
@@ -640,6 +652,25 @@ class AnnotationAPI {
       return true;
     } catch (error) {
       console.error('Failed to update image split:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Update image split section (train/val/test)
+   * @param {string} imageId - Image ID
+   * @param {string} splitSection - Split section (train/val/test)
+   * @returns {Promise<boolean>} Success status
+   */
+  static async updateImageSplitSection(imageId, splitSection) {
+    try {
+      // Use the correct endpoint for updating split_section
+      // The endpoint is under the datasets router, not images
+      await axios.put(`${API_BASE}/datasets/images/${imageId}/split-section`, { split_section: splitSection });
+      return true;
+    } catch (error) {
+      console.error('Failed to update image split section:', error);
+      console.error('Error details:', error.response?.data || error.message);
       return false;
     }
   }

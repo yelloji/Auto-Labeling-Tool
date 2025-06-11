@@ -65,7 +65,7 @@ def debug_database():
         dataset_id, name, split_type, total_images, labeled_images, created_at, updated_at, project_name = dataset
         
         print(f"\n📁 DATASET: {name} (Project: {project_name or 'None'})")
-        print(f"   📊 Split Type: {split_type}")
+        print(f"   🔀 Split Section: {split_type}")
         print(f"   📈 Images: {total_images} total, {labeled_images} labeled")
         print(f"   📅 Created: {format_datetime(created_at)}")
         print(f"   🔄 Updated: {format_datetime(updated_at)}")
@@ -91,7 +91,7 @@ def debug_database():
             print(f"\n   🖼️  IMAGE: {filename} (ID: {img_id[:8]}...)")
             print(f"      📁 File Path: {file_path or 'None'}")
             print(f"      🔍 Physical File: {file_status}")
-            print(f"      📊 Split Type: {img_split}")
+            print(f"      🔀 Split Section: {img_split}")
             print(f"      🏷️  Labeled: {'Yes' if labeled else 'No'}")
             print(f"      🤖 Auto-labeled: {'Yes' if auto_labeled else 'No'}")
             print(f"      ✅ Verified: {'Yes' if verified else 'No'}")

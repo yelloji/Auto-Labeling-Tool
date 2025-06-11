@@ -236,13 +236,21 @@ const DatasetManagement = ({ datasetId, onClose }) => {
 
   const getSplitColor = (splitType) => {
     const colors = {
-      train: 'blue',
-      val: 'orange',
-      test: 'green',
       unassigned: 'default',
+      annotating: 'processing',
+      dataset: 'success',
       reserved: 'purple'
     };
     return colors[splitType] || 'default';
+  };
+  
+  const getDatasetSplitColor = (splitSection) => {
+    const colors = {
+      train: 'blue',
+      val: 'orange',
+      test: 'green'
+    };
+    return colors[splitSection] || 'default';
   };
 
   const getStatusIcon = (image) => {
@@ -303,13 +311,24 @@ const DatasetManagement = ({ datasetId, onClose }) => {
       )
     },
     {
-      title: 'Split',
+      title: 'Workflow',
       dataIndex: 'split_type',
       key: 'split_type',
       width: 100,
       render: (splitType) => (
         <Tag color={getSplitColor(splitType)}>
           {splitType ? splitType.toUpperCase() : 'UNKNOWN'}
+        </Tag>
+      )
+    },
+    {
+      title: 'Dataset Split',
+      dataIndex: 'split_section',
+      key: 'split_section',
+      width: 100,
+      render: (splitSection) => (
+        <Tag color={getDatasetSplitColor(splitSection)}>
+          {splitSection ? splitSection.toUpperCase() : 'NOT ASSIGNED'}
         </Tag>
       )
     },
@@ -654,7 +673,7 @@ const DatasetManagement = ({ datasetId, onClose }) => {
           onFinish={handleFilter}
           initialValues={filters}
         >
-          <Form.Item name="split_type" label="Split Type">
+          <Form.Item name="split_type" label="Workflow">
             <Select allowClear placeholder="All splits">
               <Option value="train">Train</Option>
               <Option value="val">Validation</Option>
@@ -719,7 +738,8 @@ const DatasetManagement = ({ datasetId, onClose }) => {
                       <p><strong>Size:</strong> {selectedImageDetail.image.width || 0}x{selectedImageDetail.image.height || 0}</p>
                       <p><strong>Format:</strong> {selectedImageDetail.image.format || 'N/A'}</p>
                       <p><strong>File Size:</strong> {selectedImageDetail.image.file_size ? (selectedImageDetail.image.file_size / 1024).toFixed(1) : 0}KB</p>
-                      <p><strong>Split:</strong> <Tag color={getSplitColor(selectedImageDetail.image.split_type)}>{selectedImageDetail.image.split_type || 'N/A'}</Tag></p>
+                      <p><strong>Workflow Stage:</strong> <Tag color={getSplitColor(selectedImageDetail.image.split_type)}>{selectedImageDetail.image.split_type || 'N/A'}</Tag></p>
+                      <p><strong>Dataset Split:</strong> <Tag color={getDatasetSplitColor(selectedImageDetail.image.split_section)}>{selectedImageDetail.image.split_section || 'Not assigned'}</Tag></p>
                     </>
                   )}
                 </Card>

@@ -17,7 +17,12 @@ import {
   Avatar,
   Divider,
   Empty,
-  Tooltip
+  Tooltip,
+  Drawer,
+  Slider,
+  Radio,
+  Statistic,
+  Select
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -32,7 +37,7 @@ import {
   TagOutlined,
   PlusOutlined
 } from '@ant-design/icons';
-import { datasetsAPI } from '../services/api';
+import { datasetsAPI, projectsAPI } from '../services/api';
 
 const { Title, Paragraph, Text } = Typography;
 const { Sider, Content } = Layout;
@@ -52,6 +57,12 @@ const AnnotateProgress = () => {
   const [editingInstructions, setEditingInstructions] = useState(false);
   const [tempInstructions, setTempInstructions] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Dataset split drawer state
+  const [splitDrawerVisible, setSplitDrawerVisible] = useState(false);
+  const [splitMethod, setSplitMethod] = useState('use_existing');
+  const [splitPercentages, setSplitPercentages] = useState([70, 20]); // [train, val] - test is calculated (10%)
+  const [assignLoading, setAssignLoading] = useState(false);
 
   const imagesPerPage = 50;
 
@@ -141,7 +152,92 @@ const AnnotateProgress = () => {
   const handleImageClick = (imageId) => {
     navigate(`/annotate/${datasetId}/manual?imageId=${imageId}`);
   };
-
+  
+  // Handle split method change
+  const handleSplitMethodChange = (value) => {
+    setSplitMethod(value);
+  };
+  
+  // Handle slider change for percentages
+  const handleSliderChange = (newValues) => {
+    // The slider has two points:
+    // - First point (newValues[0]) is the end of train set
+    // - Second point (newValues[1]) is the end of train+val sets
+    
+    let [trainEnd, valEnd] = newValues;
+    
+    // Ensure train end is between 0 and 100
+    trainEnd = Math.max(0, Math.min(100, trainEnd));
+    
+    // Ensure val end is between train end and 100
+    valEnd = Math.max(trainEnd, Math.min(100, valEnd));
+    
+    // Calculate the actual percentages
+    const trainPercent = trainEnd;
+    const valPercent = valEnd - trainEnd;
+    
+    setSplitPercentages([trainPercent, valPercent]);
+  };
+  
+  // Calculate test percentage
+  const testPercentage = Math.max(0, 100 - splitPercentages[0] - splitPercentages[1]);
+  
+  // For the slider, we need the cumulative values
+  const trainEndPoint = splitPercentages[0];
+  const valEndPoint = splitPercentages[0] + splitPercentages[1];
+  
+  // Calculate number of images per split
+  const totalLabeledImages = images.filter(img => img.is_labeled).length;
+  const trainCount = Math.floor(totalLabeledImages * splitPercentages[0] / 100);
+  const valCount = Math.floor(totalLabeledImages * splitPercentages[1] / 100);
+  // Ensure all images are accounted for by assigning remainder to test
+  const testCount = totalLabeledImages - trainCount - valCount;
+  
+  // Handle assigning images to dataset splits
+  const handleAssignImages = async () => {
+    setAssignLoading(true);
+    
+    try {
+      // Prepare request data based on the selected method
+      let requestData = {
+        method: splitMethod
+      };
+      
+      // Only include percentages for the random assignment method
+      if (splitMethod === 'assign_random') {
+        requestData = {
+          ...requestData,
+          train_percent: splitPercentages[0],
+          val_percent: splitPercentages[1],
+          test_percent: testPercentage
+        };
+      }
+      
+      console.log('Assigning images with data:', requestData);
+      const response = await datasetsAPI.assignImagesToSplits(datasetId, requestData);
+      
+      message.success(response.message || 'Images assigned successfully');
+      
+      // Move dataset to completed section
+      await projectsAPI.moveDatasetToCompleted(dataset.project_id, datasetId);
+      
+      // Navigate to main project workspace
+      navigate(`/projects/${dataset.project_id}/workspace`);
+      
+    } catch (error) {
+      console.error('Error assigning images:', error);
+      message.error('Failed to assign images to dataset splits');
+      
+      // Show more detailed error if available
+      if (error.response && error.response.data && error.response.data.detail) {
+        message.error(`Error: ${error.response.data.detail}`);
+      }
+    } finally {
+      setAssignLoading(false);
+      setSplitDrawerVisible(false);
+    }
+  };
+  
   // Handle instructions edit
   const handleEditInstructions = () => {
     setEditingInstructions(true);
@@ -408,10 +504,7 @@ const AnnotateProgress = () => {
               type="primary" 
               size="large"
               icon={<PlusOutlined />}
-              onClick={() => {
-                // Navigate to add images page or show upload modal
-                message.info('Add Images functionality - to be implemented');
-              }}
+              onClick={() => setSplitDrawerVisible(true)}
               style={{
                 background: '#52c41a',
                 borderColor: '#52c41a',
@@ -637,7 +730,227 @@ const AnnotateProgress = () => {
         </Card>
       </Content>
 
+      {/* Dataset Split Drawer */}
+      <Drawer
+        title="Add Images to Dataset Splits"
+        width={520}
+        open={splitDrawerVisible}
+        onClose={() => setSplitDrawerVisible(false)}
+        footer={
+          <div style={{ textAlign: 'right' }}>
+            <Button 
+              onClick={() => setSplitDrawerVisible(false)} 
+              style={{ marginRight: 8 }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="primary" 
+              onClick={handleAssignImages}
+              loading={assignLoading}
+            >
+              Update & Go to Workspace
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ marginBottom: 24 }}>
+          <Title level={4}>Split Method</Title>
+          <Select
+            value={splitMethod}
+            onChange={handleSplitMethodChange}
+            style={{ width: '100%', marginTop: 8 }}
+            size="large"
+            options={[
+              {
+                value: 'use_existing',
+                label: 'USE EXISTING SPLIT',
+              },
+              {
+                value: 'assign_random',
+                label: 'SPLIT IMAGES BETWEEN TRAIN/VALID/TEST',
+              },
+              {
+                value: 'all_train',
+                label: 'ADD ALL IMAGES TO TRAIN SET',
+              },
+              {
+                value: 'all_val',
+                label: 'ADD ALL IMAGES TO VALID SET',
+              },
+              {
+                value: 'all_test',
+                label: 'ADD ALL IMAGES TO TEST SET',
+              }
+            ]}
+          />
+          <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
+            {splitMethod === 'use_existing' && 'Keep current split values in the database (for existing datasets)'}
+            {splitMethod === 'assign_random' && 'Randomly assigns images to splits based on the percentages below'}
+            {splitMethod === 'all_train' && 'Assigns all labeled images to the training set'}
+            {splitMethod === 'all_val' && 'Assigns all labeled images to the validation set'}
+            {splitMethod === 'all_test' && 'Assigns all labeled images to the test set'}
+          </div>
+        </div>
 
+        {/* Only show distribution controls for SPLIT IMAGES BETWEEN TRAIN/VALID/TEST option */}
+        {splitMethod === 'assign_random' && (
+          <div style={{ marginBottom: 24 }}>
+            <Title level={4}>Dataset Distribution</Title>
+            <Paragraph type="secondary">
+              Drag the sliders to adjust the dataset split:
+              <ul style={{ marginTop: 8, marginBottom: 0 }}>
+                <li>First slider: End of training set</li>
+                <li>Second slider: End of validation set</li>
+                <li>Remaining percentage goes to test set</li>
+              </ul>
+            </Paragraph>
+            
+            <div style={{ marginTop: 24, marginBottom: 48 }}>
+              <Slider
+                range
+                min={0}
+                max={100}
+                value={[trainEndPoint, valEndPoint]}
+                onChange={handleSliderChange}
+                marks={{
+                  0: '0%',
+                  25: '25%',
+                  50: '50%',
+                  75: '75%',
+                  100: '100%'
+                }}
+                tooltip={{
+                  formatter: (value, index) => {
+                    if (index === 0) {
+                      return `Train: ${splitPercentages[0]}%`;
+                    } else {
+                      return `Val: ${splitPercentages[1]}%`;
+                    }
+                  }
+                }}
+              />
+              
+              {/* Distribution Markers */}
+              <div style={{ 
+                display: 'flex', 
+                marginTop: -36,
+                marginBottom: 24
+              }}>
+                <div style={{ 
+                  width: `${splitPercentages[0]}%`, 
+                  textAlign: 'center',
+                  paddingRight: 4,
+                  minWidth: '60px'
+                }}>
+                  <Tag color="blue" style={{ marginRight: 0 }}>Train</Tag>
+                </div>
+                <div style={{ 
+                  width: `${splitPercentages[1]}%`, 
+                  textAlign: 'center',
+                  minWidth: '80px'
+                }}>
+                  <Tag color="orange" style={{ marginRight: 0 }}>Val</Tag>
+                </div>
+                <div style={{ 
+                  width: `${testPercentage}%`, 
+                  textAlign: 'center',
+                  paddingLeft: 4,
+                  minWidth: '60px'
+                }}>
+                  <Tag color="green" style={{ marginRight: 0 }}>Test</Tag>
+                </div>
+              </div>
+            </div>
+            
+            {/* Distribution Statistics */}
+            <Row gutter={16}>
+              <Col span={8}>
+                <Statistic 
+                  title="Train"
+                  value={splitPercentages[0]}
+                  suffix="%"
+                  valueStyle={{ color: '#1890ff' }}
+                  precision={0}
+                />
+                <Text type="secondary">{trainCount} images</Text>
+              </Col>
+              <Col span={8}>
+                <Statistic 
+                  title="Validation"
+                  value={splitPercentages[1]}
+                  suffix="%"
+                  valueStyle={{ color: '#fa8c16' }}
+                  precision={0}
+                />
+                <Text type="secondary">{valCount} images</Text>
+              </Col>
+              <Col span={8}>
+                <Statistic 
+                  title="Test"
+                  value={testPercentage}
+                  suffix="%"
+                  valueStyle={{ color: '#52c41a' }}
+                  precision={0}
+                />
+                <Text type="secondary">{testCount} images</Text>
+              </Col>
+            </Row>
+          </div>
+        )}
+        
+        {/* Show appropriate message for other split methods */}
+        {splitMethod === 'use_existing' && (
+          <div style={{ marginBottom: 24 }}>
+            <Title level={4}>Using Existing Split</Title>
+            <Paragraph>
+              This option will keep the current train/val/test assignments for all labeled images.
+            </Paragraph>
+          </div>
+        )}
+        
+        {splitMethod === 'all_train' && (
+          <div style={{ marginBottom: 24 }}>
+            <Title level={4}>All Images to Training Set</Title>
+            <Paragraph>
+              This option will assign all {totalLabeledImages} labeled images to the training set.
+            </Paragraph>
+          </div>
+        )}
+        
+        {splitMethod === 'all_val' && (
+          <div style={{ marginBottom: 24 }}>
+            <Title level={4}>All Images to Validation Set</Title>
+            <Paragraph>
+              This option will assign all {totalLabeledImages} labeled images to the validation set.
+            </Paragraph>
+          </div>
+        )}
+        
+        {splitMethod === 'all_test' && (
+          <div style={{ marginBottom: 24 }}>
+            <Title level={4}>All Images to Test Set</Title>
+            <Paragraph>
+              This option will assign all {totalLabeledImages} labeled images to the test set.
+            </Paragraph>
+          </div>
+        )}
+        
+        <Divider />
+        
+        <Paragraph>
+          <Text strong>Note:</Text> {
+            splitMethod === 'assign_random'
+              ? "This will assign all labeled images to the dataset splits according to the percentages you've set."
+              : splitMethod === 'use_existing'
+                ? "This will keep the current train/val/test assignments for all labeled images."
+                : `This will assign all labeled images to the ${
+                    splitMethod === 'all_train' ? 'training' : 
+                    splitMethod === 'all_val' ? 'validation' : 'test'
+                  } set.`
+          } Unlabeled images will be ignored.
+        </Paragraph>
+      </Drawer>
     </Layout>
   );
 };

@@ -82,8 +82,115 @@ app.include_router(analytics.router, tags=["analytics"])
 app.include_router(augmentation.router, tags=["augmentation"])
 app.include_router(dataset_management.router, tags=["dataset-management"])
 
+# Include dataset splits feature
+from api.routes import dataset_splits
+app.include_router(dataset_splits.router, prefix="/api/v1", tags=["dataset-splits"])
+
 # Include Active Learning routes
 app.include_router(active_learning.router, tags=["active-learning"])
+
+# EMERGENCY CLEANUP ENDPOINTS
+
+@app.delete("/api/v1/fix-labels")
+async def fix_orphaned_labels():
+    """Emergency cleanup endpoint to fix orphaned labels"""
+    from database.database import get_db
+    from database.models import Label, Project
+    
+    db = next(get_db())
+    
+    try:
+        # Get list of valid project IDs
+        existing_projects = db.query(Project).all()
+        existing_project_ids = [p.id for p in existing_projects]
+        
+        print(f"\n\n================ EMERGENCY LABEL CLEANUP ================")
+        print(f"Valid projects: {existing_project_ids}")
+        
+        # Find orphaned labels (null project_id or non-existent project)
+        orphaned_labels = db.query(Label).filter(
+            (Label.project_id.is_(None)) | 
+            (~Label.project_id.in_(existing_project_ids))
+        ).all()
+        
+        orphaned_count = len(orphaned_labels)
+        print(f"Found {orphaned_count} orphaned labels")
+        
+        for label in orphaned_labels:
+            print(f"Deleting orphaned label: ID {label.id}, Name: {label.name}, Project ID: {label.project_id}")
+            db.delete(label)
+        
+        # Commit all changes
+        db.commit()
+        
+        # Verify that all orphaned labels are gone
+        remaining = db.query(Label).filter(
+            (Label.project_id.is_(None)) | 
+            (~Label.project_id.in_(existing_project_ids))
+        ).all()
+        
+        if remaining:
+            print(f"WARNING: {len(remaining)} orphaned labels still remain!")
+            return {
+                "success": False,
+                "message": f"Failed to delete all orphaned labels - {len(remaining)} remain"
+            }
+        else:
+            print("SUCCESS: All orphaned labels have been removed")
+            return {
+                "success": True,
+                "message": f"Successfully deleted {orphaned_count} orphaned labels"
+            }
+    except Exception as e:
+        print(f"ERROR: {str(e)}")
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+        print("================ CLEANUP COMPLETE ================\n\n")
+
+@app.get("/api/v1/list-labels")
+async def list_all_labels():
+    """Diagnostic endpoint to list all labels in the database"""
+    from database.database import get_db
+    from database.models import Label, Project
+    
+    db = next(get_db())
+    
+    try:
+        # Get all labels
+        all_labels = db.query(Label).all()
+        projects = {p.id: p.name for p in db.query(Project).all()}
+        
+        # Group by project
+        labels_by_project = {}
+        for label in all_labels:
+            project_id = label.project_id
+            if project_id not in labels_by_project:
+                labels_by_project[project_id] = []
+            labels_by_project[project_id].append({
+                "id": label.id,
+                "name": label.name,
+                "color": label.color,
+                "project_id": label.project_id
+            })
+        
+        # Format the response
+        result = []
+        for project_id, labels in labels_by_project.items():
+            project_name = projects.get(project_id, "Unknown")
+            result.append({
+                "project_id": project_id,
+                "project_name": project_name,
+                "label_count": len(labels),
+                "labels": labels
+            })
+        
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        db.close()
 
 # Include Smart Segmentation routes
 from api import smart_segmentation

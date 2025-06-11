@@ -79,10 +79,33 @@ class ProjectOperations:
     @staticmethod
     def delete_project(db: Session, project_id: str) -> bool:
         """Delete project and all related data"""
+        # First, explicitly delete all labels associated with this project
+        from database.models import Label
+        print(f"Deleting all labels for project {project_id}")
+        
+        # Find all labels to delete (for logging)
+        labels_to_delete = db.query(Label).filter(Label.project_id == project_id).all()
+        print(f"Found {len(labels_to_delete)} labels to delete")
+        for label in labels_to_delete:
+            print(f"Will delete label: ID {label.id}, Name '{label.name}', Color {label.color}")
+        
+        # Delete the labels
+        db.query(Label).filter(Label.project_id == project_id).delete(synchronize_session=False)
+        
+        # Then delete the project itself
         project = db.query(Project).filter(Project.id == project_id).first()
         if project:
+            print(f"Deleting project: ID {project.id}, Name '{project.name}'")
             db.delete(project)
             db.commit()
+            
+            # Verify that labels were actually deleted
+            remaining = db.query(Label).filter(Label.project_id == project_id).all()
+            if remaining:
+                print(f"WARNING: {len(remaining)} labels still remain after project deletion!")
+            else:
+                print(f"SUCCESS: All labels for project {project_id} were deleted")
+                
             return True
         return False
 
@@ -213,7 +236,8 @@ class ImageOperations:
         height: int = None,
         file_size: int = None,
         format: str = None,
-        split_type: str = "unassigned"
+        split_type: str = "unassigned",
+        split_section: str = "train"
     ) -> Image:
         """Create a new image record"""
         image = Image(
@@ -225,7 +249,8 @@ class ImageOperations:
             height=height,
             file_size=file_size,
             format=format,
-            split_type=split_type
+            split_type=split_type,
+            split_section=split_section
         )
         db.add(image)
         db.commit()
@@ -283,8 +308,36 @@ class ImageOperations:
         return image
     
     @staticmethod
+    def update_image_split_section(db: Session, image_id: str, split_section: str) -> bool:
+        """Update image train/val/test split section"""
+        try:
+            image = db.query(Image).filter(Image.id == image_id).first()
+            if not image:
+                return False
+            
+            # Skip if already in the correct split section
+            if hasattr(image, "split_section") and image.split_section == split_section:
+                return True
+                
+            # Update split section
+            if hasattr(image, "split_section"):
+                image.split_section = split_section
+                image.updated_at = datetime.utcnow()
+                db.commit()
+            else:
+                # If the column doesn't exist yet, we'll need to run migrations first
+                print(f"Warning: split_section column doesn't exist yet. Skipping update.")
+                return False
+            
+            return True
+        except Exception as e:
+            print(f"Error updating split_section: {str(e)}")
+            db.rollback()
+            return False
+    
+    @staticmethod
     def update_image_split(db: Session, image_id: str, split_type: str) -> bool:
-        """Update image split assignment with automatic file movement and path updates"""
+        """Update image workflow split assignment with automatic file movement and path updates"""
         from utils.path_utils import path_manager
         import shutil
         

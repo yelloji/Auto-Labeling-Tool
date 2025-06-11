@@ -42,6 +42,39 @@ const LabelSelectionPopup = ({
       return;
     }
     
+    // Refresh project labels when popup opens to ensure we see all labels
+    if (visible) {
+      // Use API endpoint directly if we need to
+      try {
+        const apiBase = process.env.REACT_APP_API_BASE || '/api/v1';
+        
+        // Get current dataset ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const datasetId = urlParams.get('dataset');
+        
+        if (datasetId) {
+          console.log('Popup refreshing labels for dataset:', datasetId);
+          
+          // Force refresh labels from API
+          fetch(`${apiBase}/datasets/${datasetId}`)
+            .then(r => r.json())
+            .then(data => {
+              const projectId = data.project_id;
+              return fetch(`${apiBase}/projects/${projectId}/labels`);
+            })
+            .then(r => r.json())
+            .then(labels => {
+              console.log('Popup refreshed labels:', labels);
+              // We don't need to update state here as the parent component 
+              // will receive these labels on next render
+            })
+            .catch(err => console.error('Error refreshing labels in popup:', err));
+        }
+      } catch (e) {
+        console.error('Error in popup label refresh:', e);
+      }
+    }
+    
     // Only initialize state when first opening the popup
     if (visible && !document.getElementById('root').hasAttribute('data-label-popup-initialized')) {
       // Set a flag on the document to prevent state reset during typing
@@ -211,6 +244,9 @@ const LabelSelectionPopup = ({
 
     // Log the existing labels to help with debugging
     console.log('Rendering existing labels in popup:', existingLabels);
+    
+    // Check if we have labels from other datasets
+    console.log('IMPORTANT: Showing ALL labels from all datasets in project');
 
     // Sort labels by name for better organization
     const sortedLabels = [...existingLabels].sort((a, b) => {

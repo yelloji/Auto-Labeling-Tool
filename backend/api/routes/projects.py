@@ -488,6 +488,14 @@ async def assign_dataset_to_annotating(project_id: str, dataset_id: str, db: Ses
                 # Update image properties directly without individual commits
                 image.file_path = new_path
                 image.split_type = "annotating"
+                # Set default split_section to "train" if the column exists
+                try:
+                    if hasattr(image, "split_section"):
+                        if not image.split_section:
+                            image.split_section = "train"
+                        print(f"Ensured split_section is set to: {image.split_section}")
+                except Exception as e:
+                    print(f"Note: split_section column may not exist yet: {str(e)}")
                 image.updated_at = datetime.utcnow()
                 print(f"Updated image path: {old_path} -> {new_path}")
                 print(f"Updated image split_type: unassigned -> annotating")
@@ -1494,38 +1502,104 @@ async def move_dataset_to_unassigned(
             return {"message": f"Dataset '{dataset.name}' is already in unassigned", "dataset": dataset}
         
         # Create unassigned directory if it doesn't exist
-        os.makedirs(os.path.dirname(unassigned_folder), exist_ok=True)
+        os.makedirs(unassigned_folder, exist_ok=True)
         
-        # Move the entire dataset folder to unassigned
-        shutil.move(current_folder, unassigned_folder)
-        print(f"Moved dataset folder: {current_folder} -> {unassigned_folder}")
-        
-        # Update file paths in database using proper path management
+        # Get all images for this dataset
         images = ImageOperations.get_images_by_dataset(db, dataset_id, skip=0, limit=10000)
-        for image in images:
-            old_path = image.file_path
-            # Use path_manager to generate correct relative path
-            new_path = path_manager.get_relative_image_path(
-                project.name, dataset.name, image.filename, "unassigned"
-            )
-            # Update image properties directly without individual commits
-            image.file_path = new_path
-            image.split_type = "unassigned"
-            image.updated_at = datetime.utcnow()
-            print(f"Updated image path: {old_path} -> {new_path}")
-            print(f"Updated image split_type: {current_workflow} -> unassigned")
+        
+        # Handle different source folder structures
+        if current_workflow == "dataset":
+            # For dataset, we need to handle train/val/test subfolders
+            for image in images:
+                # Get the current image file path
+                source_path = os.path.join("..", image.file_path)
+                
+                # Create the target path in unassigned
+                target_path = os.path.join(unassigned_folder, image.filename)
+                
+                # Copy the file if it exists
+                if os.path.exists(source_path):
+                    try:
+                        shutil.copy2(source_path, target_path)
+                        print(f"Copied image: {source_path} -> {target_path}")
+                    except Exception as e:
+                        print(f"Error copying file {source_path}: {str(e)}")
+                else:
+                    print(f"Warning: Source file not found: {source_path}")
+                
+                # Update the database path but KEEP the original split_section
+                old_path = image.file_path
+                split_section = image.split_section  # Save the original split_section
+                new_path = f"uploads/projects/{project.name}/unassigned/{dataset.name}/{image.filename}"
+                
+                # Update image properties directly without individual commits
+                image.file_path = new_path
+                image.split_type = "unassigned"  # Update split_type to unassigned
+                # Don't change the split_section, keep it as train/val/test
+                image.updated_at = datetime.utcnow()
+                print(f"Updated image path: {old_path} -> {new_path}")
+                print(f"Updated split_type: {current_workflow} -> unassigned, kept split_section: {split_section}")
+            
+            # Now remove the original dataset folder with all its subfolders
+            try:
+                shutil.rmtree(current_folder)
+                print(f"Removed original folder: {current_folder}")
+            except Exception as e:
+                print(f"Error removing folder {current_folder}: {str(e)}")
+        else:
+            # For annotating or other workflows, move the entire folder
+            try:
+                # If unassigned folder already exists, we need to move files individually
+                if os.path.exists(unassigned_folder):
+                    # Copy all files from current folder to unassigned
+                    for filename in os.listdir(current_folder):
+                        source_path = os.path.join(current_folder, filename)
+                        target_path = os.path.join(unassigned_folder, filename)
+                        
+                        if os.path.isfile(source_path):
+                            shutil.copy2(source_path, target_path)
+                            print(f"Copied file: {source_path} -> {target_path}")
+                    
+                    # Remove the original folder
+                    shutil.rmtree(current_folder)
+                    print(f"Removed original folder after copying files: {current_folder}")
+                else:
+                    # Move the entire folder if unassigned doesn't exist yet
+                    shutil.move(current_folder, unassigned_folder)
+                    print(f"Moved dataset folder: {current_folder} -> {unassigned_folder}")
+            except Exception as e:
+                print(f"Error moving folder {current_folder}: {str(e)}")
+            
+            # Update file paths in database but preserve split_section
+            for image in images:
+                old_path = image.file_path
+                split_section = image.split_section  # Save the original split_section
+                
+                # Use path_manager to generate correct relative path
+                new_path = path_manager.get_relative_image_path(
+                    project.name, dataset.name, image.filename, "unassigned"
+                )
+                
+                # Update image properties directly without individual commits
+                image.file_path = new_path
+                image.split_type = "unassigned"  # Update split_type to unassigned
+                # Don't change the split_section, keep it as is
+                image.updated_at = datetime.utcnow()
+                print(f"Updated image path: {old_path} -> {new_path}")
+                print(f"Updated split_type: {current_workflow} -> unassigned, kept split_section: {split_section}")
         
         # Commit all image updates at once
         db.commit()
         print(f"Committed {len(images)} image updates to database")
         
-        # Update dataset to unassigned status (labeled_images = 0)
-        updated_dataset = DatasetOperations.update_dataset(
-            db,
-            dataset_id,
-            labeled_images=0,
-            unlabeled_images=dataset.total_images
-        )
+        # Update the is_labeled flag in the database to match reality
+        for image in images:
+            if image.is_labeled:
+                # Ensure the database flag matches the actual state
+                ImageOperations.update_image_status(db, image.id, is_labeled=True)
+        
+        # Update dataset statistics based on actual database state
+        updated_dataset = DatasetOperations.update_dataset_stats(db, dataset_id)
         
         return {"message": f"Dataset '{dataset.name}' moved to unassigned", "dataset": updated_dataset}
         
@@ -1554,46 +1628,93 @@ async def move_dataset_to_completed(
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # CRITICAL: Check if ALL images are labeled before allowing move to dataset
-        if dataset.labeled_images < dataset.total_images:
-            unlabeled_count = dataset.total_images - dataset.labeled_images
+        # Get the actual count of labeled images directly from the database
+        images = ImageOperations.get_images_by_dataset(db, dataset_id, skip=0, limit=10000)
+        labeled_count = sum(1 for img in images if img.is_labeled)
+        
+        if labeled_count < len(images):
+            unlabeled_count = len(images) - labeled_count
             raise HTTPException(
                 status_code=400, 
-                detail=f"Cannot move to dataset: {unlabeled_count} images still need labeling. Please label all {dataset.total_images} images first."
+                detail=f"Cannot move to dataset: {unlabeled_count} images still need labeling. Please label all {len(images)} images first."
             )
         
-        # Move physical files from annotating to dataset
+        # Move physical files from annotating to dataset with train/val/test folders
         project_folder = os.path.join("..", "uploads", "projects", project.name)
         annotating_folder = os.path.join(project_folder, "annotating", dataset.name)
         dataset_folder = os.path.join(project_folder, "dataset", dataset.name)
         
         if os.path.exists(annotating_folder):
             # Create dataset directory if it doesn't exist
-            os.makedirs(os.path.dirname(dataset_folder), exist_ok=True)
+            os.makedirs(dataset_folder, exist_ok=True)
             
-            # Move the entire dataset folder
-            shutil.move(annotating_folder, dataset_folder)
-            print(f"Moved dataset folder: {annotating_folder} -> {dataset_folder}")
+            # Create train/val/test folders inside the dataset folder
+            train_folder = os.path.join(dataset_folder, "train")
+            val_folder = os.path.join(dataset_folder, "val")
+            test_folder = os.path.join(dataset_folder, "test")
             
-            # Update file paths in database using proper path management
+            os.makedirs(train_folder, exist_ok=True)
+            os.makedirs(val_folder, exist_ok=True)
+            os.makedirs(test_folder, exist_ok=True)
+            
+            print(f"Created split folders inside {dataset_folder}")
+            
+            # Get all images for this dataset
             images = ImageOperations.get_images_by_dataset(db, dataset_id, skip=0, limit=10000)
+            
+            # Move each image to the appropriate split folder
             for image in images:
+                # Get the current image file path
+                source_path = os.path.join("..", image.file_path)
+                
+                # Determine the target split folder based on database split_section
+                split_section = image.split_section
+                if split_section not in ["train", "val", "test"]:
+                    # Default to train if no split is assigned
+                    split_section = "train"
+                
+                # Create the target folder path
+                target_folder = os.path.join(dataset_folder, split_section)
+                target_path = os.path.join(target_folder, image.filename)
+                
+                # Ensure the target folder exists
+                os.makedirs(target_folder, exist_ok=True)
+                
+                # Move the file if it exists
+                if os.path.exists(source_path):
+                    try:
+                        shutil.copy2(source_path, target_path)
+                        print(f"Copied image: {source_path} -> {target_path}")
+                    except Exception as e:
+                        print(f"Error copying file {source_path}: {str(e)}")
+                else:
+                    print(f"Warning: Source file not found: {source_path}")
+                
+                # Update the database path
                 old_path = image.file_path
-                # Use path_manager to generate correct relative path
-                new_path = path_manager.get_relative_image_path(
-                    project.name, dataset.name, image.filename, "dataset"
-                )
+                new_path = f"uploads/projects/{project.name}/dataset/{dataset.name}/{split_section}/{image.filename}"
                 ImageOperations.update_image_path(db, image.id, new_path)
+                
+                # Update split_type to 'dataset' but keep split_section as is
                 ImageOperations.update_image_split(db, image.id, "dataset")
                 print(f"Updated image path: {old_path} -> {new_path}")
-                print(f"Updated image split_type: annotating -> dataset")
+                print(f"Updated image split_type: annotating -> dataset, kept split_section: {split_section}")
+            
+            # Now that all files are copied, we can remove the original annotating folder
+            try:
+                shutil.rmtree(annotating_folder)
+                print(f"Removed original folder: {annotating_folder}")
+            except Exception as e:
+                print(f"Error removing folder {annotating_folder}: {str(e)}")
         
-        # Update dataset to completed status (labeled_images = total_images)
-        updated_dataset = DatasetOperations.update_dataset(
-            db,
-            dataset_id,
-            labeled_images=dataset.total_images,
-            unlabeled_images=0
-        )
+        # Update the is_labeled flag in the database to match reality
+        for image in images:
+            if image.is_labeled:
+                # Ensure the database flag matches the actual state
+                ImageOperations.update_image_status(db, image.id, is_labeled=True)
+        
+        # Update dataset statistics based on actual database state
+        updated_dataset = DatasetOperations.update_dataset_stats(db, dataset_id)
         
         return {"message": f"Dataset '{dataset.name}' moved to completed", "dataset": updated_dataset}
         

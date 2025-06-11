@@ -274,6 +274,13 @@ export const datasetsAPI = {
     const response = await api.get(`/api/v1/datasets/${datasetId}/stats`);
     return response.data;
   },
+  
+  // Assign labeled images to dataset splits (train/val/test)
+  assignImagesToSplits: async (datasetId, splitData) => {
+    // Use the dataset splits endpoint
+    const response = await api.post(`/api/v1/datasets/${datasetId}/splits`, splitData);
+    return response.data;
+  },
 };
 
 // ==================== SMART SEGMENTATION API ====================
