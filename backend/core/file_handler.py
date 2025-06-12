@@ -25,8 +25,8 @@ class FileHandler:
     MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
     
     def __init__(self):
-        # Ensure upload directory exists
-        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+        # Ensure projects directory exists
+        os.makedirs(settings.PROJECTS_DIR, exist_ok=True)
     
     def validate_image_file(self, file: UploadFile) -> bool:
         """Validate uploaded image file"""
@@ -113,7 +113,9 @@ class FileHandler:
         path_manager.ensure_directory_exists(storage_dir)
         
         # Generate unique filename (preserving original when possible)
-        unique_filename = self.generate_unique_filename(file.filename, storage_dir)
+        # Make sure we use just the base filename without any path or dataset prefix
+        base_filename = Path(file.filename).name
+        unique_filename = self.generate_unique_filename(base_filename, storage_dir)
         
         # Save file
         file_path = storage_dir / unique_filename
@@ -183,9 +185,10 @@ class FileHandler:
                     )
                     
                     # Create database record with relative path
+                    # Use original filename instead of path-based name to avoid dataset prefix
                     image_record = ImageOperations.create_image(
                         db=db,
-                        filename=Path(relative_path).name,
+                        filename=file.filename,  # Use original filename instead of path-based name
                         original_filename=file.filename,
                         file_path=relative_path,  # Store relative path
                         dataset_id=dataset_id,
@@ -257,8 +260,8 @@ class FileHandler:
     def rename_dataset_folder(self, project_name: str, old_dataset_name: str, new_dataset_name: str) -> bool:
         """Rename dataset folder when dataset name is updated"""
         try:
-            old_path = Path(settings.UPLOAD_DIR) / project_name / old_dataset_name
-            new_path = Path(settings.UPLOAD_DIR) / project_name / new_dataset_name
+            old_path = Path(settings.PROJECTS_DIR) / project_name / old_dataset_name
+            new_path = Path(settings.PROJECTS_DIR) / project_name / new_dataset_name
             
             # Check if old folder exists
             if not old_path.exists():
@@ -282,7 +285,7 @@ class FileHandler:
     def cleanup_dataset_files_by_path(self, project_name: str, dataset_name: str) -> bool:
         """Delete dataset folder using project and dataset names"""
         try:
-            dataset_dir = Path(settings.UPLOAD_DIR) / project_name / dataset_name
+            dataset_dir = Path(settings.PROJECTS_DIR) / project_name / dataset_name
             if dataset_dir.exists():
                 shutil.rmtree(dataset_dir)
                 print(f"Deleted dataset folder: {dataset_dir}")
@@ -297,7 +300,7 @@ class FileHandler:
     def cleanup_dataset_files(self, dataset_id: str) -> bool:
         """Delete all files for a dataset (legacy method for dataset_id-based folders)"""
         try:
-            dataset_dir = Path(settings.UPLOAD_DIR) / dataset_id
+            dataset_dir = Path(settings.PROJECTS_DIR) / dataset_id
             if dataset_dir.exists():
                 shutil.rmtree(dataset_dir)
                 print(f"Deleted dataset folder: {dataset_dir}")

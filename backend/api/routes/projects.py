@@ -14,10 +14,21 @@ import json
 import uuid
 from PIL import Image
 import io
+from pathlib import Path
 
 from database.database import get_db
 from database.operations import ProjectOperations, DatasetOperations, ImageOperations, AnnotationOperations
 from models.model_manager import model_manager
+from core.config import settings
+
+# Helper function to get standard project paths
+def get_project_path(project_name):
+    """Get the standard path to a project folder using settings.PROJECTS_DIR"""
+    return Path(settings.PROJECTS_DIR) / project_name
+
+def get_dataset_path(project_name, workflow_stage, dataset_name):
+    """Get the standard path to a dataset folder"""
+    return get_project_path(project_name) / workflow_stage / dataset_name
 from utils.path_utils import path_manager
 
 router = APIRouter()
@@ -127,14 +138,18 @@ async def create_project(
 
         # Create project folder structure
         try:
-            project_folder = os.path.join("..", "uploads", "projects", project.name)
-            os.makedirs(project_folder, exist_ok=True)
+            from core.config import settings
+            from pathlib import Path
+            
+            # Use the PROJECTS_DIR from settings
+            project_folder = Path(settings.PROJECTS_DIR) / project.name
+            project_folder.mkdir(exist_ok=True)
             
             # Create workflow folders
             workflow_folders = ["unassigned", "annotating", "dataset"]
             for folder in workflow_folders:
-                folder_path = os.path.join(project_folder, folder)
-                os.makedirs(folder_path, exist_ok=True)
+                folder_path = project_folder / folder
+                folder_path.mkdir(exist_ok=True)
                 
             print(f"Created project folder structure: {project_folder}")
         except Exception as folder_error:
@@ -244,20 +259,20 @@ async def update_project(
         # Handle folder renaming if project name changed
         if request.name is not None and old_project_name != new_project_name:
             try:
-                old_folder_path = os.path.join("..", "uploads", "projects", old_project_name)
-                new_folder_path = os.path.join("..", "uploads", "projects", new_project_name)
+                old_folder_path = get_project_path(old_project_name)
+                new_folder_path = get_project_path(new_project_name)
                 print(f"DEBUG: Attempting to rename folder from '{old_folder_path}' to '{new_folder_path}'")
-                print(f"DEBUG: old_folder_path exists: {os.path.exists(old_folder_path)}")
-                print(f"DEBUG: new_folder_path exists: {os.path.exists(new_folder_path)}")
+                print(f"DEBUG: old_folder_path exists: {old_folder_path.exists()}")
+                print(f"DEBUG: new_folder_path exists: {new_folder_path.exists()}")
                 
                 # Only rename if old folder exists and new folder doesn't exist
-                if os.path.exists(old_folder_path) and not os.path.exists(new_folder_path):
-                    shutil.move(old_folder_path, new_folder_path)
+                if old_folder_path.exists() and not new_folder_path.exists():
+                    shutil.move(str(str(old_folder_path)), str(new_folder_path))
                     print(f"Renamed project folder from '{old_folder_path}' to '{new_folder_path}'")
-                elif os.path.exists(old_folder_path) and os.path.exists(new_folder_path):
+                elif old_folder_path.exists() and new_folder_path.exists():
                     print(f"Warning: Both old and new project folders exist. Manual cleanup may be needed.")
                 else:
-                    print(f"DEBUG: Folder rename skipped - old exists: {os.path.exists(old_folder_path)}, new exists: {os.path.exists(new_folder_path)}")
+                    print(f"DEBUG: Folder rename skipped - old exists: {old_folder_path.exists()}, new exists: {new_folder_path.exists()}")
                     
             except Exception as folder_error:
                 print(f"Warning: Failed to rename project folder: {str(folder_error)}")
@@ -309,11 +324,11 @@ async def delete_project(project_id: str, db: Session = Depends(get_db)):
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete project from database")
         
-        # Delete project upload folder
+        # Delete project folder
         try:
-            project_folder_path = os.path.join("..", "uploads", "projects", project_name)
-            if os.path.exists(project_folder_path):
-                shutil.rmtree(project_folder_path)
+            project_folder_path = get_project_path(project_name)
+            if project_folder_path.exists():
+                shutil.rmtree(str(str(project_folder_path)))
                 print(f"Deleted project folder: {project_folder_path}")
             else:
                 print(f"Project folder not found: {project_folder_path}")
@@ -398,27 +413,27 @@ async def get_project_management_data(project_id: str, db: Session = Depends(get
             }
             
             # Check physical location to determine status
-            project_folder = os.path.join("..", "uploads", "projects", project.name)
-            unassigned_folder = os.path.join(project_folder, "unassigned", dataset.name)
-            annotating_folder = os.path.join(project_folder, "annotating", dataset.name)
-            dataset_folder = os.path.join(project_folder, "dataset", dataset.name)
+            project_folder = get_project_path(project.name)
+            unassigned_folder = project_folder / "unassigned" / dataset.name
+            annotating_folder = project_folder / "annotating" / dataset.name
+            dataset_folder = project_folder / "dataset" / dataset.name
             
             # Debug logs
             print(f"Dataset {dataset.name} (id={dataset.id}) in project {project.name}")
-            print(f"  Checking unassigned folder: {unassigned_folder} - exists: {os.path.exists(unassigned_folder)}")
-            print(f"  Checking annotating folder: {annotating_folder} - exists: {os.path.exists(annotating_folder)}")
-            print(f"  Checking dataset folder: {dataset_folder} - exists: {os.path.exists(dataset_folder)}")
+            print(f"  Checking unassigned folder: {unassigned_folder} - exists: {unassigned_folder.exists()}")
+            print(f"  Checking annotating folder: {annotating_folder} - exists: {annotating_folder.exists()}")
+            print(f"  Checking dataset folder: {dataset_folder} - exists: {dataset_folder.exists()}")
             
             # LOGIC CHANGE: Prioritize unassigned folder check first
-            if os.path.exists(unassigned_folder):
+            if unassigned_folder.exists():
                 # Explicitly check for unassigned folder first
                 print(f"  -> Adding to UNASSIGNED")
                 unassigned.append(dataset_info)
-            elif os.path.exists(annotating_folder):
+            elif annotating_folder.exists():
                 # Dataset is assigned for annotation work - Annotating
                 print(f"  -> Adding to ANNOTATING")
                 annotating.append(dataset_info)
-            elif os.path.exists(dataset_folder) or dataset.labeled_images == dataset.total_images:
+            elif dataset_folder.exists() or dataset.labeled_images == dataset.total_images:
                 # Fully annotated - Dataset (completed)
                 print(f"  -> Adding to COMPLETED")
                 completed.append(dataset_info)
@@ -464,27 +479,27 @@ async def assign_dataset_to_annotating(project_id: str, dataset_id: str, db: Ses
         if not dataset or dataset.project_id != int(project_id):
             raise HTTPException(status_code=404, detail="Dataset not found")
         
-        # Use proper folder structure: uploads/projects/{project}/{workflow}/{dataset}/
-        project_folder = os.path.join("..", "uploads", "projects", project.name)
-        unassigned_folder = os.path.join(project_folder, "unassigned", dataset.name)
-        annotating_folder = os.path.join(project_folder, "annotating", dataset.name)
-        dataset_folder = os.path.join(project_folder, "dataset", dataset.name)
+        # Use proper folder structure: projects/{project}/{workflow}/{dataset}/
+        project_folder = get_project_path(project.name)
+        unassigned_folder = project_folder / "unassigned" / dataset.name
+        annotating_folder = project_folder / "annotating" / dataset.name
+        dataset_folder = project_folder / "dataset" / dataset.name
         
         # Check if dataset is in unassigned folder
-        if os.path.exists(unassigned_folder):
+        if unassigned_folder.exists():
             # Create annotating directory if it doesn't exist
-            os.makedirs(os.path.join(project_folder, "annotating"), exist_ok=True)
+            (project_folder / "annotating").mkdir(exist_ok=True, parents=True)
             
             # Move the entire dataset folder
-            shutil.move(unassigned_folder, annotating_folder)
+            shutil.move(str(unassigned_folder), annotating_folder)
             print(f"Moved dataset folder: {unassigned_folder} -> {annotating_folder}")
             
             # Update file paths in database
             images = ImageOperations.get_images_by_dataset(db, dataset_id, skip=0, limit=10000)
             for image in images:
                 old_path = image.file_path
-                # Generate correct relative path: uploads/projects/{project}/annotating/{dataset}/{filename}
-                new_path = f"uploads/projects/{project.name}/annotating/{dataset.name}/{image.filename}"
+                # Generate correct relative path: projects/{project}/annotating/{dataset}/{filename}
+                new_path = f"projects/{project.name}/annotating/{dataset.name}/{image.filename}"
                 # Update image properties directly without individual commits
                 image.file_path = new_path
                 image.split_type = "annotating"
@@ -505,26 +520,45 @@ async def assign_dataset_to_annotating(project_id: str, dataset_id: str, db: Ses
             print(f"Committed {len(images)} image updates to database")
         
         # Check if dataset is in dataset folder (completed datasets)
-        elif os.path.exists(dataset_folder):
+        elif dataset_folder.exists():
             # Create annotating directory if it doesn't exist
-            os.makedirs(os.path.join(project_folder, "annotating"), exist_ok=True)
+            (project_folder / "annotating").mkdir(exist_ok=True, parents=True)
+            annotating_folder.mkdir(exist_ok=True, parents=True)
             
-            # Move the entire dataset folder
-            shutil.move(dataset_folder, annotating_folder)
-            print(f"Moved dataset folder: {dataset_folder} -> {annotating_folder}")
-            
-            # Update file paths in database
+            # Get all images for this dataset
             images = ImageOperations.get_images_by_dataset(db, dataset_id, skip=0, limit=10000)
+            
+            # Move images from train/val/test folders to flat annotating folder
             for image in images:
                 old_path = image.file_path
-                # Generate correct relative path: uploads/projects/{project}/annotating/{dataset}/{filename}
-                new_path = f"uploads/projects/{project.name}/annotating/{dataset.name}/{image.filename}"
+                # Find the source file path from train/val/test subfolder
+                source_path = Path("..") / image.file_path
+                # Create target path in flat annotating folder
+                target_path = annotating_folder / image.filename
+                
+                # Copy the file if it exists
+                if source_path.exists():
+                    try:
+                        shutil.copy2(source_path, target_path)
+                        print(f"Copied image: {source_path} -> {target_path}")
+                    except Exception as e:
+                        print(f"Error copying image {source_path}: {str(e)}")
+                
+                # Generate correct relative path: projects/{project}/annotating/{dataset}/{filename}
+                new_path = f"projects/{project.name}/annotating/{dataset.name}/{image.filename}"
                 # Update image properties directly without individual commits
                 image.file_path = new_path
                 image.split_type = "annotating"
                 image.updated_at = datetime.utcnow()
                 print(f"Updated image path: {old_path} -> {new_path}")
                 print(f"Updated image split_type: dataset -> annotating")
+            
+            # Now remove the original dataset folder with all its subfolders
+            try:
+                shutil.rmtree(str(dataset_folder))
+                print(f"Removed original dataset folder with train/val/test: {dataset_folder}")
+            except Exception as e:
+                print(f"Error removing folder {dataset_folder}: {str(e)}")
             
             # Commit all image updates at once
             db.commit()
@@ -589,7 +623,7 @@ async def rename_dataset(project_id: str, dataset_id: str, new_name: str = Body(
         
         # Handle folder renaming - check all workflow folders
         try:
-            project_folder = os.path.join("..", "uploads", "projects", project.name)
+            project_folder = get_project_path(project.name)
             workflow_folders = ["unassigned", "annotating", "dataset"]
             
             old_folder_path = None
@@ -601,7 +635,7 @@ async def rename_dataset(project_id: str, dataset_id: str, new_name: str = Body(
             # First try with the old_dataset_name from database
             for workflow in workflow_folders:
                 potential_old_path = os.path.join(project_folder, workflow, old_dataset_name)
-                if os.path.exists(potential_old_path):
+                if potential_old_path.exists():
                     old_folder_path = potential_old_path
                     new_folder_path = os.path.join(project_folder, workflow, new_name)
                     workflow_type = workflow
@@ -613,7 +647,7 @@ async def rename_dataset(project_id: str, dataset_id: str, new_name: str = Body(
             if not old_folder_path:
                 for workflow in workflow_folders:
                     workflow_path = os.path.join(project_folder, workflow)
-                    if os.path.exists(workflow_path):
+                    if workflow_path.exists():
                         for folder_name in os.listdir(workflow_path):
                             folder_path = os.path.join(workflow_path, folder_name)
                             if os.path.isdir(folder_path):
@@ -634,12 +668,12 @@ async def rename_dataset(project_id: str, dataset_id: str, new_name: str = Body(
             print(f"DEBUG: Attempting to rename dataset folder from '{old_folder_path}' to '{new_folder_path}'")
             print(f"DEBUG: Found in workflow: {workflow_type}")
             print(f"DEBUG: Actual folder name: {actual_folder_name}")
-            print(f"DEBUG: old_folder_path exists: {os.path.exists(old_folder_path) if old_folder_path else False}")
-            print(f"DEBUG: new_folder_path exists: {os.path.exists(new_folder_path) if new_folder_path else False}")
+            print(f"DEBUG: old_folder_path exists: {old_folder_path.exists() if old_folder_path else False}")
+            print(f"DEBUG: new_folder_path exists: {new_folder_path.exists() if new_folder_path else False}")
             
             # Only rename if old folder exists and new folder doesn't exist
-            if old_folder_path and os.path.exists(old_folder_path) and not os.path.exists(new_folder_path):
-                shutil.move(old_folder_path, new_folder_path)
+            if old_folder_path and old_folder_path.exists() and not new_folder_path.exists():
+                shutil.move(str(old_folder_path), new_folder_path)
                 print(f"Renamed dataset folder from '{old_folder_path}' to '{new_folder_path}'")
                 
                 # Update file paths in database using the actual folder name
@@ -651,10 +685,10 @@ async def rename_dataset(project_id: str, dataset_id: str, new_name: str = Body(
                     ImageOperations.update_image_path(db, image.id, new_path)
                     print(f"Updated image path: {old_path} -> {new_path}")
                     
-            elif old_folder_path and os.path.exists(old_folder_path) and os.path.exists(new_folder_path):
+            elif old_folder_path and old_folder_path.exists() and new_folder_path.exists():
                 print(f"Warning: Both old and new dataset folders exist. Manual cleanup may be needed.")
             else:
-                print(f"DEBUG: Dataset folder rename skipped - old exists: {os.path.exists(old_folder_path) if old_folder_path else False}, new exists: {os.path.exists(new_folder_path) if new_folder_path else False}")
+                print(f"DEBUG: Dataset folder rename skipped - old exists: {old_folder_path.exists() if old_folder_path else False}, new exists: {new_folder_path.exists() if new_folder_path else False}")
                 
         except Exception as folder_error:
             print(f"Warning: Failed to rename dataset folder: {str(folder_error)}")
@@ -704,15 +738,15 @@ async def delete_dataset(project_id: str, dataset_id: str, db: Session = Depends
         
         # Delete dataset folder from all possible locations
         try:
-            project_folder = os.path.join("..", "uploads", "projects", project.name)
+            project_folder = get_project_path(project.name)
             possible_locations = ["unassigned", "annotating", "dataset"]
             
             for location in possible_locations:
-                dataset_folder_path = os.path.join(project_folder, location, dataset_name)
+                dataset_folder_path = project_folder / location / dataset_name
                 print(f"DEBUG: Checking dataset folder: '{dataset_folder_path}'")
                 
-                if os.path.exists(dataset_folder_path):
-                    shutil.rmtree(dataset_folder_path)
+                if dataset_folder_path.exists():
+                    shutil.rmtree(str(dataset_folder_path))
                     print(f"Deleted dataset folder: {dataset_folder_path}")
                     break
             else:
@@ -753,9 +787,9 @@ async def clear_project_data(project_id: str, db: Session = Depends(get_db)):
                 DatasetOperations.delete_dataset(db, str(dataset.id))
                 
                 # Delete dataset folder
-                dataset_folder_path = os.path.join("..", "uploads", "projects", project.name, dataset.name)
-                if os.path.exists(dataset_folder_path):
-                    shutil.rmtree(dataset_folder_path)
+                dataset_folder_path = get_project_path(project.name) / dataset.name
+                if dataset_folder_path.exists():
+                    shutil.rmtree(str(dataset_folder_path))
                     print(f"Deleted dataset folder: {dataset_folder_path}")
                     
             except Exception as dataset_error:
@@ -764,11 +798,11 @@ async def clear_project_data(project_id: str, db: Session = Depends(get_db)):
         
         # Also delete any loose images in the project folder
         try:
-            project_folder_path = os.path.join("..", "uploads", "projects", project.name)
-            if os.path.exists(project_folder_path):
+            project_folder_path = get_project_path(project.name)
+            if project_folder_path.exists():
                 # Remove all files and subdirectories, then recreate the empty folder
-                shutil.rmtree(project_folder_path)
-                os.makedirs(project_folder_path, exist_ok=True)
+                shutil.rmtree(str(project_folder_path))
+                project_folder_path.mkdir(parents=True, exist_ok=True)
                 print(f"Cleared project folder: {project_folder_path}")
         except Exception as folder_error:
             print(f"Warning: Failed to clear project folder: {str(folder_error)}")
@@ -807,13 +841,13 @@ async def duplicate_project(project_id: str, db: Session = Depends(get_db)):
         )
         
         # Create new project folder
-        source_project_folder = os.path.join("..", "uploads", "projects", source_project.name)
-        new_project_folder = os.path.join("..", "uploads", "projects", new_project_name)
-        os.makedirs(new_project_folder, exist_ok=True)
+        source_project_folder = get_project_path(source_project.name)
+        new_project_folder = get_project_path(new_project_name)
+        new_project_folder.mkdir(parents=True, exist_ok=True)
         
         # Copy all files from source project folder to new project folder
         try:
-            if os.path.exists(source_project_folder):
+            if source_project_folder.exists():
                 # Copy all files directly in the project folder (like Medical Image project)
                 for item in os.listdir(source_project_folder):
                     source_item_path = os.path.join(source_project_folder, item)
@@ -948,16 +982,16 @@ async def merge_projects(
         )
         
         # Create merged project folder
-        merged_project_folder = os.path.join("..", "uploads", "projects", merged_project.name)
-        os.makedirs(merged_project_folder, exist_ok=True)
+        merged_project_folder = get_project_path(merged_project.name)
+        merged_project_folder.mkdir(parents=True, exist_ok=True)
         
         # Function to copy project content
         def copy_project_content(project, prefix=""):
-            project_folder = os.path.join("..", "uploads", "projects", project.name)
+            project_folder = get_project_path(project.name)
             
             # Copy all files and folders from project
             try:
-                if os.path.exists(project_folder):
+                if project_folder.exists():
                     for item in os.listdir(project_folder):
                         source_item_path = os.path.join(project_folder, item)
                         # Add prefix to avoid naming conflicts
@@ -1164,7 +1198,7 @@ async def upload_images_to_project(
         import re
         safe_filename = re.sub(r'[^\w\-_\.]', '_', file.filename)
         
-        # Get proper storage path: uploads/projects/{project}/{dataset}/unassigned/
+        # Get proper storage path: projects/{project}/{dataset}/unassigned/
         storage_path = path_manager.get_image_storage_path(project.name, default_dataset_name, "unassigned")
         path_manager.ensure_directory_exists(storage_path)
         
@@ -1241,7 +1275,7 @@ async def upload_images_to_project(
         raise
     except Exception as e:
         # Clean up file if it was created
-        if 'file_path' in locals() and os.path.exists(file_path):
+        if 'file_path' in locals() and file_path.exists():
             try:
                 os.remove(file_path)
             except:
@@ -1281,9 +1315,9 @@ async def upload_multiple_images_to_project(
             default_dataset_name = batch_name.strip()
         
         # Create project and dataset upload directories
-        project_upload_dir = os.path.join("..", "uploads", "projects", project.name)
-        dataset_upload_dir = os.path.join(project_upload_dir, "unassigned", default_dataset_name)
-        os.makedirs(dataset_upload_dir, exist_ok=True)
+        project_upload_dir = get_project_path(project.name)
+        dataset_upload_dir = project_upload_dir / "unassigned" / default_dataset_name
+        dataset_upload_dir.mkdir(parents=True, exist_ok=True)
         
         # Check if dataset with this name already exists
         existing_datasets = DatasetOperations.get_datasets_by_project(db, project_id)
@@ -1461,8 +1495,8 @@ async def move_dataset_to_unassigned(
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Find the current location of the dataset folder
-        project_folder = os.path.join("..", "uploads", "projects", project.name)
-        unassigned_folder = os.path.join(project_folder, "unassigned", dataset.name)
+        project_folder = get_project_path(project.name)
+        unassigned_folder = project_folder / "unassigned" / dataset.name
         
         # Check all possible workflow folders for the dataset
         workflow_folders = ["annotating", "dataset", "unassigned"]
@@ -1470,8 +1504,8 @@ async def move_dataset_to_unassigned(
         current_workflow = None
         
         for workflow in workflow_folders:
-            potential_folder = os.path.join(project_folder, workflow, dataset.name)
-            if os.path.exists(potential_folder):
+            potential_folder = Path(os.path.join(project_folder, workflow, dataset.name))
+            if potential_folder.exists():
                 current_folder = potential_folder
                 current_workflow = workflow
                 break
@@ -1488,8 +1522,8 @@ async def move_dataset_to_unassigned(
                         path_parts = image_path.split(f"/{workflow}/")
                         if len(path_parts) > 1:
                             folder_name = path_parts[1].split('/')[0]
-                            potential_folder = os.path.join(project_folder, workflow, folder_name)
-                            if os.path.exists(potential_folder):
+                            potential_folder = Path(os.path.join(project_folder, workflow, folder_name))
+                            if potential_folder.exists():
                                 current_folder = potential_folder
                                 current_workflow = workflow
                                 break
@@ -1502,7 +1536,7 @@ async def move_dataset_to_unassigned(
             return {"message": f"Dataset '{dataset.name}' is already in unassigned", "dataset": dataset}
         
         # Create unassigned directory if it doesn't exist
-        os.makedirs(unassigned_folder, exist_ok=True)
+        unassigned_folder.mkdir(parents=True, exist_ok=True)
         
         # Get all images for this dataset
         images = ImageOperations.get_images_by_dataset(db, dataset_id, skip=0, limit=10000)
@@ -1512,13 +1546,13 @@ async def move_dataset_to_unassigned(
             # For dataset, we need to handle train/val/test subfolders
             for image in images:
                 # Get the current image file path
-                source_path = os.path.join("..", image.file_path)
+                source_path = Path("..") / image.file_path
                 
                 # Create the target path in unassigned
-                target_path = os.path.join(unassigned_folder, image.filename)
+                target_path = unassigned_folder / image.filename
                 
                 # Copy the file if it exists
-                if os.path.exists(source_path):
+                if source_path.exists():
                     try:
                         shutil.copy2(source_path, target_path)
                         print(f"Copied image: {source_path} -> {target_path}")
@@ -1530,7 +1564,7 @@ async def move_dataset_to_unassigned(
                 # Update the database path but KEEP the original split_section
                 old_path = image.file_path
                 split_section = image.split_section  # Save the original split_section
-                new_path = f"uploads/projects/{project.name}/unassigned/{dataset.name}/{image.filename}"
+                new_path = f"projects/{project.name}/unassigned/{dataset.name}/{image.filename}"
                 
                 # Update image properties directly without individual commits
                 image.file_path = new_path
@@ -1542,7 +1576,7 @@ async def move_dataset_to_unassigned(
             
             # Now remove the original dataset folder with all its subfolders
             try:
-                shutil.rmtree(current_folder)
+                shutil.rmtree(str(current_folder))
                 print(f"Removed original folder: {current_folder}")
             except Exception as e:
                 print(f"Error removing folder {current_folder}: {str(e)}")
@@ -1550,22 +1584,22 @@ async def move_dataset_to_unassigned(
             # For annotating or other workflows, move the entire folder
             try:
                 # If unassigned folder already exists, we need to move files individually
-                if os.path.exists(unassigned_folder):
+                if unassigned_folder.exists():
                     # Copy all files from current folder to unassigned
                     for filename in os.listdir(current_folder):
-                        source_path = os.path.join(current_folder, filename)
-                        target_path = os.path.join(unassigned_folder, filename)
+                        source_path = Path(os.path.join(current_folder, filename))
+                        target_path = Path(os.path.join(unassigned_folder, filename))
                         
                         if os.path.isfile(source_path):
                             shutil.copy2(source_path, target_path)
                             print(f"Copied file: {source_path} -> {target_path}")
                     
                     # Remove the original folder
-                    shutil.rmtree(current_folder)
+                    shutil.rmtree(str(current_folder))
                     print(f"Removed original folder after copying files: {current_folder}")
                 else:
                     # Move the entire folder if unassigned doesn't exist yet
-                    shutil.move(current_folder, unassigned_folder)
+                    shutil.move(str(current_folder), unassigned_folder)
                     print(f"Moved dataset folder: {current_folder} -> {unassigned_folder}")
             except Exception as e:
                 print(f"Error moving folder {current_folder}: {str(e)}")
@@ -1640,22 +1674,25 @@ async def move_dataset_to_completed(
             )
         
         # Move physical files from annotating to dataset with train/val/test folders
-        project_folder = os.path.join("..", "uploads", "projects", project.name)
-        annotating_folder = os.path.join(project_folder, "annotating", dataset.name)
-        dataset_folder = os.path.join(project_folder, "dataset", dataset.name)
+        project_folder = get_project_path(project.name)
+        annotating_folder = project_folder / "annotating" / dataset.name
+        dataset_folder = project_folder / "dataset" / dataset.name
         
-        if os.path.exists(annotating_folder):
-            # Create dataset directory if it doesn't exist
-            os.makedirs(dataset_folder, exist_ok=True)
+        if annotating_folder.exists():
+            # IMPORTANT: Only create the dataset folder after we've decided it's safe to proceed
+            # This prevents partial/incomplete moves
             
             # Create train/val/test folders inside the dataset folder
-            train_folder = os.path.join(dataset_folder, "train")
-            val_folder = os.path.join(dataset_folder, "val")
-            test_folder = os.path.join(dataset_folder, "test")
+            # We'll create the actual dataset folder first, then the split folders inside it
+            dataset_folder.mkdir(parents=True, exist_ok=True)
             
-            os.makedirs(train_folder, exist_ok=True)
-            os.makedirs(val_folder, exist_ok=True)
-            os.makedirs(test_folder, exist_ok=True)
+            train_folder = dataset_folder / "train"
+            val_folder = dataset_folder / "val"
+            test_folder = dataset_folder / "test"
+            
+            train_folder.mkdir(parents=True, exist_ok=True)
+            val_folder.mkdir(parents=True, exist_ok=True)
+            test_folder.mkdir(parents=True, exist_ok=True)
             
             print(f"Created split folders inside {dataset_folder}")
             
@@ -1665,7 +1702,7 @@ async def move_dataset_to_completed(
             # Move each image to the appropriate split folder
             for image in images:
                 # Get the current image file path
-                source_path = os.path.join("..", image.file_path)
+                source_path = Path("..") / image.file_path
                 
                 # Determine the target split folder based on database split_section
                 split_section = image.split_section
@@ -1674,14 +1711,14 @@ async def move_dataset_to_completed(
                     split_section = "train"
                 
                 # Create the target folder path
-                target_folder = os.path.join(dataset_folder, split_section)
-                target_path = os.path.join(target_folder, image.filename)
+                target_folder = dataset_folder / split_section
+                target_path = target_folder / image.filename
                 
                 # Ensure the target folder exists
-                os.makedirs(target_folder, exist_ok=True)
+                target_folder.mkdir(parents=True, exist_ok=True)
                 
                 # Move the file if it exists
-                if os.path.exists(source_path):
+                if source_path.exists():
                     try:
                         shutil.copy2(source_path, target_path)
                         print(f"Copied image: {source_path} -> {target_path}")
@@ -1692,20 +1729,34 @@ async def move_dataset_to_completed(
                 
                 # Update the database path
                 old_path = image.file_path
-                new_path = f"uploads/projects/{project.name}/dataset/{dataset.name}/{split_section}/{image.filename}"
+                # Make sure the path includes the split_section folder
+                new_path = f"projects/{project.name}/dataset/{dataset.name}/{split_section}/{image.filename}"
+                
+                # CRITICAL: First update the split type to dataset, this will preserve the split_section
+                ImageOperations.update_image_split(db, image.id, "dataset")
+                
+                # THEN override the file path which might have been set incorrectly
                 ImageOperations.update_image_path(db, image.id, new_path)
                 
-                # Update split_type to 'dataset' but keep split_section as is
-                ImageOperations.update_image_split(db, image.id, "dataset")
                 print(f"Updated image path: {old_path} -> {new_path}")
-                print(f"Updated image split_type: annotating -> dataset, kept split_section: {split_section}")
+                print(f"Updated image split_type: annotating -> dataset, split_section: {split_section}")
             
             # Now that all files are copied, we can remove the original annotating folder
             try:
-                shutil.rmtree(annotating_folder)
+                shutil.rmtree(str(annotating_folder))
                 print(f"Removed original folder: {annotating_folder}")
             except Exception as e:
                 print(f"Error removing folder {annotating_folder}: {str(e)}")
+                
+            # IMPORTANT: Remove any direct files in the dataset folder
+            # They should only be in the train/val/test subfolders
+            for item in dataset_folder.glob("*.jpg"):
+                if item.is_file():
+                    try:
+                        item.unlink()
+                        print(f"Removed duplicate file from dataset root: {item}")
+                    except Exception as e:
+                        print(f"Error removing duplicate file {item}: {str(e)}")
         
         # Update the is_labeled flag in the database to match reality
         for image in images:
