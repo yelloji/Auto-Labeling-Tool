@@ -46,7 +46,7 @@ class ProjectOperations:
         db.refresh(project)
         
         # Create project folder structure
-        project_dir = settings.UPLOAD_DIR / "projects" / name
+        project_dir = settings.PROJECTS_DIR / name
         for folder in ["unassigned", "annotating", "dataset"]:
             folder_path = project_dir / folder
             folder_path.mkdir(parents=True, exist_ok=True)
@@ -324,6 +324,41 @@ class ImageOperations:
                 image.split_section = split_section
                 image.updated_at = datetime.utcnow()
                 db.commit()
+                
+                # Also update the filesystem path if needed
+                # This is crucial to ensure the file location matches the split_section
+                if image.split_type == "dataset":
+                    try:
+                        # Get dataset and project info
+                        dataset = DatasetOperations.get_dataset(db, image.dataset_id)
+                        project = DatasetOperations.get_project_by_dataset(db, image.dataset_id)
+                        
+                        if dataset and project:
+                            from utils.path_utils import path_manager
+                            import shutil
+                            
+                            # Calculate expected path based on split_section
+                            expected_path = f"projects/{project.name}/dataset/{dataset.name}/{split_section}/{image.filename}"
+                            
+                            # If current path doesn't match expected path, move the file
+                            if image.file_path != expected_path:
+                                current_abs_path = path_manager.get_absolute_path(image.file_path)
+                                new_abs_path = path_manager.get_absolute_path(expected_path)
+                                
+                                # Create directory if needed
+                                path_manager.ensure_directory_exists(new_abs_path.parent)
+                                
+                                # Move file if it exists
+                                if current_abs_path.exists():
+                                    shutil.move(str(current_abs_path), str(new_abs_path))
+                                    print(f"Moved file to match split_section: {current_abs_path} -> {new_abs_path}")
+                                
+                                # Update path in database
+                                image.file_path = expected_path
+                                db.commit()
+                                print(f"Updated file path to match split_section: {expected_path}")
+                    except Exception as path_error:
+                        print(f"Warning: Could not update file path to match split_section: {str(path_error)}")
             else:
                 # If the column doesn't exist yet, we'll need to run migrations first
                 print(f"Warning: split_section column doesn't exist yet. Skipping update.")
@@ -379,9 +414,18 @@ class ImageOperations:
             else:
                 print(f"Warning: Source file not found at {current_absolute_path}")
             
-            # Update database record
+            # Update database record - IMPORTANT: preserve split_section when changing split_type
+            current_split_section = None
+            if hasattr(image, "split_section"):
+                current_split_section = image.split_section
+                
             image.split_type = split_type
             image.file_path = new_relative_path
+            
+            # Restore split_section if it existed (crucial fix!)
+            if current_split_section and hasattr(image, "split_section"):
+                image.split_section = current_split_section
+                
             image.updated_at = datetime.utcnow()
             db.commit()
             

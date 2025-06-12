@@ -201,10 +201,10 @@ static_dir = Path(settings.STATIC_FILES_DIR)
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# Serve uploaded files
-upload_dir = Path(settings.UPLOAD_DIR)
-upload_dir.mkdir(exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
+# Serve project files
+projects_dir = Path(settings.PROJECTS_DIR)
+projects_dir.mkdir(exist_ok=True)
+app.mount("/projects", StaticFiles(directory=str(projects_dir)), name="projects")
 
 # Image serving endpoint with path migration
 @app.get("/api/images/{image_id}")

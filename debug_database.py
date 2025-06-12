@@ -169,7 +169,7 @@ class DatabaseDebugger:
                     print(f"      - {split_type}: {count} images")
                     
                     # Check if physical folder exists for each split type
-                    expected_folder = f"uploads/projects/{dataset['project_name']}/{split_type}/{dataset['name']}"
+                    expected_folder = f"projects/{dataset['project_name']}/{split_type}/{dataset['name']}"
                     folder_exists = os.path.exists(expected_folder)
                     print(f"        📂 Folder: {expected_folder} {'✅' if folder_exists else '❌'}")
             else:
@@ -209,14 +209,14 @@ class DatabaseDebugger:
             print(f"\n   🖼️  IMAGE: {image['filename']} (ID: {image['id']})")
             print(f"      📂 File Path: {image['file_path']}")
             print(f"      📏 Size: {image['width']}x{image['height']}")
-            print(f"      🔀 Split Section: {image['split_type']}")
+            print(f"      🔀 Split Type: {image['split_type']}")
             
             # Check if split_section column exists in the database
             try:
                 split_section = image['split_section']
-                print(f"      🏷️  Split Type: {split_section}")
+                print(f"      🏷️  Split Section: {split_section}")
             except:
-                print(f"      🏷️  Split Type: Column not found in database")
+                print(f"      🏷️  Split Section: Column not found in database")
                 
             print(f"      ✅ Labeled: {'Yes' if image['is_labeled'] else 'No'}")
             print(f"      🤖 Auto-labeled: {'Yes' if image['is_auto_labeled'] else 'No'}")
@@ -447,7 +447,8 @@ class DatabaseDebugger:
             
             for split_type in split_types:
                 if split_type:  # Skip empty split types
-                    expected_path = f"uploads/projects/{project_name}/{split_type}/{dataset_name}"
+                    # Use the correct path format without 'uploads/'
+                    expected_path = f"projects/{project_name}/{split_type}/{dataset_name}"
                     exists = os.path.exists(expected_path)
                     
                     print(f"   Split: {split_type}")
@@ -457,26 +458,57 @@ class DatabaseDebugger:
                     if exists:
                         # Count files in folder
                         try:
-                            files = list(Path(expected_path).glob("*"))
-                            image_files = [f for f in files if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']]
-                            print(f"   Files in folder: {len(image_files)}")
+                            total_image_files = []
+                            
+                            # For dataset split type, check for train/val/test subfolders
+                            if split_type == "dataset":
+                                # First check the main folder for direct files
+                                direct_files = list(Path(expected_path).glob("*.*"))
+                                direct_image_files = [f for f in direct_files if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']]
+                                total_image_files.extend(direct_image_files)
+                                
+                                # Check for train/val/test subfolders
+                                split_sections = ['train', 'val', 'test']
+                                subfolder_details = []
+                                
+                                for section in split_sections:
+                                    section_path = os.path.join(expected_path, section)
+                                    if os.path.exists(section_path):
+                                        section_files = list(Path(section_path).glob("*.*"))
+                                        section_image_files = [f for f in section_files if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']]
+                                        if section_image_files:
+                                            total_image_files.extend(section_image_files)
+                                            subfolder_details.append(f"{section}: {len(section_image_files)} files")
+                                
+                                print(f"   Files in folder: {len(total_image_files)}")
+                                
+                                # Print details of subfolder distribution if any
+                                if subfolder_details:
+                                    print(f"   Subfolder distribution: {', '.join(subfolder_details)}")
+                            else:
+                                # For non-dataset split types, just check the folder directly
+                                files = list(Path(expected_path).glob("*.*"))
+                                total_image_files = [f for f in files if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']]
+                                print(f"   Files in folder: {len(total_image_files)}")
                             
                             # Count images in database for this dataset and split type
                             cursor.execute("SELECT COUNT(*) FROM images WHERE dataset_id = ? AND split_type = ?", (dataset['id'], split_type))
                             db_count = cursor.fetchone()[0]
                             print(f"   Images in DB: {db_count}")
                             
-                            if len(image_files) != db_count:
-                                print(f"   ⚠️  MISMATCH: Folder has {len(image_files)} files, DB has {db_count} records")
+                            if len(total_image_files) != db_count:
+                                print(f"   ⚠️  MISMATCH: Folder has {len(total_image_files)} files, DB has {db_count} records")
+                                if split_type == "dataset" and subfolder_details:
+                                    print(f"   ℹ️  NOTE: Files are distributed across train/val/test subfolders")
                         except Exception as e:
                             print(f"   ❌ Error reading folder: {e}")
         
         # Check for orphaned folders
         print(f"\n🔍 CHECKING FOR ORPHANED FOLDERS:")
-        uploads_path = "uploads/projects"
-        if os.path.exists(uploads_path):
-            for project_folder in os.listdir(uploads_path):
-                project_path = os.path.join(uploads_path, project_folder)
+        projects_path = "projects"  # Changed from uploads/projects to projects
+        if os.path.exists(projects_path):
+            for project_folder in os.listdir(projects_path):
+                project_path = os.path.join(projects_path, project_folder)
                 if os.path.isdir(project_path):
                     for split_folder in os.listdir(project_path):
                         split_path = os.path.join(project_path, split_folder)
@@ -610,8 +642,8 @@ class DatabaseDebugger:
         cursor.execute("SELECT COUNT(*) FROM labels")
         label_count = cursor.fetchone()[0] if cursor.rowcount != -1 else 0
         
-        # Split types (from images table)
-        cursor.execute("SELECT split_type, COUNT(*) FROM images GROUP BY split_type")
+        # Split sections (from images table)
+        cursor.execute("SELECT split_section, COUNT(*) FROM images GROUP BY split_section")
         split_stats = cursor.fetchall()
         
         print(f"📊 OVERALL STATISTICS:")
@@ -623,9 +655,9 @@ class DatabaseDebugger:
         print(f"   🎯 Total Annotations: {annotation_count}")
         print(f"   🔖 Total Labels: {label_count}")
         
-        print(f"\n📈 SPLIT TYPE DISTRIBUTION:")
-        for split_type, count in split_stats:
-            print(f"   {split_type}: {count} images")
+        print(f"\n📈 SPLIT SECTION DISTRIBUTION:")
+        for split_section, count in split_stats:
+            print(f"   {split_section}: {count} images")
         
         # Database file info
         db_size = os.path.getsize(self.db_path)

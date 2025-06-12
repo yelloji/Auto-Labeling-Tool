@@ -166,21 +166,24 @@ const AnnotateProgress = () => {
     
     let [trainEnd, valEnd] = newValues;
     
-    // Ensure train end is between 0 and 100
-    trainEnd = Math.max(0, Math.min(100, trainEnd));
+    // Ensure the slider handles stay within valid bounds (0-100)
+    trainEnd = Math.max(0, Math.min(trainEnd, 100));
+    valEnd = Math.max(trainEnd, Math.min(valEnd, 100));
     
-    // Ensure val end is between train end and 100
-    valEnd = Math.max(trainEnd, Math.min(100, valEnd));
-    
-    // Calculate the actual percentages
+    // Calculate all three percentages
     const trainPercent = trainEnd;
     const valPercent = valEnd - trainEnd;
+    const testPercent = 100 - valEnd;  // Explicitly calculate test percentage
     
+    // Update the splitPercentages state
     setSplitPercentages([trainPercent, valPercent]);
+    
+    // Log the percentages for debugging
+    console.log(`Train: ${trainPercent}%, Val: ${valPercent}%, Test: ${testPercent}%`);
   };
   
-  // Calculate test percentage
-  const testPercentage = Math.max(0, 100 - splitPercentages[0] - splitPercentages[1]);
+  // Calculate test percentage based on valEnd (which is splitPercentages[0] + splitPercentages[1])
+  const testPercentage = Math.max(0, 100 - (splitPercentages[0] + splitPercentages[1]));
   
   // For the slider, we need the cumulative values
   const trainEndPoint = splitPercentages[0];
@@ -188,10 +191,54 @@ const AnnotateProgress = () => {
   
   // Calculate number of images per split
   const totalLabeledImages = images.filter(img => img.is_labeled).length;
-  const trainCount = Math.floor(totalLabeledImages * splitPercentages[0] / 100);
-  const valCount = Math.floor(totalLabeledImages * splitPercentages[1] / 100);
-  // Ensure all images are accounted for by assigning remainder to test
-  const testCount = totalLabeledImages - trainCount - valCount;
+  
+  // Use smarter allocation for small datasets
+  let trainCount, valCount, testCount;
+  
+  if (totalLabeledImages <= 3) {
+    // Special handling for small datasets
+    trainCount = 0;
+    valCount = 0;
+    testCount = 0;
+    
+    // Create list of splits with their percentages
+    const splits = [
+      { name: 'train', percentage: splitPercentages[0] },
+      { name: 'val', percentage: splitPercentages[1] },
+      { name: 'test', percentage: testPercentage }
+    ];
+    
+    // Filter out any splits with 0%
+    const nonZeroSplits = splits.filter(split => split.percentage > 0);
+    
+    // Sort by percentage (highest first)
+    nonZeroSplits.sort((a, b) => b.percentage - a.percentage);
+    
+    // Distribute images
+    let imagesLeft = totalLabeledImages;
+    
+    nonZeroSplits.forEach(split => {
+      // Allocate at least 1 image to each non-zero split if possible
+      if (imagesLeft > 0) {
+        const splitImages = Math.min(
+          Math.max(1, Math.round(totalLabeledImages * split.percentage / 100)),
+          imagesLeft
+        );
+        
+        if (split.name === 'train') trainCount = splitImages;
+        else if (split.name === 'val') valCount = splitImages;
+        else testCount = splitImages;
+        
+        imagesLeft -= splitImages;
+      }
+    });
+  } else {
+    // Standard calculation for larger datasets
+    trainCount = Math.floor(totalLabeledImages * splitPercentages[0] / 100);
+    valCount = Math.floor(totalLabeledImages * splitPercentages[1] / 100);
+    // Ensure all images are accounted for by assigning remainder to test
+    testCount = totalLabeledImages - trainCount - valCount;
+  }
   
   // Handle assigning images to dataset splits
   const handleAssignImages = async () => {
@@ -205,11 +252,19 @@ const AnnotateProgress = () => {
       
       // Only include percentages for the random assignment method
       if (splitMethod === 'assign_random') {
+        // Ensure percentages are integers and sum to 100
+        const trainPercent = Math.round(splitPercentages[0]);
+        const valPercent = Math.round(splitPercentages[1]);
+        // Calculate test percent using the same logic as the slider
+        const testPercent = 100 - (trainPercent + valPercent);
+        
+        console.log(`Split percentages: Train=${trainPercent}%, Val=${valPercent}%, Test=${testPercent}%`);
+        
         requestData = {
           ...requestData,
-          train_percent: splitPercentages[0],
-          val_percent: splitPercentages[1],
-          test_percent: testPercentage
+          train_percent: trainPercent,
+          val_percent: valPercent,
+          test_percent: testPercent
         };
       }
       

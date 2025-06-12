@@ -59,25 +59,33 @@ class PathManager:
         return settings.BASE_DIR / normalized
     
     @staticmethod
-    def get_image_storage_path(project_name: str, dataset_name: str, split_type: str = "unassigned") -> Path:
+    def get_image_storage_path(project_name: str, dataset_name: str, split_section: str = "unassigned", split_type: str = None) -> Path:
         """
         Get the standard storage path for images
-        Format: uploads/projects/{project_name}/{split_type}/{dataset_name}/
+        Format: projects/{project_name}/{split_section}/{dataset_name}/
+        Where split_section is one of: "unassigned", "annotating", "dataset"
+        If split_section is "dataset", split_type can be one of: "train", "test", "validation"
         """
         # Sanitize names to be filesystem-safe
         safe_project = PathManager.sanitize_filename(project_name)
         safe_dataset = PathManager.sanitize_filename(dataset_name)
-        safe_split = PathManager.sanitize_filename(split_type)
+        safe_split_section = PathManager.sanitize_filename(split_section)
         
-        return settings.UPLOAD_DIR / "projects" / safe_project / safe_split / safe_dataset
+        if split_section == "dataset" and split_type:
+            safe_split_type = PathManager.sanitize_filename(split_type)
+            return settings.PROJECTS_DIR / safe_project / safe_split_section / safe_dataset / safe_split_type
+        
+        return settings.PROJECTS_DIR / safe_project / safe_split_section / safe_dataset
     
     @staticmethod
-    def get_relative_image_path(project_name: str, dataset_name: str, filename: str, split_type: str = "unassigned") -> str:
+    def get_relative_image_path(project_name: str, dataset_name: str, filename: str, split_section: str = "unassigned", split_type: str = None) -> str:
         """
         Get relative path for storing in database
-        Returns: uploads/projects/{project_name}/{split_type}/{dataset_name}/{filename}
+        Returns: projects/{project_name}/{split_section}/{dataset_name}/{filename}
+        Where split_section is one of: "unassigned", "annotating", "dataset"
+        If split_section is "dataset", split_type can be one of: "train", "test", "validation"
         """
-        storage_path = PathManager.get_image_storage_path(project_name, dataset_name, split_type)
+        storage_path = PathManager.get_image_storage_path(project_name, dataset_name, split_section, split_type)
         full_path = storage_path / filename
         
         # Return path relative to BASE_DIR
@@ -128,12 +136,12 @@ class PathManager:
         # Normalize path and ensure forward slashes
         normalized = PathManager.normalize_path(relative_path)
         
-        # If it starts with uploads/, use it directly
-        if normalized.startswith('uploads/'):
+        # If it starts with projects/ or uploads/, use it directly
+        if normalized.startswith('projects/') or normalized.startswith('uploads/'):
             return f"/{normalized}"
         
-        # Otherwise, assume it's in uploads/
-        return f"/uploads/{normalized}"
+        # Otherwise, assume it's in projects/
+        return f"/projects/{normalized}"
     
     @staticmethod
     def file_exists(relative_path: str) -> bool:
@@ -161,20 +169,37 @@ class PathManager:
         # Extract meaningful parts from the path
         parts = path_obj.parts
         
-        # Look for 'uploads' in the path
-        uploads_index = -1
+        # Look for 'projects' or 'uploads' in the path
+        start_index = -1
         for i, part in enumerate(parts):
-            if part == 'uploads':
-                uploads_index = i
+            if part in ['projects', 'uploads']:
+                start_index = i
                 break
         
-        if uploads_index >= 0:
-            # Take everything from 'uploads' onwards
-            relevant_parts = parts[uploads_index:]
+        if start_index >= 0:
+            # If it's an old path with 'uploads', convert to new format
+            if parts[start_index] == 'uploads' and len(parts) > start_index + 2:
+                if parts[start_index + 1] == 'projects':
+                    # Format: uploads/projects/project_name/split_section/dataset_name/filename
+                    if len(parts) > start_index + 4:
+                        project_name = parts[start_index + 2]
+                        split_section = parts[start_index + 3]
+                        dataset_name = parts[start_index + 4]
+                        filename = path_obj.name
+                        
+                        # Check if there's a split_type (train/test/validation)
+                        if split_section == "dataset" and len(parts) > start_index + 5:
+                            split_type = parts[start_index + 5]
+                            return f"projects/{project_name}/{split_section}/{dataset_name}/{split_type}/{filename}"
+                        
+                        return f"projects/{project_name}/{split_section}/{dataset_name}/{filename}"
+            
+            # If it's already in the new format or we can't convert, just use it as is
+            relevant_parts = parts[start_index:]
             new_path = Path(*relevant_parts)
             return str(new_path).replace('\\', '/')
         
-        # If no 'uploads' found, try to extract filename and guess structure
+        # If no 'projects' or 'uploads' found, try to extract filename and guess structure
         filename = path_obj.name
         if filename:
             # Try to find project and dataset info from path
@@ -183,15 +208,15 @@ class PathManager:
             
             # Look for common patterns
             for i, part in enumerate(parts):
-                if part in ['projects', 'today', 'annotating', 'unassigned']:
+                if part in ['projects', 'today', 'annotating', 'unassigned', 'dataset']:
                     if i + 1 < len(parts):
                         if part == 'projects' and i + 1 < len(parts):
                             project_name = parts[i + 1]
-                        elif part in ['annotating', 'unassigned'] and i + 1 < len(parts):
+                        elif part in ['annotating', 'unassigned', 'dataset'] and i + 1 < len(parts):
                             dataset_name = parts[i + 1]
             
             # Create new standardized path
-            return f"uploads/projects/{project_name}/{dataset_name}/unassigned/{filename}"
+            return f"projects/{project_name}/unassigned/{dataset_name}/{filename}"
         
         return None
 

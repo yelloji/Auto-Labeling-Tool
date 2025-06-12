@@ -123,13 +123,20 @@ class Image(Base):
             elif path.startswith('./'):
                 path = path[2:]
         
-        # Ensure it starts with uploads/projects/ (without leading slash for web serving)
-        if not path.startswith('uploads/projects/'):
+        # Ensure it starts with projects/ (without leading slash for web serving)
+        if not path.startswith('projects/'):
             if 'uploads' in path:
+                # Extract the part after uploads/
                 uploads_index = path.find('uploads')
-                path = path[uploads_index:]
-            elif path.startswith('projects/'):
-                path = 'uploads/' + path
+                after_uploads = path[uploads_index + len('uploads/'):]
+                # Check if it contains projects/
+                if 'projects/' in after_uploads:
+                    projects_index = after_uploads.find('projects/')
+                    path = 'projects/' + after_uploads[projects_index + len('projects/'):]
+                else:
+                    path = 'projects/' + after_uploads
+            elif not path.startswith('projects/'):
+                path = 'projects/' + path
         
         # Return with leading slash for web serving
         return '/' + path if not path.startswith('/') else path
