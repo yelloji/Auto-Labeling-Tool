@@ -344,7 +344,97 @@ async def assign_images_to_splits(
         # File movement is now handled by the ImageOperations.update_image_split_section method
         # No need for additional file movement logic here
         print(f"[DEBUG] Split sections updated successfully for {request.method} method")
-
+                for image in labeled_images:
+                    try:
+                        # First check if the file is in the annotating section
+                        src_path = os.path.join(
+                            settings.PROJECTS_DIR, 
+                            project.name, 
+                            "annotating", 
+                            dataset.name, 
+                            image.filename
+                        )
+                        
+                        # Get destination path (in the appropriate split section)
+                        dest_dir = os.path.join(
+                            settings.PROJECTS_DIR,
+                            project.name,
+                            "dataset",  # Using "dataset" to match the expected path structure
+                            dataset.name,
+                            image.split_section  # train, val, or test
+                        )
+                        
+                        # Print debug information
+                        print(f"[DEBUG] Source path: {src_path}")
+                        print(f"[DEBUG] Destination dir: {dest_dir}")
+                        print(f"[DEBUG] Image split section: {image.split_section}")
+                        
+                        # Ensure destination directory exists
+                        os.makedirs(dest_dir, exist_ok=True)
+                        
+                        dest_path = os.path.join(dest_dir, image.filename)
+                        
+                        # Check if source and destination are the same file
+                        if os.path.exists(src_path) and os.path.normpath(os.path.dirname(src_path)) == os.path.normpath(dest_dir):
+                            print(f"[DEBUG] File is already in the correct location: {src_path}")
+                            continue
+                        
+                        # Move file safely (copy then delete)
+                        if os.path.exists(src_path):
+                            print(f"[DEBUG] Source file exists, copying to destination")
+                            shutil.copy2(src_path, dest_path)
+                            if os.path.exists(dest_path):
+                                print(f"[DEBUG] Destination file created successfully, removing source")
+                                os.remove(src_path)
+                                print(f"[DEBUG] Successfully moved file {image.filename} to {image.split_section} split")
+                            else:
+                                print(f"[DEBUG] ERROR: Failed to copy file to destination: {dest_path}")
+                        else:
+                            print(f"[DEBUG] ERROR: Source file does not exist: {src_path}")
+                            
+                            # If source file doesn't exist in annotating, check if it's already in another split section
+                            # and move it to the correct split section
+                            found = False
+                            for split in ["train", "val", "test"]:
+                                if split != image.split_section:  # Skip checking the target split
+                                    alt_src_path = os.path.join(
+                                        settings.PROJECTS_DIR, 
+                                        project.name, 
+                                        "dataset", 
+                                        dataset.name,
+                                        split,
+                                        image.filename
+                                    )
+                                    if os.path.exists(alt_src_path):
+                                        print(f"[DEBUG] Found file in {split} split, moving to {image.split_section}")
+                                        shutil.copy2(alt_src_path, dest_path)
+                                        if os.path.exists(dest_path):
+                                            os.remove(alt_src_path)
+                                            print(f"[DEBUG] Successfully moved file from {split} to {image.split_section}")
+                                            found = True
+                                            break
+                                        else:
+                                            print(f"[DEBUG] ERROR: Failed to copy file from {split} to {image.split_section}")
+                            
+                            if not found:
+                                print(f"[DEBUG] WARNING: Could not find file {image.filename} in any split section")
+                        # Update image file path in database
+                        try:
+                            # Generate relative path for database - use a consistent format
+                            # The path should be relative to the project root
+                            rel_path = os.path.join("dataset", dataset.name, image.split_section, image.filename)
+                            print(f"[DEBUG] Updating database with new path: {rel_path}")
+                            
+                            # Update image in database
+                            ImageOperations.update_image_path(db, image.id, rel_path)
+                            db.commit()
+                            print(f"[DEBUG] Database updated successfully for image ID: {image.id}")
+                        except Exception as db_error:
+                            print(f"[DEBUG] ERROR updating database for image {image.id}: {str(db_error)}")
+                            db.rollback()
+                    except Exception as move_error:
+                        print(f"[DEBUG] ERROR moving file {image.filename}: {str(move_error)}")
+        
         # Create a method description for the response message
         method_description = {
             "use_existing": "using existing assignments",
