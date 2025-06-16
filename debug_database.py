@@ -164,16 +164,16 @@ class DatabaseDebugger:
             print(f"   ❌ Unlabeled: {unlabeled_images}")
             
             if split_types:
-                print(f"   🏷️  Split Types:")
+                print(f"   🔀 Split Sections:")
                 for split_type, count in split_types:
                     print(f"      - {split_type}: {count} images")
                     
                     # Check if physical folder exists for each split type
-                    expected_folder = f"uploads/projects/{dataset['project_name']}/{split_type}/{dataset['name']}"
+                    expected_folder = f"projects/{dataset['project_name']}/{split_type}/{dataset['name']}"
                     folder_exists = os.path.exists(expected_folder)
                     print(f"        📂 Folder: {expected_folder} {'✅' if folder_exists else '❌'}")
             else:
-                print(f"   🏷️  Split Types: None")
+                print(f"   🔀 Split Sections: None")
     
     def get_images_detailed(self):
         """Get detailed information about all images"""
@@ -209,7 +209,15 @@ class DatabaseDebugger:
             print(f"\n   🖼️  IMAGE: {image['filename']} (ID: {image['id']})")
             print(f"      📂 File Path: {image['file_path']}")
             print(f"      📏 Size: {image['width']}x{image['height']}")
-            print(f"      🏷️  Split Type: {image['split_type']}")
+            print(f"      🔀 Split Type: {image['split_type']}")
+            
+            # Check if split_section column exists in the database
+            try:
+                split_section = image['split_section']
+                print(f"      🏷️  Split Section: {split_section}")
+            except:
+                print(f"      🏷️  Split Section: Column not found in database")
+                
             print(f"      ✅ Labeled: {'Yes' if image['is_labeled'] else 'No'}")
             print(f"      🤖 Auto-labeled: {'Yes' if image['is_auto_labeled'] else 'No'}")
             print(f"      ✔️  Verified: {'Yes' if image['is_verified'] else 'No'}")
@@ -439,7 +447,8 @@ class DatabaseDebugger:
             
             for split_type in split_types:
                 if split_type:  # Skip empty split types
-                    expected_path = f"uploads/projects/{project_name}/{split_type}/{dataset_name}"
+                    # Use the correct path format without 'uploads/'
+                    expected_path = f"projects/{project_name}/{split_type}/{dataset_name}"
                     exists = os.path.exists(expected_path)
                     
                     print(f"   Split: {split_type}")
@@ -449,26 +458,57 @@ class DatabaseDebugger:
                     if exists:
                         # Count files in folder
                         try:
-                            files = list(Path(expected_path).glob("*"))
-                            image_files = [f for f in files if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']]
-                            print(f"   Files in folder: {len(image_files)}")
+                            total_image_files = []
+                            
+                            # For dataset split type, check for train/val/test subfolders
+                            if split_type == "dataset":
+                                # First check the main folder for direct files
+                                direct_files = list(Path(expected_path).glob("*.*"))
+                                direct_image_files = [f for f in direct_files if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']]
+                                total_image_files.extend(direct_image_files)
+                                
+                                # Check for train/val/test subfolders
+                                split_sections = ['train', 'val', 'test']
+                                subfolder_details = []
+                                
+                                for section in split_sections:
+                                    section_path = os.path.join(expected_path, section)
+                                    if os.path.exists(section_path):
+                                        section_files = list(Path(section_path).glob("*.*"))
+                                        section_image_files = [f for f in section_files if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']]
+                                        if section_image_files:
+                                            total_image_files.extend(section_image_files)
+                                            subfolder_details.append(f"{section}: {len(section_image_files)} files")
+                                
+                                print(f"   Files in folder: {len(total_image_files)}")
+                                
+                                # Print details of subfolder distribution if any
+                                if subfolder_details:
+                                    print(f"   Subfolder distribution: {', '.join(subfolder_details)}")
+                            else:
+                                # For non-dataset split types, just check the folder directly
+                                files = list(Path(expected_path).glob("*.*"))
+                                total_image_files = [f for f in files if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']]
+                                print(f"   Files in folder: {len(total_image_files)}")
                             
                             # Count images in database for this dataset and split type
                             cursor.execute("SELECT COUNT(*) FROM images WHERE dataset_id = ? AND split_type = ?", (dataset['id'], split_type))
                             db_count = cursor.fetchone()[0]
                             print(f"   Images in DB: {db_count}")
                             
-                            if len(image_files) != db_count:
-                                print(f"   ⚠️  MISMATCH: Folder has {len(image_files)} files, DB has {db_count} records")
+                            if len(total_image_files) != db_count:
+                                print(f"   ⚠️  MISMATCH: Folder has {len(total_image_files)} files, DB has {db_count} records")
+                                if split_type == "dataset" and subfolder_details:
+                                    print(f"   ℹ️  NOTE: Files are distributed across train/val/test subfolders")
                         except Exception as e:
                             print(f"   ❌ Error reading folder: {e}")
         
         # Check for orphaned folders
         print(f"\n🔍 CHECKING FOR ORPHANED FOLDERS:")
-        uploads_path = "uploads/projects"
-        if os.path.exists(uploads_path):
-            for project_folder in os.listdir(uploads_path):
-                project_path = os.path.join(uploads_path, project_folder)
+        projects_path = "projects"  # Changed from uploads/projects to projects
+        if os.path.exists(projects_path):
+            for project_folder in os.listdir(projects_path):
+                project_path = os.path.join(projects_path, project_folder)
                 if os.path.isdir(project_path):
                     for split_folder in os.listdir(project_path):
                         split_path = os.path.join(project_path, split_folder)
@@ -488,6 +528,88 @@ class DatabaseDebugger:
                                     if not exists_in_db:
                                         print(f"   ⚠️  ORPHANED FOLDER: {dataset_path} (not in database)")
     
+    def get_labels_table(self):
+        """Get all labels from the labels table"""
+        cursor = self.conn.cursor()
+        
+        self.print_header("LABELS TABLE DATA")
+        
+        # Check if labels table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='labels'")
+        if not cursor.fetchone():
+            print("❌ Labels table does not exist!")
+            return
+        
+        # Get all labels
+        cursor.execute("""
+            SELECT l.id, l.name, l.color, l.project_id, p.name as project_name
+            FROM labels l
+            LEFT JOIN projects p ON l.project_id = p.id
+            ORDER BY l.project_id, l.name
+        """)
+        
+        labels = cursor.fetchall()
+        
+        if not labels:
+            print("❌ No labels found in the database!")
+            return
+        
+        print(f"📋 Found {len(labels)} labels in database\n")
+        
+        # Group labels by project
+        projects = {}
+        for label in labels:
+            project_id = label['project_id']
+            if project_id not in projects:
+                projects[project_id] = {
+                    'name': label['project_name'],
+                    'labels': []
+                }
+            projects[project_id]['labels'].append(label)
+        
+        # Display labels by project
+        for project_id, project_data in projects.items():
+            self.print_subheader(f"Project: {project_data['name']} (ID: {project_id})")
+            
+            for label in project_data['labels']:
+                print(f"   🏷️  ID: {label['id']}, Name: {label['name']}, Color: {label['color']}")
+            
+            print(f"   Total: {len(project_data['labels'])} labels\n")
+        
+        # Check for labels used in annotations
+        print("\n🔍 CHECKING LABELS USAGE IN ANNOTATIONS:")
+        for project_id, project_data in projects.items():
+            print(f"\n   Project: {project_data['name']} (ID: {project_id})")
+            
+            for label in project_data['labels']:
+                # Count annotations using this label name
+                cursor.execute("""
+                    SELECT COUNT(*) 
+                    FROM annotations 
+                    WHERE class_name = ?
+                """, (label['name'],))
+                
+                annotation_count = cursor.fetchone()[0]
+                
+                # Get list of datasets where this label is used
+                cursor.execute("""
+                    SELECT DISTINCT d.id, d.name
+                    FROM annotations a
+                    JOIN images i ON a.image_id = i.id
+                    JOIN datasets d ON i.dataset_id = d.id
+                    WHERE a.class_name = ? AND d.project_id = ?
+                """, (label['name'], project_id))
+                
+                datasets = cursor.fetchall()
+                dataset_names = [d['name'] for d in datasets]
+                
+                if annotation_count > 0:
+                    print(f"      ✅ Label '{label['name']}' used in {annotation_count} annotations")
+                    if dataset_names:
+                        print(f"         Used in datasets: {', '.join(dataset_names)}")
+                else:
+                    print(f"      ❌ Label '{label['name']}' not used in any annotations")
+
     def get_database_statistics(self):
         """Get overall database statistics"""
         cursor = self.conn.cursor()
@@ -516,8 +638,12 @@ class DatabaseDebugger:
         cursor.execute("SELECT COUNT(*) FROM annotations")
         annotation_count = cursor.fetchone()[0]
         
-        # Split types (from images table)
-        cursor.execute("SELECT split_type, COUNT(*) FROM images GROUP BY split_type")
+        # Labels
+        cursor.execute("SELECT COUNT(*) FROM labels")
+        label_count = cursor.fetchone()[0] if cursor.rowcount != -1 else 0
+        
+        # Split sections (from images table)
+        cursor.execute("SELECT split_section, COUNT(*) FROM images GROUP BY split_section")
         split_stats = cursor.fetchall()
         
         print(f"📊 OVERALL STATISTICS:")
@@ -527,10 +653,11 @@ class DatabaseDebugger:
         print(f"   ✅ Labeled Images: {labeled_count}")
         print(f"   ❌ Unlabeled Images: {unlabeled_count}")
         print(f"   🎯 Total Annotations: {annotation_count}")
+        print(f"   🔖 Total Labels: {label_count}")
         
-        print(f"\n📈 SPLIT TYPE DISTRIBUTION:")
-        for split_type, count in split_stats:
-            print(f"   {split_type}: {count} images")
+        print(f"\n📈 SPLIT SECTION DISTRIBUTION:")
+        for split_section, count in split_stats:
+            print(f"   {split_section}: {count} images")
         
         # Database file info
         db_size = os.path.getsize(self.db_path)
@@ -553,6 +680,7 @@ class DatabaseDebugger:
             self.get_table_info()
             self.get_projects_overview()
             self.get_datasets_detailed()
+            self.get_labels_table()  # Add labels table analysis
             self.get_images_detailed()
             self.get_annotations_summary()
             self.get_detailed_annotations()
@@ -569,27 +697,35 @@ class DatabaseDebugger:
 
 def main():
     """Main function to run the database debugger"""
-    print("🔧 Database Debug Viewer")
-    print("=" * 50)
+    import argparse
     
-    # Check for database file
-    db_files = ["database.db"]
-    db_path = None
+    parser = argparse.ArgumentParser(description='Database debugging tool')
+    parser.add_argument('--db', type=str, default='database.db', help='Path to database file')
+    parser.add_argument('--labels', action='store_true', help='Show only labels table data')
+    args = parser.parse_args()
     
-    for db_file in db_files:
-        if os.path.exists(db_file):
-            db_path = db_file
-            break
+    db_path = args.db
     
-    if not db_path:
-        print("❌ No database file found. Checked:")
-        for db_file in db_files:
-            print(f"   - {db_file}")
+    # Check if database file exists
+    if not os.path.exists(db_path):
+        print(f"❌ Database file not found: {db_path}")
         return
     
-    # Run the debugger
+    print("🔧 Database Debug Viewer")
+    print("=" * 50)
+    print(f"Using database file: {db_path}")
+    
+    # Create the debugger
     debugger = DatabaseDebugger(db_path)
-    debugger.run_full_debug()
+    
+    if args.labels:
+        # Only show labels table
+        if debugger.connect():
+            debugger.get_labels_table()
+            debugger.close()
+    else:
+        # Run full debug
+        debugger.run_full_debug()
 
 if __name__ == "__main__":
     main()

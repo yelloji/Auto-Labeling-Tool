@@ -114,9 +114,16 @@ const DatasetManagement = ({ datasetId, onClose }) => {
 
   const loadSplitConfig = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/dataset-management/split/${datasetId}`);
-      const data = await response.json();
-      setSplitConfig(data);
+      // Call the correct API endpoint to get split configuration
+      const response = await fetch(`${API_BASE_URL}/api/v1/datasets/${datasetId}/split-stats`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSplitConfig(data);
+        console.log("Loaded split config successfully:", data);
+      } else {
+        console.error("Failed to load split config, status:", response.status);
+      }
     } catch (error) {
       console.error('Error loading split config:', error);
     }
@@ -134,21 +141,85 @@ const DatasetManagement = ({ datasetId, onClose }) => {
 
   const handleCreateSplit = async (values) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/dataset-management/split`, {
+      // Debug: Log the values received from the form
+      console.log('Form submitted with values:', values);
+      
+      // Map frontend split_method to backend method format
+      let method;
+      if (values.split_method === 'random') {
+        method = 'assign_random';
+      } else if (values.split_method === 'stratified') {
+        method = 'assign_random'; // Backend also uses assign_random for stratified
+      } else if (values.split_method === 'manual') {
+        method = 'assign_sequential';
+      } else {
+        method = values.split_method;
+      }
+      
+      // Ensure percentages are valid numbers and add up to 100%
+      let trainPercent = parseInt(values.train_percentage) || 0;
+      let valPercent = parseInt(values.val_percentage) || 0;
+      let testPercent = parseInt(values.test_percentage) || 0;
+      
+      // Check if percentages add up to 100
+      const totalPercent = trainPercent + valPercent + testPercent;
+      if (totalPercent !== 100) {
+        console.warn(`Percentages don't add up to 100%: ${totalPercent}%`);
+        // Adjust to make sure they add up to 100%
+        // We'll adjust the test percentage to make it work
+        testPercent = 100 - trainPercent - valPercent;
+        console.log(`Adjusting test percentage from ${values.test_percentage} to ${testPercent}`);
+      }
+      
+      // Create the request body - convert percentage field names to percent as expected by API
+      const requestBody = {
+        method: method,
+        train_percent: trainPercent,
+        val_percent: valPercent,
+        test_percent: testPercent
+      };
+      
+      // Log the request for debugging
+      console.log('Split request:', {
+        url: `${API_BASE_URL}/api/v1/datasets/${datasetId}/splits`,
+        method: 'POST',
+        body: requestBody
+      });
+      
+      // Force using the correct backend API URL
+      const apiUrl = `http://localhost:12000/api/v1/datasets/${datasetId}/splits`;
+      console.log('Using hardcoded API URL:', apiUrl);
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dataset_id: datasetId,
-          ...values
-        })
+        body: JSON.stringify(requestBody)
       });
+      
+      const responseText = await response.text();
+      console.log('Split response status:', response.status, response.statusText);
+      console.log('Split response text:', responseText);
       
       if (response.ok) {
         setSplitModalVisible(false);
-        loadDatasetData();
+        
+        // Force a complete reload of all data with a slight delay
+        // to ensure the backend has time to process the changes
+        setTimeout(() => {
+          console.log("Reloading dataset data after split creation");
+          loadSplitConfig();
+          loadImages();
+          loadDatasetSummary();
+        }, 500);
+        
         Modal.success({
           title: 'Split Created',
           content: 'Dataset split has been created successfully.'
+        });
+      } else {
+        // Show error message
+        Modal.error({
+          title: 'Error Creating Split',
+          content: `Failed to create split: ${responseText}`
         });
       }
     } catch (error) {
@@ -236,13 +307,21 @@ const DatasetManagement = ({ datasetId, onClose }) => {
 
   const getSplitColor = (splitType) => {
     const colors = {
-      train: 'blue',
-      val: 'orange',
-      test: 'green',
       unassigned: 'default',
+      annotating: 'processing',
+      dataset: 'success',
       reserved: 'purple'
     };
     return colors[splitType] || 'default';
+  };
+  
+  const getDatasetSplitColor = (splitSection) => {
+    const colors = {
+      train: 'blue',
+      val: 'orange',
+      test: 'green'
+    };
+    return colors[splitSection] || 'default';
   };
 
   const getStatusIcon = (image) => {
@@ -303,13 +382,24 @@ const DatasetManagement = ({ datasetId, onClose }) => {
       )
     },
     {
-      title: 'Split',
+      title: 'Workflow',
       dataIndex: 'split_type',
       key: 'split_type',
       width: 100,
       render: (splitType) => (
         <Tag color={getSplitColor(splitType)}>
           {splitType ? splitType.toUpperCase() : 'UNKNOWN'}
+        </Tag>
+      )
+    },
+    {
+      title: 'Dataset Split',
+      dataIndex: 'split_section',
+      key: 'split_section',
+      width: 100,
+      render: (splitSection) => (
+        <Tag color={getDatasetSplitColor(splitSection)}>
+          {splitSection ? splitSection.toUpperCase() : 'NOT ASSIGNED'}
         </Tag>
       )
     },
@@ -372,6 +462,9 @@ const DatasetManagement = ({ datasetId, onClose }) => {
                 <Menu.Item key="reserved" onClick={() => handleBulkAssign('reserved')}>
                   Move to Reserved
                 </Menu.Item>
+                <Menu.Item key="unassigned" onClick={() => handleBulkAssign('unassigned')}>
+                  Move to Unassigned
+                </Menu.Item>
               </Menu>
             }
           >
@@ -383,7 +476,7 @@ const DatasetManagement = ({ datasetId, onClose }) => {
   ];
 
   const renderSplitSummary = () => {
-    if (!splitConfig || !splitConfig.split_counts || !splitConfig.actual_percentages) return null;
+    if (!splitConfig) return null;
 
     return (
       <Card title="Dataset Split Summary" size="small">
@@ -391,33 +484,32 @@ const DatasetManagement = ({ datasetId, onClose }) => {
           <Col span={6}>
             <Statistic
               title="Train"
-              value={splitConfig.split_counts.train || 0}
-              suffix={`(${(splitConfig.actual_percentages.train || 0).toFixed(1)}%)`}
+              value={splitConfig.train || 0}
+              suffix={`(${splitConfig.train_percent || 0}%)`}
               valueStyle={{ color: '#1890ff' }}
             />
           </Col>
           <Col span={6}>
             <Statistic
               title="Validation"
-              value={splitConfig.split_counts.val || 0}
-              suffix={`(${(splitConfig.actual_percentages.val || 0).toFixed(1)}%)`}
+              value={splitConfig.val || 0}
+              suffix={`(${splitConfig.val_percent || 0}%)`}
               valueStyle={{ color: '#fa8c16' }}
             />
           </Col>
           <Col span={6}>
             <Statistic
               title="Test"
-              value={splitConfig.split_counts.test || 0}
-              suffix={`(${(splitConfig.actual_percentages.test || 0).toFixed(1)}%)`}
+              value={splitConfig.test || 0}
+              suffix={`(${splitConfig.test_percent || 0}%)`}
               valueStyle={{ color: '#52c41a' }}
             />
           </Col>
           <Col span={6}>
             <Statistic
-              title="Unassigned"
-              value={splitConfig.split_counts.unassigned || 0}
-              suffix={`(${(splitConfig.actual_percentages.unassigned || 0).toFixed(1)}%)`}
-              valueStyle={{ color: '#8c8c8c' }}
+              title="Total"
+              value={splitConfig.total_images || 0}
+              prefix={<TagsOutlined />}
             />
           </Col>
         </Row>
@@ -549,6 +641,9 @@ const DatasetManagement = ({ datasetId, onClose }) => {
                     <Button size="small" onClick={() => handleBulkAssign('test')}>
                       → Test
                     </Button>
+                    <Button size="small" onClick={() => handleBulkAssign('unassigned')}>
+                      → Unassigned
+                    </Button>
                     <Button size="small" onClick={() => setSelectedImages([])}>
                       Clear
                     </Button>
@@ -654,7 +749,7 @@ const DatasetManagement = ({ datasetId, onClose }) => {
           onFinish={handleFilter}
           initialValues={filters}
         >
-          <Form.Item name="split_type" label="Split Type">
+          <Form.Item name="split_type" label="Workflow">
             <Select allowClear placeholder="All splits">
               <Option value="train">Train</Option>
               <Option value="val">Validation</Option>
@@ -719,7 +814,8 @@ const DatasetManagement = ({ datasetId, onClose }) => {
                       <p><strong>Size:</strong> {selectedImageDetail.image.width || 0}x{selectedImageDetail.image.height || 0}</p>
                       <p><strong>Format:</strong> {selectedImageDetail.image.format || 'N/A'}</p>
                       <p><strong>File Size:</strong> {selectedImageDetail.image.file_size ? (selectedImageDetail.image.file_size / 1024).toFixed(1) : 0}KB</p>
-                      <p><strong>Split:</strong> <Tag color={getSplitColor(selectedImageDetail.image.split_type)}>{selectedImageDetail.image.split_type || 'N/A'}</Tag></p>
+                      <p><strong>Workflow Stage:</strong> <Tag color={getSplitColor(selectedImageDetail.image.split_type)}>{selectedImageDetail.image.split_type || 'N/A'}</Tag></p>
+                      <p><strong>Dataset Split:</strong> <Tag color={getDatasetSplitColor(selectedImageDetail.image.split_section)}>{selectedImageDetail.image.split_section || 'Not assigned'}</Tag></p>
                     </>
                   )}
                 </Card>

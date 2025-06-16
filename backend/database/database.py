@@ -32,7 +32,7 @@ async def init_db():
     
     # Create directories if they don't exist
     os.makedirs(os.path.dirname(settings.DATABASE_PATH), exist_ok=True)
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    os.makedirs(settings.PROJECTS_DIR, exist_ok=True)
     os.makedirs(settings.MODELS_DIR, exist_ok=True)
 
 def get_db():

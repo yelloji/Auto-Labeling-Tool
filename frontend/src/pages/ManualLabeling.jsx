@@ -76,8 +76,25 @@ const ManualLabeling = () => {
   useEffect(() => {
     if (datasetId) {
       console.log('Loading initial data for dataset:', datasetId);
+      
+      // Clean up orphaned labels on app start using the direct endpoint
+      const cleanupOrphanedLabels = async () => {
+        try {
+          console.log('Cleaning up orphaned labels on app start');
+          console.log(`DELETE ${API_BASE}/fix-labels`);
+          const response = await axios.delete(`${API_BASE}/fix-labels`);
+          console.log('Cleanup response:', response.data);
+        } catch (error) {
+          console.error('Error cleaning up orphaned labels:', error);
+          console.error('Error details:', error.response?.data || error.message);
+        }
+      };
+      
+      cleanupOrphanedLabels();
+      
+      // Load dataset images and project labels
       loadDatasetImages();
-      loadProjectLabels();
+      loadProjectLabels(true); // Force refresh labels
       
       // Set up periodic refresh of project labels
       const labelsRefreshInterval = setInterval(() => {
@@ -140,7 +157,7 @@ const ManualLabeling = () => {
     }
   };
 
-  const loadProjectLabels = async () => {
+  const loadProjectLabels = async (forceRefresh = false) => {
     try {
       console.log('Loading project labels for dataset ID:', datasetId);
       
@@ -151,8 +168,13 @@ const ManualLabeling = () => {
       console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
       
       // Now get the labels for this project
-      console.log(`GET ${API_BASE}/projects/${projectId}/labels`);
-      const labelResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
+      // Add force_refresh parameter if needed to clean up orphaned labels
+      const url = forceRefresh 
+        ? `${API_BASE}/projects/${projectId}/labels?force_refresh=true`
+        : `${API_BASE}/projects/${projectId}/labels`;
+        
+      console.log(`GET ${url}`);
+      const labelResponse = await axios.get(url);
       const apiLabels = Array.isArray(labelResponse.data) ? labelResponse.data : [];
       
       console.log('Loaded project labels from API:', apiLabels);
@@ -164,17 +186,21 @@ const ManualLabeling = () => {
           name: label.name,
           color: label.color || AnnotationAPI.generateLabelColor(label.name),
           count: label.count || 0, // Use count from API if available
-          projectCount: label.count || 0 // Store project-wide count
+          projectCount: label.count || 0, // Store project-wide count
+          project_id: projectId // Store the project ID with each label
         }));
         
         console.log('Formatted project labels:', formattedLabels);
         setProjectLabels(formattedLabels);
         
-        // Store in local storage as backup using project ID
+        // Store in local storage as backup using both project ID and dataset ID for better availability
         localStorage.setItem(`project_labels_${projectId}`, JSON.stringify(formattedLabels));
+        localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
       } else {
-        // If no labels from API, try to get from local storage
-        const storedLabelsStr = localStorage.getItem(`project_labels_${projectId}`);
+        // If no labels from API, try to get from local storage (check both project and dataset ID)
+        const storedLabelsStr = localStorage.getItem(`project_labels_${projectId}`) || 
+                               localStorage.getItem(`project_labels_${datasetId}`);
+        
         if (storedLabelsStr) {
           try {
             const storedLabels = JSON.parse(storedLabelsStr);
@@ -194,6 +220,29 @@ const ManualLabeling = () => {
                 console.error(`Failed to save local label to database: ${label.name}`, e);
               }
             }
+            
+            // After saving all labels, refresh from server to get IDs
+            try {
+              const refreshResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
+              const refreshedLabels = Array.isArray(refreshResponse.data) ? refreshResponse.data : [];
+              
+              if (refreshedLabels.length > 0) {
+                const updatedLabels = refreshedLabels.map(label => ({
+                  id: label.id,
+                  name: label.name,
+                  color: label.color || AnnotationAPI.generateLabelColor(label.name),
+                  count: label.count || 0,
+                  projectCount: label.count || 0,
+                  project_id: projectId
+                }));
+                
+                setProjectLabels(updatedLabels);
+                localStorage.setItem(`project_labels_${projectId}`, JSON.stringify(updatedLabels));
+                localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(updatedLabels));
+              }
+            } catch (refreshError) {
+              console.error('Error refreshing labels after save:', refreshError);
+            }
           } catch (e) {
             console.error('Failed to parse stored labels:', e);
           }
@@ -203,18 +252,44 @@ const ManualLabeling = () => {
       console.error('Load project labels error:', error);
       console.error('Error details:', error.response?.data || error.message);
       
-      // Try to get from local storage as fallback
-      // We can't access response in the catch block, so just use dataset ID
-      const storageKey = `project_labels_${datasetId}`;
-      const storedLabelsStr = localStorage.getItem(storageKey);
-      if (storedLabelsStr) {
-        try {
-          const storedLabels = JSON.parse(storedLabelsStr);
-          console.log('Loaded project labels from local storage (fallback):', storedLabels);
-          setProjectLabels(storedLabels);
-        } catch (e) {
-          console.error('Failed to parse stored labels:', e);
+      // Try to get project ID from error response if possible
+      let projectId;
+      try {
+        if (error.response && error.response.data && error.response.data.project_id) {
+          projectId = error.response.data.project_id;
         }
+      } catch (e) {
+        console.log('Could not get project ID from error response');
+      }
+      
+      // Try to get from local storage as fallback, checking multiple possible keys
+      const possibleKeys = [
+        projectId ? `project_labels_${projectId}` : null,
+        `project_labels_${datasetId}`
+      ].filter(Boolean);
+      
+      console.log('Trying local storage keys:', possibleKeys);
+      
+      let storedLabels = null;
+      
+      // Try each possible key until we find stored labels
+      for (const key of possibleKeys) {
+        const storedLabelsStr = localStorage.getItem(key);
+        if (storedLabelsStr) {
+          try {
+            storedLabels = JSON.parse(storedLabelsStr);
+            console.log(`Loaded project labels from local storage key ${key}:`, storedLabels);
+            break;
+          } catch (e) {
+            console.error(`Failed to parse stored labels from key ${key}:`, e);
+          }
+        }
+      }
+      
+      if (storedLabels) {
+        setProjectLabels(storedLabels);
+      } else {
+        console.warn('Could not load any project labels from local storage');
       }
     }
   };
@@ -223,7 +298,8 @@ const ManualLabeling = () => {
     try {
       setLoading(true);
       setImageData(image);
-      setCurrentSplit(image.split_type || 'train');
+      // Use split_section instead of split_type for train/val/test
+      setCurrentSplit(image.split_section || 'train');
       
       // Load image URL
       const imageUrl = await AnnotationAPI.getImageUrl(image.id);
@@ -315,7 +391,7 @@ const ManualLabeling = () => {
     setSelectedAnnotation(null);
   }, []);
 
-  const handleShapeComplete = useCallback((shape) => {
+  const handleShapeComplete = useCallback(async (shape) => {
     console.log('🎯 handleShapeComplete called with shape:', shape);
     
     // Make a deep copy to avoid reference issues
@@ -361,6 +437,28 @@ const ManualLabeling = () => {
         x: shapeCopy.x + shapeCopy.width / 2, 
         y: shapeCopy.y - 10 
       });
+    }
+    
+    // Force refresh ALL labels from the project when opening the popup
+    try {
+      // Use our loadProjectLabels function with forceRefresh=true
+      console.log('FORCE REFRESHING ALL PROJECT LABELS');
+      await loadProjectLabels(true);
+      
+      // Get the current project ID for this dataset
+      const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
+      const currentProjectId = response.data.project_id;
+      
+      // Also clean up unused labels for this project
+      console.log('Cleaning up unused labels');
+      if (currentProjectId) {
+        await axios.delete(`${API_BASE}/projects/${currentProjectId}/labels/unused`);
+        
+        // Refresh again after cleanup
+        await loadProjectLabels(true);
+      }
+    } catch (error) {
+      console.error('Error refreshing project labels:', error);
     }
     
     // Automatically show the label popup when shape is completed
@@ -899,9 +997,10 @@ const ManualLabeling = () => {
 
   const handleSplitChange = useCallback(async (newSplit) => {
     try {
-      await AnnotationAPI.updateImageSplit(imageData.id, newSplit);
+      // Use the split_section endpoint instead of split_type
+      await AnnotationAPI.updateImageSplitSection(imageData.id, newSplit);
       setCurrentSplit(newSplit);
-      setImageData(prev => ({ ...prev, split_type: newSplit }));
+      setImageData(prev => ({ ...prev, split_section: newSplit }));
       message.success(`Image moved to ${newSplit} set`);
     } catch (error) {
       message.error('Failed to update split');

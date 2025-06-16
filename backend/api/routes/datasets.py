@@ -372,6 +372,8 @@ async def get_dataset_images(
                 "width": image.width,
                 "height": image.height,
                 "file_size": image.file_size,
+                "split_type": image.split_type,
+                "split_section": getattr(image, "split_section", None),  # Add split_section field
                 "is_labeled": image.is_labeled,
                 "is_auto_labeled": image.is_auto_labeled,
                 "is_verified": image.is_verified,
@@ -420,13 +422,69 @@ async def get_image_by_id(
             "is_verified": image.is_verified,
             "created_at": image.created_at,
             "file_path": image.normalized_file_path,  # Use automatic path normalization
-            "dataset_id": image.dataset_id
+            "dataset_id": image.dataset_id,
+            "split_type": image.split_type,
+            # Handle case where split_section column doesn't exist yet
+            "split_section": getattr(image, "split_section", "train")
         }
         
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get image: {str(e)}")
+
+
+class SplitSectionUpdate(BaseModel):
+    split_section: str
+
+@router.put("/images/{image_id}/split-section")
+async def update_image_split_section(
+    image_id: str,
+    request: SplitSectionUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update the split section (train/val/test) for an image
+    
+    This endpoint is used in the annotation interface to change the split section
+    """
+    try:
+        # Validate split section
+        if request.split_section not in ["train", "val", "test"]:
+            raise HTTPException(status_code=400, detail="Invalid split section. Must be train, val, or test")
+        
+        # Get the image
+        image = ImageOperations.get_image(db, image_id)
+        if not image:
+            raise HTTPException(status_code=404, detail="Image not found")
+        
+        # Check if the image has the split_section attribute
+        has_split_section = hasattr(image, "split_section")
+        
+        if has_split_section:
+            # Update the split section
+            success = ImageOperations.update_image_split_section(db, image_id, request.split_section)
+            if not success:
+                raise HTTPException(status_code=500, detail="Failed to update image split section")
+        else:
+            # If the column doesn't exist yet, inform the user
+            raise HTTPException(
+                status_code=503, 
+                detail="The split_section feature is not available yet. Please run database migrations first."
+            )
+        
+        # Return success response
+        return {
+            "message": f"Image split section updated to {request.split_section}",
+            "image_id": image_id,
+            "split_section": request.split_section
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update image split section: {str(e)}")
 
 
 @router.put("/{dataset_id}", response_model=Dict[str, Any])

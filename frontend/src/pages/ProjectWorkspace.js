@@ -1022,6 +1022,20 @@ const ProjectWorkspace = () => {
 
     const getProgressPercent = () => {
       if (dataset.total_images === 0) return 0;
+      
+      // For datasets in the annotating section, we need to ensure we have the latest count
+      // This is especially important after moving datasets between sections
+      if (status === 'annotating' || status === 'unassigned') {
+        // Use the actual labeled_images count from the dataset object
+        // The backend should now be correctly updating this value
+        return Math.round((dataset.labeled_images / dataset.total_images) * 100);
+      }
+      
+      // For completed datasets, always show 100%
+      if (status === 'completed') {
+        return 100;
+      }
+      
       return Math.round((dataset.labeled_images / dataset.total_images) * 100);
     };
 
@@ -1117,10 +1131,14 @@ const ProjectWorkspace = () => {
         hoverable
         bodyStyle={{ padding: '12px' }}
         onClick={() => {
+          // Only navigate to annotation launcher for datasets in the annotating section
           if (status === 'annotating') {
-            // Navigate to annotation page - remove confusing message
-            // TODO: Implement actual navigation to annotation interface
+            handleStartAnnotating(dataset);
+          } else if (status === 'unassigned') {
+            // For unassigned datasets, assign to annotating first
+            handleAssignToAnnotating(dataset);
           }
+          // For completed datasets, just show details (no action needed)
         }}
       >
         {/* Three dots button in top right corner */}
@@ -1162,7 +1180,7 @@ const ProjectWorkspace = () => {
           <Text type="secondary" style={{ fontSize: '12px' }}>
             {dataset.total_images} images
           </Text>
-          {status === 'annotating' && (
+          {(status === 'annotating' || status === 'unassigned') && (
             <div style={{ marginTop: '4px' }}>
               <Progress 
                 percent={getProgressPercent()} 
@@ -1171,11 +1189,23 @@ const ProjectWorkspace = () => {
               />
               <Text type="secondary" style={{ fontSize: '11px' }}>
                 {dataset.labeled_images}/{dataset.total_images} labeled
-                {dataset.labeled_images < dataset.total_images && (
+                {dataset.labeled_images < dataset.total_images && status === 'annotating' && (
                   <Text type="warning" style={{ fontSize: '10px', display: 'block' }}>
                     Label all images to move to dataset
                   </Text>
                 )}
+              </Text>
+            </div>
+          )}
+          {status === 'completed' && (
+            <div style={{ marginTop: '4px' }}>
+              <Progress 
+                percent={100} 
+                size="small" 
+                status="success"
+              />
+              <Text type="secondary" style={{ fontSize: '11px' }}>
+                {dataset.total_images}/{dataset.total_images} labeled
               </Text>
             </div>
           )}
@@ -1185,52 +1215,8 @@ const ProjectWorkspace = () => {
           <Text type="secondary" style={{ fontSize: '11px' }}>
             {new Date(dataset.created_at).toLocaleDateString()}
           </Text>
-          {status === 'unassigned' && (
-            <Button 
-              type="primary" 
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAssignToAnnotating(dataset);
-              }}
-            >
-              Assign to Annotating
-            </Button>
-          )}
-          {status === 'annotating' && (
-            (() => {
-              const isFullyLabeled = dataset.labeled_images === dataset.total_images && dataset.total_images > 0;
-              if (isFullyLabeled) {
-                return (
-                  <Button 
-                    type="primary" 
-                    size="small"
-                    style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                    icon={<CheckCircleOutlined />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleMoveToDataset(dataset);
-                    }}
-                  >
-                    Ready for Dataset
-                  </Button>
-                );
-              } else {
-                return (
-                  <Button 
-                    type="primary" 
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleStartAnnotating(dataset);
-                    }}
-                  >
-                    Start Annotating
-                  </Button>
-                );
-              }
-            })()
-          )}
+          {/* Removed Assign to Annotating button - card is now clickable */}
+          {/* Removed Start Annotating button - card is now clickable */}
         </div>
       </Card>
     );

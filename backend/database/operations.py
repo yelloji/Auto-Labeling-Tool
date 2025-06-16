@@ -46,7 +46,7 @@ class ProjectOperations:
         db.refresh(project)
         
         # Create project folder structure
-        project_dir = settings.UPLOAD_DIR / "projects" / name
+        project_dir = settings.PROJECTS_DIR / name
         for folder in ["unassigned", "annotating", "dataset"]:
             folder_path = project_dir / folder
             folder_path.mkdir(parents=True, exist_ok=True)
@@ -79,10 +79,33 @@ class ProjectOperations:
     @staticmethod
     def delete_project(db: Session, project_id: str) -> bool:
         """Delete project and all related data"""
+        # First, explicitly delete all labels associated with this project
+        from database.models import Label
+        print(f"Deleting all labels for project {project_id}")
+        
+        # Find all labels to delete (for logging)
+        labels_to_delete = db.query(Label).filter(Label.project_id == project_id).all()
+        print(f"Found {len(labels_to_delete)} labels to delete")
+        for label in labels_to_delete:
+            print(f"Will delete label: ID {label.id}, Name '{label.name}', Color {label.color}")
+        
+        # Delete the labels
+        db.query(Label).filter(Label.project_id == project_id).delete(synchronize_session=False)
+        
+        # Then delete the project itself
         project = db.query(Project).filter(Project.id == project_id).first()
         if project:
+            print(f"Deleting project: ID {project.id}, Name '{project.name}'")
             db.delete(project)
             db.commit()
+            
+            # Verify that labels were actually deleted
+            remaining = db.query(Label).filter(Label.project_id == project_id).all()
+            if remaining:
+                print(f"WARNING: {len(remaining)} labels still remain after project deletion!")
+            else:
+                print(f"SUCCESS: All labels for project {project_id} were deleted")
+                
             return True
         return False
 
@@ -213,7 +236,8 @@ class ImageOperations:
         height: int = None,
         file_size: int = None,
         format: str = None,
-        split_type: str = "unassigned"
+        split_type: str = "unassigned",
+        split_section: str = "train"
     ) -> Image:
         """Create a new image record"""
         image = Image(
@@ -225,7 +249,8 @@ class ImageOperations:
             height=height,
             file_size=file_size,
             format=format,
-            split_type=split_type
+            split_type=split_type,
+            split_section=split_section
         )
         db.add(image)
         db.commit()
@@ -282,9 +307,58 @@ class ImageOperations:
             DatasetOperations.update_dataset_stats(db, image.dataset_id)
         return image
     
+
+    @staticmethod
+    def update_image_split_section(db: Session, image_id: str, split_section: str) -> bool:
+        """Update image train/val/test split section and move the file."""
+        try:
+            image = db.query(Image).filter(Image.id == image_id).first()
+            if not image:
+                return False
+
+            # 1) Update the split_section field
+            image.split_section = split_section
+            image.updated_at = datetime.utcnow()
+            """
+            2) Move the file on disk
+            from utils.path_utils import path_manager
+            import shutil
+
+            dataset = DatasetOperations.get_dataset(db, image.dataset_id)
+            project = ProjectOperations.get_project_by_dataset(db, image.dataset_id)
+
+            if dataset and project:
+                expected_rel = (
+                    f"projects/{project.name}/dataset/{dataset.name}/"
+                    f"{split_section}/{image.filename}"
+                )
+                current_abs = path_manager.get_absolute_path(image.file_path)
+                new_abs     = path_manager.get_absolute_path(expected_rel)
+                # Ensure target dir
+                path_manager.ensure_directory_exists(new_abs.parent)
+                # Move the one tracked file
+                if current_abs.exists():
+                    shutil.move(str(current_abs), str(new_abs))
+                    
+                # 3) Clean up any stray copy in the dataset root
+                stray_rel = f"projects/{project.name}/dataset/{dataset.name}/{image.filename}"
+                stray_abs = path_manager.get_absolute_path(stray_rel)
+                if stray_abs.exists() and stray_abs != new_abs:
+                    stray_abs.unlink()  # delete it
+                image.file_path = expected_rel s
+            """
+            db.commit()
+            return True
+
+        except Exception as e:
+            print(f"Error in update_image_split_section: {e}")
+            db.rollback()
+            return False
+
+
     @staticmethod
     def update_image_split(db: Session, image_id: str, split_type: str) -> bool:
-        """Update image split assignment with automatic file movement and path updates"""
+        """Update image workflow split assignment with automatic file movement and path updates"""
         from utils.path_utils import path_manager
         import shutil
         
@@ -326,9 +400,18 @@ class ImageOperations:
             else:
                 print(f"Warning: Source file not found at {current_absolute_path}")
             
-            # Update database record
+            # Update database record - IMPORTANT: preserve split_section when changing split_type
+            current_split_section = None
+            if hasattr(image, "split_section"):
+                current_split_section = image.split_section
+                
             image.split_type = split_type
             image.file_path = new_relative_path
+            
+            # Restore split_section if it existed (crucial fix!)
+            if current_split_section and hasattr(image, "split_section"):
+                image.split_section = current_split_section
+                
             image.updated_at = datetime.utcnow()
             db.commit()
             
