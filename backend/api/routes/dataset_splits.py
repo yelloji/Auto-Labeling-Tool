@@ -6,6 +6,7 @@ Handle assigning images to train/val/test splits
 import os
 import shutil
 import random
+import math
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
@@ -25,12 +26,22 @@ router = APIRouter()
 
 class AssignImagesRequest(BaseModel):
     """Request model for assigning images to train/val/test splits"""
-    method: str  # "use_existing", "assign_random", "assign_sequential", "all_train", "all_val", "all_test"
+    method: str  # "use_existing", "assign_random", "all_train", "all_val", "all_test"
     train_percent: Optional[int] = 70
     val_percent: Optional[int] = 20
     test_percent: Optional[int] = 10
-
-
+"""
+    This endpoint will:
+    1. Get all labeled images for the dataset
+    2. Assign splits based on method:
+       - use_existing: Keep existing split assignments
+       - split_ratio: Split images between train/val/test based on percentages
+       - all_train: Assign all images to training set
+       - all_val: Assign all images to validation set
+       - all_test: Assign all images to test set
+    3. Update the database records
+    4. Return a summary of the operation
+    """
 @router.post("/datasets/{dataset_id}/splits")
 async def assign_images_to_splits(
     dataset_id: str,
@@ -45,128 +56,91 @@ async def assign_images_to_splits(
     print(f"Val percent: {request.val_percent}")
     print(f"Test percent: {request.test_percent}")
     print(f"===============================================\n\n")
-    """
-    Assign labeled images to dataset splits (train/val/test)
-    
-    This endpoint will:
-    1. Get all labeled images for the dataset
-    2. Assign splits based on method:
-       - use_existing: Keep existing split assignments
-       - split_ratio: Split images between train/val/test based on percentages
-       - all_train: Assign all images to training set
-       - all_val: Assign all images to validation set
-       - all_test: Assign all images to test set
-    3. Update the database records
-    4. Return a summary of the operation
-    """
     try:
-        import random
-        
-        # Verify dataset exists
+        import random, math  # for shuffling and ceil
+
+        # Verify dataset & project
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
             raise HTTPException(status_code=404, detail="Dataset not found")
-            
-        # Get project information (needed for file paths)
         project = ProjectOperations.get_project(db, dataset.project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-            
-        # Get all labeled images for this dataset
-        labeled_images = ImageOperations.get_images_by_dataset(
-            db, dataset_id, labeled_only=True
-        )
-        
-        # If no images, return error
+
+        # Fetch all labeled images
+        labeled_images = ImageOperations.get_images_by_dataset(db, dataset_id, labeled_only=True)
         if not labeled_images:
             raise HTTPException(status_code=400, detail="No labeled images found in dataset")
-            
-        # Validate the method parameter
-        valid_methods = ["use_existing", "assign_random", "assign_sequential", "all_train", "all_val", "all_test"]
+
+        # Validate method
+        valid_methods = ["use_existing", "assign_random", "all_train", "all_val", "all_test"]
         if request.method not in valid_methods:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid method: {request.method}. Must be one of: {', '.join(valid_methods)}"
             )
-            
-        # Verify and adjust percentages for percentage-based methods
-        if request.method in ["assign_random", "assign_sequential"]:
-            total_percent = request.train_percent + request.val_percent + request.test_percent
-            if total_percent != 100:
-                print(f"WARNING: Percentages don't add up to 100: {request.train_percent} + {request.val_percent} + {request.test_percent} = {total_percent}")
-                
-                # Fix the percentages by adjusting the test percentage
-                request.test_percent = 100 - request.train_percent - request.val_percent
-                print(f"Adjusted percentages: {request.train_percent} + {request.val_percent} + {request.test_percent} = 100")
-        
-        # Counters for summary
+
+        # Adjust percentages if necessary
+        if request.method == "assign_random":
+            total_pct = (request.train_percent or 0) + (request.val_percent or 0) + (request.test_percent or 0)
+            if total_pct != 100:
+                request.test_percent = 100 - ((request.train_percent or 0) + (request.val_percent or 0))
+
+        # Counters
         train_count = 0
         val_count = 0
         test_count = 0
-        
-        # Import math for ceiling function
-        import math
-        
-        # Process images based on selected method
-        if request.method == "assign_random":
-            # Randomly assign images to splits based on percentages
+
+        # 1) KEEP EXISTING
+        if request.method == "use_existing":
+            for image in labeled_images:
+                sec = getattr(image, "split_section", "train")
+                if sec == "train":
+                    train_count += 1
+                elif sec == "val":
+                    val_count += 1
+                else:
+                    test_count += 1
+
+        # 2) RANDOM SPLIT
+                # 2) RANDOM SPLIT
+        elif request.method == "assign_random":
+            import math  # ensure math is in scope
             random.shuffle(labeled_images)
             total_images = len(labeled_images)
-            
-            # Special handling for small datasets to ensure distribution makes sense
-            if total_images <= 3:
-                # With 1-3 images, use a direct allocation approach
-                train_size = 0
-                val_size = 0
-                test_size = 0
-                
-                # Calculate how many images to allocate to each split
-                images_left = total_images
-                
-                # Prioritize allocation by highest percentage first
-                splits = [
-                    ("train", request.train_percent),
-                    ("val", request.val_percent),
-                    ("test", request.test_percent)
-                ]
-                
-                # Sort by percentage (highest first)
-                splits.sort(key=lambda x: x[1], reverse=True)
-                
-                # Allocate images by priority
-                for split_name, percentage in splits:
-                    # Calculate images for this split (at least 1 if percentage > 0 and we have images left)
-                    split_images = min(
-                        math.ceil(total_images * percentage / 100) if percentage > 0 else 0,
-                        images_left
-                    )
-                    
-                    # Update the appropriate count
-                    if split_name == "train":
-                        train_size = split_images
-                    elif split_name == "val":
-                        val_size = split_images
-                    else:  # test
-                        test_size = split_images
-                    
-                    images_left -= split_images
-            else:
-                # Calculate counts for each split with improved rounding
-                train_size = round(total_images * request.train_percent / 100)
-                val_size = round(total_images * request.val_percent / 100)
-                test_size = total_images - train_size - val_size
-                
-                # Safety check - ensure we don't have negative values
-                if test_size < 0:
-                    # Adjust val_size to make test_size at least 0
-                    val_size = val_size + test_size
-                    test_size = 0
-                
-            # Debug log
-            print(f"Split sizes: Train={train_size}, Val={val_size}, Test={test_size}, Total={total_images}")
-            print(f"Split percentages: Train={request.train_percent}%, Val={request.val_percent}%, Test={request.test_percent}%")
-            
-            # Assign splits
+
+            # 1. Exact (float) quotas
+            quotas = {
+                "train": total_images * (request.train_percent or 0) / 100,
+                "val":   total_images * (request.val_percent   or 0) / 100,
+                "test":  total_images * (request.test_percent  or 0) / 100,
+            }
+            # 2. Floor each quota
+            sizes = {k: math.floor(q) for k, q in quotas.items()}
+            assigned = sum(sizes.values())
+            remaining = total_images - assigned
+
+            # 3. Largest‐Remainder among only splits with percent > 0
+            remainders = []
+            if request.train_percent and request.train_percent > 0:
+                remainders.append(("train", quotas["train"] - sizes["train"]))
+            if request.val_percent and request.val_percent > 0:
+                remainders.append(("val",   quotas["val"]   - sizes["val"]))
+            if request.test_percent and request.test_percent > 0:
+                remainders.append(("test",  quotas["test"]  - sizes["test"]))
+
+            # Sort by fractional part descending
+            remainders.sort(key=lambda kv: kv[1], reverse=True)
+
+            # Allocate the leftover slots
+            for split_name, _ in remainders[:remaining]:
+                sizes[split_name] += 1
+
+            # Final counts
+            train_size, val_size, test_size = sizes["train"], sizes["val"], sizes["test"]
+            print(f"[DEBUG] assign_random computed → train={train_size}, val={val_size}, test={test_size}")
+
+            # Assign & persist
             for i, image in enumerate(labeled_images):
                 if i < train_size:
                     split_section = "train"
@@ -177,199 +151,55 @@ async def assign_images_to_splits(
                 else:
                     split_section = "test"
                     test_count += 1
-        
-        elif request.method == "assign_sequential":
-            # Sequentially assign images to splits based on percentages
-            # (no shuffling, maintain original order)
-            total_images = len(labeled_images)
-            
-            # Special handling for small datasets to ensure distribution makes sense
-            if total_images <= 3:
-                # With 1-3 images, use a direct allocation approach
-                train_size = 0
-                val_size = 0
-                test_size = 0
-                
-                # Calculate how many images to allocate to each split
-                images_left = total_images
-                
-                # Prioritize allocation by highest percentage first
-                splits = [
-                    ("train", request.train_percent),
-                    ("val", request.val_percent),
-                    ("test", request.test_percent)
-                ]
-                
-                # Sort by percentage (highest first)
-                splits.sort(key=lambda x: x[1], reverse=True)
-                
-                # Allocate images by priority
-                for split_name, percentage in splits:
-                    # Calculate images for this split (at least 1 if percentage > 0 and we have images left)
-                    split_images = min(
-                        math.ceil(total_images * percentage / 100) if percentage > 0 else 0,
-                        images_left
-                    )
-                    
-                    # Update the appropriate count
-                    if split_name == "train":
-                        train_size = split_images
-                    elif split_name == "val":
-                        val_size = split_images
-                    else:  # test
-                        test_size = split_images
-                    
-                    images_left -= split_images
-            else:
-                # Calculate counts for each split with improved rounding
-                train_size = round(total_images * request.train_percent / 100)
-                val_size = round(total_images * request.val_percent / 100)
-                test_size = total_images - train_size - val_size
-                
-                # Safety check - ensure we don't have negative values
-                if test_size < 0:
-                    # Adjust val_size to make test_size at least 0
-                    val_size = val_size + test_size
-                    test_size = 0
-                
-            # Debug log
-            print(f"Sequential split sizes: Train={train_size}, Val={val_size}, Test={test_size}, Total={total_images}")
-            
-            # Assign splits
-            for i, image in enumerate(labeled_images):
-                if i < train_size:
-                    split_section = "train"
-                    train_count += 1
-                elif i < train_size + val_size:
-                    split_section = "val"
-                    val_count += 1
-                else:
-                    split_section = "test"
-                    test_count += 1
-                
-                # For both assign_random and assign_sequential, update the split
-                # Use the proper method that also handles file movement
-                try:
-                    # Store image ID in a separate variable
-                    current_image_id = image.id
-                    
-                    # Use the ImageOperations method to update split_section
-                    # This will also handle moving the files to the correct location
-                    success = ImageOperations.update_image_split_section(db, current_image_id, split_section)
-                    
-                    if success:
-                        print(f"Updated image {current_image_id} to split_section: {split_section}")
-                    else:
-                        print(f"Failed to update image {current_image_id} to split_section: {split_section}")
-                        
-                except Exception as e:
-                    print(f"DATABASE ERROR: {str(e)}")
-                    # Log stack trace for debugging
-                    import traceback
-                    print(traceback.format_exc())
-        
-        elif request.method == "all_train" or request.method == "all_val" or request.method == "all_test":
-            # Determine which split to use
+
+                ImageOperations.update_image_split_section(db, image.id, split_section)
+
+
+
+        # 3) ALL_TRAIN / ALL_VAL / ALL_TEST
+        elif request.method in ["all_train", "all_val", "all_test"]:
             if request.method == "all_train":
                 split_section = "train"
             elif request.method == "all_val":
                 split_section = "val"
-            else:  # all_test
+            else:
                 split_section = "test"
-                
-            # Assign all images to the selected split
+
             for image in labeled_images:
-                try:
-                    # Store image ID in a separate variable
-                    current_image_id = image.id
-                    
-                    # Use the ImageOperations method to update split_section
-                    # This will also handle moving the files to the correct location
-                    success = ImageOperations.update_image_split_section(db, current_image_id, split_section)
-                    
-                    if success:
-                        print(f"Updated image {current_image_id} to split_section: {split_section}")
-                    else:
-                        print(f"Failed to update image {current_image_id} to split_section: {split_section}")
-                        
-                except Exception as e:
-                    print(f"DATABASE ERROR: {str(e)}")
-                    # Log stack trace for debugging
-                    import traceback
-                    print(traceback.format_exc())
-                
-                # Update counters
+                ImageOperations.update_image_split_section(db, image.id, split_section)
                 if split_section == "train":
                     train_count += 1
                 elif split_section == "val":
                     val_count += 1
-                else:  # test
+                else:
                     test_count += 1
-                
-        else:  # "use_existing"
-            # Use split_section values already in the database
-            for image in labeled_images:
-                try:
-                    # Default to "train" if split_section is not set
-                    split_section = getattr(image, "split_section", "train")
-                    
-                    # Update counts based on existing assignment
-                    if split_section == "train":
-                        train_count += 1
-                    elif split_section == "val":
-                        val_count += 1
-                    elif split_section == "test":
-                        test_count += 1
-                    else:
-                        # If split_section has an invalid value, set it to train
-                        split_section = "train"
-                        train_count += 1
-                        
-                        # Update the database with the corrected value
-                        if hasattr(image, "split_section"):
-                            ImageOperations.update_image_split_section(db, image.id, "train")
-                except Exception as e:
-                    print(f"Error processing existing split: {str(e)}")
-                    # Default to train if there's an error
-                    train_count += 1
-        
-        # Make absolutely sure all database changes are committed
-        try:
-            db.commit()
-            print("Successfully committed all database changes")
-        except Exception as commit_error:
-            print(f"Error committing changes: {str(commit_error)}")
-            db.rollback()
-            
-        # File movement is now handled by the ImageOperations.update_image_split_section method
-        # No need for additional file movement logic here
-        print(f"[DEBUG] Split sections updated successfully for {request.method} method")
+        else:
+            # This should never happen because you validated `request.method` earlier.
+            raise HTTPException(status_code=400, detail="Unsupported split method")
 
-        # Create a method description for the response message
-        method_description = {
-            "use_existing": "using existing assignments",
-            "assign_random": "randomly assigned",
-            "assign_sequential": "sequentially assigned",
-            "all_train": "assigned to training set",
-            "all_val": "assigned to validation set",
-            "all_test": "assigned to test set"
-        }.get(request.method, "assigned")
-        
-        # Return summary
+        # Commit once after handling whichever branch
+        db.commit()
+          
+
+        # Recalculate stats and refresh
+        DatasetOperations.update_dataset_stats(db, dataset_id)
+        db.refresh(dataset)
+
         return {
-            "message": f"{len(labeled_images)} images {method_description} successfully",
+            "message": f"{len(labeled_images)} images {request.method.replace('_',' ')} successfully",
             "method": request.method,
             "train": train_count,
-            "val": val_count,
-            "test": test_count
+            "val":   val_count,
+            "test":  test_count
         }
-        
+
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to assign images: {str(e)}")
+
 
 
 @router.get("/datasets/{dataset_id}/split-stats")

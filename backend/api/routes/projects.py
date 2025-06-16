@@ -1763,7 +1763,8 @@ async def move_dataset_to_completed(
                 
             # IMPORTANT: Remove any direct files in the dataset folder
             # They should only be in the train/val/test subfolders
-            for item in dataset_folder.glob("*.jpg"):
+        for ext in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.gif"):
+            for item in dataset_folder.glob(ext):
                 if item.is_file():
                     try:
                         item.unlink()
