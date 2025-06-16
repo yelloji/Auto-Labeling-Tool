@@ -571,7 +571,7 @@ async def assign_dataset_to_annotating(project_id: str, dataset_id: str, db: Ses
         # Refresh dataset to get updated stats
         db.refresh(dataset)
         print(f"DEBUG: Dataset '{dataset.name}' stats updated - labeled_images: {dataset.labeled_images}, total_images: {dataset.total_images}")
-        
+        """
         # Handle completed datasets that need to be moved back to annotating
         if dataset.labeled_images == dataset.total_images and dataset.total_images > 0:
             # Moving from Completed to Annotating (set to partially annotated)
@@ -592,7 +592,20 @@ async def assign_dataset_to_annotating(project_id: str, dataset_id: str, db: Ses
             "message": f"Dataset '{dataset.name}' assigned to annotating",
             "dataset_id": dataset_id
         }
-        
+        """
+    
+        # … earlier logic …
+
+        # Recalculate stats normally (no forced “-1” hack)
+        DatasetOperations.update_dataset_stats(db, dataset_id)
+        db.refresh(dataset)
+
+        return {
+            "success": True,
+            "message": f"Dataset '{dataset.name}' assigned to annotating",
+            "dataset_id": dataset_id
+        }
+
     except HTTPException:
         raise
     except Exception as e:
