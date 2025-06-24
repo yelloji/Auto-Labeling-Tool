@@ -1,0 +1,289 @@
+/* Release Section Styles */
+.release-section {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.release-section-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+}
+
+.release-layout {
+  flex: 1;
+  background: #fff;
+}
+
+.release-sidebar {
+  background: #fafafa;
+  border-right: 1px solid #f0f0f0;
+  height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.release-sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.release-list {
+  padding: 8px;
+}
+
+.release-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+}
+
+.release-content {
+  padding: 24px;
+  height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.release-empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.release-details {
+  height: 100%;
+}
+
+.release-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.release-title-section {
+  flex: 1;
+}
+
+.release-stats {
+  margin-bottom: 24px;
+}
+
+.release-splits-section {
+  margin-bottom: 24px;
+}
+
+.release-preview-section {
+  margin-bottom: 24px;
+}
+
+.sample-images {
+  min-height: 200px;
+  border: 1px dashed #d9d9d9;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Release Card Styles */
+.release-card {
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 1px solid #f0f0f0;
+}
+
+.release-card:hover {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.release-card-selected {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2);
+  background: #f6ffed;
+}
+
+.release-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.release-card-title {
+  margin: 0 !important;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.release-card-meta {
+  font-size: 12px;
+}
+
+.release-card-date {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.release-card-stats {
+  margin-bottom: 8px;
+}
+
+.release-stat {
+  display: flex;
+  align-items: center;
+}
+
+.release-card-tags {
+  margin-bottom: 8px;
+}
+
+.release-card-splits {
+  margin-top: 8px;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .release-sidebar {
+    width: 300px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .release-layout {
+    flex-direction: column;
+  }
+  
+  .release-sidebar {
+    width: 100% !important;
+    height: auto;
+    max-height: 300px;
+  }
+  
+  .release-content {
+    height: auto;
+  }
+  
+  .release-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .release-stats .ant-col {
+    margin-bottom: 16px;
+  }
+}
+
+/* Export Modal Styles */
+.export-modal .ant-modal-body {
+  padding: 24px;
+}
+
+.export-modal .ant-steps {
+  margin-bottom: 32px;
+}
+
+.export-modal .ant-form-item {
+  margin-bottom: 16px;
+}
+
+/* Augmentation Controls Styles */
+.augmentation-controls .ant-collapse-header {
+  font-weight: 600;
+}
+
+.augmentation-controls .ant-card-small .ant-card-head {
+  min-height: 40px;
+}
+
+.augmentation-controls .ant-card-small .ant-card-head-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.augmentation-controls .ant-slider {
+  margin: 8px 0;
+}
+
+/* Split Manager Styles */
+.split-manager .ant-card {
+  margin-bottom: 8px;
+}
+
+.split-manager .ant-statistic {
+  text-align: center;
+}
+
+.split-manager .ant-input-number {
+  width: 100%;
+}
+
+/* Animation */
+.release-card {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Loading States */
+.release-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+/* Status Indicators */
+.release-status-completed {
+  color: #52c41a;
+}
+
+.release-status-processing {
+  color: #1890ff;
+}
+
+.release-status-failed {
+  color: #ff4d4f;
+}
+
+/* Custom Scrollbar */
+.release-sidebar::-webkit-scrollbar,
+.release-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.release-sidebar::-webkit-scrollbar-track,
+.release-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.release-sidebar::-webkit-scrollbar-thumb,
+.release-content::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.release-sidebar::-webkit-scrollbar-thumb:hover,
+.release-content::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}

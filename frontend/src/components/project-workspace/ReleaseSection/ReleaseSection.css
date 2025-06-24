@@ -1,0 +1,283 @@
+/* ReleaseSection.css - Roboflow-style UI Design */
+
+/* Main Release Section Styling */
+.release-section {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.release-section-header h1 {
+  background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Dataset Stats Card Styling */
+.dataset-stats-card .ant-card-head {
+  background: linear-gradient(135deg, #f6ffed 0%, #e6f7ff 100%);
+  border-bottom: 1px solid #b7eb8f;
+}
+
+.dataset-stats-card .ant-statistic-title {
+  font-weight: 500;
+  color: #262626;
+}
+
+/* Transformation Pipeline Styling */
+.transformation-pipeline-card .ant-card-head {
+  background: linear-gradient(135deg, #fff7e6 0%, #f6ffed 100%);
+  border-bottom: 1px solid #ffd591;
+}
+
+.transformation-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.transformation-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.transformation-card .ant-card-head {
+  background: linear-gradient(135deg, #f0f9ff 0%, #fef3f2 100%);
+  border-bottom: 1px solid #e1f5fe;
+  padding: 12px 16px;
+}
+
+.transformation-card .ant-card-body {
+  padding: 16px;
+}
+
+.add-transformation-card {
+  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+  border: 2px dashed #d9d9d9 !important;
+  transition: all 0.3s ease;
+}
+
+.add-transformation-card:hover {
+  border-color: #1890ff !important;
+  background: linear-gradient(135deg, #e6f7ff 0%, #f0f9ff 100%);
+  transform: translateY(-2px);
+}
+
+/* Release Config Panel Styling */
+.release-config-panel .ant-card-head {
+  background: linear-gradient(135deg, #f9f0ff 0%, #f6ffed 100%);
+  border-bottom: 1px solid #d3adf7;
+}
+
+.release-config-panel .ant-form-item-label > label {
+  font-weight: 500;
+  color: #262626;
+}
+
+.release-config-panel .ant-input,
+.release-config-panel .ant-input-number,
+.release-config-panel .ant-select-selector {
+  border-radius: 8px;
+  border: 1px solid #d9d9d9;
+  transition: all 0.3s ease;
+}
+
+.release-config-panel .ant-input:focus,
+.release-config-panel .ant-input-number:focus,
+.release-config-panel .ant-select-focused .ant-select-selector {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+/* Release History Styling */
+.release-history-card .ant-card-head {
+  background: linear-gradient(135deg, #fff2e8 0%, #f6ffed 100%);
+  border-bottom: 1px solid #ffbb96;
+}
+
+.release-history-item {
+  background: linear-gradient(135deg, #fafafa 0%, #f9f9f9 100%);
+  border: 1px solid #f0f0f0 !important;
+  border-radius: 12px !important;
+  transition: all 0.3s ease;
+}
+
+.release-history-item:hover {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%);
+  border-color: #91d5ff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* Button Styling */
+.ant-btn-primary {
+  background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.ant-btn-primary:hover {
+  background: linear-gradient(135deg, #40a9ff 0%, #9254de 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3);
+}
+
+.ant-btn {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.ant-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Modal Styling */
+.ant-modal-header {
+  background: linear-gradient(135deg, #f0f9ff 0%, #f6ffed 100%);
+  border-bottom: 1px solid #e1f5fe;
+  border-radius: 8px 8px 0 0;
+}
+
+.ant-modal-title {
+  font-weight: 600;
+  color: #262626;
+}
+
+.ant-modal-content {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Tag Styling */
+.ant-tag {
+  border-radius: 6px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border: none;
+}
+
+/* Card Hover Effects */
+.ant-card {
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  border: 1px solid #f0f0f0;
+}
+
+.ant-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* Progress Bar Styling */
+.ant-progress-bg {
+  background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+}
+
+/* Alert Styling */
+.ant-alert {
+  border-radius: 8px;
+  border: none;
+}
+
+.ant-alert-info {
+  background: linear-gradient(135deg, #e6f7ff 0%, #f0f9ff 100%);
+  border: 1px solid #91d5ff;
+}
+
+.ant-alert-success {
+  background: linear-gradient(135deg, #f6ffed 0%, #f0f9ff 100%);
+  border: 1px solid #b7eb8f;
+}
+
+/* Statistic Styling */
+.ant-statistic-content {
+  font-weight: 600;
+}
+
+/* List Item Styling */
+.ant-list-item {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+/* Form Styling */
+.ant-form-item-label > label {
+  font-weight: 500;
+  color: #262626;
+}
+
+/* Select Dropdown Styling */
+.ant-select-dropdown {
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* Checkbox Styling */
+.ant-checkbox-wrapper {
+  font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .release-section-header h1 {
+    font-size: 24px;
+  }
+  
+  .transformation-card {
+    min-width: 100%;
+    max-width: 100%;
+  }
+  
+  .add-transformation-card {
+    min-width: 100%;
+    height: 120px;
+  }
+}
+
+@media (max-width: 576px) {
+  .release-section .ant-layout-content {
+    padding: 16px;
+  }
+  
+  .release-section-header h1 {
+    font-size: 20px;
+  }
+}
+
+/* Animation Keyframes */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.release-section .ant-card {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+/* Custom Scrollbar */
+.release-section ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.release-section ::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.release-section ::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+  border-radius: 3px;
+}
+
+.release-section ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #40a9ff 0%, #9254de 100%);
+}
+
