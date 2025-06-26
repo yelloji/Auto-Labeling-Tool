@@ -4,8 +4,8 @@
 import { projectsAPI } from '../../../services/api';
 
 import React, { useState, useEffect } from 'react';
-import { Layout, Button, Space, Divider, Row, Col, Card, message, Modal, Image, Tag, Spin } from 'antd';
-import { PlusOutlined, RocketOutlined, EyeOutlined } from '@ant-design/icons';
+import { Layout, Button, Space, Divider, Row, Col, Card, message, Modal, Image, Tag, Spin, Alert, InputNumber, Progress } from 'antd';
+import { PlusOutlined, RocketOutlined, EyeOutlined, SyncOutlined } from '@ant-design/icons';
 
 // Import all the components we've built
 import { DatasetStats, TransformationCard, TransformationModal, ReleaseConfigPanel, ExportOptionsModal, ReleaseHistoryList } from './';
@@ -343,24 +343,34 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     splitStats: null,
     loading: false
   });
+  const [datasetRebalanceModal, setDatasetRebalanceModal] = useState({
+    visible: false,
+    dataset: null,
+    trainCount: 0,
+    valCount: 0,
+    testCount: 0,
+    totalImages: 0,
+    loading: false
+  });
+
+  // Function to fetch datasets
+  const fetchDatasets = async () => {
+    try {
+      const response = await projectsAPI.getProjectManagementData(projectId);
+      console.log("Management data response:", response);
+      
+      // The API returns response.dataset.datasets for completed datasets
+      const completedDatasets = response?.dataset?.datasets || [];
+      console.log("Filtered completed datasets only:", completedDatasets);
+      
+      setSelectedDatasets(completedDatasets);
+    } catch (error) {
+      console.error("Failed to load datasets:", error);
+      message.error("Failed to load datasets");
+    }
+  };
 
   useEffect(() => {
-    const fetchDatasets = async () => {
-      try {
-        const response = await projectsAPI.getProjectManagementData(projectId);
-        console.log("Management data response:", response);
-        
-        // The API returns response.dataset.datasets for completed datasets
-        const completedDatasets = response?.dataset?.datasets || [];
-        console.log("Filtered completed datasets only:", completedDatasets);
-        
-        setSelectedDatasets(completedDatasets);
-      } catch (error) {
-        console.error("Failed to load datasets:", error);
-        message.error('Failed to load datasets');
-      }
-    };
-
     if (projectId) {
       fetchDatasets();
     }
@@ -410,6 +420,115 @@ const ReleaseSection = ({ projectId, datasetId }) => {
       splitStats: null,
       loading: false
     });
+  };
+
+  // Function to handle dataset rebalance
+  const handleDatasetRebalance = (dataset, splitStats) => {
+    const totalImages = splitStats.total_images || 0;
+    setDatasetRebalanceModal({
+      visible: true,
+      dataset: dataset,
+      trainCount: splitStats.train || 0,
+      valCount: splitStats.val || 0,
+      testCount: splitStats.test || 0,
+      totalImages: totalImages,
+      loading: false
+    });
+  };
+
+  // Function to save dataset rebalance
+  const handleSaveDatasetRebalance = async () => {
+    const { dataset, trainCount, valCount, testCount, totalImages } = datasetRebalanceModal;
+    
+    const totalCount = trainCount + valCount + testCount;
+    if (totalCount !== totalImages) {
+      message.error(`Total images must equal ${totalImages}. Current total: ${totalCount}`);
+      return;
+    }
+
+    try {
+      setDatasetRebalanceModal(prev => ({ ...prev, loading: true }));
+      
+      // Calculate percentages for backend API
+      const trainPercent = totalImages > 0 ? Math.round((trainCount / totalImages) * 100) : 0;
+      const valPercent = totalImages > 0 ? Math.round((valCount / totalImages) * 100) : 0;
+      const testPercent = 100 - trainPercent - valPercent;
+      
+      const requestData = {
+        method: 'assign_random',
+        train_percent: trainPercent,
+        val_percent: valPercent,
+        test_percent: testPercent
+      };
+      
+      console.log(`Rebalancing dataset ${dataset.id} with counts: Train=${trainCount}, Val=${valCount}, Test=${testCount}`);
+      console.log(`Converted to percentages:`, requestData);
+      
+      const response = await fetch(`http://localhost:12000/api/v1/datasets/${dataset.id}/splits`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to rebalance dataset ${dataset.name}`);
+      }
+      
+      const result = await response.json();
+      console.log(`Dataset ${dataset.name} rebalanced:`, result);
+      
+      message.success(`Dataset "${dataset.name}" rebalanced successfully!`);
+      
+      // Close rebalance modal
+      setDatasetRebalanceModal({
+        visible: false,
+        dataset: null,
+        trainCount: 0,
+        valCount: 0,
+        testCount: 0,
+        totalImages: 0,
+        loading: false
+      });
+      
+      // Refresh the dataset details to show updated split distribution
+      if (datasetDetailsModal.visible && datasetDetailsModal.dataset) {
+        handleViewDatasetDetails(datasetDetailsModal.dataset);
+      }
+      
+      // Force refresh of the main datasets list to update DatasetStats
+      fetchDatasets();
+      
+    } catch (error) {
+      console.error('Error rebalancing dataset:', error);
+      message.error(`Failed to rebalance dataset: ${error.message}`);
+    } finally {
+      setDatasetRebalanceModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Function to cancel dataset rebalance
+  const handleCancelDatasetRebalance = () => {
+    setDatasetRebalanceModal({
+      visible: false,
+      dataset: null,
+      trainCount: 0,
+      valCount: 0,
+      testCount: 0,
+      totalImages: 0,
+      loading: false
+    });
+  };
+
+  // Function to handle count changes in dataset rebalance modal
+  const handleDatasetCountChange = (value, type) => {
+    const newValue = Math.max(0, Math.min(value || 0, datasetRebalanceModal.totalImages));
+    
+    setDatasetRebalanceModal(prev => ({
+      ...prev,
+      [type === 'train' ? 'trainCount' : type === 'val' ? 'valCount' : 'testCount']: newValue
+    }));
   };
 
 
@@ -758,7 +877,24 @@ const ReleaseSection = ({ projectId, datasetId }) => {
 
                 {/* Split Distribution */}
                 {datasetDetailsModal.splitStats && (
-                  <Card title="Split Distribution" style={{ marginBottom: 16 }}>
+                  <Card 
+                    title={
+                      <Row justify="space-between" align="middle">
+                        <Col>Split Distribution</Col>
+                        <Col>
+                          <Button 
+                            type="default" 
+                            size="small"
+                            icon={<SyncOutlined />}
+                            onClick={() => handleDatasetRebalance(datasetDetailsModal.dataset, datasetDetailsModal.splitStats)}
+                          >
+                            Rebalance
+                          </Button>
+                        </Col>
+                      </Row>
+                    } 
+                    style={{ marginBottom: 16 }}
+                  >
                     <Row gutter={16}>
                       <Col span={8}>
                         <div style={{ textAlign: 'center' }}>
@@ -812,6 +948,137 @@ const ReleaseSection = ({ projectId, datasetId }) => {
                 </Card>
               </div>
             ) : null}
+          </Modal>
+
+          {/* Individual Dataset Rebalance Modal */}
+          <Modal
+            title={`Rebalance Dataset: ${datasetRebalanceModal.dataset?.name}`}
+            open={datasetRebalanceModal.visible}
+            onOk={handleSaveDatasetRebalance}
+            onCancel={handleCancelDatasetRebalance}
+            okText="Save"
+            cancelText="Cancel"
+            width={600}
+            confirmLoading={datasetRebalanceModal.loading}
+          >
+            <p>You can update this dataset's train/test split here.</p>
+            <Alert
+              message="Note: changing your test set will invalidate model performance comparisons with previously generated versions."
+              type="warning"
+              showIcon
+              style={{ marginBottom: 20 }}
+            />
+            
+            <div style={{ marginBottom: 20 }}>
+              <Row align="middle" gutter={16} style={{ marginBottom: 16 }}>
+                <Col span={6}>
+                  <strong>Train:</strong>
+                </Col>
+                <Col span={12}>
+                  <InputNumber
+                    min={0}
+                    max={datasetRebalanceModal.totalImages}
+                    value={datasetRebalanceModal.trainCount}
+                    onChange={(value) => handleDatasetCountChange(value, 'train')}
+                    style={{ width: '100%' }}
+                    addonAfter="images"
+                  />
+                </Col>
+                <Col span={6}>
+                  <Tag color="blue" style={{ fontSize: '12px' }}>
+                    {datasetRebalanceModal.totalImages > 0 ? Math.round((datasetRebalanceModal.trainCount / datasetRebalanceModal.totalImages) * 100) : 0}%
+                  </Tag>
+                </Col>
+              </Row>
+              
+              <Row align="middle" gutter={16} style={{ marginBottom: 16 }}>
+                <Col span={6}>
+                  <strong>Valid:</strong>
+                </Col>
+                <Col span={12}>
+                  <InputNumber
+                    min={0}
+                    max={datasetRebalanceModal.totalImages}
+                    value={datasetRebalanceModal.valCount}
+                    onChange={(value) => handleDatasetCountChange(value, 'val')}
+                    style={{ width: '100%' }}
+                    addonAfter="images"
+                  />
+                </Col>
+                <Col span={6}>
+                  <Tag color="geekblue" style={{ fontSize: '12px' }}>
+                    {datasetRebalanceModal.totalImages > 0 ? Math.round((datasetRebalanceModal.valCount / datasetRebalanceModal.totalImages) * 100) : 0}%
+                  </Tag>
+                </Col>
+              </Row>
+              
+              <Row align="middle" gutter={16} style={{ marginBottom: 16 }}>
+                <Col span={6}>
+                  <strong>Test:</strong>
+                </Col>
+                <Col span={12}>
+                  <InputNumber
+                    min={0}
+                    max={datasetRebalanceModal.totalImages}
+                    value={datasetRebalanceModal.testCount}
+                    onChange={(value) => handleDatasetCountChange(value, 'test')}
+                    style={{ width: '100%' }}
+                    addonAfter="images"
+                  />
+                </Col>
+                <Col span={6}>
+                  <Tag color="purple" style={{ fontSize: '12px' }}>
+                    {datasetRebalanceModal.totalImages > 0 ? Math.round((datasetRebalanceModal.testCount / datasetRebalanceModal.totalImages) * 100) : 0}%
+                  </Tag>
+                </Col>
+              </Row>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <Row justify="space-between" align="middle">
+                <Col>
+                  <strong>Total: {datasetRebalanceModal.trainCount + datasetRebalanceModal.valCount + datasetRebalanceModal.testCount} / {datasetRebalanceModal.totalImages} images</strong>
+                </Col>
+                <Col>
+                  {(() => {
+                    const currentTotal = datasetRebalanceModal.trainCount + datasetRebalanceModal.valCount + datasetRebalanceModal.testCount;
+                    const remaining = datasetRebalanceModal.totalImages - currentTotal;
+                    
+                    if (remaining !== 0) {
+                      return (
+                        <Tag color={remaining > 0 ? 'orange' : 'red'}>
+                          {remaining > 0 ? `${remaining} remaining` : `${Math.abs(remaining)} over limit`}
+                        </Tag>
+                      );
+                    }
+                    return <Tag color="green">Perfect match!</Tag>;
+                  })()}
+                </Col>
+              </Row>
+              <Progress 
+                percent={Math.min(((datasetRebalanceModal.trainCount + datasetRebalanceModal.valCount + datasetRebalanceModal.testCount) / datasetRebalanceModal.totalImages) * 100, 100)}
+                status={
+                  (datasetRebalanceModal.trainCount + datasetRebalanceModal.valCount + datasetRebalanceModal.testCount) === datasetRebalanceModal.totalImages 
+                    ? 'success' 
+                    : (datasetRebalanceModal.trainCount + datasetRebalanceModal.valCount + datasetRebalanceModal.testCount) > datasetRebalanceModal.totalImages 
+                      ? 'exception' 
+                      : 'active'
+                }
+                strokeColor={
+                  (datasetRebalanceModal.trainCount + datasetRebalanceModal.valCount + datasetRebalanceModal.testCount) === datasetRebalanceModal.totalImages 
+                    ? '#52c41a' 
+                    : (datasetRebalanceModal.trainCount + datasetRebalanceModal.valCount + datasetRebalanceModal.testCount) > datasetRebalanceModal.totalImages 
+                      ? '#ff4d4f' 
+                      : '#1890ff'
+                }
+              />
+            </div>
+
+            <Alert
+              message={`This will assign all labeled images in "${datasetRebalanceModal.dataset?.name}" to the dataset splits according to the counts you've set. Unlabeled images will be ignored.`}
+              type="info"
+              showIcon
+            />
           </Modal>
         </Content>
       </Layout>

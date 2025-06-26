@@ -67,10 +67,14 @@ async def assign_images_to_splits(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
+        print(f"[DEBUG] Found dataset: {dataset.name} in project: {project.name}")
+
         # Fetch all labeled images
         labeled_images = ImageOperations.get_images_by_dataset(db, dataset_id, labeled_only=True)
         if not labeled_images:
             raise HTTPException(status_code=400, detail="No labeled images found in dataset")
+
+        print(f"[DEBUG] Found {len(labeled_images)} labeled images")
 
         # Validate method
         valid_methods = ["use_existing", "assign_random", "all_train", "all_val", "all_test"]
@@ -137,32 +141,41 @@ async def assign_images_to_splits(
                 sizes[split_name] += 1
 
             # Final counts
-            train_size, val_size, test_size = (
-                sizes["train"], sizes["val"], sizes["test"]
-            )
-
-            print(f"Split sizes: Train={train_size}, Val={val_size}, Test={test_size}, Total={total_images}")
+            train_size, val_size, test_size = sizes["train"], sizes["val"], sizes["test"]
+            print(f"[DEBUG] assign_random computed → train={train_size}, val={val_size}, test={test_size}")
 
             # Assign & persist
             for i, image in enumerate(labeled_images):
+                old_split_section = getattr(image, "split_section", "train")
                 if i < train_size:
-                    split_section = "train"
+                    new_split_section = "train"
                     train_count += 1
                 elif i < train_size + val_size:
-                    split_section = "val"
+                    new_split_section = "val"
                     val_count += 1
                 else:
-                    split_section = "test"
+                    new_split_section = "test"
                     test_count += 1
 
-                ImageOperations.update_image_split_section(db, image.id, split_section)
-
-            # Commit once after all moves
-            db.commit()
-
+                print(f"[DEBUG] Image {image.filename}: {old_split_section} -> {new_split_section}")
+                ImageOperations.update_image_split_section(db, image.id, new_split_section)
+                
+                # Move image file to appropriate split directory if split section changed
+                if old_split_section != new_split_section:
+                    print(f"[DEBUG] Moving image {image.filename} from {old_split_section} to {new_split_section}")
+                    try:
+                        file_handler.move_image_to_split_directory(image, new_split_section, project, dataset)
+                        print(f"[DEBUG] Successfully moved image {image.filename}")
+                    except Exception as e:
+                        print(f"[ERROR] Failed to move image {image.filename} to {new_split_section} directory: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
+                        # Continue processing other images even if one fails
+                else:
+                    print(f"[DEBUG] Image {image.filename} already in correct split, no move needed")
 
         # 3) ALL_TRAIN / ALL_VAL / ALL_TEST
-        else:  # covers "all_train", "all_val", "all_test"
+        elif request.method in ["all_train", "all_val", "all_test"]:
             if request.method == "all_train":
                 split_section = "train"
             elif request.method == "all_val":
@@ -170,16 +183,40 @@ async def assign_images_to_splits(
             else:
                 split_section = "test"
 
+            print(f"[DEBUG] Assigning all images to {split_section}")
+
             for image in labeled_images:
+                old_split_section = getattr(image, "split_section", "train")
+                print(f"[DEBUG] Image {image.filename}: {old_split_section} -> {split_section}")
                 ImageOperations.update_image_split_section(db, image.id, split_section)
+                
+                # Move image file to appropriate split directory if split section changed
+                if old_split_section != split_section:
+                    print(f"[DEBUG] Moving image {image.filename} from {old_split_section} to {split_section}")
+                    try:
+                        file_handler.move_image_to_split_directory(image, split_section, project, dataset)
+                        print(f"[DEBUG] Successfully moved image {image.filename}")
+                    except Exception as e:
+                        print(f"[ERROR] Failed to move image {image.filename} to {split_section} directory: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
+                        # Continue processing other images even if one fails
+                else:
+                    print(f"[DEBUG] Image {image.filename} already in correct split, no move needed")
+                
                 if split_section == "train":
                     train_count += 1
                 elif split_section == "val":
                     val_count += 1
                 else:
                     test_count += 1
+        else:
+            # This should never happen because you validated `request.method` earlier.
+            raise HTTPException(status_code=400, detail="Unsupported split method")
 
-            db.commit()
+        # Commit once after handling whichever branch
+        db.commit()
+          
 
         # Recalculate stats and refresh
         DatasetOperations.update_dataset_stats(db, dataset_id)

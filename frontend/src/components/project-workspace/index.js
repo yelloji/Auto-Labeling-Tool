@@ -1,7 +1,7 @@
 import UploadSection from './UploadSection';
 import ManagementSection from './ManagementSection';
 import DatasetSection from './DatasetSection';
-import ReleaseSection from './ReleaseSection';
+import { default as ReleaseSection } from './ReleaseSection';
 import AnalyticsSection from './AnalyticsSection';
 import ModelsSection from './ModelsSection';
 import VisualizeSection from './VisualizeSection';
