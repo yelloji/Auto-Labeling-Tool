@@ -494,3 +494,4 @@ This project now supports **two installation methods**:
 
 📚 **See [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md) for detailed instructions**
 
+"# release-section-2" 
