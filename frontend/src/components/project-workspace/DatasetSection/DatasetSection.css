@@ -1,0 +1,122 @@
+/* Dataset Container */
+.dataset-container {
+  padding: 24px;
+  background: #fff;
+  min-height: calc(100vh - 64px);
+}
+
+/* Image Grid for 200px thumbnails */
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 200px);
+  gap: 20px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  margin-top: 16px;
+  padding: 0 10px;
+}
+
+/* Responsive breakpoints for image grid */
+@media (max-width: 768px) {
+  .image-grid {
+    grid-template-columns: repeat(auto-fill, 180px);
+    gap: 16px;
+    justify-content: center;
+  }
+  
+  .dataset-container {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .image-grid {
+    grid-template-columns: repeat(auto-fill, 160px);
+    gap: 12px;
+  }
+}
+
+/* Image Card - 200px thumbnails */
+.image-card {
+  position: relative;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  width: 200px;
+  height: fit-content;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: flex-start;
+}
+
+.image-card:hover {
+  border-color: #1890ff;
+  box-shadow: 0 6px 16px rgba(24, 144, 255, 0.15);
+  transform: translateY(-3px);
+}
+.annotation-overlay {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: rgba(255, 255, 0, 0.8);
+  padding: 0.2rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: bold;
+  border-radius: 3px;
+  color: #333;
+  z-index: 10;
+}
+
+.annotation-box {
+  border-radius: 2px;
+  z-index: 5;
+}
+
+.annotation-label {
+  position: absolute;
+  top: -20px;
+  left: 0;
+  background: rgba(255, 77, 79, 0.9);
+  color: white;
+  padding: 1px 4px;
+  font-size: 0.6rem;
+  font-weight: bold;
+  border-radius: 2px;
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 15;
+}
+
+.annotation-polygon {
+  z-index: 5;
+}
+
+.annotation-polygon .annotation-label {
+  position: absolute;
+  background: rgba(255, 77, 79, 0.9);
+  color: white;
+  padding: 1px 4px;
+  font-size: 0.6rem;
+  font-weight: bold;
+  border-radius: 2px;
+  white-space: nowrap;
+  z-index: 15;
+}
+
+/* Additional styles for better annotation visibility */
+.image-card .annotation-text {
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: bold;
+}

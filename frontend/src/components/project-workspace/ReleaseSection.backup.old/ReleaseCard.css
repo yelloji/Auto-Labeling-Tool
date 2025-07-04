@@ -1,0 +1,254 @@
+/* Release Card Specific Styles */
+.release-card {
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.release-card:hover {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.release-card-selected {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2);
+  background: linear-gradient(135deg, #f6ffed 0%, #f0f9ff 100%);
+}
+
+.release-card-selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #1890ff;
+}
+
+.release-card .ant-card-body {
+  padding: 12px;
+  position: relative;
+}
+
+.release-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.release-card-title {
+  margin: 0 !important;
+  font-size: 14px;
+  font-weight: 600;
+  color: #262626;
+  line-height: 1.4;
+  flex: 1;
+  margin-right: 8px !important;
+}
+
+.release-card-meta {
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.release-card-date {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+  color: #8c8c8c;
+}
+
+.release-card-date .anticon {
+  font-size: 10px;
+  margin-right: 4px;
+}
+
+.release-card-stats {
+  margin-bottom: 8px;
+}
+
+.release-stat {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 12px;
+  color: #595959;
+}
+
+.release-stat .anticon {
+  font-size: 10px;
+  margin-right: 2px;
+  color: #8c8c8c;
+}
+
+.release-card-tags {
+  margin-bottom: 8px;
+}
+
+.release-card-tags .ant-tag {
+  font-size: 10px;
+  margin: 0 2px 2px 0;
+  padding: 0 4px;
+  line-height: 16px;
+  border-radius: 2px;
+}
+
+.release-card-splits {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.release-card-splits .ant-typography {
+  margin: 0 4px 0 0;
+  font-weight: 500;
+}
+
+/* Action buttons */
+.release-card .ant-card-actions {
+  background: #fafafa;
+  border-top: 1px solid #f0f0f0;
+}
+
+.release-card .ant-card-actions > li {
+  margin: 4px 0;
+}
+
+.release-card .ant-card-actions > li > span {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 32px;
+}
+
+.release-card .ant-card-actions .ant-btn {
+  border: none;
+  box-shadow: none;
+  height: 28px;
+  width: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.release-card .ant-card-actions .ant-btn:hover {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+.release-card .ant-card-actions .ant-btn.ant-btn-dangerous:hover {
+  background: #fff2f0;
+  color: #ff4d4f;
+}
+
+/* Augmented badge */
+.release-card .ant-tag {
+  font-size: 10px;
+  padding: 0 4px;
+  line-height: 16px;
+  border-radius: 2px;
+  margin: 0;
+}
+
+/* Hover effects */
+.release-card:hover .release-card-title {
+  color: #1890ff;
+}
+
+.release-card-selected .release-card-title {
+  color: #1890ff;
+  font-weight: 700;
+}
+
+/* Loading state */
+.release-card.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.release-card.loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Animation */
+.release-card {
+  animation: slideInUp 0.3s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .release-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .release-card-title {
+    margin-bottom: 4px !important;
+  }
+  
+  .release-stat {
+    margin-right: 8px;
+  }
+  
+  .release-card .ant-card-actions .ant-btn {
+    height: 24px;
+    width: 24px;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .release-card {
+    background: #1f1f1f;
+    border-color: #303030;
+  }
+  
+  .release-card:hover {
+    border-color: #177ddc;
+  }
+  
+  .release-card-selected {
+    background: linear-gradient(135deg, #111b26 0%, #0f1419 100%);
+    border-color: #177ddc;
+  }
+  
+  .release-card-title {
+    color: #f0f0f0;
+  }
+  
+  .release-card-date,
+  .release-stat {
+    color: #bfbfbf;
+  }
+  
+  .release-card .ant-card-actions {
+    background: #262626;
+    border-top-color: #303030;
+  }
+}
