@@ -223,7 +223,15 @@ class ImageTransformer:
                 'name': 'Blur',
                 'category': 'basic',
                 'parameters': {
-                    'intensity': {'type': 'float', 'min': 0.1, 'max': 5.0, 'default': 1.0},
+                    'radius': {
+                        'type': 'float', 
+                        'min': 0.5, 
+                        'max': 20.0, 
+                        'default': 2.0,
+                        'unit': 'pixels',
+                        'step': 0.1,
+                        'description': 'Blur radius in pixels'
+                    },
                     'blur_type': {'type': 'select', 'options': ['gaussian', 'motion', 'box'], 'default': 'gaussian'}
                 }
             },
@@ -231,7 +239,15 @@ class ImageTransformer:
                 'name': 'Noise',
                 'category': 'basic',
                 'parameters': {
-                    'intensity': {'type': 'float', 'min': 0.001, 'max': 0.1, 'default': 0.01},
+                    'strength': {
+                        'type': 'int', 
+                        'min': 1, 
+                        'max': 50, 
+                        'default': 5,
+                        'unit': 'percent',
+                        'step': 1,
+                        'description': 'Noise strength (1% subtle to 50% heavy)'
+                    },
                     'noise_type': {'type': 'select', 'options': ['gaussian', 'salt_pepper', 'uniform'], 'default': 'gaussian'}
                 }
             },
@@ -239,10 +255,42 @@ class ImageTransformer:
                 'name': 'Color Jitter',
                 'category': 'advanced',
                 'parameters': {
-                    'hue': {'type': 'float', 'min': -0.1, 'max': 0.1, 'default': 0},
-                    'brightness': {'type': 'float', 'min': 0.8, 'max': 1.2, 'default': 1.0},
-                    'contrast': {'type': 'float', 'min': 0.8, 'max': 1.2, 'default': 1.0},
-                    'saturation': {'type': 'float', 'min': 0.8, 'max': 1.2, 'default': 1.0}
+                    'hue_shift': {
+                        'type': 'int', 
+                        'min': -30, 
+                        'max': 30, 
+                        'default': 0,
+                        'unit': 'degrees',
+                        'step': 1,
+                        'description': 'Hue shift in degrees (-30° to +30°)'
+                    },
+                    'brightness_variation': {
+                        'type': 'int', 
+                        'min': -20, 
+                        'max': 20, 
+                        'default': 0,
+                        'unit': 'percent',
+                        'step': 1,
+                        'description': 'Brightness variation (-20% to +20%)'
+                    },
+                    'contrast_variation': {
+                        'type': 'int', 
+                        'min': -20, 
+                        'max': 20, 
+                        'default': 0,
+                        'unit': 'percent',
+                        'step': 1,
+                        'description': 'Contrast variation (-20% to +20%)'
+                    },
+                    'saturation_variation': {
+                        'type': 'int', 
+                        'min': -20, 
+                        'max': 20, 
+                        'default': 0,
+                        'unit': 'percent',
+                        'step': 1,
+                        'description': 'Saturation variation (-20% to +20%)'
+                    }
                 }
             },
             'cutout': {
@@ -272,17 +320,57 @@ class ImageTransformer:
                 'name': 'Affine Transform',
                 'category': 'advanced',
                 'parameters': {
-                    'scale': {'type': 'float', 'min': 0.9, 'max': 1.1, 'default': 1.0},
-                    'rotate': {'type': 'float', 'min': -10, 'max': 10, 'default': 0},
-                    'shift_x': {'type': 'float', 'min': -0.1, 'max': 0.1, 'default': 0},
-                    'shift_y': {'type': 'float', 'min': -0.1, 'max': 0.1, 'default': 0}
+                    'scale_factor': {
+                        'type': 'float', 
+                        'min': 0.8, 
+                        'max': 1.2, 
+                        'default': 1.0,
+                        'unit': 'ratio',
+                        'step': 0.01,
+                        'description': 'Scale factor (0.8× smaller to 1.2× larger)'
+                    },
+                    'rotation_angle': {
+                        'type': 'float', 
+                        'min': -15, 
+                        'max': 15, 
+                        'default': 0,
+                        'unit': 'degrees',
+                        'step': 0.1,
+                        'description': 'Rotation angle in degrees'
+                    },
+                    'horizontal_shift': {
+                        'type': 'int', 
+                        'min': -20, 
+                        'max': 20, 
+                        'default': 0,
+                        'unit': 'percent',
+                        'step': 1,
+                        'description': 'Horizontal shift (-20% left to +20% right)'
+                    },
+                    'vertical_shift': {
+                        'type': 'int', 
+                        'min': -20, 
+                        'max': 20, 
+                        'default': 0,
+                        'unit': 'percent',
+                        'step': 1,
+                        'description': 'Vertical shift (-20% up to +20% down)'
+                    }
                 }
             },
             'perspective_warp': {
                 'name': 'Perspective Warp',
                 'category': 'advanced',
                 'parameters': {
-                    'distortion': {'type': 'float', 'min': 0.0, 'max': 0.3, 'default': 0.1}
+                    'distortion_strength': {
+                        'type': 'int', 
+                        'min': 0, 
+                        'max': 30, 
+                        'default': 10,
+                        'unit': 'percent',
+                        'step': 1,
+                        'description': 'Perspective distortion strength (0% none to 30% heavy)'
+                    }
                 }
             },
             'grayscale': {
@@ -602,31 +690,46 @@ class ImageTransformer:
         return enhancer.enhance(factor)
     
     def _apply_blur(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
-        """Apply high-quality Gaussian blur"""
+        """Apply high-quality blur with specified radius"""
         blur_type = params.get('blur_type', 'gaussian')
-        intensity = params.get('intensity', 1.0)  # 0.1 to 5.0
+        radius = params.get('radius', params.get('intensity', 1.0))  # Support both old and new parameter names
+        
+        # Convert old intensity to radius if needed
+        if 'intensity' in params and 'radius' not in params:
+            # Old intensity format (0.1-5.0) - convert to radius
+            intensity = params.get('intensity', 1.0)
+            radius = max(0.5, intensity * 2.0)
+        else:
+            # New radius format (0.5-20.0) - use directly
+            radius = max(0.5, radius)
         
         if blur_type == 'gaussian':
-            # Gaussian blur with proper radius calculation
-            radius = max(0.1, intensity * 2.0)
+            # Gaussian blur with direct radius
             return image.filter(ImageFilter.GaussianBlur(radius=radius))
         elif blur_type == 'motion':
             # Motion blur simulation
-            radius = max(1, int(intensity * 3))
-            return image.filter(ImageFilter.BoxBlur(radius=radius))
+            motion_radius = max(1, int(radius * 1.5))
+            return image.filter(ImageFilter.BoxBlur(radius=motion_radius))
         elif blur_type == 'box':
             # Box blur for different effect
-            radius = max(1, int(intensity * 2))
-            return image.filter(ImageFilter.BoxBlur(radius=radius))
+            box_radius = max(1, int(radius))
+            return image.filter(ImageFilter.BoxBlur(radius=box_radius))
         else:
             # Default to Gaussian
-            radius = max(0.1, intensity * 2.0)
             return image.filter(ImageFilter.GaussianBlur(radius=radius))
     
     def _apply_noise(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
-        """Add high-quality noise to image"""
+        """Add noise to image with specified strength"""
         noise_type = params.get('noise_type', 'gaussian')
-        intensity = params.get('intensity', 0.01)  # 0.001 to 0.1
+        strength = params.get('strength', params.get('intensity', 0.01))  # Support both old and new parameter names
+        
+        # Convert strength to intensity if needed
+        if isinstance(strength, int) and 1 <= strength <= 50:
+            # New percentage format (1-50) - convert to intensity
+            intensity = strength / 1000.0  # 5% = 0.005 intensity
+        else:
+            # Old intensity format (0.001-0.1) for backwards compatibility
+            intensity = strength
         
         # Convert to numpy array
         img_array = np.array(image).astype(np.float32)
@@ -657,36 +760,72 @@ class ImageTransformer:
     
     # Advanced transformation methods
     def _apply_color_jitter(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
-        """Apply color jittering"""
+        """Apply color jittering with improved parameter names"""
         result = image
         
-        # Apply brightness
-        brightness_factor = params.get('brightness', 1.0)
+        # Handle hue shift (new parameter name: hue_shift)
+        hue_shift = params.get('hue_shift', params.get('hue', 0))  # Support both old and new parameter names
+        
+        # Convert hue shift to factor if needed
+        if isinstance(hue_shift, int) and -30 <= hue_shift <= 30:
+            # New degrees format (-30 to +30) - convert to factor
+            hue_factor = hue_shift / 180.0  # Convert degrees to factor
+        else:
+            # Old factor format (-0.1 to 0.1) for backwards compatibility
+            hue_factor = hue_shift
+        
+        if hue_factor != 0:
+            # Convert to HSV, shift hue, convert back
+            img_array = np.array(result)
+            hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
+            hsv[:, :, 0] = (hsv[:, :, 0] + hue_factor * 180) % 180
+            rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+            result = Image.fromarray(rgb)
+        
+        # Handle brightness variation (new parameter name: brightness_variation)
+        brightness_variation = params.get('brightness_variation', params.get('brightness', 1.0))  # Support both old and new parameter names
+        
+        # Convert brightness variation to factor if needed
+        if isinstance(brightness_variation, int) and -20 <= brightness_variation <= 20:
+            # New percentage format (-20 to +20) - convert to factor
+            brightness_factor = 1.0 + (brightness_variation / 100.0)
+        else:
+            # Old factor format (0.8-1.2) for backwards compatibility
+            brightness_factor = brightness_variation
+        
         if brightness_factor != 1.0:
             enhancer = ImageEnhance.Brightness(result)
             result = enhancer.enhance(brightness_factor)
         
-        # Apply contrast
-        contrast_factor = params.get('contrast', 1.0)
+        # Handle contrast variation (new parameter name: contrast_variation)
+        contrast_variation = params.get('contrast_variation', params.get('contrast', 1.0))  # Support both old and new parameter names
+        
+        # Convert contrast variation to factor if needed
+        if isinstance(contrast_variation, int) and -20 <= contrast_variation <= 20:
+            # New percentage format (-20 to +20) - convert to factor
+            contrast_factor = 1.0 + (contrast_variation / 100.0)
+        else:
+            # Old factor format (0.8-1.2) for backwards compatibility
+            contrast_factor = contrast_variation
+        
         if contrast_factor != 1.0:
             enhancer = ImageEnhance.Contrast(result)
             result = enhancer.enhance(contrast_factor)
         
-        # Apply saturation
-        saturation_factor = params.get('saturation', 1.0)
+        # Handle saturation variation (new parameter name: saturation_variation)
+        saturation_variation = params.get('saturation_variation', params.get('saturation', 1.0))  # Support both old and new parameter names
+        
+        # Convert saturation variation to factor if needed
+        if isinstance(saturation_variation, int) and -20 <= saturation_variation <= 20:
+            # New percentage format (-20 to +20) - convert to factor
+            saturation_factor = 1.0 + (saturation_variation / 100.0)
+        else:
+            # Old factor format (0.8-1.2) for backwards compatibility
+            saturation_factor = saturation_variation
+        
         if saturation_factor != 1.0:
             enhancer = ImageEnhance.Color(result)
             result = enhancer.enhance(saturation_factor)
-        
-        # Apply hue shift (simplified implementation)
-        hue_shift = params.get('hue', 0)
-        if hue_shift != 0:
-            # Convert to HSV, shift hue, convert back
-            img_array = np.array(result)
-            hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
-            hsv[:, :, 0] = (hsv[:, :, 0] + hue_shift * 180) % 180
-            rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-            result = Image.fromarray(rgb)
         
         return result
     
@@ -735,18 +874,18 @@ class ImageTransformer:
             return new_image
     
     def _apply_affine_transform(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
-        """Apply affine transformation"""
+        """Apply affine transformation with improved parameter names"""
         # This is a simplified implementation
         # For full affine transforms, you might want to use cv2.warpAffine
         result = image
         
-        # Apply rotation
-        rotate_angle = params.get('rotate', 0)
-        if rotate_angle != 0:
-            result = result.rotate(rotate_angle, expand=False, fillcolor=(255, 255, 255))
+        # Handle rotation (new parameter name: rotation_angle)
+        rotation_angle = params.get('rotation_angle', params.get('rotate', 0))  # Support both old and new parameter names
+        if rotation_angle != 0:
+            result = result.rotate(rotation_angle, expand=False, fillcolor=(255, 255, 255))
         
-        # Apply scaling
-        scale_factor = params.get('scale', 1.0)
+        # Handle scaling (new parameter name: scale_factor)
+        scale_factor = params.get('scale_factor', params.get('scale', 1.0))  # Support both old and new parameter names
         if scale_factor != 1.0:
             width, height = result.size
             new_width = int(width * scale_factor)
@@ -765,11 +904,67 @@ class ImageTransformer:
                 new_image.paste(result, (left, top))
                 result = new_image
         
+        # Handle horizontal shift (new parameter name: horizontal_shift)
+        horizontal_shift = params.get('horizontal_shift', params.get('shift_x', 0))  # Support both old and new parameter names
+        
+        # Convert horizontal shift to pixels if needed
+        if isinstance(horizontal_shift, int) and -20 <= horizontal_shift <= 20:
+            # New percentage format (-20 to +20) - convert to factor
+            shift_x_factor = horizontal_shift / 100.0
+        else:
+            # Old factor format (-0.1 to 0.1) for backwards compatibility
+            shift_x_factor = horizontal_shift
+        
+        # Handle vertical shift (new parameter name: vertical_shift)
+        vertical_shift = params.get('vertical_shift', params.get('shift_y', 0))  # Support both old and new parameter names
+        
+        # Convert vertical shift to pixels if needed
+        if isinstance(vertical_shift, int) and -20 <= vertical_shift <= 20:
+            # New percentage format (-20 to +20) - convert to factor
+            shift_y_factor = vertical_shift / 100.0
+        else:
+            # Old factor format (-0.1 to 0.1) for backwards compatibility
+            shift_y_factor = vertical_shift
+        
+        # Apply shifts if needed
+        if shift_x_factor != 0 or shift_y_factor != 0:
+            width, height = result.size
+            shift_x_pixels = int(width * shift_x_factor)
+            shift_y_pixels = int(height * shift_y_factor)
+            
+            # Create new image with white background
+            new_image = Image.new('RGB', (width, height), (255, 255, 255))
+            
+            # Calculate paste position
+            paste_x = max(0, shift_x_pixels)
+            paste_y = max(0, shift_y_pixels)
+            
+            # Calculate crop area from original image
+            crop_left = max(0, -shift_x_pixels)
+            crop_top = max(0, -shift_y_pixels)
+            crop_right = min(width, width - shift_x_pixels)
+            crop_bottom = min(height, height - shift_y_pixels)
+            
+            if crop_right > crop_left and crop_bottom > crop_top:
+                cropped = result.crop((crop_left, crop_top, crop_right, crop_bottom))
+                new_image.paste(cropped, (paste_x, paste_y))
+            
+            result = new_image
+        
         return result
     
     def _apply_perspective_warp(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
-        """Apply perspective warp transformation"""
-        distortion = params.get('distortion', 0.1)
+        """Apply perspective warp transformation with improved parameter name"""
+        distortion_strength = params.get('distortion_strength', params.get('distortion', 0.1))  # Support both old and new parameter names
+        
+        # Convert distortion strength to factor if needed
+        if isinstance(distortion_strength, int) and 0 <= distortion_strength <= 30:
+            # New percentage format (0-30) - convert to factor
+            distortion = distortion_strength / 100.0
+        else:
+            # Old factor format (0.0-0.3) for backwards compatibility
+            distortion = distortion_strength
+        
         if distortion == 0:
             return image
         
