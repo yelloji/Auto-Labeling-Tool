@@ -545,62 +545,124 @@ const TransformationModal = ({
         <div className="parameters-section">
           <h4>Parameters</h4>
           <div className="parameters-container">
-            {Object.entries(parameters).map(([paramKey, paramDef]) => (
-              <div key={paramKey} className="parameter-control">
-                <div className="parameter-label">{paramKey.toUpperCase()}</div>
-                {paramDef.type === 'int' || paramDef.type === 'float' ? (
-                  <div className="parameter-slider-container">
-                    <div className="slider-container">
-                      <Input.Group compact>
-                        <div style={{ width: '70%' }}>
-                          <Slider
-                            min={paramDef.min}
-                            max={paramDef.max}
-                            step={paramDef.type === 'int' ? 1 : 0.1}
-                            value={config[paramKey] !== undefined ? config[paramKey] : paramDef.default}
-                            onChange={(value) => handleParameterChange(paramKey, value)}
-                          />
-                        </div>
-                        <div style={{ width: '30%' }}>
-                          <Input
-                            type="number"
-                            min={paramDef.min}
-                            max={paramDef.max}
-                            step={paramDef.type === 'int' ? 1 : 0.1}
-                            value={config[paramKey] !== undefined ? config[paramKey] : paramDef.default}
-                            onChange={(e) => handleParameterChange(paramKey, parseFloat(e.target.value))}
-                          />
-                        </div>
-                      </Input.Group>
+            {Object.entries(parameters).map(([paramKey, paramDef]) => {
+              // Helper function to format parameter label with units
+              const formatParameterLabel = (key, def) => {
+                const baseLabel = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                if (def.unit) {
+                  const unitSymbols = {
+                    'degrees': '°',
+                    'pixels': 'px',
+                    'percent': '%',
+                    'ratio': '×'
+                  };
+                  const unitSymbol = unitSymbols[def.unit] || def.unit;
+                  return `${baseLabel} (${unitSymbol})`;
+                }
+                return baseLabel;
+              };
+
+              // Helper function to format input suffix with units
+              const getInputSuffix = (def) => {
+                if (def.unit) {
+                  const unitSymbols = {
+                    'degrees': '°',
+                    'pixels': 'px',
+                    'percent': '%',
+                    'ratio': '×'
+                  };
+                  return unitSymbols[def.unit] || def.unit;
+                }
+                return null;
+              };
+
+              return (
+                <div key={paramKey} className="parameter-control">
+                  <div className="parameter-label-container">
+                    <div className="parameter-label">{formatParameterLabel(paramKey, paramDef)}</div>
+                    {paramDef.description && (
+                      <div className="parameter-description" style={{ 
+                        fontSize: '12px', 
+                        color: '#666', 
+                        marginTop: '2px',
+                        fontStyle: 'italic'
+                      }}>
+                        {paramDef.description}
+                      </div>
+                    )}
+                  </div>
+                  {paramDef.type === 'int' || paramDef.type === 'float' ? (
+                    <div className="parameter-slider-container">
+                      <div className="slider-container">
+                        <Input.Group compact>
+                          <div style={{ width: '70%' }}>
+                            <Slider
+                              min={paramDef.min}
+                              max={paramDef.max}
+                              step={paramDef.step || (paramDef.type === 'int' ? 1 : 0.1)}
+                              value={config[paramKey] !== undefined ? config[paramKey] : paramDef.default}
+                              onChange={(value) => handleParameterChange(paramKey, value)}
+                              tooltip={{
+                                formatter: (value) => {
+                                  const suffix = getInputSuffix(paramDef);
+                                  return suffix ? `${value}${suffix}` : value;
+                                }
+                              }}
+                            />
+                          </div>
+                          <div style={{ width: '30%' }}>
+                            <Input
+                              type="number"
+                              min={paramDef.min}
+                              max={paramDef.max}
+                              step={paramDef.step || (paramDef.type === 'int' ? 1 : 0.1)}
+                              value={config[paramKey] !== undefined ? config[paramKey] : paramDef.default}
+                              onChange={(e) => handleParameterChange(paramKey, parseFloat(e.target.value))}
+                              suffix={getInputSuffix(paramDef)}
+                              style={{ textAlign: 'center' }}
+                            />
+                          </div>
+                        </Input.Group>
+                      </div>
                     </div>
-                  </div>
-                ) : paramDef.type === 'bool' ? (
-                  <div className="parameter-switch-container">
-                    <Button
-                      type={config[paramKey] ? "primary" : "default"}
-                      onClick={() => handleParameterChange(paramKey, !config[paramKey])}
-                    >
-                      {config[paramKey] ? "On" : "Off"}
-                    </Button>
-                  </div>
-                ) : paramDef.type === 'select' ? (
-                  <div className="parameter-select-container">
-                    <Select
-                      value={config[paramKey] !== undefined ? config[paramKey] : paramDef.default}
-                      onChange={(value) => handleParameterChange(paramKey, value)}
-                      style={{ width: '100%' }}
-                      placeholder={`Select ${paramKey.replace(/_/g, ' ')}`}
-                    >
-                      {paramDef.options?.map(option => (
-                        <Select.Option key={option} value={option}>
-                          {paramDef.labels?.[option] || option.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </Select.Option>
-                      ))}
-                    </Select>
-                  </div>
-                ) : null}
-              </div>
-            ))}
+                  ) : paramDef.type === 'bool' ? (
+                    <div className="parameter-switch-container">
+                      <Button
+                        type={config[paramKey] ? "primary" : "default"}
+                        onClick={() => handleParameterChange(paramKey, !config[paramKey])}
+                      >
+                        {config[paramKey] ? "On" : "Off"}
+                      </Button>
+                    </div>
+                  ) : paramDef.type === 'select' ? (
+                    <div className="parameter-select-container">
+                      <Select
+                        value={config[paramKey] !== undefined ? config[paramKey] : paramDef.default}
+                        onChange={(value) => handleParameterChange(paramKey, value)}
+                        style={{ width: '100%' }}
+                        placeholder={`Select ${paramKey.replace(/_/g, ' ')}`}
+                      >
+                        {paramDef.options?.map(option => (
+                          <Select.Option key={option} value={option}>
+                            {paramDef.labels?.[option] || option.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </Select.Option>
+                        ))}
+                      </Select>
+                      {paramDef.description && (
+                        <div style={{ 
+                          fontSize: '11px', 
+                          color: '#888', 
+                          marginTop: '4px',
+                          fontStyle: 'italic'
+                        }}>
+                          {paramDef.description}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </div>
 
