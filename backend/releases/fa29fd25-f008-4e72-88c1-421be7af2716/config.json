@@ -1,0 +1,13 @@
+{
+    "version_name": "test_release_v1",
+    "dataset_id": "1c62d270-2df3-4568-986d-0cff06cd7e7d",
+    "description": "Test release with task_type",
+    "transformations": [],
+    "multiplier": 1,
+    "preserve_annotations": true,
+    "export_format": "YOLO",
+    "task_type": "object_detection",
+    "include_images": true,
+    "include_annotations": true,
+    "verified_only": false
+}

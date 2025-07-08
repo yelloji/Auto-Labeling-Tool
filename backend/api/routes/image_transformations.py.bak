@@ -1,0 +1,420 @@
+"""
+Image Transformations API
+Handles CRUD operations for image transformations
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from sqlalchemy.orm import Session
+from typing import List, Dict, Any, Optional
+from database.database import get_db
+from database.models import ImageTransformation
+from utils.version_generator import generate_transformation_version, is_temporary_version
+from pydantic import BaseModel, Field, validator
+import uuid
+from datetime import datetime
+import logging
+import json
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Create router
+router = APIRouter(
+    prefix="/api/image-transformations",
+    tags=["image-transformations"],
+)
+
+# Pydantic models for request/response
+class TransformationCreate(BaseModel):
+    transformation_type: str
+    parameters: Dict[str, Any]
+    is_enabled: bool = True
+    order_index: int = 0
+    release_version: Optional[str] = None
+    category: str = "basic"  # basic or advanced
+    status: str = "PENDING"  # PENDING or COMPLETED
+    release_id: Optional[str] = None
+
+class TransformationUpdate(BaseModel):
+    transformation_type: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+    is_enabled: Optional[bool] = None
+    order_index: Optional[int] = None
+    category: Optional[str] = None
+    status: Optional[str] = None
+    release_id: Optional[str] = None
+
+class TransformationResponse(BaseModel):
+    id: str
+    transformation_type: str
+    parameters: Dict[str, Any]
+    is_enabled: bool
+    order_index: int
+    release_version: str
+    created_at: datetime
+    category: str
+    status: str
+    release_id: Optional[str] = None
+
+    @validator('parameters', pre=True)
+    def parse_parameters(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return {}
+        return v
+
+    class Config:
+        orm_mode = True
+
+
+@router.post("/", response_model=TransformationResponse)
+def create_transformation(
+    transformation: TransformationCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new image transformation
+    
+    If release_version is not provided, a new temporary version will be generated
+    """
+    try:
+        # Generate a new version ID if not provided
+        if not transformation.release_version:
+            transformation.release_version = generate_transformation_version()
+        
+        # Create new transformation
+        db_transformation = ImageTransformation(
+            id=str(uuid.uuid4()),
+            transformation_type=transformation.transformation_type,
+            parameters=transformation.parameters,
+            is_enabled=transformation.is_enabled,
+            order_index=transformation.order_index,
+            release_version=transformation.release_version,
+            category=transformation.category,
+            status=transformation.status,
+            release_id=transformation.release_id
+        )
+        
+        db.add(db_transformation)
+        db.commit()
+        db.refresh(db_transformation)
+        
+        logger.info(f"Created transformation: {db_transformation.id} of type {db_transformation.transformation_type}")
+        return db_transformation
+    
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating transformation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create transformation: {str(e)}")
+
+
+@router.get("/", response_model=List[TransformationResponse])
+def get_transformations(
+    release_version: Optional[str] = Query(None, description="Filter by release version"),
+    transformation_type: Optional[str] = Query(None, description="Filter by transformation type"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all transformations, optionally filtered by release version or type
+    """
+    try:
+        query = db.query(ImageTransformation)
+        
+        if release_version:
+            query = query.filter(ImageTransformation.release_version == release_version)
+        
+        if transformation_type:
+            query = query.filter(ImageTransformation.transformation_type == transformation_type)
+        
+        # Order by order_index
+        query = query.order_by(ImageTransformation.order_index)
+        
+        transformations = query.all()
+        return transformations
+    
+    except Exception as e:
+        logger.error(f"Error fetching transformations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch transformations: {str(e)}")
+
+
+@router.get("/{transformation_id}", response_model=TransformationResponse)
+def get_transformation(
+    transformation_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get a specific transformation by ID
+    """
+    try:
+        transformation = db.query(ImageTransformation).filter(ImageTransformation.id == transformation_id).first()
+        
+        if not transformation:
+            raise HTTPException(status_code=404, detail=f"Transformation with ID {transformation_id} not found")
+        
+        return transformation
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching transformation {transformation_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch transformation: {str(e)}")
+
+
+@router.put("/{transformation_id}", response_model=TransformationResponse)
+def update_transformation(
+    transformation_id: str,
+    transformation: TransformationUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update an existing transformation
+    """
+    try:
+        db_transformation = db.query(ImageTransformation).filter(ImageTransformation.id == transformation_id).first()
+        
+        if not db_transformation:
+            raise HTTPException(status_code=404, detail=f"Transformation with ID {transformation_id} not found")
+        
+        # Update fields if provided
+        if transformation.transformation_type is not None:
+            db_transformation.transformation_type = transformation.transformation_type
+        
+        if transformation.parameters is not None:
+            db_transformation.parameters = transformation.parameters
+        
+        if transformation.is_enabled is not None:
+            db_transformation.is_enabled = transformation.is_enabled
+        
+        if transformation.order_index is not None:
+            db_transformation.order_index = transformation.order_index
+        
+        if transformation.category is not None:
+            db_transformation.category = transformation.category
+        
+        db.commit()
+        db.refresh(db_transformation)
+        
+        logger.info(f"Updated transformation: {db_transformation.id}")
+        return db_transformation
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating transformation {transformation_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update transformation: {str(e)}")
+
+
+@router.delete("/{transformation_id}", response_model=dict)
+def delete_transformation(
+    transformation_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a transformation
+    """
+    try:
+        db_transformation = db.query(ImageTransformation).filter(ImageTransformation.id == transformation_id).first()
+        
+        if not db_transformation:
+            raise HTTPException(status_code=404, detail=f"Transformation with ID {transformation_id} not found")
+        
+        db.delete(db_transformation)
+        db.commit()
+        
+        logger.info(f"Deleted transformation: {transformation_id}")
+        return {"message": f"Transformation {transformation_id} deleted successfully"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting transformation {transformation_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete transformation: {str(e)}")
+
+
+@router.get("/version/{release_version}", response_model=List[TransformationResponse])
+def get_transformations_by_version(
+    release_version: str,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all transformations for a specific release version, optionally filtered by status
+    """
+    try:
+        query = db.query(ImageTransformation).filter(
+            ImageTransformation.release_version == release_version
+        )
+        
+        if status:
+            query = query.filter(ImageTransformation.status == status)
+            
+        transformations = query.order_by(ImageTransformation.order_index).all()
+        
+        return transformations
+    
+    except Exception as e:
+        logger.error(f"Error fetching transformations for version {release_version}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch transformations: {str(e)}")
+
+
+@router.post("/batch", response_model=List[TransformationResponse])
+def create_transformations_batch(
+    transformations: List[TransformationCreate],
+    db: Session = Depends(get_db)
+):
+    """
+    Create multiple transformations in a single batch
+    
+    All transformations will use the same release_version if not individually specified
+    """
+    try:
+        # Generate a common version ID if not provided in the first item
+        common_version = None
+        if transformations and not transformations[0].release_version:
+            common_version = generate_transformation_version()
+        
+        db_transformations = []
+        for i, transformation in enumerate(transformations):
+            # Use common version if individual version not specified
+            if not transformation.release_version and common_version:
+                transformation.release_version = common_version
+            
+            # If still no version, generate a new one
+            if not transformation.release_version:
+                transformation.release_version = generate_transformation_version()
+            
+            # Set order index if not provided
+            if transformation.order_index == 0:
+                transformation.order_index = i
+            
+            db_transformation = ImageTransformation(
+                id=str(uuid.uuid4()),
+                transformation_type=transformation.transformation_type,
+                parameters=transformation.parameters,
+                is_enabled=transformation.is_enabled,
+                order_index=transformation.order_index,
+                release_version=transformation.release_version,
+                category=transformation.category
+            )
+            
+            db.add(db_transformation)
+            db_transformations.append(db_transformation)
+        
+        db.commit()
+        
+        # Refresh all objects
+        for transformation in db_transformations:
+            db.refresh(transformation)
+        
+        logger.info(f"Created {len(db_transformations)} transformations in batch")
+        return db_transformations
+    
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating transformations batch: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create transformations batch: {str(e)}")
+
+
+@router.delete("/version/{release_version}", response_model=dict)
+def delete_transformations_by_version(
+    release_version: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete all transformations for a specific release version
+    """
+    try:
+        # Check if it's a temporary version
+        if not is_temporary_version(release_version):
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot delete transformations for a finalized release version. Only temporary versions can be deleted."
+            )
+        
+        # Delete all transformations with this version
+        result = db.query(ImageTransformation).filter(
+            ImageTransformation.release_version == release_version
+        ).delete()
+        
+        db.commit()
+        
+        logger.info(f"Deleted {result} transformations for version {release_version}")
+        return {"message": f"Deleted {result} transformations for version {release_version}"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting transformations for version {release_version}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete transformations: {str(e)}")
+
+
+@router.post("/reorder", response_model=List[TransformationResponse])
+def reorder_transformations(
+    transformation_ids: List[str] = Body(..., embed=True),
+    db: Session = Depends(get_db)
+):
+    """
+    Reorder transformations based on the provided list of IDs
+    The order in the list determines the new order_index values
+    """
+    try:
+        # Verify all transformations exist
+        transformations = []
+        for i, transformation_id in enumerate(transformation_ids):
+            transformation = db.query(ImageTransformation).filter(ImageTransformation.id == transformation_id).first()
+            if not transformation:
+                raise HTTPException(status_code=404, detail=f"Transformation with ID {transformation_id} not found")
+            
+            # Update order index
+            transformation.order_index = i
+            transformations.append(transformation)
+        
+        db.commit()
+        
+        # Refresh all objects
+        for transformation in transformations:
+            db.refresh(transformation)
+        
+        logger.info(f"Reordered {len(transformations)} transformations")
+        return transformations
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error reordering transformations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to reorder transformations: {str(e)}")
+
+
+@router.post("/generate-version", response_model=dict)
+def generate_new_version():
+    """
+    Generate a new transformation version ID
+    """
+    try:
+        version = generate_transformation_version()
+        return {"version": version}
+    
+    except Exception as e:
+        logger.error(f"Error generating version: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate version: {str(e)}")
+
+
+@router.get("/pending", response_model=List[TransformationResponse])
+def get_pending_transformations(db: Session = Depends(get_db)):
+    """
+    Get all pending transformations
+    """
+    try:
+        transformations = db.query(ImageTransformation).filter(
+            ImageTransformation.status == "PENDING"
+        ).all()
+        return transformations
+    except Exception as e:
+        logger.error(f"Error getting pending transformations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get pending transformations: {str(e)}")
