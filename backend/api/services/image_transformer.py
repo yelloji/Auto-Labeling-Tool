@@ -164,21 +164,59 @@ class ImageTransformer:
                 'name': 'Crop',
                 'category': 'basic',
                 'parameters': {
-                    'scale': {'type': 'float', 'min': 0.8, 'max': 1.0, 'default': 1.0}
+                    'crop_percentage': {
+                        'type': 'int', 
+                        'min': 50, 
+                        'max': 100, 
+                        'default': 100,
+                        'unit': 'percent',
+                        'step': 1,
+                        'description': 'Crop to percentage of original size'
+                    },
+                    'crop_mode': {
+                        'type': 'select',
+                        'options': ['center', 'random', 'top_left', 'top_right', 'bottom_left', 'bottom_right'],
+                        'default': 'center',
+                        'labels': {
+                            'center': 'Center Crop (consistent)',
+                            'random': 'Random Crop (for augmentation)',
+                            'top_left': 'Top-Left Corner',
+                            'top_right': 'Top-Right Corner',
+                            'bottom_left': 'Bottom-Left Corner',
+                            'bottom_right': 'Bottom-Right Corner'
+                        },
+                        'description': 'Choose crop position'
+                    }
                 }
             },
             'brightness': {
                 'name': 'Brightness',
                 'category': 'basic',
                 'parameters': {
-                    'factor': {'type': 'float', 'min': 0.8, 'max': 1.2, 'default': 1.0}
+                    'adjustment': {
+                        'type': 'int', 
+                        'min': -50, 
+                        'max': 50, 
+                        'default': 0,
+                        'unit': 'percent',
+                        'step': 1,
+                        'description': 'Brightness adjustment (-50% darker to +50% brighter)'
+                    }
                 }
             },
             'contrast': {
                 'name': 'Contrast',
                 'category': 'basic',
                 'parameters': {
-                    'factor': {'type': 'float', 'min': 0.8, 'max': 1.2, 'default': 1.0}
+                    'adjustment': {
+                        'type': 'int', 
+                        'min': -50, 
+                        'max': 50, 
+                        'default': 0,
+                        'unit': 'percent',
+                        'step': 1,
+                        'description': 'Contrast adjustment (-50% less to +50% more contrast)'
+                    }
                 }
             },
             'blur': {
@@ -481,8 +519,18 @@ class ImageTransformer:
         return result
     
     def _apply_crop(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
-        """Apply random crop with specified scale"""
-        scale = params.get('scale', 1.0)
+        """Apply crop with specified percentage and position mode"""
+        crop_percentage = params.get('crop_percentage', params.get('scale', 1.0))  # Support both old and new parameter names
+        crop_mode = params.get('crop_mode', 'center')  # Default to center crop
+        
+        # Convert percentage to scale if needed
+        if crop_percentage > 1.0:
+            # New percentage format (50-100)
+            scale = crop_percentage / 100.0
+        else:
+            # Old scale format (0.8-1.0) for backwards compatibility
+            scale = crop_percentage
+            
         if scale >= 1.0:
             return image
         
@@ -490,21 +538,66 @@ class ImageTransformer:
         new_width = int(width * scale)
         new_height = int(height * scale)
         
-        left = random.randint(0, width - new_width)
-        top = random.randint(0, height - new_height)
+        # Calculate crop position based on mode
+        if crop_mode == 'center':
+            # Center crop (consistent results)
+            left = (width - new_width) // 2
+            top = (height - new_height) // 2
+        elif crop_mode == 'random':
+            # Random crop (for augmentation)
+            left = random.randint(0, width - new_width)
+            top = random.randint(0, height - new_height)
+        elif crop_mode == 'top_left':
+            # Top-left corner
+            left = 0
+            top = 0
+        elif crop_mode == 'top_right':
+            # Top-right corner
+            left = width - new_width
+            top = 0
+        elif crop_mode == 'bottom_left':
+            # Bottom-left corner
+            left = 0
+            top = height - new_height
+        elif crop_mode == 'bottom_right':
+            # Bottom-right corner
+            left = width - new_width
+            top = height - new_height
+        else:
+            # Default to center if unknown mode
+            left = (width - new_width) // 2
+            top = (height - new_height) // 2
         
         cropped = image.crop((left, top, left + new_width, top + new_height))
         return cropped.resize((width, height), Image.Resampling.LANCZOS)
     
     def _apply_brightness(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
         """Adjust image brightness"""
-        factor = params.get('factor', 1.0)
+        adjustment = params.get('adjustment', params.get('factor', 1.0))  # Support both old and new parameter names
+        
+        # Convert adjustment to factor if needed
+        if isinstance(adjustment, int) and -50 <= adjustment <= 50:
+            # New percentage format (-50 to +50)
+            factor = 1.0 + (adjustment / 100.0)
+        else:
+            # Old factor format (0.8-1.2) for backwards compatibility
+            factor = adjustment
+            
         enhancer = ImageEnhance.Brightness(image)
         return enhancer.enhance(factor)
     
     def _apply_contrast(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
         """Adjust image contrast"""
-        factor = params.get('factor', 1.0)
+        adjustment = params.get('adjustment', params.get('factor', 1.0))  # Support both old and new parameter names
+        
+        # Convert adjustment to factor if needed
+        if isinstance(adjustment, int) and -50 <= adjustment <= 50:
+            # New percentage format (-50 to +50)
+            factor = 1.0 + (adjustment / 100.0)
+        else:
+            # Old factor format (0.8-1.2) for backwards compatibility
+            factor = adjustment
+            
         enhancer = ImageEnhance.Contrast(image)
         return enhancer.enhance(factor)
     
