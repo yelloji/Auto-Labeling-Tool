@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Button, Row, Col, Card, message, Spin, Alert, Divider, Slider, Space } from 'antd';
+import { Modal, Form, Input, Button, Row, Col, Card, message, Spin, Alert, Divider, Slider, Space, Select } from 'antd';
 import { SettingOutlined, EyeOutlined, SaveOutlined, ArrowLeftOutlined, RocketOutlined } from '@ant-design/icons';
 import IndividualTransformationControl from './IndividualTransformationControl';
 import { augmentationAPI } from '../../../services/api';
@@ -582,6 +582,21 @@ const TransformationModal = ({
                     >
                       {config[paramKey] ? "On" : "Off"}
                     </Button>
+                  </div>
+                ) : paramDef.type === 'select' ? (
+                  <div className="parameter-select-container">
+                    <Select
+                      value={config[paramKey] !== undefined ? config[paramKey] : paramDef.default}
+                      onChange={(value) => handleParameterChange(paramKey, value)}
+                      style={{ width: '100%' }}
+                      placeholder={`Select ${paramKey.replace(/_/g, ' ')}`}
+                    >
+                      {paramDef.options?.map(option => (
+                        <Select.Option key={option} value={option}>
+                          {paramDef.labels?.[option] || option.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </Select.Option>
+                      ))}
+                    </Select>
                   </div>
                 ) : null}
               </div>

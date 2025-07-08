@@ -140,7 +140,15 @@ class ImageTransformer:
                 'name': 'Rotate',
                 'category': 'basic',
                 'parameters': {
-                    'angle': {'type': 'float', 'min': -15, 'max': 15, 'default': 0},
+                    'angle': {
+                        'type': 'float', 
+                        'min': -180, 
+                        'max': 180, 
+                        'default': 0,
+                        'unit': 'degrees',
+                        'step': 0.1,
+                        'description': 'Rotation angle in degrees'
+                    },
                     'fill_color': {'type': 'select', 'options': ['white', 'black'], 'default': 'white'}
                 }
             },
@@ -211,7 +219,15 @@ class ImageTransformer:
                 'name': 'Random Zoom',
                 'category': 'advanced',
                 'parameters': {
-                    'zoom_range': {'type': 'float', 'min': 0.9, 'max': 1.1, 'default': 1.0}
+                    'zoom_factor': {
+                        'type': 'float', 
+                        'min': 0.5, 
+                        'max': 2.0, 
+                        'default': 1.0,
+                        'unit': 'ratio',
+                        'step': 0.1,
+                        'description': 'Zoom factor (1.0 = original size)'
+                    }
                 }
             },
             'affine_transform': {
@@ -240,7 +256,15 @@ class ImageTransformer:
                 'name': 'Shear',
                 'category': 'advanced',
                 'parameters': {
-                    'angle': {'type': 'float', 'min': -5, 'max': 5, 'default': 0}
+                    'shear_angle': {
+                        'type': 'float', 
+                        'min': -45, 
+                        'max': 45, 
+                        'default': 0,
+                        'unit': 'degrees',
+                        'step': 0.1,
+                        'description': 'Shear angle in degrees'
+                    }
                 }
             },
             'gamma_correction': {
@@ -590,24 +614,24 @@ class ImageTransformer:
     
     def _apply_random_zoom(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
         """Apply random zoom"""
-        zoom_range = params.get('zoom_range', 1.0)
-        if zoom_range == 1.0:
+        zoom_factor = params.get('zoom_factor', params.get('zoom_range', 1.0))  # Support both old and new parameter names
+        if zoom_factor == 1.0:
             return image
         
         width, height = image.size
         
-        if zoom_range > 1.0:
+        if zoom_factor > 1.0:
             # Zoom in (crop and resize)
-            new_width = int(width / zoom_range)
-            new_height = int(height / zoom_range)
+            new_width = int(width / zoom_factor)
+            new_height = int(height / zoom_factor)
             left = (width - new_width) // 2
             top = (height - new_height) // 2
             cropped = image.crop((left, top, left + new_width, top + new_height))
             return cropped.resize((width, height), Image.Resampling.LANCZOS)
         else:
             # Zoom out (resize and pad)
-            new_width = int(width * zoom_range)
-            new_height = int(height * zoom_range)
+            new_width = int(width * zoom_factor)
+            new_height = int(height * zoom_factor)
             resized = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
             
             # Create new image with original size and paste resized image in center
@@ -684,12 +708,12 @@ class ImageTransformer:
     
     def _apply_shear(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
         """Apply shear transformation"""
-        angle = params.get('angle', 0)
-        if angle == 0:
+        shear_angle = params.get('shear_angle', params.get('angle', 0))  # Support both old and new parameter names
+        if shear_angle == 0:
             return image
         
         # Convert angle to radians and calculate shear factor
-        shear_factor = math.tan(math.radians(angle))
+        shear_factor = math.tan(math.radians(shear_angle))
         
         # Convert to OpenCV format
         img_array = np.array(image)
