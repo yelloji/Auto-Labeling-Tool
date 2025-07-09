@@ -137,6 +137,17 @@ const TransformationModal = ({
   };
 
   const handleTransformationSelect = (transformationType, transformationDetails) => {
+    // Check if this transformation type already exists
+    const existingTransformation = existingTransformations.find(t => {
+      const existingType = Object.keys(t.config || {})[0];
+      return existingType === transformationType;
+    });
+
+    if (existingTransformation) {
+      message.warning(`${transformationType} transformation already exists. You can only add each transformation type once.`);
+      return;
+    }
+
     console.log('Selected transformation:', transformationType, transformationDetails);
     setSelectedTransformation({
       type: transformationType,
