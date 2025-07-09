@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Input, InputNumber, Select, Button, Card, Checkbox, Space, Divider, Row, Col, Statistic, Tag, Alert, message } from 'antd';
-import { RocketOutlined, EyeOutlined, SettingOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { Form, Input, InputNumber, Select, Button, Card, Space, Divider, Row, Col, Statistic, Tag, Alert, message } from 'antd';
+import { RocketOutlined, EyeOutlined, SettingOutlined } from '@ant-design/icons';
 import { imageTransformationsAPI } from '../../../services/api';
 
 const { Option } = Select;
@@ -10,6 +10,41 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
   const [previewData, setPreviewData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadingReleaseVersion, setLoadingReleaseVersion] = useState(true);
+  const [classCount, setClassCount] = useState(0);
+
+  // Fetch class count when selected datasets change
+  useEffect(() => {
+    const fetchClassCount = async () => {
+      if (!selectedDatasets || selectedDatasets.length === 0) {
+        setClassCount(0);
+        return;
+      }
+      
+      const uniqueClasses = new Set();
+      for (const ds of selectedDatasets) {
+        try {
+          const res = await fetch(`http://localhost:12000/api/v1/datasets/${ds.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.recent_images) {
+              for (const img of data.recent_images) {
+                try {
+                  const aRes = await fetch(`http://localhost:12000/api/v1/images/${img.id}/annotations`);
+                  if (aRes.ok) {
+                    const anns = await aRes.json();
+                    anns.forEach(a => { if (a.class_name) uniqueClasses.add(a.class_name); });
+                  }
+                } catch (e) { console.error('Annotation fetch error:', img.id, e); }
+              }
+            }
+          }
+        } catch (e) { console.error('Dataset fetch error:', e); }
+      }
+      setClassCount(uniqueClasses.size);
+    };
+
+    fetchClassCount();
+  }, [selectedDatasets]);
 
   // Load existing release version when component mounts
   useEffect(() => {
@@ -95,17 +130,16 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
       // Calculate preview statistics
       const baseImages = selectedDatasets.reduce((sum, dataset) => sum + (dataset.total_images || 0), 0);
       const totalImages = baseImages * (values.multiplier || 1);
-      const totalClasses = [...new Set(selectedDatasets.flatMap(d => d.classes || []))].length;
       
       const preview = {
         releaseName: values.name,
         totalImages,
-        totalClasses,
+        totalClasses: classCount, // Use calculated class count
         baseImages,
         multiplier: values.multiplier,
         transformationsCount: transformations.length,
         appliedTo: values.split,
-        preserveAnnotations: values.preserveAnnotations,
+        preserveAnnotations: true, // Always true now
         exportFormat: values.exportFormat,
         taskType: values.taskType,
         imageFormat: values.imageFormat || 'original',
@@ -114,7 +148,7 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
         splitBreakdown: {
           train: Math.floor(totalImages * 0.7),
           val: Math.floor(totalImages * 0.2), 
-          test: Math.floor(totalImages * 0.1)
+          test: Math.ceil(totalImages * 0.1) // Use ceil to avoid off-by-one
         }
       };
       
@@ -134,6 +168,7 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
       const values = await form.validateFields();
       const releaseConfig = {
         ...values,
+        preserveAnnotations: true, // Ensure this is always true on generate
         transformations,
         selectedDatasets: selectedDatasets.map(d => d.id),
         previewData
@@ -161,9 +196,8 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
         initialValues={{ 
           multiplier: 5,
           split: 'all',
-          preserveAnnotations: true,
-          exportFormat: 'yolo',          // set initial export format here
-          taskType: 'object_detection'   // set initial task type here
+          exportFormat: 'yolo',
+          taskType: 'object_detection'
         }}
       >
         <Row gutter={16}>
@@ -227,7 +261,6 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
           </Col>
         </Row>
 
-        {/* <-- ROW FOR EXPORT FORMAT AND TASK TYPE --> */}
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item
@@ -260,7 +293,6 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
           </Col>
         </Row>
 
-        {/* <-- NEW ROW FOR IMAGE FORMAT --> */}
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item
@@ -280,26 +312,6 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
           </Col>
           <Col span={12}>
             {/* Placeholder for future options */}
-          </Col>
-        </Row>
-        {/* <-- END NEW ROW --> */}
-
-        <Row gutter={16}>
-          <Col span={24}>
-            <Form.Item
-              name="preserveAnnotations"
-              valuePropName="checked"
-            >
-              <Checkbox>
-                <Space>
-                  <span>Preserve Annotations</span>
-                  <InfoCircleOutlined style={{ color: '#1890ff' }} />
-                </Space>
-              </Checkbox>
-            </Form.Item>
-            <div style={{ fontSize: '12px', color: '#666', marginTop: -16, marginBottom: 16 }}>
-              Keep original annotations and transform them along with images
-            </div>
           </Col>
         </Row>
 
@@ -323,6 +335,11 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
                 Base Images: {selectedDatasets.reduce((sum, d) => sum + (d.total_images || 0), 0)}
               </Tag>
             </Col>
+            <Col>
+              <Tag color="cyan">
+                Classes: {classCount}
+              </Tag>
+            </Col>
           </Row>
         </div>
 
@@ -331,7 +348,6 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
             message={`Release Configuration Preview: "${previewData.releaseName}"`}
             description={
               <div style={{ marginTop: 12 }}>
-                {/* Dataset & Images Statistics */}
                 <Row gutter={16} style={{ marginBottom: 16 }}>
                   <Col span={6}>
                     <Statistic 
@@ -363,7 +379,6 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
                   </Col>
                 </Row>
 
-                {/* Split Breakdown */}
                 <Row gutter={16} style={{ marginBottom: 16 }}>
                   <Col span={6}>
                     <Statistic 
@@ -394,8 +409,7 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
                     />
                   </Col>
                 </Row>
-
-                {/* Configuration Details */}
+                
                 <Row gutter={16} style={{ marginBottom: 12 }}>
                   <Col span={8}>
                     <div>
@@ -414,7 +428,6 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
                   </Col>
                 </Row>
 
-                {/* Selected Datasets */}
                 {previewData.selectedDatasets.length > 0 && (
                   <Row style={{ marginBottom: 12 }}>
                     <Col span={24}>
@@ -425,7 +438,6 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
                   </Row>
                 )}
 
-                {/* Applied Transformations */}
                 {previewData.transformationsList.length > 0 && (
                   <Row style={{ marginBottom: 12 }}>
                     <Col span={24}>
@@ -436,16 +448,10 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
                   </Row>
                 )}
 
-                {/* Additional Settings */}
                 <Row>
-                  <Col span={12}>
+                  <Col span={24}>
                     <div>
                       <strong>Applied To:</strong> {previewData.appliedTo}
-                    </div>
-                  </Col>
-                  <Col span={12}>
-                    <div>
-                      <strong>Preserve Annotations:</strong> {previewData.preserveAnnotations ? 'Yes' : 'No'}
                     </div>
                   </Col>
                 </Row>
