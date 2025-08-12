@@ -87,9 +87,11 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
   }, [selectedDatasets]);
 
   // Fetch combination count and user selection for current release version
+  // Also refetch when transformations change to get updated max count
   useEffect(() => {
     const fetchReleaseConfig = async () => {
       console.log('🔍 DEBUG: fetchReleaseConfig called with currentReleaseVersion:', currentReleaseVersion);
+      console.log('🔍 DEBUG: Current transformations count:', transformations.length);
       
       if (!currentReleaseVersion) {
         console.log('❌ No currentReleaseVersion, skipping fetch');
@@ -139,7 +141,7 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
     };
 
     fetchReleaseConfig();
-  }, [currentReleaseVersion]);
+  }, [currentReleaseVersion, transformations]);
 
   // Load existing release version when component mounts
   useEffect(() => {

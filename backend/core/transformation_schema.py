@@ -147,6 +147,10 @@ class TransformationSchema:
         dual_value_transformations = []
         regular_transformations = []
         
+        logger.info(f"🔍 DEBUG - Input transformations:")
+        for t in enabled_transformations:
+            logger.info(f"  Tool: {t.tool_type}, Params: {t.parameters}, Dual-value: {is_dual_value_transformation(t.tool_type)}")
+        
         for transformation in enabled_transformations:
             if is_dual_value_transformation(transformation.tool_type):
                 dual_value_transformations.append(transformation)
@@ -168,7 +172,14 @@ class TransformationSchema:
             
             combination = {transformation.tool_type: user_params}
             combinations.append(combination)
-            logger.debug(f"Added user value combination: {combination}")
+            logger.info(f"🔵 PRIORITY 1 - Added user value combination: {combination}")
+        
+        # Add single-value transformations to Priority 1 as well
+        logger.info("Adding single-value transformations to Priority 1")
+        for transformation in regular_transformations:
+            combination = {transformation.tool_type: transformation.parameters.copy()}
+            combinations.append(combination)
+            logger.info(f"🔵 PRIORITY 1 - Added single-value combination: {combination}")
         
         # PRIORITY 2: Auto-Generated Values (opposite values)
         logger.info("Generating Priority 2: Auto-Generated Values")
@@ -189,7 +200,7 @@ class TransformationSchema:
             
             combination = {transformation.tool_type: auto_params}
             combinations.append(combination)
-            logger.debug(f"Added auto value combination: {combination}")
+            logger.info(f"🟠 PRIORITY 2 - Added auto value combination: {combination}")
         
         # PRIORITY 3: Random Combinations (if more images needed)
         logger.info("Generating Priority 3: Random Combinations")
@@ -242,11 +253,49 @@ class TransformationSchema:
                             }
                             additional_combinations.append(mixed_combo)
             
+            # ✅ NEW: Generate combinations with single-value tools
+            if len(dual_value_transformations) >= 1 and len(regular_transformations) >= 1:
+                logger.info("Generating dual-value + single-value combinations")
+                for dual_transformation in dual_value_transformations:
+                    # Get user and auto values for dual-value tool
+                    dual_user_params = {}
+                    dual_auto_params = {}
+                    
+                    for param_name, param_value in dual_transformation.parameters.items():
+                        if isinstance(param_value, dict) and 'user_value' in param_value:
+                            dual_user_params[param_name] = param_value['user_value']
+                            dual_auto_params[param_name] = param_value.get('auto_value', 
+                                                         generate_auto_value(dual_transformation.tool_type, param_value['user_value']))
+                        else:
+                            # For simple values like {"percentage": 50}, use as user value and generate auto
+                            dual_user_params[param_name] = param_value
+                            dual_auto_params[param_name] = generate_auto_value(dual_transformation.tool_type, param_value)
+                    
+                    # Combine with each single-value tool
+                    for single_transformation in regular_transformations:
+                        # Dual-value (user) + Single-value combination
+                        combo1 = {
+                            dual_transformation.tool_type: dual_user_params,
+                            single_transformation.tool_type: single_transformation.parameters.copy()
+                        }
+                        additional_combinations.append(combo1)
+                        logger.info(f"🟣 PRIORITY 3 - Added dual(user)+single combination: {combo1}")
+                        
+                        # Dual-value (auto) + Single-value combination  
+                        combo2 = {
+                            dual_transformation.tool_type: dual_auto_params,
+                            single_transformation.tool_type: single_transformation.parameters.copy()
+                        }
+                        additional_combinations.append(combo2)
+                        logger.info(f"🟣 PRIORITY 3 - Added dual(auto)+single combination: {combo2}")
+            
             # Add random combinations up to the limit
             random.shuffle(additional_combinations)
             combinations.extend(additional_combinations[:remaining_slots])
         
-        logger.info(f"Generated {len(combinations)} dual-value combinations with priority order")
+        logger.info(f"🎯 FINAL RESULT - Generated {len(combinations)} transformation combinations:")
+        for i, combo in enumerate(combinations):
+            logger.info(f"  {i+1}. {combo}")
         return combinations
     
     def apply_intelligent_sampling(self, combinations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -358,27 +407,22 @@ class TransformationSchema:
     
     def get_combination_count_estimate(self) -> int:
         """Estimate total images per original INCLUDING the original
-
-        Rules:
-        - Resize is baseline (handled elsewhere) and does not increase combinations
-        - Dual-value tools (rotate, brightness, contrast, shear, hue): total = 1 + 2^(dual_count)
-        - If no dual-value tools: total = 1 + (1 if any regular tool is present else 0)
+        
+        ✅ Uses centralized calculation function for consistency
         """
-        enabled_transformations = [t for t in self.transformations if t.enabled]
-        if not enabled_transformations:
-            return 1
+        # Convert to format expected by centralized function
+        transformation_list = []
+        for t in self.transformations:
+            transformation_list.append({
+                'transformation_type': t.tool_type,
+                'enabled': t.enabled,
+                'parameters': t.parameters
+            })
         
-        # Exclude baseline resize from counts
-        filtered = [t for t in enabled_transformations if t.tool_type != 'resize']
-        dual_value_transformations = [t for t in filtered if is_dual_value_transformation(t.tool_type)]
-        regular_transformations = [t for t in filtered if not is_dual_value_transformation(t.tool_type)]
-        
-        if dual_value_transformations:
-            dual_count = len(dual_value_transformations)
-            return 1 + (2 ** dual_count)
-        else:
-            # Single-value only: original + 1 if any regular tool
-            return 1 + (1 if len(regular_transformations) > 0 else 0)
+        # Use centralized calculation from transformation_config
+        from core.transformation_config import calculate_max_images_per_original
+        result = calculate_max_images_per_original(transformation_list)
+        return result.get('max', 1)
     
     def validate_configuration(self) -> Tuple[bool, List[str]]:
         """

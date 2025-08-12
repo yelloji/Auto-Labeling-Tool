@@ -221,7 +221,7 @@ const AnnotatedImageCard = ({ image }) => {
                       />
                       {annotation.class_name && (
                         <text
-                          x={points[0] || 10}s
+                          x={points[0] || 10}
                           y={(points[1] || 10) - 5}
                           fill="#34c426"
                           fontSize="16"
@@ -540,27 +540,32 @@ const ReleaseSection = ({ projectId, datasetId }) => {
   };
 
   const handleContinueToReleaseConfig = () => {
-    // Show the Release Configuration section
-    setShowReleaseConfig(true);
+    // Force refresh by temporarily hiding then showing the config panel
+    setShowReleaseConfig(false);
     
-    // Scroll to the Release Configuration section after a short delay to ensure it's rendered
+    // Use setTimeout to ensure the state update is processed
     setTimeout(() => {
-      const releaseConfigElement = document.querySelector('.release-config-panel, [data-testid="release-config-panel"]');
-      if (releaseConfigElement) {
-        releaseConfigElement.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'start' 
-        });
-      } else {
-        // Fallback: scroll to a reasonable position
-        window.scrollTo({ 
-          top: window.innerHeight, 
-          behavior: 'smooth' 
-        });
-      }
-    }, 100);
-    
-    message.success('Ready to configure your release!');
+      setShowReleaseConfig(true);
+      
+      // Scroll to the Release Configuration section after rendering
+      setTimeout(() => {
+        const releaseConfigElement = document.querySelector('.release-config-panel, [data-testid="release-config-panel"]');
+        if (releaseConfigElement) {
+          releaseConfigElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+          });
+        } else {
+          // Fallback: scroll to a reasonable position
+          window.scrollTo({ 
+            top: window.innerHeight, 
+            behavior: 'smooth' 
+          });
+        }
+      }, 100);
+      
+      message.success('Release configuration updated with latest transformations!');
+    }, 50); // Small delay to ensure state change is processed
   };
 
   const handleCreateRelease = async (releaseConfig) => {
@@ -614,6 +619,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
         preserve_annotations: releaseConfig.preserveAnnotations,
         task_type: releaseConfig.taskType || 'object_detection',
         export_format: releaseConfig.exportFormat || 'yolo_detection',
+        output_format: releaseConfig.imageFormat || 'original', // ✅ Add output_format for image conversion
         include_images: true,
         include_annotations: true,
         verified_only: false,
@@ -742,7 +748,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     });
   };
 
-  // Close download modal
+  // Close download modal and refresh the Release Section state
   const closeDownloadModal = () => {
     setDownloadModal({
       isOpen: false,
@@ -750,6 +756,23 @@ const ReleaseSection = ({ projectId, datasetId }) => {
       isExporting: false,
       exportProgress: null
     });
+    
+    // ✅ REFRESH THE RELEASE SECTION STATE
+    // Clear transformations to show fresh state
+    setTransformations([]);
+    
+    // Hide release config panel to go back to transformation step
+    setShowReleaseConfig(false);
+    
+    // Clear current release version to force new session
+    setCurrentReleaseVersion(null);
+    sessionStorage.removeItem('currentReleaseVersion');
+    
+    // Keep selected datasets as they are still valid for next release
+    // setSelectedDatasets([]); - Commented out to keep dataset selection
+    
+    console.log('✅ Release Section state refreshed after modal close');
+    message.info('Ready to create a new release!');
   };
 
   return (
@@ -883,6 +906,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
 
               {/* Transformation Pipeline */}
               <TransformationSection 
+                key={currentReleaseVersion || 'default'} // ✅ Force re-render when release version changes
                 onTransformationsChange={setTransformations}
                 selectedDatasets={selectedDatasets}
                 onContinue={handleContinueToReleaseConfig}

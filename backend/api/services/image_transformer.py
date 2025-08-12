@@ -745,32 +745,34 @@ class ImageTransformer:
         return cropped.resize((width, height), Image.Resampling.LANCZOS)
     
     def _apply_brightness(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
-        """Adjust image brightness"""
-        # Get percentage value (new format) or fallback to old formats
+        """Adjust image brightness using centralized config bridge"""
+        from core.transformation_config import brightness_percentage_to_factor
+        
+        # Get percentage value (centralized format)
         percentage = params.get('percentage', params.get('adjustment', params.get('factor', 0)))
         
-        # Convert percentage to factor
-        if isinstance(percentage, int) and -50 <= percentage <= 50:
-            # New percentage format (-50 to +50) -> factor (0.5 to 1.5)
-            factor = 1.0 + (percentage / 100.0)
+        # Use centralized bridge function for 100% consistency
+        if isinstance(percentage, (int, float)) and -50 <= percentage <= 50:
+            factor = brightness_percentage_to_factor(percentage)
         else:
-            # Old factor format for backwards compatibility
+            # Fallback for legacy formats
             factor = percentage if percentage > 0 else 1.0
             
         enhancer = ImageEnhance.Brightness(image)
         return enhancer.enhance(factor)
     
     def _apply_contrast(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
-        """Adjust image contrast"""
-        # Get percentage value (new format) or fallback to old formats
+        """Adjust image contrast using centralized config bridge"""
+        from core.transformation_config import contrast_percentage_to_factor
+        
+        # Get percentage value (centralized format)
         percentage = params.get('percentage', params.get('adjustment', params.get('factor', 0)))
         
-        # Convert percentage to factor
-        if isinstance(percentage, int) and -50 <= percentage <= 50:
-            # New percentage format (-50 to +50) -> factor (0.5 to 1.5)
-            factor = 1.0 + (percentage / 100.0)
+        # Use centralized bridge function for 100% consistency
+        if isinstance(percentage, (int, float)) and -50 <= percentage <= 50:
+            factor = contrast_percentage_to_factor(percentage)
         else:
-            # Old factor format for backwards compatibility
+            # Fallback for legacy formats
             factor = percentage if percentage > 0 else 1.0
             
         enhancer = ImageEnhance.Contrast(image)

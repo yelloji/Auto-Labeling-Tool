@@ -1189,7 +1189,9 @@ def create_complete_release_zip(
                     final_image_count += 1
                     
                     # Generate augmented versions (schema-driven priority order)
-                    num_aug_to_generate = max(0, effective_multiplier - 1)
+                    # Use schema's combination count instead of multiplier for accurate generation
+                    schema_combination_count = schema.get_combination_count_estimate() - 1 if schema else 0  # -1 for original
+                    num_aug_to_generate = max(0, schema_combination_count)
                     aug_plan = []
                     if schema:
                         try:

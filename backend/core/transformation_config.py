@@ -421,19 +421,20 @@ SYMMETRIC_TRANSFORMATIONS = [
 # User selects one value, system auto-generates opposite value
 DUAL_VALUE_TRANSFORMATIONS = [
     'rotate',      # -180° to +180°
-    'hue',         # -30 to +30
+    'hue',         # -30° to +30°
     'shear',       # -30° to +30°
-    'brightness',  # -0.5 to +0.5 (relative)
-    'contrast'     # -0.5 to +0.5 (relative)
+    'brightness',  # -50% to +50% (percentage)
+    'contrast'     # -50% to +50% (percentage)
 ]
 
 # Dual-value parameter ranges (for auto-generation)
+# ✅ Updated to match current centralized parameter system
 DUAL_VALUE_RANGES = {
-    'rotate': {'min': -180, 'max': 180, 'step': 0.1, 'default': 0},
-    'hue': {'min': -30, 'max': 30, 'step': 0.1, 'default': 0},
-    'shear': {'min': -30, 'max': 30, 'step': 0.1, 'default': 0},
-    'brightness': {'min': -0.5, 'max': 0.5, 'step': 0.01, 'default': 0},
-    'contrast': {'min': -0.5, 'max': 0.5, 'step': 0.01, 'default': 0}
+    'rotate': {'min': ROTATION_ANGLE_MIN, 'max': ROTATION_ANGLE_MAX, 'step': ROTATION_ANGLE_STEP, 'default': ROTATION_ANGLE_DEFAULT},
+    'hue': {'min': HUE_SHIFT_MIN, 'max': HUE_SHIFT_MAX, 'step': HUE_SHIFT_STEP, 'default': HUE_SHIFT_DEFAULT},
+    'shear': {'min': SHEAR_ANGLE_MIN, 'max': SHEAR_ANGLE_MAX, 'step': SHEAR_ANGLE_STEP, 'default': SHEAR_ANGLE_DEFAULT},
+    'brightness': {'min': BRIGHTNESS_MIN, 'max': BRIGHTNESS_MAX, 'step': BRIGHTNESS_STEP, 'default': BRIGHTNESS_DEFAULT},
+    'contrast': {'min': CONTRAST_MIN, 'max': CONTRAST_MAX, 'step': CONTRAST_STEP, 'default': CONTRAST_DEFAULT}
 }
 
 def is_dual_value_transformation(transformation_type: str) -> bool:
@@ -479,10 +480,25 @@ def calculate_max_images_per_original(transformations: list) -> dict:
     
     baseline_original = 1  # include_original is true in release config
     if dual_value_count > 0:
-        # Dual-value system
-        # Each dual-value tool yields two variants (user and auto/opposite)
-        # We do NOT stack regular single-value tools combinatorially
-        variants = 2 ** dual_value_count
+        # Dual-value system with Priority Order logic
+        # Priority 1: User values (individual) = dual_value_count
+        # Priority 2: Auto values (individual) = dual_value_count  
+        # Priority 3: Combinations (if multiple tools) + regular tool combinations
+        priority1_count = dual_value_count
+        priority2_count = dual_value_count
+        priority3_count = 0
+        
+        # Add Priority 3 combinations for dual-value tools
+        if dual_value_count >= 2:
+            priority3_count += 2  # Both user + Both auto combinations
+            priority3_count += dual_value_count * (dual_value_count - 1)  # Mixed combinations
+        
+        # Add regular tool combinations with dual-value variants
+        if regular_count > 0:
+            total_dual_combinations = priority1_count + priority2_count + priority3_count
+            priority3_count += regular_count * (1 + min(total_dual_combinations, 4))
+        
+        variants = priority1_count + priority2_count + priority3_count
         min_images = baseline_original + variants
         max_images = min_images
         return {
