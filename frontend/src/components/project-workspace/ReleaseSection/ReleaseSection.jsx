@@ -388,6 +388,13 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     }
   }, [projectId]);
 
+  // Monitor transformationKey changes to ensure proper refresh
+  useEffect(() => {
+    if (transformationKey > 0) {
+      console.log('🔄 Transformation section refreshed with key:', transformationKey);
+    }
+  }, [transformationKey]);
+
   // Function to handle viewing dataset details
   const handleViewDatasetDetails = async (dataset) => {
     setDatasetDetailsModal({
@@ -759,24 +766,27 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     });
     
     // ✅ COMPLETE REFRESH OF RELEASE SECTION STATE
-    // Clear transformations to show fresh state
-    setTransformations([]);
-    
-    // Hide release config panel to go back to transformation step
-    setShowReleaseConfig(false);
-    
-    // Clear current release version to force new session
-    setCurrentReleaseVersion(null);
-    sessionStorage.removeItem('currentReleaseVersion');
-    
-    // Force refresh of transformation section by updating key
-    setTransformationKey(prev => prev + 1);
+    // Use setTimeout to ensure state updates happen in correct order
+    setTimeout(() => {
+      // Clear transformations to show fresh state
+      setTransformations([]);
+      
+      // Hide release config panel to go back to transformation step
+      setShowReleaseConfig(false);
+      
+      // Clear current release version to force new session
+      setCurrentReleaseVersion(null);
+      sessionStorage.removeItem('currentReleaseVersion');
+      
+      // Force refresh of transformation section by updating key
+      setTransformationKey(prev => prev + 1);
+      
+      console.log('✅ Release Section state completely refreshed after modal close');
+      message.info('Ready to create a new release!');
+    }, 100); // Small delay to ensure modal closes first
     
     // Keep selected datasets as they are still valid for next release
     // setSelectedDatasets([]); - Commented out to keep dataset selection
-    
-    console.log('✅ Release Section state completely refreshed after modal close');
-    message.info('Ready to create a new release!');
   };
 
   return (
