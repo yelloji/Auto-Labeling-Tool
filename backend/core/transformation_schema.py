@@ -207,9 +207,9 @@ class TransformationSchema:
             logger.info(f"🟠 PRIORITY 2 - Added auto value combination: {combination}")
         
         # PRIORITY 3: Random Combinations (if more images needed)
-        logger.info("Generating Priority 3: Random Combinations")
-        if len(combinations) < self.sampling_config.images_per_original:
-            remaining_slots = self.sampling_config.images_per_original - len(combinations)
+        logger.info(f"Generating Priority 3: Random Combinations (current: {len(combinations)}, target: {self.sampling_config.images_per_original})")
+        remaining_slots = self.sampling_config.images_per_original - len(combinations)
+        if remaining_slots > 0:
             
             # Generate combinations of both user and auto values
             all_values = []
