@@ -152,7 +152,11 @@ class TransformationSchema:
             logger.info(f"  Tool: {t.tool_type}, Params: {t.parameters}, Dual-value: {is_dual_value_transformation(t.tool_type)}")
         
         for transformation in enabled_transformations:
-            if is_dual_value_transformation(transformation.tool_type):
+            # Skip resize as it's a baseline transformation applied to all images
+            if transformation.tool_type == 'resize':
+                logger.info(f"🔄 Skipping resize from combination generation (baseline transformation)")
+                continue
+            elif is_dual_value_transformation(transformation.tool_type):
                 dual_value_transformations.append(transformation)
             else:
                 regular_transformations.append(transformation)
