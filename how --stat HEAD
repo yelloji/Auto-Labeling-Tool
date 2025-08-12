@@ -1,0 +1,22 @@
+[33mf079606[m[33m ([m[1;36mHEAD -> [m[1;32mfinal[m[33m, [m[1;31morigin/final[m[33m)[m Priority 3 combinations working successfully - Fixed resize filter in transformation schema - Fixed Priority 3 combination generation logic - System now generates proper brightness+flip combinations - No duplicates, all transformations working correctly
+database.db
+projects/gevis/dataset/good/val/2-Squares_bmp.rf.b1d7f48704d9f94fb2a220458b90cd8c.jpg
+projects/gevis/releases/.staging_3186e9e0-3aab-44f8-ac7b-70227d6993b3/staging/images/test/dog.jpg
+projects/gevis/releases/restart-1_yolo_detection.zip
+[33m3d364d8[m Fix Priority 3 combination generation logic - Improved logging to show current vs target combination count - Fixed condition check for remaining slots - This should enable brightness+flip combinations to be generated
+backend/core/transformation_schema.py
+[33mff4cb55[m Fix Issue 1: Resize being counted as transformation - Added resize filter in transformation schema to exclude from combination generation - Resize is now properly treated as baseline transformation applied to all images - This should fix the extra image count issue
+backend/core/transformation_schema.py
+[33me24e8b6[m Fix UI refresh inconsistency after download modal close - Added setTimeout to ensure proper state update order - Added useEffect to monitor transformationKey changes - Improved refresh reliability for transformation section
+database.db
+frontend/src/components/project-workspace/ReleaseSection/ReleaseSection.jsx
+projects/gevis/releases/.staging_baf8aeed-f856-4a7a-b157-a04588634264/staging/images/test/dog.jpg
+projects/gevis/releases/check_-2_yolo_detection.zip
+[33me3d55f7[m Current state before fixing remaining issues - Missing user brightness+flip combinations - PNG format conversion not working - Original image naming issues
+database.db
+projects/gevis/releases/.staging_3b0b8b7a-6cac-47f5-9d2b-f4e6a96596e9/staging/images/test/dog.jpg
+projects/gevis/releases/.staging_790094f4-def4-45a0-8049-a3cc6e96e5aa/staging/images/test/dog.jpg
+projects/gevis/releases/.staging_8f378e6d-a07e-488c-a877-530780ef0b83/staging/images/test/dog.jpg
+projects/gevis/releases/chceck-1_yolo_detection.zip
+projects/gevis/releases/check-1_yolo_detection.zip
+projects/gevis/releases/check-3_yolo_detection.zip
