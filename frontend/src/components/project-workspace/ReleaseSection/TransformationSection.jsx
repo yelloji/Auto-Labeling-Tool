@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Space, Row, Col, message, Spin, Empty, Tooltip, Tag, Divider } from 'antd';
+import { Card, Button, Space, Row, Col, message, Spin, Empty, Tooltip, Tag, Divider, Alert } from 'antd';
 import { PlusOutlined, SettingOutlined, DeleteOutlined, CloseOutlined, RocketOutlined } from '@ant-design/icons';
 import TransformationModal from './TransformationModal';
 import { augmentationAPI, imageTransformationsAPI } from '../../../services/api';
@@ -344,6 +344,26 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
         <p className="transformations-description">
           Add image-level transformations to augment your dataset before creating a release.
         </p>
+        {/* Mandatory note for Resize */}
+        {(() => {
+          const all = [...basicTransformations, ...advancedTransformations];
+          const hasResize = all.some(t => {
+            const keys = Object.keys(t?.config || {});
+            return keys.length === 1 && keys[0] === 'resize';
+          });
+          if (!hasResize) {
+            return (
+              <Alert 
+                type="warning" 
+                showIcon 
+                message="Resize is mandatory"
+                description="Please add a Resize transformation (set width/height) to continue to Release Configuration."
+                style={{ marginBottom: 12 }}
+              />
+            );
+          }
+          return null;
+        })()}
 
         <div className="transformations-container">
           {/* Basic Transformations */}
@@ -409,7 +429,7 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
           </div>
         </div>
 
-        {/* Continue Button - Show when transformations exist */}
+        {/* Continue Button - Require Resize to be present */}
         {([...basicTransformations, ...advancedTransformations].length > 0) && (
           <div style={{ 
             marginTop: 24, 
@@ -422,10 +442,27 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
               size="large"
               icon={<RocketOutlined />}
               onClick={() => {
+                const all = [...basicTransformations, ...advancedTransformations];
+                const hasResize = all.some(t => {
+                  const keys = Object.keys(t?.config || {});
+                  return keys.length === 1 && keys[0] === 'resize';
+                });
+                if (!hasResize) {
+                  message.error('Resize is mandatory. Please add a Resize transformation before continuing.');
+                  return;
+                }
                 if (onContinue) {
                   onContinue();
                 }
               }}
+              disabled={(() => {
+                const all = [...basicTransformations, ...advancedTransformations];
+                const hasResize = all.some(t => {
+                  const keys = Object.keys(t?.config || {});
+                  return keys.length === 1 && keys[0] === 'resize';
+                });
+                return !hasResize;
+              })()}
               style={{
                 minWidth: 200,
                 height: 48,

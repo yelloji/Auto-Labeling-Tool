@@ -357,30 +357,28 @@ class TransformationSchema:
         logger.info(f"Updated sampling config: {self.sampling_config}")
     
     def get_combination_count_estimate(self) -> int:
-        """Estimate total number of possible combinations including original"""
+        """Estimate total images per original INCLUDING the original
+
+        Rules:
+        - Resize is baseline (handled elsewhere) and does not increase combinations
+        - Dual-value tools (rotate, brightness, contrast, shear, hue): total = 1 + 2^(dual_count)
+        - If no dual-value tools: total = 1 + (1 if any regular tool is present else 0)
+        """
         enabled_transformations = [t for t in self.transformations if t.enabled]
         if not enabled_transformations:
             return 1
         
-        # Check if we have dual-value transformations
-        dual_value_transformations = [t for t in enabled_transformations if is_dual_value_transformation(t.tool_type)]
-        regular_transformations = [t for t in enabled_transformations if not is_dual_value_transformation(t.tool_type)]
+        # Exclude baseline resize from counts
+        filtered = [t for t in enabled_transformations if t.tool_type != 'resize']
+        dual_value_transformations = [t for t in filtered if is_dual_value_transformation(t.tool_type)]
+        regular_transformations = [t for t in filtered if not is_dual_value_transformation(t.tool_type)]
         
         if dual_value_transformations:
-            # For dual-value system: Calculate based on priority order
             dual_count = len(dual_value_transformations)
-            regular_count = len(regular_transformations)
-            
-            # Minimum guaranteed: 2 * dual_count (user + auto values)
-            # Maximum possible: includes all combinations
-            min_combinations = 2 * dual_count
-            max_combinations = min_combinations + (2 ** dual_count) + (2 ** regular_count)
-            
-            # Return the minimum guaranteed for UI display
-            return min_combinations
+            return 1 + (2 ** dual_count)
         else:
-            # For single-value system: 2^n (including original file)
-            return (2 ** len(enabled_transformations))
+            # Single-value only: original + 1 if any regular tool
+            return 1 + (1 if len(regular_transformations) > 0 else 0)
     
     def validate_configuration(self) -> Tuple[bool, List[str]]:
         """

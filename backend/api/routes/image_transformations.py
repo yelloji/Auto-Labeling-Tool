@@ -750,25 +750,36 @@ def update_user_selected_images(
         if not transformations:
             raise HTTPException(status_code=404, detail=f"No transformations found for release version {release_version}")
         
-        # Get the maximum allowed count from the first transformation
-        max_allowed = transformations[0].transformation_combination_count
-        
-        if max_allowed is None:
-            # Calculate max if not set
-            transformation_list = []
-            for t in transformations:
-                transformation_list.append({
-                    "transformation_type": t.transformation_type,
-                    "enabled": t.is_enabled,
-                    "is_dual_value": t.is_dual_value,
-                    "parameters": t.parameters
-                })
-            
-            result = calculate_max_images_per_original(transformation_list)
+        # Always (re)calculate maximum allowed using current rules
+        transformation_list = []
+        for t in transformations:
+            transformation_list.append({
+                "transformation_type": t.transformation_type,
+                "enabled": t.is_enabled,
+                "is_dual_value": t.is_dual_value,
+                "parameters": t.parameters
+            })
+        result = calculate_max_images_per_original(transformation_list)
+        # Align with schema's dynamic estimate rules
+        try:
+            from core.transformation_schema import TransformationSchema
+            schema = TransformationSchema()
+            schema.load_from_database_records([
+                {
+                    'transformation_type': t['transformation_type'],
+                    'parameters': t['parameters'],
+                    'is_enabled': t['enabled'],
+                    'order_index': 0
+                } for t in transformation_list
+            ])
+            max_allowed = schema.get_combination_count_estimate()
+        except Exception:
             max_allowed = result.get('max', 100)
-            
-            # Update the max count in database
+        # Persist the latest max to DB for visibility/consistency
+        try:
             update_transformation_combination_count(db, release_version)
+        except Exception:
+            pass
         
         # Validate user selection doesn't exceed maximum
         if user_selected_count > max_allowed:
@@ -823,27 +834,37 @@ def get_release_config(
         if not transformations:
             raise HTTPException(status_code=404, detail=f"No transformations found for release version {release_version}")
         
-        # Get configuration from first transformation (all should have same values)
-        first_transformation = transformations[0]
-        max_allowed = first_transformation.transformation_combination_count
-        user_selected = first_transformation.user_selected_images_per_original
-        
-        # Calculate max if not set
-        if max_allowed is None:
-            transformation_list = []
-            for t in transformations:
-                transformation_list.append({
-                    "transformation_type": t.transformation_type,
-                    "enabled": t.is_enabled,
-                    "is_dual_value": t.is_dual_value,
-                    "parameters": t.parameters
-                })
-            
-            result = calculate_max_images_per_original(transformation_list)
+        # Always (re)calculate max using current rules
+        transformation_list = []
+        for t in transformations:
+            transformation_list.append({
+                "transformation_type": t.transformation_type,
+                "enabled": t.is_enabled,
+                "is_dual_value": t.is_dual_value,
+                "parameters": t.parameters
+            })
+        result = calculate_max_images_per_original(transformation_list)
+        try:
+            from core.transformation_schema import TransformationSchema
+            schema = TransformationSchema()
+            schema.load_from_database_records([
+                {
+                    'transformation_type': t['transformation_type'],
+                    'parameters': t['parameters'],
+                    'is_enabled': t['enabled'],
+                    'order_index': 0
+                } for t in transformation_list
+            ])
+            max_allowed = schema.get_combination_count_estimate()
+        except Exception:
             max_allowed = result.get('max', 100)
-            
-            # Update the max count in database
+        # Read user-selected from first transformation (for UI)
+        user_selected = transformations[0].user_selected_images_per_original
+        # Persist updated max
+        try:
             update_transformation_combination_count(db, release_version)
+        except Exception:
+            pass
         
         return {
             "release_version": release_version,

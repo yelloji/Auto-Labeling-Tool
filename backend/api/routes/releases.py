@@ -230,6 +230,38 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         # Generate release ID
         release_id = str(uuid.uuid4())
         
+        # Normalize transformations from various UI shapes to [{type, params}]
+        def _normalize_single_transform(item: dict):
+            if not isinstance(item, dict):
+                return None
+            if item.get("type") and isinstance(item.get("params"), dict):
+                return {"type": item["type"], "params": dict(item["params"]) }
+            if isinstance(item.get("config"), dict):
+                keys = list(item["config"].keys())
+                if len(keys) == 1:
+                    t = keys[0]
+                    params = dict(item["config"][t])
+                    params.pop("enabled", None)
+                    return {"type": t, "params": params}
+            if isinstance(item.get("transformations"), dict):
+                keys = list(item["transformations"].keys())
+                if len(keys) == 1:
+                    t = keys[0]
+                    params = dict(item["transformations"][t])
+                    params.pop("enabled", None)
+                    return {"type": t, "params": params}
+            return None
+
+        normalized_transformations = []
+        try:
+            for itm in (payload.transformations or []):
+                norm = _normalize_single_transform(itm)
+                if norm:
+                    normalized_transformations.append(norm)
+        except Exception as _e:
+            logger.warning(f"Failed to normalize transformations: {_e}")
+            normalized_transformations = payload.transformations or []
+
         # Create release configuration
         config = ReleaseConfig(
             project_id=project_id,
@@ -264,7 +296,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             "version_name": payload.version_name,
             "export_format": payload.export_format,
             "task_type": payload.task_type,
-            "transformations": payload.transformations,
+            "transformations": normalized_transformations,
             "multiplier": payload.multiplier,
             "preserve_annotations": payload.preserve_annotations,
             "include_images": payload.include_images,
@@ -304,7 +336,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 dataset_ids=payload.dataset_ids,
                 project_name=project.name,
                 config=config,
-                transformations=payload.transformations,
+                transformations=normalized_transformations,
                 multiplier=payload.multiplier,
                 zip_path=model_path
             )
@@ -869,16 +901,49 @@ def create_complete_release_zip(
     
     logger.info(f"Creating complete release ZIP for {len(dataset_ids)} datasets")
     
-    # Create temporary directory for staging
-    with tempfile.TemporaryDirectory() as temp_dir:
-        staging_dir = os.path.join(temp_dir, "staging")
-        os.makedirs(staging_dir, exist_ok=True)
+    # Prefer a project-local staging dir (same drive as final ZIP) to avoid Windows temp issues
+    # Use a hidden staging directory (prefixed with a dot) so it isn't visible to users
+    staging_root = os.path.join(os.path.dirname(zip_path), f".staging_{release_id}")
+    if os.path.exists(staging_root):
+        try:
+            shutil.rmtree(staging_root, ignore_errors=True)
+        except Exception:
+            pass
+    os.makedirs(staging_root, exist_ok=True)
+    # On Windows, also mark the folder as hidden
+    try:
+        if os.name == 'nt':
+            import ctypes
+            FILE_ATTRIBUTE_HIDDEN = 0x02
+            ctypes.windll.kernel32.SetFileAttributesW(staging_root, FILE_ATTRIBUTE_HIDDEN)
+    except Exception:
+        pass
+    staging_dir = os.path.join(staging_root, "staging")
+    os.makedirs(staging_dir, exist_ok=True)
+    try:
         
         # Create split directories
         for split in ["train", "val", "test"]:
             os.makedirs(os.path.join(staging_dir, "images", split), exist_ok=True)
             os.makedirs(os.path.join(staging_dir, "labels", split), exist_ok=True)
         
+        # Step 0: Build dual-value map from DB if available for this release version
+        db_dual_value_map = {}
+        try:
+            release_version = getattr(config, 'release_name', None) or getattr(config, 'project_id', None)  # attempt to get version name
+            # Prefer config.release_name which is payload.version_name in create_release
+            release_version = getattr(config, 'release_name', None)
+            if release_version:
+                db_transforms = db.query(ImageTransformation).filter(
+                    ImageTransformation.release_version == release_version
+                ).all()
+                for t in db_transforms:
+                    # Expect dual_value_parameters like {"angle": {"user_value": x, "auto_value": y}}
+                    if getattr(t, 'dual_value_enabled', False) and getattr(t, 'dual_value_parameters', None):
+                        db_dual_value_map.setdefault(t.transformation_type, {}).update(t.dual_value_parameters)
+        except Exception as _e:
+            logger.warning(f"Failed building DB dual-value map: {_e}")
+
         # Step 1: Aggregate images by split across all datasets
         all_images_by_split = {"train": [], "val": [], "test": []}
         class_names = set()
@@ -911,7 +976,7 @@ def create_complete_release_zip(
                     if image_file.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
                         image_path = os.path.join(split_path, image_file)
                         
-                        # Get corresponding annotations from database
+                    # Get corresponding annotations from database
                         db_image = db.query(Image).filter(
                             Image.dataset_id == dataset_id,
                             Image.filename == image_file,
@@ -940,6 +1005,36 @@ def create_complete_release_zip(
                             })
         
         logger.info(f"Aggregated images: train={len(all_images_by_split['train'])}, val={len(all_images_by_split['val'])}, test={len(all_images_by_split['test'])}")
+
+        # Prepare central schema once for priority-order generation
+        schema = None
+        try:
+            from core.transformation_schema import TransformationSchema
+            schema = TransformationSchema()
+            schema.load_from_database_records([
+                {
+                    'transformation_type': t.get('type'),
+                    'parameters': t.get('params', {}),
+                    'is_enabled': True,
+                    'order_index': idx
+                } for idx, t in enumerate(transformations or [])
+            ])
+            # images_per_original means augmented images per original (exclude original)
+            schema.set_sampling_config(images_per_original=max(0, multiplier - 1), strategy="intelligent")
+        except Exception as _e:
+            logger.warning(f"Schema initialization failed, will use fallback generation: {_e}")
+
+        # Baseline resize params if present (applied to all outputs)
+        resize_baseline_params = None
+        try:
+            for bt in (transformations or []):
+                if bt.get("type") == "resize":
+                    rp = dict(bt.get("params", {}))
+                    rp["enabled"] = True
+                    resize_baseline_params = rp
+                    break
+        except Exception:
+            resize_baseline_params = None
         
         # Step 2: Apply augmentation to each split
         final_image_count = 0
@@ -949,6 +1044,31 @@ def create_complete_release_zip(
                 continue
                 
             logger.info(f"Processing {split} split with {len(images)} images, {multiplier}x multiplier")
+
+            # Compute a cap on unique variants per original using central schema rules
+            try:
+                from core.transformation_schema import TransformationSchema
+                schema = TransformationSchema()
+                schema.load_from_database_records([
+                    {
+                        'transformation_type': t.get('type'),
+                        'parameters': t.get('params', {}),
+                        'is_enabled': True,
+                        'order_index': idx
+                    } for idx, t in enumerate(transformations or [])
+                ])
+                total_with_original = schema.get_combination_count_estimate()
+                variant_cap = max(0, int(total_with_original) - 1)
+            except Exception:
+                variant_cap = max(0, (len(transformations or []) > 0) and 1 or 0)
+            effective_multiplier = 1 + max(0, min((multiplier - 1), variant_cap))
+            # Extra safety: ensure split directories exist
+            try:
+                safe_split = split if split in ["train", "val", "test"] else "train"
+                os.makedirs(os.path.join(staging_dir, "images", safe_split), exist_ok=True)
+                os.makedirs(os.path.join(staging_dir, "labels", safe_split), exist_ok=True)
+            except Exception as _e:
+                logger.warning(f"Failed to ensure split directories for {split}: {_e}")
             
             for img_data in images:
                 # Copy original image
@@ -956,40 +1076,213 @@ def create_complete_release_zip(
                 original_path = img_data["image_path"]
                 
                 if os.path.exists(original_path):
-                    # Copy original image
-                    dest_path = os.path.join(staging_dir, "images", split, original_filename)
-                    shutil.copy2(original_path, dest_path)
+                    # Destination path for original image in staging
+                    safe_split = split if split in ["train", "val", "test"] else "train"
+                    dest_path = os.path.join(staging_dir, "images", safe_split, original_filename)
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+
+                    # If a resize transformation is present, apply it to originals too
+                    resize_only_config = None
+                    try:
+                        for t in (transformations or []):
+                            if t.get("type") == "resize":
+                                params = dict(t.get("params", {}))
+                                params["enabled"] = True
+                                resize_only_config = {"resize": params}
+                                break
+                    except Exception:
+                        resize_only_config = None
+
+                    if resize_only_config:
+                        try:
+                            from ..services.image_transformer import ImageTransformer as FullTransformer
+                            transformer = FullTransformer()
+                            from PIL import Image as PILImage
+                            pil_img = PILImage.open(original_path).convert('RGB')
+                            resized_img = transformer.apply_transformations(pil_img, resize_only_config)
+                            resized_img.save(dest_path)
+                        except Exception as _e:
+                            logger.warning(f"Failed to apply resize to original; copying instead: {_e}")
+                            try:
+                                shutil.copy2(original_path, dest_path)
+                            except Exception as _e2:
+                                logger.warning(f"copy2 failed, falling back to manual copy: {_e2}")
+                                try:
+                                    with open(original_path, 'rb') as src, open(dest_path, 'wb') as dst:
+                                        dst.write(src.read())
+                                except Exception as _e3:
+                                    logger.error(f"Manual copy failed for {dest_path}: {_e3}")
+                                    raise
+                    else:
+                        # No resize requested → copy original
+                        try:
+                            shutil.copy2(original_path, dest_path)
+                        except Exception as _e2:
+                            logger.warning(f"copy2 failed, falling back to manual copy: {_e2}")
+                            try:
+                                with open(original_path, 'rb') as src, open(dest_path, 'wb') as dst:
+                                    dst.write(src.read())
+                            except Exception as _e3:
+                                logger.error(f"Manual copy failed for {dest_path}: {_e3}")
+                                raise
                     
-                    # Create label file
-                    label_content = create_yolo_label_content(img_data["annotations"], img_data["db_image"])
+                    # Create label file (choose detection vs segmentation)
+                    try:
+                        if config and getattr(config, 'task_type', None) == 'segmentation' and getattr(config, 'export_format', '').lower() in ["yolo", "yolo_segmentation"]:
+                            label_mode = "yolo_segmentation"
+                        else:
+                            label_mode = "yolo_detection"
+                    except Exception:
+                        label_mode = "yolo_detection"
+
+                    # Write labels for original: if resize is applied, transform labels accordingly
                     label_filename = os.path.splitext(original_filename)[0] + ".txt"
-                    label_path = os.path.join(staging_dir, "labels", split, label_filename)
-                    
-                    with open(label_path, 'w') as f:
-                        f.write(label_content)
+                    label_path = os.path.join(staging_dir, "labels", safe_split, label_filename)
+                    os.makedirs(os.path.dirname(label_path), exist_ok=True)
+                    try:
+                        if resize_only_config and label_mode == "yolo_detection":
+                            from core.annotation_transformer import transform_detection_annotations_to_yolo
+                            # If resize applied, use resulting size; otherwise db image size
+                            try:
+                                from PIL import Image as PILImage
+                                _tmp_img = PILImage.open(dest_path)
+                                img_w, img_h = _tmp_img.size
+                            except Exception:
+                                img_w = int(getattr(img_data["db_image"], 'width', 640))
+                                img_h = int(getattr(img_data["db_image"], 'height', 480))
+                            yolo_lines = transform_detection_annotations_to_yolo(
+                                annotations=img_data["annotations"],
+                                img_w=img_w,
+                                img_h=img_h,
+                                transform_config=resize_only_config,
+                            )
+                            with open(label_path, 'w') as f:
+                                f.write("\n".join(yolo_lines))
+                        elif resize_only_config and label_mode == "yolo_segmentation":
+                            from core.annotation_transformer import transform_segmentation_annotations_to_yolo
+                            try:
+                                from PIL import Image as PILImage
+                                _tmp_img = PILImage.open(dest_path)
+                                img_w, img_h = _tmp_img.size
+                            except Exception:
+                                img_w = int(getattr(img_data["db_image"], 'width', 640))
+                                img_h = int(getattr(img_data["db_image"], 'height', 480))
+                            seg_lines = transform_segmentation_annotations_to_yolo(
+                                annotations=img_data["annotations"],
+                                img_w=img_w,
+                                img_h=img_h,
+                                transform_config=resize_only_config,
+                            )
+                            with open(label_path, 'w') as f:
+                                f.write("\n".join(seg_lines))
+                        else:
+                            # No resize: use original content
+                            label_content = create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode)
+                            with open(label_path, 'w') as f:
+                                f.write(label_content)
+                    except Exception as _e:
+                        logger.warning(f"Failed to write original labels (resize-aware): {_e}")
+                        label_content = create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode)
+                        with open(label_path, 'w') as f:
+                            f.write(label_content)
                     
                     final_image_count += 1
                     
-                    # Generate augmented versions
-                    if multiplier > 1:
-                        for aug_idx in range(1, multiplier):
-                            aug_filename = f"{os.path.splitext(original_filename)[0]}_aug_{aug_idx}{os.path.splitext(original_filename)[1]}"
-                            aug_dest_path = os.path.join(staging_dir, "images", split, aug_filename)
-                            
-                            # ✅ Generate different transformations for each augmented image
-                            aug_transformations = generate_augmented_transformations(transformations, aug_idx)
-                            
-                            # Apply transformations
-                            augmented_image = apply_transformations_to_image(original_path, aug_transformations)
-                            if augmented_image:
+                    # Generate augmented versions (schema-driven priority order)
+                    num_aug_to_generate = max(0, effective_multiplier - 1)
+                    aug_plan = []
+                    if schema:
+                        try:
+                            image_id_local = os.path.splitext(original_filename)[0]
+                            aug_plan = schema.generate_transformation_configs_for_image(image_id_local)[:num_aug_to_generate]
+                        except Exception as _e:
+                            logger.warning(f"Schema plan failed for {original_filename}: {_e}")
+                            aug_plan = []
+                    if not aug_plan and num_aug_to_generate > 0:
+                        # Fallback: replicate payload transformations as a single plan
+                        base_transforms_dict = {}
+                        for t in (transformations or []):
+                            t_type = t.get('type')
+                            if t_type:
+                                base_transforms_dict[t_type] = t.get('params', {})
+                        aug_plan = [{"transformations": base_transforms_dict} for _ in range(num_aug_to_generate)]
+
+                    for aug_idx, plan in enumerate(aug_plan, start=1):
+                        aug_filename = f"{os.path.splitext(original_filename)[0]}_aug_{aug_idx}{os.path.splitext(original_filename)[1]}"
+                        aug_dest_path = os.path.join(staging_dir, "images", safe_split, aug_filename)
+                        os.makedirs(os.path.dirname(aug_dest_path), exist_ok=True)
+                        
+                        # Use centralized ImageTransformer for all tool types
+                        try:
+                                from ..services.image_transformer import ImageTransformer as FullTransformer
+                                transformer = FullTransformer()
+                                # Build config dict from schema plan
+                                config_dict = {}
+                                try:
+                                    for k, v in (plan.get('transformations') or {}).items():
+                                        cfg = dict(v)
+                                        cfg["enabled"] = True
+                                        config_dict[k] = cfg
+                                except Exception:
+                                    pass
+                                # Append baseline resize last
+                                resize_params_for_aug = resize_baseline_params
+                                if resize_params_for_aug:
+                                    config_dict["resize"] = resize_params_for_aug
+                                # Load PIL image and apply
+                                from PIL import Image as PILImage
+                                pil_img = PILImage.open(original_path).convert('RGB')
+                                augmented_image = transformer.apply_transformations(pil_img, config_dict)
+                        except Exception as _e:
+                            logger.warning(f"Falling back to simple apply for {original_path}: {_e}")
+                            augmented_image = None
+                        if augmented_image:
+                                # Safety: if resize target specified, enforce final size
+                                try:
+                                    if resize_params_for_aug:
+                                        target_w = int(resize_params_for_aug.get("width") or 0)
+                                        target_h = int(resize_params_for_aug.get("height") or 0)
+                                        if target_w > 0 and target_h > 0:
+                                            if augmented_image.size != (target_w, target_h):
+                                                augmented_image = augmented_image.resize((target_w, target_h))
+                                except Exception:
+                                    pass
                                 augmented_image.save(aug_dest_path)
                                 
-                                # Create corresponding label (same as original for now)
+                                # Create corresponding label updated for transforms
                                 aug_label_filename = os.path.splitext(aug_filename)[0] + ".txt"
-                                aug_label_path = os.path.join(staging_dir, "labels", split, aug_label_filename)
-                                
-                                with open(aug_label_path, 'w') as f:
-                                    f.write(label_content)
+                                aug_label_path = os.path.join(staging_dir, "labels", safe_split, aug_label_filename)
+                                os.makedirs(os.path.dirname(aug_label_path), exist_ok=True)
+                                try:
+                                    if label_mode == "yolo_detection":
+                                        from core.annotation_transformer import transform_detection_annotations_to_yolo
+                                        img_w, img_h = augmented_image.size
+                                        yolo_lines = transform_detection_annotations_to_yolo(
+                                            annotations=img_data["annotations"],
+                                            img_w=img_w,
+                                            img_h=img_h,
+                                            transform_config=config_dict,
+                                        )
+                                        with open(aug_label_path, 'w') as f:
+                                            f.write("\n".join(yolo_lines))
+                                    elif label_mode == "yolo_segmentation":
+                                        from core.annotation_transformer import transform_segmentation_annotations_to_yolo
+                                        img_w, img_h = augmented_image.size
+                                        seg_lines = transform_segmentation_annotations_to_yolo(
+                                            annotations=img_data["annotations"],
+                                            img_w=img_w,
+                                            img_h=img_h,
+                                            transform_config=config_dict,
+                                        )
+                                        with open(aug_label_path, 'w') as f:
+                                            f.write("\n".join(seg_lines))
+                                    else:
+                                        with open(aug_label_path, 'w') as f:
+                                            f.write("")
+                                except Exception as _e:
+                                    logger.warning(f"Failed to create transformed aug labels: {_e}")
+                                    with open(aug_label_path, 'w') as f:
+                                        f.write(create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode))
                                 
                                 final_image_count += 1
         
@@ -1022,10 +1315,21 @@ def create_complete_release_zip(
                     zipf.write(file_path, arc_path)
         
         logger.info(f"Successfully created ZIP file: {zip_path}")
+    finally:
+        # Cleanup staging
+        try:
+            shutil.rmtree(staging_root, ignore_errors=True)
+        except Exception:
+            pass
 
 
-def create_yolo_label_content(annotations, db_image) -> str:
-    """Create YOLO format label content from database annotations"""
+def create_yolo_label_content(annotations, db_image, mode: str = "yolo_detection") -> str:
+    """
+    Create YOLO format label content from database annotations.
+    mode:
+      - "yolo_detection": one line per bbox → "class cx cy w h" (normalized)
+      - "yolo_segmentation": one line per polygon → "class x1 y1 x2 y2 ..." (normalized)
+    """
     if not annotations:
         return ""
     
@@ -1037,40 +1341,111 @@ def create_yolo_label_content(annotations, db_image) -> str:
         # Get class ID (default to 0 if not available)
         class_id = getattr(ann, 'class_id', 0)
         
-        # Get bounding box coordinates
-        if hasattr(ann, 'bbox') and ann.bbox:
-            # Parse bbox if it's a string
-            if isinstance(ann.bbox, str):
+        # YOLO Segmentation: prefer polygons if requested
+        if mode == "yolo_segmentation":
+            seg = getattr(ann, 'segmentation', None)
+            # Parse JSON string if needed
+            if isinstance(seg, str):
                 try:
-                    bbox = json.loads(ann.bbox)
-                except:
-                    bbox = [0.25, 0.25, 0.75, 0.75]  # Default bbox
+                    seg = json.loads(seg)
+                except Exception:
+                    seg = None
+            points = []
+            if isinstance(seg, list) and len(seg) > 0:
+                # 1) list of {x,y}
+                if isinstance(seg[0], dict) and 'x' in seg[0] and 'y' in seg[0]:
+                    points = [(float(p['x']), float(p['y'])) for p in seg]
+                # 2) [[x1,y1,x2,y2,...]]
+                elif isinstance(seg[0], list):
+                    flat = seg[0]
+                    for i in range(0, len(flat) - 1, 2):
+                        points.append((float(flat[i]), float(flat[i+1])))
+                # 3) [x1,y1,x2,y2,...]
+                else:
+                    flat = seg
+                    for i in range(0, len(flat) - 1, 2):
+                        points.append((float(flat[i]), float(flat[i+1])))
+
+            if points:
+                # Detect normalized vs pixel
+                max_val = max([max(px, py) for px, py in points]) if points else 0
+                is_norm = max_val <= 1.0
+                norm_vals = []
+                for px, py in points:
+                    nx = px if is_norm else (px / max(1, image_width))
+                    ny = py if is_norm else (py / max(1, image_height))
+                    nx = max(0.0, min(1.0, nx))
+                    ny = max(0.0, min(1.0, ny))
+                    norm_vals.extend([f"{nx:.6f}", f"{ny:.6f}"])
+                if len(norm_vals) >= 6:  # at least 3 points
+                    lines.append(f"{class_id} " + " ".join(norm_vals))
+                    continue  # done for this annotation
+
+        # Detection path: prefer explicit x_min/x_max if present
+        if all(hasattr(ann, f) for f in ("x_min", "y_min", "x_max", "y_max")):
+            x_min = float(getattr(ann, 'x_min', 0.0))
+            y_min = float(getattr(ann, 'y_min', 0.0))
+            x_max = float(getattr(ann, 'x_max', 0.0))
+            y_max = float(getattr(ann, 'y_max', 0.0))
+
+            is_norm = max(x_min, y_min, x_max, y_max) <= 1.0
+            if is_norm:
+                cx = (x_min + x_max) / 2.0
+                cy = (y_min + y_max) / 2.0
+                w = (x_max - x_min)
+                h = (y_max - y_min)
             else:
-                bbox = ann.bbox
-            
-            # Convert to YOLO format (normalized center coordinates)
-            x_min, y_min, x_max, y_max = bbox[:4]
-            
-            center_x = (x_min + x_max) / 2.0 / image_width
-            center_y = (y_min + y_max) / 2.0 / image_height
-            width = (x_max - x_min) / image_width
-            height = (y_max - y_min) / image_height
-            
-            # Ensure values are within [0, 1]
-            center_x = max(0, min(1, center_x))
-            center_y = max(0, min(1, center_y))
-            width = max(0, min(1, width))
-            height = max(0, min(1, height))
-            
-            lines.append(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}")
-        else:
-            # Default annotation if no bbox available
-            lines.append(f"{class_id} 0.5 0.5 0.3 0.3")
+                cx = ((x_min + x_max) / 2.0) / max(1, image_width)
+                cy = ((y_min + y_max) / 2.0) / max(1, image_height)
+                w = (x_max - x_min) / max(1, image_width)
+                h = (y_max - y_min) / max(1, image_height)
+
+            cx = max(0.0, min(1.0, cx))
+            cy = max(0.0, min(1.0, cy))
+            w = max(0.0, min(1.0, w))
+            h = max(0.0, min(1.0, h))
+            lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
+            continue
+
+        # Legacy bbox fallback
+        if hasattr(ann, 'bbox') and ann.bbox:
+            bbox_raw = ann.bbox
+            if isinstance(bbox_raw, str):
+                try:
+                    bbox = json.loads(bbox_raw)
+                except Exception:
+                    bbox = None
+            else:
+                bbox = bbox_raw
+
+            if bbox and len(bbox) >= 4:
+                x_min, y_min, x_max, y_max = bbox[:4]
+                is_norm = max(x_min, y_min, x_max, y_max) <= 1.0
+                if is_norm:
+                    cx = (x_min + x_max) / 2.0
+                    cy = (y_min + y_max) / 2.0
+                    w = (x_max - x_min)
+                    h = (y_max - y_min)
+                else:
+                    cx = ((x_min + x_max) / 2.0) / max(1, image_width)
+                    cy = ((y_min + y_max) / 2.0) / max(1, image_height)
+                    w = (x_max - x_min) / max(1, image_width)
+                    h = (y_max - y_min) / max(1, image_height)
+
+                cx = max(0.0, min(1.0, cx))
+                cy = max(0.0, min(1.0, cy))
+                w = max(0.0, min(1.0, w))
+                h = max(0.0, min(1.0, h))
+                lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
+                continue
+
+        # No usable annotation → skip (do not write dummy)
+        continue
     
     return "\n".join(lines)
 
 
-def generate_augmented_transformations(base_transformations: List[dict], aug_idx: int) -> List[dict]:
+def generate_augmented_transformations(base_transformations: List[dict], aug_idx: int, db_dual_value_map: Dict[str, Dict[str, Dict[str, float]]] = None) -> List[dict]:
     """
     Generate different transformation parameters for each augmented image
     
@@ -1081,31 +1456,96 @@ def generate_augmented_transformations(base_transformations: List[dict], aug_idx
     - etc.
     """
     augmented_transformations = []
+    # Import dual-value helpers lazily to avoid circular deps
+    try:
+        from core.transformation_config import (
+            is_dual_value_transformation,
+            generate_auto_value,
+        )
+    except Exception:
+        def is_dual_value_transformation(_t):
+            return _t in {"rotate", "brightness", "contrast", "shear", "hue"}
+        def generate_auto_value(_t, val):
+            try:
+                return -val
+            except Exception:
+                return val
     
     for transform in base_transformations:
-        if transform.get("type") == "rotate":
-            base_angle = transform.get("params", {}).get("angle", 0)
-            
-            # Generate different angles for each augmentation
-            if aug_idx == 1:
-                # First augmentation: negative angle
-                new_angle = -base_angle
-            elif aug_idx == 2:
-                # Second augmentation: positive angle  
-                new_angle = base_angle
+        t_type = transform.get("type")
+        t_params = dict(transform.get("params", {}))
+
+        # Handle rotate specially for angle parameter
+        if t_type == "rotate":
+            base_angle = t_params.get("angle", 0)
+            # If DB provides auto value, prefer it
+            if db_dual_value_map and db_dual_value_map.get("rotate", {}).get("angle"):
+                dv = db_dual_value_map["rotate"]["angle"]
+                user_val = dv.get("user_value", base_angle)
+                auto_val = dv.get("auto_value", -user_val)
+                if aug_idx == 1:
+                    new_angle = auto_val
+                elif aug_idx == 2:
+                    new_angle = user_val
+                else:
+                    new_angle = user_val if (aug_idx % 2 == 0) else auto_val
             else:
-                # Additional augmentations: multiples
-                new_angle = base_angle * aug_idx
-                
-            augmented_transform = {
-                "type": "rotate",
-                "params": {"angle": new_angle}
-            }
-            augmented_transformations.append(augmented_transform)
-            
-        else:
-            # For other transformations, keep the same for now
-            augmented_transformations.append(transform.copy())
+            # Alternate angle across aug_idx: odd → auto opposite, even → user value, >2 → multiples
+                if aug_idx == 1:
+                    new_angle = generate_auto_value("rotate", base_angle)
+                elif aug_idx == 2:
+                    new_angle = base_angle
+                else:
+                    # scale but clamp to reasonable range
+                    new_angle = max(-180, min(180, base_angle * (1 if aug_idx % 2 == 0 else -1)))
+            t_params["angle"] = new_angle
+            augmented_transformations.append({"type": t_type, "params": t_params})
+            continue
+
+        # Dual-value transformations: brightness, contrast, shear, hue
+        if is_dual_value_transformation(t_type):
+            # Pick a primary numeric parameter to invert
+            key_order = [
+                ("brightness", ["percentage", "factor"]),
+                ("contrast", ["percentage", "factor"]),
+                ("shear", ["shear_angle", "angle"]),
+                ("hue", ["hue_shift", "hue"]),
+            ]
+            # Find the actual param name present for this transform
+            active_key = None
+            for _, candidates in key_order:
+                for c in candidates:
+                    if c in t_params:
+                        active_key = c
+                        break
+                if active_key:
+                    break
+
+            if active_key is not None and isinstance(t_params.get(active_key), (int, float)):
+                base_val = t_params[active_key]
+                # Prefer DB dual-value if available
+                if db_dual_value_map and db_dual_value_map.get(t_type, {}).get(active_key):
+                    dv = db_dual_value_map[t_type][active_key]
+                    user_val = dv.get("user_value", base_val)
+                    auto_val = dv.get("auto_value", generate_auto_value(t_type, user_val))
+                    if aug_idx == 1:
+                        new_val = auto_val
+                    elif aug_idx == 2:
+                        new_val = user_val
+                    else:
+                        new_val = user_val if (aug_idx % 2 == 0) else auto_val
+                else:
+                    if aug_idx == 1:
+                        new_val = generate_auto_value(t_type, base_val)
+                    elif aug_idx == 2:
+                        new_val = base_val
+                    else:
+                        # alternate sign for subsequent augs
+                        new_val = base_val if (aug_idx % 2 == 0) else generate_auto_value(t_type, base_val)
+                t_params[active_key] = new_val
+
+        # Default: keep other params as-is
+        augmented_transformations.append({"type": t_type, "params": t_params})
     
     return augmented_transformations
 

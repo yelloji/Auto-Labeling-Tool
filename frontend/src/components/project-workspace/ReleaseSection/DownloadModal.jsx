@@ -11,6 +11,7 @@ const DownloadModal = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState('');
+  const [packageInfo, setPackageInfo] = useState(null);
 
   // Add debugging logs
   console.log('DownloadModal props:', { isOpen, release, isExporting, exportProgress });
@@ -34,6 +35,24 @@ const DownloadModal = ({
       }
     }
   }, [release]);
+
+  // After export completes, fetch package-info to show accurate counts
+  useEffect(() => {
+    const fetchPackageInfo = async () => {
+      try {
+        if (!isExporting && release?.id) {
+          const resp = await fetch(`${API_BASE_URL}/api/v1/releases/${release.id}/package-info`);
+          if (resp.ok) {
+            const data = await resp.json();
+            setPackageInfo(data);
+          }
+        }
+      } catch (e) {
+        // Non-blocking
+      }
+    };
+    fetchPackageInfo();
+  }, [isExporting, release]);
 
   const copyToClipboard = async (text) => {
     try {
@@ -164,9 +183,10 @@ const DownloadModal = ({
                   </span>
                   <span className="stat-item">
                     <span className="stat-icon">🖼️</span>
-                    Images: {release?.final_image_count || 
-                             (release?.original_image_count + release?.augmented_image_count) || 
-                             (release?.total_original_images || 0) + (release?.total_augmented_images || 0) || 
+                    Images: {packageInfo?.file_counts?.images?.total ||
+                             release?.final_image_count ||
+                             ((release?.original_image_count || 0) + (release?.augmented_image_count || 0)) ||
+                             ((release?.total_original_images || 0) + (release?.total_augmented_images || 0)) ||
                              'N/A'}
                   </span>
                   <span className="stat-item">
