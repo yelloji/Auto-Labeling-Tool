@@ -339,6 +339,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
   const [selectedDatasets, setSelectedDatasets] = useState([]);
   const [showReleaseConfig, setShowReleaseConfig] = useState(false); // New state to control Release Config visibility
   const [currentReleaseVersion, setCurrentReleaseVersion] = useState(null); // Shared release version state
+  const [transformationKey, setTransformationKey] = useState(0); // Force refresh transformation section
   const [datasetDetailsModal, setDatasetDetailsModal] = useState({
     visible: false,
     dataset: null,
@@ -757,7 +758,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
       exportProgress: null
     });
     
-    // ✅ REFRESH THE RELEASE SECTION STATE
+    // ✅ COMPLETE REFRESH OF RELEASE SECTION STATE
     // Clear transformations to show fresh state
     setTransformations([]);
     
@@ -768,10 +769,13 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     setCurrentReleaseVersion(null);
     sessionStorage.removeItem('currentReleaseVersion');
     
+    // Force refresh of transformation section by updating key
+    setTransformationKey(prev => prev + 1);
+    
     // Keep selected datasets as they are still valid for next release
     // setSelectedDatasets([]); - Commented out to keep dataset selection
     
-    console.log('✅ Release Section state refreshed after modal close');
+    console.log('✅ Release Section state completely refreshed after modal close');
     message.info('Ready to create a new release!');
   };
 
@@ -906,7 +910,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
 
               {/* Transformation Pipeline */}
               <TransformationSection 
-                key={currentReleaseVersion || 'default'} // ✅ Force re-render when release version changes
+                key={`${currentReleaseVersion || 'default'}-${transformationKey}`} // ✅ Force re-render when release version changes or after modal close
                 onTransformationsChange={setTransformations}
                 selectedDatasets={selectedDatasets}
                 onContinue={handleContinueToReleaseConfig}

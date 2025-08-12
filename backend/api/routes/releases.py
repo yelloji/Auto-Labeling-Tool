@@ -1057,6 +1057,22 @@ def create_complete_release_zip(
                         'order_index': idx
                     } for idx, t in enumerate(transformations or [])
                 ])
+                # Set proper sampling configuration to enable Priority 3 combinations
+                from core.transformation_config import calculate_max_images_per_original
+                transformation_list = [
+                    {
+                        'transformation_type': t.get('type'),
+                        'enabled': True,
+                        'parameters': t.get('params', {})
+                    } for t in (transformations or [])
+                ]
+                max_images_result = calculate_max_images_per_original(transformation_list)
+                max_images = max_images_result.get('max', 6)  # Default to 6 for brightness+flip
+                schema.set_sampling_config(
+                    images_per_original=max_images,
+                    strategy="intelligent",
+                    fixed_combinations=0
+                )
                 total_with_original = schema.get_combination_count_estimate()
                 variant_cap = max(0, int(total_with_original) - 1)
             except Exception:
@@ -1189,9 +1205,9 @@ def create_complete_release_zip(
                     final_image_count += 1
                     
                     # Generate augmented versions (schema-driven priority order)
-                    # Use schema's combination count instead of multiplier for accurate generation
-                    schema_combination_count = schema.get_combination_count_estimate() - 1 if schema else 0  # -1 for original
-                    num_aug_to_generate = max(0, schema_combination_count)
+                    # Use schema's combination count - centralized function already includes original
+                    schema_combination_count = schema.get_combination_count_estimate() if schema else 1
+                    num_aug_to_generate = max(0, schema_combination_count - 1)  # Subtract 1 for original
                     aug_plan = []
                     if schema:
                         try:
@@ -1210,7 +1226,10 @@ def create_complete_release_zip(
                         aug_plan = [{"transformations": base_transforms_dict} for _ in range(num_aug_to_generate)]
 
                     for aug_idx, plan in enumerate(aug_plan, start=1):
-                        aug_filename = f"{os.path.splitext(original_filename)[0]}_aug_{aug_idx}{os.path.splitext(original_filename)[1]}"
+                        # Generate descriptive suffix based on transformations
+                        transformations_dict = plan.get('transformations', {})
+                        descriptive_suffix = generate_descriptive_suffix(transformations_dict)
+                        aug_filename = f"{os.path.splitext(original_filename)[0]}_{descriptive_suffix}{os.path.splitext(original_filename)[1]}"
                         aug_dest_path = os.path.join(staging_dir, "images", safe_split, aug_filename)
                         os.makedirs(os.path.dirname(aug_dest_path), exist_ok=True)
                         
@@ -1251,7 +1270,7 @@ def create_complete_release_zip(
                                     pass
                                 augmented_image.save(aug_dest_path)
                                 
-                                # Create corresponding label updated for transforms
+                                # Create corresponding label updated for transforms (use same descriptive naming)
                                 aug_label_filename = os.path.splitext(aug_filename)[0] + ".txt"
                                 aug_label_path = os.path.join(staging_dir, "labels", safe_split, aug_label_filename)
                                 os.makedirs(os.path.dirname(aug_label_path), exist_ok=True)
@@ -1572,3 +1591,51 @@ def apply_transformations_to_image(image_path: str, transformations: List[dict])
     except Exception as e:
         logger.error(f"Failed to apply transformations to {image_path}: {str(e)}")
         return None
+
+def generate_descriptive_suffix(transformations: dict) -> str:
+    """
+    Generate descriptive suffix for augmented images based on transformations applied.
+    Example: brightness+50_flip_vertical
+    """
+    parts = []
+    
+    for tool_type, params in transformations.items():
+        if tool_type == 'brightness':
+            percentage = params.get('percentage', params.get('adjustment', 0))
+            if percentage > 0:
+                parts.append(f"brightness+{int(percentage)}")
+            else:
+                parts.append(f"brightness{int(percentage)}")
+        elif tool_type == 'contrast':
+            percentage = params.get('percentage', params.get('adjustment', 0))
+            if percentage > 0:
+                parts.append(f"contrast+{int(percentage)}")
+            else:
+                parts.append(f"contrast{int(percentage)}")
+        elif tool_type == 'rotate':
+            angle = params.get('angle', 0)
+            parts.append(f"rotate{int(angle)}")
+        elif tool_type == 'flip':
+            horizontal = params.get('horizontal', False)
+            vertical = params.get('vertical', False)
+            if horizontal and vertical:
+                parts.append("flip_both")
+            elif horizontal:
+                parts.append("flip_horizontal")
+            elif vertical:
+                parts.append("flip_vertical")
+        elif tool_type == 'resize':
+            width = params.get('width', 0)
+            height = params.get('height', 0)
+            parts.append(f"resize{width}x{height}")
+        elif tool_type == 'blur':
+            radius = params.get('radius', 0)
+            parts.append(f"blur{radius}")
+        elif tool_type == 'noise':
+            intensity = params.get('intensity', 0)
+            parts.append(f"noise{intensity}")
+        else:
+            # Generic fallback
+            parts.append(tool_type)
+    
+    return "_".join(parts) if parts else "aug"
