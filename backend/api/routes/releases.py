@@ -23,6 +23,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from core.release_controller import ReleaseController, ReleaseConfig, create_release_controller
 from core.transformation_schema import generate_release_configurations
 
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 from database.database import get_db
@@ -921,6 +922,12 @@ def create_complete_release_zip(
         pass
     staging_dir = os.path.join(staging_root, "staging")
     os.makedirs(staging_dir, exist_ok=True)
+    # Initialize centralized image format engine once per ZIP build
+    try:
+        from core.image_generator import create_augmentation_engine
+        image_format_engine = create_augmentation_engine(staging_dir)
+    except Exception:
+        image_format_engine = None
     try:
         
         # Create split directories
@@ -1113,14 +1120,15 @@ def create_complete_release_zip(
                     if resize_only_config:
                         try:
                             from ..services.image_transformer import ImageTransformer as FullTransformer
-                            from core.image_generator import ImageGenerator
                             transformer = FullTransformer()
-                            image_generator = ImageGenerator()
                             from PIL import Image as PILImage
                             pil_img = PILImage.open(original_path).convert('RGB')
                             resized_img = transformer.apply_transformations(pil_img, resize_only_config)
                             # Use centralized format conversion
-                            image_generator._save_image_with_format(resized_img, dest_path, config.output_format)
+                            if image_format_engine is not None:
+                                image_format_engine._save_image_with_format(resized_img, dest_path, config.output_format)
+                            else:
+                                resized_img.save(dest_path)
                         except Exception as _e:
                             logger.warning(f"Failed to apply resize to original; copying instead: {_e}")
                             try:
@@ -1136,12 +1144,13 @@ def create_complete_release_zip(
                     else:
                         # No resize requested → copy original with format conversion
                         try:
-                            from core.image_generator import ImageGenerator
-                            image_generator = ImageGenerator()
                             from PIL import Image as PILImage
                             pil_img = PILImage.open(original_path).convert('RGB')
                             # Use centralized format conversion
-                            image_generator._save_image_with_format(pil_img, dest_path, config.output_format)
+                            if image_format_engine is not None:
+                                image_format_engine._save_image_with_format(pil_img, dest_path, config.output_format)
+                            else:
+                                pil_img.save(dest_path)
                         except Exception as _e2:
                             logger.warning(f"Format conversion failed, falling back to copy: {_e2}")
                             try:
@@ -1282,9 +1291,10 @@ def create_complete_release_zip(
                                 except Exception:
                                     pass
                                 # Use centralized format conversion for augmented images
-                                from core.image_generator import ImageGenerator
-                                image_generator = ImageGenerator()
-                                image_generator._save_image_with_format(augmented_image, aug_dest_path, config.output_format)
+                                if image_format_engine is not None:
+                                    image_format_engine._save_image_with_format(augmented_image, aug_dest_path, config.output_format)
+                                else:
+                                    augmented_image.save(aug_dest_path)
                                 
                                 # Create corresponding label updated for transforms (use same descriptive naming)
                                 aug_label_filename = os.path.splitext(aug_filename)[0] + ".txt"
