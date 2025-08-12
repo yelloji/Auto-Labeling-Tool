@@ -73,6 +73,7 @@ class ReleaseCreate(BaseModel):
     include_images: bool = True
     include_annotations: bool = True
     verified_only: bool = False
+    output_format: str = "original"  # Image format: original, jpg, png, webp, bmp, tiff
 
 class DatasetRebalanceRequest(BaseModel):
     train_count: int
@@ -272,7 +273,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             task_type=payload.task_type,
             images_per_original=payload.multiplier,
             sampling_strategy="intelligent",
-            output_format="original",
+            output_format=payload.output_format,
             include_original=True,
             split_sections=["train", "val", "test"],
             preserve_original_splits=True  # Always preserve original splits
@@ -1112,11 +1113,14 @@ def create_complete_release_zip(
                     if resize_only_config:
                         try:
                             from ..services.image_transformer import ImageTransformer as FullTransformer
+                            from core.image_generator import ImageGenerator
                             transformer = FullTransformer()
+                            image_generator = ImageGenerator()
                             from PIL import Image as PILImage
                             pil_img = PILImage.open(original_path).convert('RGB')
                             resized_img = transformer.apply_transformations(pil_img, resize_only_config)
-                            resized_img.save(dest_path)
+                            # Use centralized format conversion
+                            image_generator._save_image_with_format(resized_img, dest_path, config.output_format)
                         except Exception as _e:
                             logger.warning(f"Failed to apply resize to original; copying instead: {_e}")
                             try:
@@ -1130,17 +1134,26 @@ def create_complete_release_zip(
                                     logger.error(f"Manual copy failed for {dest_path}: {_e3}")
                                     raise
                     else:
-                        # No resize requested → copy original
+                        # No resize requested → copy original with format conversion
                         try:
-                            shutil.copy2(original_path, dest_path)
+                            from core.image_generator import ImageGenerator
+                            image_generator = ImageGenerator()
+                            from PIL import Image as PILImage
+                            pil_img = PILImage.open(original_path).convert('RGB')
+                            # Use centralized format conversion
+                            image_generator._save_image_with_format(pil_img, dest_path, config.output_format)
                         except Exception as _e2:
-                            logger.warning(f"copy2 failed, falling back to manual copy: {_e2}")
+                            logger.warning(f"Format conversion failed, falling back to copy: {_e2}")
                             try:
-                                with open(original_path, 'rb') as src, open(dest_path, 'wb') as dst:
-                                    dst.write(src.read())
+                                shutil.copy2(original_path, dest_path)
                             except Exception as _e3:
-                                logger.error(f"Manual copy failed for {dest_path}: {_e3}")
-                                raise
+                                logger.warning(f"copy2 failed, falling back to manual copy: {_e3}")
+                                try:
+                                    with open(original_path, 'rb') as src, open(dest_path, 'wb') as dst:
+                                        dst.write(src.read())
+                                except Exception as _e4:
+                                    logger.error(f"Manual copy failed for {dest_path}: {_e4}")
+                                    raise
                     
                     # Create label file (choose detection vs segmentation)
                     try:
@@ -1268,7 +1281,10 @@ def create_complete_release_zip(
                                                 augmented_image = augmented_image.resize((target_w, target_h))
                                 except Exception:
                                     pass
-                                augmented_image.save(aug_dest_path)
+                                # Use centralized format conversion for augmented images
+                                from core.image_generator import ImageGenerator
+                                image_generator = ImageGenerator()
+                                image_generator._save_image_with_format(augmented_image, aug_dest_path, config.output_format)
                                 
                                 # Create corresponding label updated for transforms (use same descriptive naming)
                                 aug_label_filename = os.path.splitext(aug_filename)[0] + ".txt"
