@@ -568,23 +568,56 @@ const ReleaseSection = ({ projectId, datasetId }) => {
       // Show loading message
       const loadingMessage = message.loading('Creating release...', 0);
       
+      // Normalize transformations from UI shape to backend `{ type, params }`
+      const normalizedTransformations = (transformations || [])
+        .map((t) => {
+          // Case 1: already normalized
+          if (t && t.type && t.params) {
+            return { type: t.type, params: { ...t.params } };
+          }
+          // Case 2: saved UI object with `config: { [type]: params }`
+          if (t && t.config && typeof t.config === 'object') {
+            const keys = Object.keys(t.config);
+            if (keys.length === 1) {
+              const type = keys[0];
+              const params = { ...t.config[type] };
+              // Strip UI-only flags
+              if (params && Object.prototype.hasOwnProperty.call(params, 'enabled')) {
+                delete params.enabled;
+              }
+              return { type, params };
+            }
+          }
+          // Case 3: modal payload shape `transformations: { [type]: params }`
+          if (t && t.transformations && typeof t.transformations === 'object') {
+            const keys = Object.keys(t.transformations);
+            if (keys.length === 1) {
+              const type = keys[0];
+              const params = { ...t.transformations[type] };
+              if (params && Object.prototype.hasOwnProperty.call(params, 'enabled')) {
+                delete params.enabled;
+              }
+              return { type, params };
+            }
+          }
+          return null;
+        })
+        .filter(Boolean);
+
       // Prepare release data for API using the values from the release config form
       const releaseData = {
-        version_name: releaseConfig.name, // ✅ Fixed: backend expects "version_name" not "name"
+        version_name: releaseConfig.name, // ✅ backend expects "version_name"
         dataset_ids: releaseConfig.selectedDatasets,
-        transformations: transformations.map(t => ({
-          type: t.type,
-          params: t.params || {} // Ensure transformations have the correct format with params object
-        })),
+        transformations: normalizedTransformations,
         multiplier: releaseConfig.multiplier,
-        description: "", // Add missing required field
+        description: "",
         preserve_annotations: releaseConfig.preserveAnnotations,
         task_type: releaseConfig.taskType || 'object_detection',
         export_format: releaseConfig.exportFormat || 'yolo_detection',
-        include_images: true, // Add missing required field
-        include_annotations: true, // Add missing required field
-        verified_only: false, // Add missing required field
-        project_id: projectId || 'gevis' // Keep project_id as backend seems to handle it
+        include_images: true,
+        include_annotations: true,
+        verified_only: false,
+        project_id: projectId || 'gevis'
       };
 
       console.log('Creating release with config:', releaseData);
@@ -613,14 +646,15 @@ const ReleaseSection = ({ projectId, datasetId }) => {
         message.success('Release created successfully! Starting export...');
         
         // Prepare release data for the download modal
+        const modalReleaseId = createdRelease.id || createdRelease.release_id;
         const releaseForModal = {
-          id: createdRelease.release_id,
+          id: modalReleaseId,
           name: releaseConfig.name,
           description: `${releaseConfig.exportFormat} export with ${transformations.length} transformations`,
           export_format: releaseConfig.exportFormat,
           final_image_count: releaseConfig.multiplier * (selectedDatasets[0]?.image_count || 0),
           created_at: new Date().toISOString(),
-          model_path: createdRelease.model_path || `/api/v1/releases/${createdRelease.release_id}/download`
+          model_path: createdRelease.model_path || (modalReleaseId ? `/api/v1/releases/${modalReleaseId}/download` : '')
         };
         
         console.log('Opening download modal with release:', releaseForModal);

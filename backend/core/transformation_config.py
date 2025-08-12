@@ -461,25 +461,30 @@ def calculate_max_images_per_original(transformations: list) -> dict:
         return {"min": 1, "max": 1, "has_dual_value": False}
     
     # Count dual-value and regular transformations
+    # IMPORTANT: 'resize' is a mandatory baseline, not combinatorial → exclude from counts
     dual_value_count = 0
     regular_count = 0
     
     for transformation in transformations:
-        if transformation.get('enabled', True):
-            tool_type = transformation.get('transformation_type') or transformation.get('tool_type')
-            if is_dual_value_transformation(tool_type):
-                dual_value_count += 1
-            else:
-                regular_count += 1
+        if not transformation.get('enabled', True):
+            continue
+        tool_type = transformation.get('transformation_type') or transformation.get('tool_type')
+        if tool_type == 'resize':
+            # Baseline resize applies to all images; do not increase combinations
+            continue
+        if is_dual_value_transformation(tool_type):
+            dual_value_count += 1
+        else:
+            regular_count += 1
     
+    baseline_original = 1  # include_original is true in release config
     if dual_value_count > 0:
         # Dual-value system
-        # Minimum: 2 images per dual-value transformation (user + auto)
-        min_images = 2 * dual_value_count
-        
-        # Maximum: includes all possible combinations
-        max_images = min_images + (2 ** dual_value_count) + regular_count
-        
+        # Each dual-value tool yields two variants (user and auto/opposite)
+        # We do NOT stack regular single-value tools combinatorially
+        variants = 2 ** dual_value_count
+        min_images = baseline_original + variants
+        max_images = min_images
         return {
             "min": min_images,
             "max": max_images,
@@ -488,9 +493,9 @@ def calculate_max_images_per_original(transformations: list) -> dict:
             "regular_count": regular_count
         }
     else:
-        # Single-value system
-        total_count = regular_count
-        max_images = 2 ** total_count if total_count > 0 else 1
+        # Single-value system (no dual-value tools)
+        # If there are any regular tools, we expect one variant plus the original
+        max_images = baseline_original + (1 if regular_count > 0 else 0)
         
         return {
             "min": max_images,
