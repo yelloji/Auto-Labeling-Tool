@@ -6,6 +6,66 @@
 
 ---
 
+### **Issue 7: YOLO Labels Always Using Class 0 (Class Index Mapping)**
+**📋 Problem Description:**
+- `labels/*.txt` first column (class index) was often `0` for all annotations even though `data.yaml` listed multiple classes.
+- Training/inspection showed incorrect class distribution.
+
+**🔧 Root Cause Analysis:**
+- Label writer used `ann.class_id` directly or defaulted to `0` when missing.
+- `data.yaml` names were built from class names, but there was no mapping from `class_name`/`class_id` to contiguous YOLO indices.
+- Mismatch between annotation fields (`class_name`, `class_id`) and the exported `names` array ordering caused incorrect indices.
+
+**✅ Solution Implemented:**
+- Build a consistent class index mapping once and use it for ALL label writes.
+  - During export, collect unique class names from annotations.
+  - Create `class_list` and `name_to_idx = {name: idx}` (stable order).
+  - Create a resolver `resolve_class_index(ann)` that prefers `ann.class_name` else falls back to `class_{class_id}`.
+  - Pass the resolver into all YOLO label writers (originals + augmented, detection + segmentation).
+  - Ensure `data.yaml` uses the exact same `class_list` order (`nc = len(class_list)`, `names = class_list`).
+
+```python
+# releases.py (create_complete_release_zip)
+class_list_sorted = sorted(list(class_names)) if class_names else ["class_0"]
+name_to_idx = {name: idx for idx, name in enumerate(class_list_sorted)}
+
+def resolve_class_index(ann) -> int:
+    name = getattr(ann, 'class_name', None)
+    if name and name in name_to_idx:
+        return name_to_idx[name]
+    cid = getattr(ann, 'class_id', None)
+    return name_to_idx.get(f"class_{cid}", 0)
+
+# Pass resolver into writers
+transform_detection_annotations_to_yolo(..., class_index_resolver=resolve_class_index)
+transform_segmentation_annotations_to_yolo(..., class_index_resolver=resolve_class_index)
+label_content = create_yolo_label_content(..., class_index_resolver=resolve_class_index)
+
+# data.yaml stays consistent
+names = class_list_sorted
+nc = len(class_list_sorted)
+```
+
+```python
+# core/annotation_transformer.py
+def transform_detection_annotations_to_yolo(..., class_index_resolver=None):
+    class_idx = int(class_index_resolver(bbox) if callable(class_index_resolver) else bbox.class_id)
+    lines.append(f"{class_idx} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
+
+def transform_segmentation_annotations_to_yolo(..., class_index_resolver=None):
+    class_id = int(class_index_resolver(ann) if callable(class_index_resolver) else getattr(ann, 'class_id', 0))
+```
+
+**📁 Files Modified:**
+- `backend/api/routes/releases.py`: added class index mapping and resolver; passed into all label writers.
+- `backend/core/annotation_transformer.py`: extended functions to accept `class_index_resolver` and use it.
+
+**🎯 Professional Result:**
+- ✅ Class indices in YOLO labels correctly match `data.yaml` names.
+- ✅ Multiple classes now preserved with correct indices (no more all zeros).
+- ✅ Works consistently for originals and augmented, detection and segmentation.
+
+---
 ## 🔍 Issues Identified and Resolved
 
 ### **Issue 1: Download Image Format Not Converting**
@@ -291,6 +351,53 @@ num_aug_to_generate = max(0, schema_combination_count)  # Uses actual schema cou
 - ✅ **All combinations generated**: No more missing brightness+flip combinations  
 - ✅ **Schema-driven generation**: Image count matches transformation schema logic
 - ✅ **Consistent results**: UI count prediction matches actual generation
+
+---
+
+### **Issue 6: Image Format Selection Not Reflected in Filenames (Legacy Flow)**
+**📋 Problem Description:**
+- In the legacy release endpoint (`/api/v1/releases/create`), selecting an image format (e.g., PNG/JPG) appeared to do nothing. The ZIP contained files with the original extensions (e.g., `.bmp`).
+- In some cases the bytes were converted but filenames kept the old extension, creating confusion and potential format/extension mismatch.
+
+**🔧 Root Cause Analysis:**
+- The actual image saving used the centralized `_save_image_with_format(image, path, output_format)` correctly, but the destination filenames were built from the original filename without changing the extension.
+- Affected spots in `create_complete_release_zip`:
+  - Originals used `dest_path = ... original_filename` and labels used `os.path.splitext(original_filename)[0] + ".txt"`.
+  - Augmented used `aug_filename = f"{base}_{descriptive_suffix}{original_extension}"`.
+  - Result: even when content was converted to PNG/JPG, filenames kept old extensions.
+
+**✅ Solution Implemented (Minimal, Safe):**
+- Derive the target extension from `config.output_format` and use it consistently for both originals and augmented images (and their labels):
+
+```python
+# Decide final extension from output_format
+fmt = (getattr(config, 'output_format', 'original') or 'original').lower()
+if fmt == 'jpeg':
+    fmt = 'jpg'
+base_name, original_ext = os.path.splitext(original_filename)
+original_ext = original_ext.lstrip('.').lower()
+target_ext = original_ext if fmt == 'original' else fmt
+
+# Originals: filename and label
+output_filename = f"{base_name}.{target_ext}"
+dest_path = os.path.join(staging_dir, 'images', safe_split, output_filename)
+label_filename = f"{base_name}.txt"  # Base of output_filename
+label_path = os.path.join(staging_dir, 'labels', safe_split, label_filename)
+
+# Augmented: filename and label
+aug_suffix = generate_descriptive_suffix(transformations_dict)
+aug_filename = f"{base_name}_{aug_suffix}.{target_ext}"
+aug_dest_path = os.path.join(staging_dir, 'images', safe_split, aug_filename)
+aug_label_filename = f"{os.path.splitext(aug_filename)[0]}.txt"
+```
+
+**📁 Files Modified:**
+- `backend/api/routes/releases.py` (function `create_complete_release_zip`): adjusted filename construction for originals and augmented to honor `output_format`.
+
+**🎯 Professional Result:**
+- ✅ Filenames now match the user-selected format (e.g., `.png`, `.jpg`).
+- ✅ No behavior change to transformation logic; only naming aligned with the selected format.
+- ✅ Label filenames always match the image base names.
 
 ---
 

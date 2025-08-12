@@ -1014,6 +1014,41 @@ def create_complete_release_zip(
         
         logger.info(f"Aggregated images: train={len(all_images_by_split['train'])}, val={len(all_images_by_split['val'])}, test={len(all_images_by_split['test'])}")
 
+        # Build consistent class index mapping for YOLO labels
+        # Prefer mapping by class_id → index to avoid missing class_name on transformed objects
+        class_id_to_name: Dict[int, str] = {}
+        for split_imgs in all_images_by_split.values():
+            for imgd in split_imgs:
+                for ann in imgd.get("annotations", []) or []:
+                    try:
+                        cid = getattr(ann, 'class_id', None)
+                        if cid is None:
+                            continue
+                        cname = getattr(ann, 'class_name', None)
+                        if not cname or not isinstance(cname, str) or not cname.strip():
+                            cname = f"class_{cid}"
+                        class_id_to_name[int(cid)] = cname
+                    except Exception:
+                        continue
+        if not class_id_to_name:
+            class_id_to_name = {0: "class_0"}
+        # Stable order by class_id
+        ordered_class_ids = sorted(class_id_to_name.keys())
+        class_list_sorted = [class_id_to_name[cid] for cid in ordered_class_ids]
+        id_to_idx = {cid: idx for idx, cid in enumerate(ordered_class_ids)}
+        name_to_idx = {class_id_to_name[cid]: idx for cid, idx in id_to_idx.items()}
+        def resolve_class_index(ann) -> int:
+            try:
+                cid = getattr(ann, 'class_id', None)
+                if cid is not None and int(cid) in id_to_idx:
+                    return id_to_idx[int(cid)]
+                cname = getattr(ann, 'class_name', None)
+                if cname and cname in name_to_idx:
+                    return name_to_idx[cname]
+            except Exception:
+                pass
+            return 0
+
         # Prepare central schema once for priority-order generation
         schema = None
         try:
@@ -1102,7 +1137,21 @@ def create_complete_release_zip(
                 if os.path.exists(original_path):
                     # Destination path for original image in staging
                     safe_split = split if split in ["train", "val", "test"] else "train"
-                    dest_path = os.path.join(staging_dir, "images", safe_split, original_filename)
+                    # Decide target extension based on selected output_format
+                    try:
+                        _fmt = (getattr(config, 'output_format', 'original') or 'original').lower()
+                        if _fmt == 'jpeg':
+                            _fmt = 'jpg'
+                        _base_name, _orig_ext_with_dot = os.path.splitext(original_filename)
+                        _orig_ext = _orig_ext_with_dot.lstrip('.').lower()
+                        _target_ext = _orig_ext if _fmt == 'original' else _fmt
+                        output_filename = f"{_base_name}.{_target_ext}"
+                    except Exception:
+                        # Fallback to original filename
+                        _base_name, _ = os.path.splitext(original_filename)
+                        output_filename = original_filename
+                        _fmt = getattr(config, 'output_format', 'original')
+                    dest_path = os.path.join(staging_dir, "images", safe_split, output_filename)
                     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
                     # If a resize transformation is present, apply it to originals too
@@ -1174,7 +1223,8 @@ def create_complete_release_zip(
                         label_mode = "yolo_detection"
 
                     # Write labels for original: if resize is applied, transform labels accordingly
-                    label_filename = os.path.splitext(original_filename)[0] + ".txt"
+                    # Ensure label matches the output image base name
+                    label_filename = os.path.splitext(output_filename)[0] + ".txt"
                     label_path = os.path.join(staging_dir, "labels", safe_split, label_filename)
                     os.makedirs(os.path.dirname(label_path), exist_ok=True)
                     try:
@@ -1193,6 +1243,7 @@ def create_complete_release_zip(
                                 img_w=img_w,
                                 img_h=img_h,
                                 transform_config=resize_only_config,
+                                class_index_resolver=resolve_class_index,
                             )
                             with open(label_path, 'w') as f:
                                 f.write("\n".join(yolo_lines))
@@ -1210,12 +1261,13 @@ def create_complete_release_zip(
                                 img_w=img_w,
                                 img_h=img_h,
                                 transform_config=resize_only_config,
+                                class_index_resolver=resolve_class_index,
                             )
                             with open(label_path, 'w') as f:
                                 f.write("\n".join(seg_lines))
                         else:
                             # No resize: use original content
-                            label_content = create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode)
+                            label_content = create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode, class_index_resolver=resolve_class_index)
                             with open(label_path, 'w') as f:
                                 f.write(label_content)
                     except Exception as _e:
@@ -1251,7 +1303,17 @@ def create_complete_release_zip(
                         # Generate descriptive suffix based on transformations
                         transformations_dict = plan.get('transformations', {})
                         descriptive_suffix = generate_descriptive_suffix(transformations_dict)
-                        aug_filename = f"{os.path.splitext(original_filename)[0]}_{descriptive_suffix}{os.path.splitext(original_filename)[1]}"
+                        # Build augmented filename honoring output_format
+                        try:
+                            _fmt = (getattr(config, 'output_format', 'original') or 'original').lower()
+                            if _fmt == 'jpeg':
+                                _fmt = 'jpg'
+                            _base_name, _orig_ext_with_dot = os.path.splitext(original_filename)
+                            _orig_ext = _orig_ext_with_dot.lstrip('.').lower()
+                            _target_ext = _orig_ext if _fmt == 'original' else _fmt
+                            aug_filename = f"{_base_name}_{descriptive_suffix}.{_target_ext}"
+                        except Exception:
+                            aug_filename = f"{os.path.splitext(original_filename)[0]}_{descriptive_suffix}{os.path.splitext(original_filename)[1]}"
                         aug_dest_path = os.path.join(staging_dir, "images", safe_split, aug_filename)
                         os.makedirs(os.path.dirname(aug_dest_path), exist_ok=True)
                         
@@ -1309,6 +1371,7 @@ def create_complete_release_zip(
                                             img_w=img_w,
                                             img_h=img_h,
                                             transform_config=config_dict,
+                                            class_index_resolver=resolve_class_index,
                                         )
                                         with open(aug_label_path, 'w') as f:
                                             f.write("\n".join(yolo_lines))
@@ -1320,6 +1383,7 @@ def create_complete_release_zip(
                                             img_w=img_w,
                                             img_h=img_h,
                                             transform_config=config_dict,
+                                            class_index_resolver=resolve_class_index,
                                         )
                                         with open(aug_label_path, 'w') as f:
                                             f.write("\n".join(seg_lines))
@@ -1334,7 +1398,8 @@ def create_complete_release_zip(
                                 final_image_count += 1
         
         # Step 3: Create data.yaml
-        class_list = sorted(list(class_names)) if class_names else ["class_0"]
+        # Use the exact ordered class list used by the resolver
+        class_list = class_list_sorted
         data_yaml = {
             "path": ".",
             "train": "images/train" if all_images_by_split["train"] else None,
@@ -1370,7 +1435,7 @@ def create_complete_release_zip(
             pass
 
 
-def create_yolo_label_content(annotations, db_image, mode: str = "yolo_detection") -> str:
+def create_yolo_label_content(annotations, db_image, mode: str = "yolo_detection", class_index_resolver=None) -> str:
     """
     Create YOLO format label content from database annotations.
     mode:
@@ -1385,8 +1450,11 @@ def create_yolo_label_content(annotations, db_image, mode: str = "yolo_detection
     image_height = getattr(db_image, 'height', 480)  # Default height if not available
     
     for ann in annotations:
-        # Get class ID (default to 0 if not available)
-        class_id = getattr(ann, 'class_id', 0)
+        # Get class index using resolver if provided
+        if callable(class_index_resolver):
+            class_id = int(class_index_resolver(ann))
+        else:
+            class_id = int(getattr(ann, 'class_id', 0))
         
         # YOLO Segmentation: prefer polygons if requested
         if mode == "yolo_segmentation":
@@ -1641,6 +1709,25 @@ def generate_descriptive_suffix(transformations: dict) -> str:
         elif tool_type == 'rotate':
             angle = params.get('angle', 0)
             parts.append(f"rotate{int(angle)}")
+        elif tool_type == 'shear':
+            angle = params.get('shear_angle', params.get('angle', 0))
+            try:
+                sval = float(angle)
+            except Exception:
+                sval = 0.0
+            sign = '+' if sval > 0 else ''
+            # Keep one decimal if not integer
+            sval_str = f"{sval:.1f}" if abs(sval - int(sval)) > 1e-6 else f"{int(sval)}"
+            parts.append(f"shear{sign}{sval_str}")
+        elif tool_type == 'hue':
+            hue_shift = params.get('hue_shift', params.get('hue', 0))
+            try:
+                hval = float(hue_shift)
+            except Exception:
+                hval = 0.0
+            sign = '+' if hval > 0 else ''
+            hval_str = f"{hval:.1f}" if abs(hval - int(hval)) > 1e-6 else f"{int(hval)}"
+            parts.append(f"hue{sign}{hval_str}")
         elif tool_type == 'flip':
             horizontal = params.get('horizontal', False)
             vertical = params.get('vertical', False)

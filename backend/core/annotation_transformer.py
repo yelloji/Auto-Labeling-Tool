@@ -118,6 +118,7 @@ def transform_detection_annotations_to_yolo(
     img_w: int,
     img_h: int,
     transform_config: Dict[str, Dict[str, Any]],
+    class_index_resolver=None,
 ) -> List[str]:
     """Convert annotations to YOLO detection lines after applying transforms.
 
@@ -168,7 +169,9 @@ def transform_detection_annotations_to_yolo(
         wn = max(0.0, min(1.0, wn))
         hn = max(0.0, min(1.0, hn))
 
-        lines.append(f"{bbox.class_id} {cxn:.6f} {cyn:.6f} {wn:.6f} {hn:.6f}")
+        # Resolve class index
+        class_idx = int(class_index_resolver(bbox) if callable(class_index_resolver) else bbox.class_id)
+        lines.append(f"{class_idx} {cxn:.6f} {cyn:.6f} {wn:.6f} {hn:.6f}")
 
     return lines
 
@@ -217,11 +220,12 @@ def transform_segmentation_annotations_to_yolo(
     img_w: int,
     img_h: int,
     transform_config: Dict[str, Dict[str, Any]],
+    class_index_resolver=None,
 ) -> List[str]:
     """Convert polygon annotations to YOLO segmentation lines after transforms."""
     lines: List[str] = []
     for ann in annotations:
-        class_id = int(getattr(ann, "class_id", 0) or 0)
+        class_id = int(class_index_resolver(ann) if callable(class_index_resolver) else getattr(ann, "class_id", 0) or 0)
         seg = getattr(ann, "segmentation", None)
         if not seg:
             continue
