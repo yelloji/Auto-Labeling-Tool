@@ -19,7 +19,13 @@ from core.transformation_config import (
     get_shear_parameters, get_rotation_parameters,
     get_brightness_parameters, get_contrast_parameters,
     get_blur_parameters, get_hue_parameters,
-    get_saturation_parameters, get_gamma_parameters
+    get_saturation_parameters, get_gamma_parameters,
+    get_resize_parameters, get_noise_parameters,
+    get_clahe_clip_limit_parameters, get_clahe_grid_size_parameters,
+    get_cutout_num_holes_parameters, get_cutout_hole_size_parameters,
+    get_crop_parameters, get_color_jitter_parameters,
+    get_random_zoom_parameters, get_affine_transform_parameters,
+    get_perspective_warp_parameters
 )
 
 router = APIRouter(prefix="/api/augmentation", tags=["augmentation"])
@@ -344,8 +350,18 @@ async def get_available_transformations():
                     "description": "Resize images to different dimensions",
                     "icon": "expand-arrows-alt",
                     "parameters": {
-                        "width": {"type": "number", "min": 100, "max": 2048, "default": 640},
-                        "height": {"type": "number", "min": 100, "max": 2048, "default": 640},
+                        "width": {
+                            "type": "number", 
+                            "min": get_resize_parameters()['width_min'], 
+                            "max": get_resize_parameters()['width_max'], 
+                            "default": get_resize_parameters()['width_default']
+                        },
+                        "height": {
+                            "type": "number", 
+                            "min": get_resize_parameters()['height_min'], 
+                            "max": get_resize_parameters()['height_max'], 
+                            "default": get_resize_parameters()['height_default']
+                        },
                         "maintain_aspect": {"type": "boolean", "default": True}
                     }
                 },

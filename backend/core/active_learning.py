@@ -15,9 +15,12 @@ from sqlalchemy.orm import Session
 from database.database import get_db
 from models.training import TrainingSession, TrainingIteration, UncertainSample, ModelVersion
 from core.dataset_manager import DatasetManager
-import logging
 
-logger = logging.getLogger(__name__)
+# Import professional logging system
+from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
+
+# Initialize professional logger
+professional_logger = get_professional_logger()
 
 
 class ActiveLearningPipeline:
@@ -61,7 +64,15 @@ class ActiveLearningPipeline:
         session_dir = self.training_dir / f"session_{session.id}"
         session_dir.mkdir(exist_ok=True)
         
-        logger.info(f"Created training session {session.id}: {name}")
+        professional_logger.info("operations", f"Created training session {session.id}: {name}", "training_session_created", {
+            'session_id': session.id,
+            'session_name': name,
+            'dataset_id': dataset_id,
+            'epochs': epochs,
+            'batch_size': batch_size,
+            'learning_rate': learning_rate,
+            'max_iterations': max_iterations
+        })
         return session
     
     async def start_training_iteration(
@@ -145,7 +156,11 @@ class ActiveLearningPipeline:
             }
             
             # Train model
-            logger.info(f"Starting training for session {session.id}, iteration {iteration.iteration_number}")
+            professional_logger.info("operations", f"Starting training for session {session.id}, iteration {iteration.iteration_number}", "training_iteration_start", {
+            'session_id': session.id,
+            'iteration_number': iteration.iteration_number,
+            'newly_labeled_count': len(newly_labeled_images) if newly_labeled_images else 0
+        })
             results = model.train(**train_args)
             
             # Save results
@@ -182,10 +197,17 @@ class ActiveLearningPipeline:
                 session.completed_at = datetime.utcnow()
                 db.commit()
             
-            logger.info(f"Training completed for session {session.id}, iteration {iteration.iteration_number}")
+            professional_logger.info("operations", f"Training completed for session {session.id}, iteration {iteration.iteration_number}", "training_iteration_completed", {
+                'session_id': session.id,
+                'iteration_number': iteration.iteration_number
+            })
             
         except Exception as e:
-            logger.error(f"Training failed for session {session.id}, iteration {iteration.iteration_number}: {str(e)}")
+            professional_logger.error("errors", f"Training failed for session {session.id}, iteration {iteration.iteration_number}: {str(e)}", "training_iteration_failed", {
+                'error': str(e),
+                'session_id': session.id,
+                'iteration_number': iteration.iteration_number
+            })
             iteration.status = "failed"
             session.status = "failed"
             db.commit()
@@ -337,10 +359,18 @@ class ActiveLearningPipeline:
             
             db.commit()
             
-            logger.info(f"Generated {len(top_samples)} uncertain samples for iteration {iteration.iteration_number}")
+            professional_logger.info("operations", f"Generated {len(top_samples)} uncertain samples for iteration {iteration.iteration_number}", "uncertain_samples_generated", {
+            'uncertain_sample_count': len(top_samples),
+            'iteration_number': iteration.iteration_number,
+            'session_id': session.id
+        })
             
         except Exception as e:
-            logger.error(f"Failed to generate uncertain samples: {str(e)}")
+            professional_logger.error("errors", f"Failed to generate uncertain samples: {str(e)}", "uncertain_samples_generation_failed", {
+                'error': str(e),
+                'session_id': session.id,
+                'iteration_number': iteration.iteration_number
+            })
     
     async def get_uncertain_samples(
         self,
@@ -491,7 +521,10 @@ class ActiveLearningPipeline:
                 })
                 
             except Exception as e:
-                logger.error(f"Error calculating uncertainty for {image_path}: {e}")
+                professional_logger.error("errors", f"Error calculating uncertainty for {image_path}: {e}", "uncertainty_calculation_error", {
+                    'error': str(e),
+                    'image_path': image_path
+                })
                 continue
         
         # Sort by uncertainty score (highest first)

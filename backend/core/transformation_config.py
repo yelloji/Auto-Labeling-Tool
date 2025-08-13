@@ -404,6 +404,113 @@ def get_cutout_hole_size_parameters():
         'description': CUTOUT_HOLE_SIZE_DESCRIPTION
     }
 
+def get_crop_parameters():
+    """Get crop parameters for UI"""
+    return {
+        'min': CROP_PERCENTAGE_MIN,
+        'max': CROP_PERCENTAGE_MAX,
+        'default': CROP_PERCENTAGE_DEFAULT,
+        'step': CROP_PERCENTAGE_STEP,
+        'unit': CROP_UNIT,
+        'description': CROP_DESCRIPTION
+    }
+
+def get_color_jitter_parameters():
+    """Get color jitter parameters for UI"""
+    return {
+        'hue': {
+            'min': COLOR_JITTER_HUE_MIN,
+            'max': COLOR_JITTER_HUE_MAX,
+            'default': COLOR_JITTER_HUE_DEFAULT,
+            'step': COLOR_JITTER_HUE_STEP,
+            'unit': COLOR_JITTER_HUE_UNIT,
+            'description': COLOR_JITTER_HUE_DESCRIPTION
+        },
+        'brightness': {
+            'min': COLOR_JITTER_BRIGHTNESS_MIN,
+            'max': COLOR_JITTER_BRIGHTNESS_MAX,
+            'default': COLOR_JITTER_BRIGHTNESS_DEFAULT,
+            'step': COLOR_JITTER_BRIGHTNESS_STEP,
+            'unit': COLOR_JITTER_BRIGHTNESS_UNIT,
+            'description': COLOR_JITTER_BRIGHTNESS_DESCRIPTION
+        },
+        'contrast': {
+            'min': COLOR_JITTER_CONTRAST_MIN,
+            'max': COLOR_JITTER_CONTRAST_MAX,
+            'default': COLOR_JITTER_CONTRAST_DEFAULT,
+            'step': COLOR_JITTER_CONTRAST_STEP,
+            'unit': COLOR_JITTER_CONTRAST_UNIT,
+            'description': COLOR_JITTER_CONTRAST_DESCRIPTION
+        },
+        'saturation': {
+            'min': COLOR_JITTER_SATURATION_MIN,
+            'max': COLOR_JITTER_SATURATION_MAX,
+            'default': COLOR_JITTER_SATURATION_DEFAULT,
+            'step': COLOR_JITTER_SATURATION_STEP,
+            'unit': COLOR_JITTER_SATURATION_UNIT,
+            'description': COLOR_JITTER_SATURATION_DESCRIPTION
+        }
+    }
+
+def get_random_zoom_parameters():
+    """Get random zoom parameters for UI"""
+    return {
+        'min': RANDOM_ZOOM_FACTOR_MIN,
+        'max': RANDOM_ZOOM_FACTOR_MAX,
+        'default': RANDOM_ZOOM_FACTOR_DEFAULT,
+        'step': RANDOM_ZOOM_FACTOR_STEP,
+        'unit': RANDOM_ZOOM_UNIT,
+        'description': RANDOM_ZOOM_DESCRIPTION
+    }
+
+def get_affine_transform_parameters():
+    """Get affine transform parameters for UI"""
+    return {
+        'scale': {
+            'min': AFFINE_SCALE_MIN,
+            'max': AFFINE_SCALE_MAX,
+            'default': AFFINE_SCALE_DEFAULT,
+            'step': AFFINE_SCALE_STEP,
+            'unit': AFFINE_SCALE_UNIT,
+            'description': AFFINE_SCALE_DESCRIPTION
+        },
+        'rotation': {
+            'min': AFFINE_ROTATION_MIN,
+            'max': AFFINE_ROTATION_MAX,
+            'default': AFFINE_ROTATION_DEFAULT,
+            'step': AFFINE_ROTATION_STEP,
+            'unit': AFFINE_ROTATION_UNIT,
+            'description': AFFINE_ROTATION_DESCRIPTION
+        },
+        'horizontal_shift': {
+            'min': AFFINE_HORIZONTAL_SHIFT_MIN,
+            'max': AFFINE_HORIZONTAL_SHIFT_MAX,
+            'default': AFFINE_HORIZONTAL_SHIFT_DEFAULT,
+            'step': AFFINE_HORIZONTAL_SHIFT_STEP,
+            'unit': AFFINE_HORIZONTAL_SHIFT_UNIT,
+            'description': AFFINE_HORIZONTAL_SHIFT_DESCRIPTION
+        },
+        'vertical_shift': {
+            'min': AFFINE_VERTICAL_SHIFT_MIN,
+            'max': AFFINE_VERTICAL_SHIFT_MAX,
+            'default': AFFINE_VERTICAL_SHIFT_DEFAULT,
+            'step': AFFINE_VERTICAL_SHIFT_STEP,
+            'unit': AFFINE_VERTICAL_SHIFT_UNIT,
+            'description': AFFINE_VERTICAL_SHIFT_DESCRIPTION
+        }
+    }
+
+def get_perspective_warp_parameters():
+    """Get perspective warp parameters for UI"""
+    return {
+        'min': PERSPECTIVE_DISTORTION_MIN,
+        'max': PERSPECTIVE_DISTORTION_MAX,
+        'default': PERSPECTIVE_DISTORTION_DEFAULT,
+        'step': PERSPECTIVE_DISTORTION_STEP,
+        'unit': PERSPECTIVE_DISTORTION_UNIT,
+        'description': PERSPECTIVE_DISTORTION_DESCRIPTION
+    }
+
 # =====================================================================
 # TRANSFORMATION CATEGORIES
 # =====================================================================

@@ -6,11 +6,11 @@ import cv2
 import base64
 from io import BytesIO
 from PIL import Image
-import logging
 import os
 from pathlib import Path
+from logging_system.professional_logger import get_professional_logger
 
-logger = logging.getLogger(__name__)
+professional_logger = get_professional_logger()
 
 router = APIRouter()
 
@@ -55,7 +55,12 @@ async def click_to_segment(request: SegmentationRequest):
     Advanced click-to-segment functionality using multiple algorithms
     """
     try:
-        logger.info(f"Processing segmentation request for point ({request.point.x}, {request.point.y})")
+        professional_logger.info("operations", f"Processing segmentation request for point ({request.point.x}, {request.point.y})", "segmentation_request", {
+            'point_x': request.point.x,
+            'point_y': request.point.y,
+            'model_type': request.model_type,
+            'class_index': request.class_index
+        })
         
         # Load image from URL or base64
         image = await load_image_from_url(request.image_url)
@@ -76,7 +81,12 @@ async def click_to_segment(request: SegmentationRequest):
         return result
         
     except Exception as e:
-        logger.error(f"Segmentation failed: {str(e)}")
+        professional_logger.error("errors", f"Segmentation failed: {str(e)}", "segmentation_failed", {
+            'error': str(e),
+            'point_x': request.point.x,
+            'point_y': request.point.y,
+            'model_type': request.model_type
+        })
         raise HTTPException(status_code=500, detail=f"Segmentation failed: {str(e)}")
 
 async def load_image_from_url(image_url: str) -> np.ndarray:
@@ -385,7 +395,14 @@ async def segment_polygon(request: SmartPolygonRequest):
     using various computer vision algorithms.
     """
     try:
-        logger.info(f"🎯 Smart Polygon: Processing request for image {request.image_id} at ({request.x}, {request.y})")
+        professional_logger.info("operations", f"🎯 Smart Polygon: Processing request for image {request.image_id} at ({request.x}, {request.y})", "smart_polygon_request", {
+            'image_id': request.image_id,
+            'click_x': request.x,
+            'click_y': request.y,
+            'algorithm': request.algorithm,
+            'image_width': request.image_width,
+            'image_height': request.image_height
+        })
         
         # Load image from database/filesystem
         image_path = await get_image_path_from_id(request.image_id)
@@ -398,7 +415,11 @@ async def segment_polygon(request: SmartPolygonRequest):
             raise HTTPException(status_code=400, detail="Failed to load image")
         
         height, width = image.shape[:2]
-        logger.info(f"📏 Image loaded: {width}x{height}")
+        professional_logger.info("operations", f"📏 Image loaded: {width}x{height}", "image_loaded", {
+            'image_id': request.image_id,
+            'width': width,
+            'height': height
+        })
         
         # Validate click coordinates
         if request.x < 0 or request.x >= width or request.y < 0 or request.y >= height:
@@ -422,7 +443,12 @@ async def segment_polygon(request: SmartPolygonRequest):
             points, confidence = segment_with_flood_fill(image, request.x, request.y)
             algorithm = "flood_fill"
         
-        logger.info(f"✅ Smart Polygon: Generated {len(points)} points with confidence {confidence}")
+        professional_logger.info("operations", f"✅ Smart Polygon: Generated {len(points)} points with confidence {confidence}", "polygon_generated", {
+            'image_id': request.image_id,
+            'point_count': len(points),
+            'confidence': confidence,
+            'algorithm': algorithm
+        })
         
         return SmartPolygonResponse(
             success=True,
@@ -434,7 +460,12 @@ async def segment_polygon(request: SmartPolygonRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Smart Polygon: Segmentation failed: {str(e)}")
+        professional_logger.error("errors", f"❌ Smart Polygon: Segmentation failed: {str(e)}", "smart_polygon_failed", {
+            'error': str(e),
+            'image_id': request.image_id,
+            'click_x': request.x,
+            'click_y': request.y
+        })
         return SmartPolygonResponse(
             success=False,
             points=[],
@@ -463,14 +494,23 @@ async def get_image_path_from_id(image_id: str) -> Optional[str]:
         
         for path in possible_paths:
             if os.path.exists(path):
-                logger.info(f"📁 Found image at: {path}")
+                professional_logger.info("operations", f"📁 Found image at: {path}", "image_path_found", {
+            'image_id': image_id,
+            'path': path
+        })
                 return path
         
-        logger.warning(f"⚠️ Image file not found for ID {image_id}, tried paths: {possible_paths}")
+        professional_logger.warning("errors", f"⚠️ Image file not found for ID {image_id}, tried paths: {possible_paths}", "image_not_found", {
+            'image_id': image_id,
+            'tried_paths': possible_paths
+        })
         return None
         
     except Exception as e:
-        logger.error(f"❌ Error getting image path: {e}")
+        professional_logger.error("errors", f"❌ Error getting image path: {e}", "image_path_error", {
+            'error': str(e),
+            'image_id': image_id
+        })
         return None
 
 def choose_best_algorithm(image: np.ndarray, x: int, y: int) -> str:
@@ -507,7 +547,9 @@ def choose_best_algorithm(image: np.ndarray, x: int, y: int) -> str:
             return "flood_fill"  # Simple objects or uniform regions
             
     except Exception as e:
-        logger.warning(f"Algorithm selection failed, using default: {e}")
+        professional_logger.warning("operations", f"Algorithm selection failed, using default: {e}", "algorithm_selection_failed", {
+            'error': str(e)
+        })
         return "flood_fill"
 
 def segment_with_grabcut(image: np.ndarray, x: int, y: int) -> tuple:
@@ -561,7 +603,11 @@ def segment_with_grabcut(image: np.ndarray, x: int, y: int) -> tuple:
         return points, confidence
         
     except Exception as e:
-        logger.warning(f"GrabCut failed, using fallback: {e}")
+        professional_logger.warning("operations", f"GrabCut failed, using fallback: {e}", "grabcut_failed", {
+            'error': str(e),
+            'click_x': x,
+            'click_y': y
+        })
         return segment_with_flood_fill(image, x, y)
 
 def segment_with_watershed_cv(image: np.ndarray, x: int, y: int) -> tuple:
@@ -604,7 +650,11 @@ def segment_with_watershed_cv(image: np.ndarray, x: int, y: int) -> tuple:
         return points, confidence
         
     except Exception as e:
-        logger.warning(f"Watershed failed, using fallback: {e}")
+        professional_logger.warning("operations", f"Watershed failed, using fallback: {e}", "watershed_failed", {
+            'error': str(e),
+            'click_x': x,
+            'click_y': y
+        })
         return segment_with_flood_fill(image, x, y)
 
 def segment_with_contour_detection(image: np.ndarray, x: int, y: int) -> tuple:
@@ -654,7 +704,11 @@ def segment_with_contour_detection(image: np.ndarray, x: int, y: int) -> tuple:
         return points, confidence
         
     except Exception as e:
-        logger.warning(f"Contour detection failed, using fallback: {e}")
+        professional_logger.warning("operations", f"Contour detection failed, using fallback: {e}", "contour_detection_failed", {
+            'error': str(e),
+            'click_x': x,
+            'click_y': y
+        })
         return segment_with_flood_fill(image, x, y)
 
 def segment_with_flood_fill(image: np.ndarray, x: int, y: int) -> tuple:
@@ -705,7 +759,11 @@ def segment_with_flood_fill(image: np.ndarray, x: int, y: int) -> tuple:
         return points, confidence
         
     except Exception as e:
-        logger.error(f"Flood fill failed: {e}")
+        professional_logger.error("errors", f"Flood fill failed: {e}", "flood_fill_failed", {
+            'error': str(e),
+            'click_x': x,
+            'click_y': y
+        })
         # Ultimate fallback - simple rectangle
         size = min(image.shape[1], image.shape[0]) // 10
         points = [

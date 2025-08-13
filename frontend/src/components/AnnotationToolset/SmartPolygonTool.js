@@ -59,7 +59,7 @@ const SmartPolygonTool = ({
       });
 
       // Call backend segmentation endpoint
-      const response = await fetch('/api/v1/segment-polygon', {
+      const response = await fetch('/api/segment-polygon', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
