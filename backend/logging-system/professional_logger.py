@@ -21,7 +21,7 @@ import threading
 from functools import wraps
 
 # Import our configuration
-from .logging_config import get_config, get_log_directory
+from logging_config import get_config, get_log_directory
 
 class ProfessionalLogger:
     """
