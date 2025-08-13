@@ -14,7 +14,6 @@ import json
 import uuid
 import shutil
 import random
-import logging
 import yaml
 
 # Import our new release system
@@ -22,6 +21,12 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from core.release_controller import ReleaseController, ReleaseConfig, create_release_controller
 from core.transformation_schema import generate_release_configurations
+
+# Import professional logging system
+from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
+
+# Initialize professional logger
+professional_logger = get_professional_logger()
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -31,7 +36,8 @@ from database.models import Project, Dataset, Image, Annotation, Release, ImageT
 from pydantic import BaseModel
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+# Old logger replaced with professional logger
+# logger = logging.getLogger(__name__)
 
 # Note: Release paths are now project-specific: /projects/{project_name}/releases/
 
@@ -124,9 +130,17 @@ async def generate_enhanced_release(
         def generate_release_task():
             try:
                 release_id = controller.generate_release(config, payload.release_version)
-                logger.info(f"Successfully generated release: {release_id}")
+                professional_logger.info("operations", f"Successfully generated release: {release_id}", "release_generated", {
+            'release_id': release_id,
+            'project_id': payload.project_id,
+            'dataset_count': len(payload.dataset_ids)
+        })
             except Exception as e:
-                logger.error(f"Failed to generate release: {str(e)}")
+                professional_logger.error("errors", f"Failed to generate release: {str(e)}", "release_generation_error", {
+                    'release_id': release_id if 'release_id' in locals() else None,
+                    'project_id': payload.project_id,
+                    'error': str(e)
+                })
         
         background_tasks.add_task(generate_release_task)
         
@@ -140,7 +154,10 @@ async def generate_enhanced_release(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to start release generation: {str(e)}")
+        professional_logger.error("errors", f"Failed to start release generation: {str(e)}", "release_start_error", {
+            'project_id': payload.project_id,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/releases/{release_id}/progress")
@@ -186,7 +203,10 @@ async def get_release_progress(release_id: str, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get release progress: {str(e)}")
+        professional_logger.error("errors", f"Failed to get release progress: {str(e)}", "release_progress_error", {
+            'release_id': release_id,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/projects/{project_id}/releases/history")
@@ -200,7 +220,10 @@ async def get_project_release_history(project_id: int, limit: int = 10, db: Sess
         return {"releases": history}
         
     except Exception as e:
-        logger.error(f"Failed to get release history: {str(e)}")
+        professional_logger.error("errors", f"Failed to get release history: {str(e)}", "release_history_error", {
+            'project_id': project_id,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=str(e))
 
 # ORIGINAL ENDPOINTS (for backward compatibility)
@@ -261,7 +284,9 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 if norm:
                     normalized_transformations.append(norm)
         except Exception as _e:
-            logger.warning(f"Failed to normalize transformations: {_e}")
+            professional_logger.warning("errors", f"Failed to normalize transformations: {_e}", "transformation_normalization_warning", {
+            'error': str(_e)
+        })
             normalized_transformations = payload.transformations or []
 
         # Create release configuration
@@ -329,7 +354,12 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         
         # NOW CREATE THE ACTUAL RELEASE ZIP FILE
         try:
-            logger.info(f"Creating release ZIP for {len(payload.dataset_ids)} datasets with {payload.multiplier}x multiplier")
+            professional_logger.info("operations", f"Creating release ZIP for {len(payload.dataset_ids)} datasets with {payload.multiplier}x multiplier", "release_creation_start", {
+            'dataset_count': len(payload.dataset_ids),
+            'multiplier': payload.multiplier,
+            'export_format': payload.export_format,
+            'task_type': payload.task_type
+        })
             
             # Create the complete release ZIP with proper dataset aggregation
             create_complete_release_zip(
@@ -343,10 +373,16 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 zip_path=model_path
             )
             
-            logger.info(f"Successfully created release ZIP at: {model_path}")
+            professional_logger.info("operations", f"Successfully created release ZIP at: {model_path}", "release_zip_created", {
+                'model_path': str(model_path),
+                'release_id': release_id
+            })
             
         except Exception as e:
-            logger.error(f"Failed to create release ZIP: {str(e)}")
+            professional_logger.error("errors", f"Failed to create release ZIP: {str(e)}", "release_zip_creation_error", {
+                'release_id': release_id,
+                'error': str(e)
+            })
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Failed to create release: {str(e)}")
         
@@ -363,7 +399,11 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         # Commit all changes
         db.commit()
         
-        logger.info(f"Release created successfully: {release_id} with {final_image_count} total images")
+        professional_logger.info("operations", f"Release created successfully: {release_id} with {final_image_count} total images", "release_creation_complete", {
+            'release_id': release_id,
+            'final_image_count': final_image_count,
+            'dataset_count': len(payload.dataset_ids)
+        })
         
         # Get the created release with all fields for frontend
         created_release = db.query(Release).filter(Release.id == release_id).first()
@@ -402,11 +442,17 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         raise
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"Database error in create_release: {str(e)}")
+        professional_logger.error("errors", f"Database error in create_release: {str(e)}", "release_database_error", {
+            'error': str(e),
+            'operation': 'create_release'
+        })
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     except Exception as e:
         db.rollback()
-        logger.error(f"Unexpected error in create_release: {str(e)}")
+        professional_logger.error("errors", f"Unexpected error in create_release: {str(e)}", "release_unexpected_error", {
+            'error': str(e),
+            'operation': 'create_release'
+        })
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 @router.get("/releases/{dataset_id}/history")
@@ -508,7 +554,10 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
             )
     else:
         # If model_path doesn't exist, create a minimal ZIP file
-        logger.warning(f"Model path {release.model_path} not found for release {release_id}. Creating a minimal ZIP file.")
+        professional_logger.warning("operations", f"Model path {release.model_path} not found for release {release_id}. Creating a minimal ZIP file.", "release_model_path_missing", {
+            'release_id': release_id,
+            'model_path': release.model_path
+        })
         
         # Create a release controller to create a minimal ZIP file
         controller = create_release_controller(db)
@@ -526,7 +575,9 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
         releases_dir = os.path.join(projects_root, "gevis", "releases")
         os.makedirs(releases_dir, exist_ok=True)
         
-        logger.info(f"Using releases directory: {releases_dir}")
+        professional_logger.info("operations", f"Using releases directory: {releases_dir}", "release_directory_setup", {
+            'releases_dir': str(releases_dir)
+        })
         
         # Create ZIP filename
         zip_filename = f"{release.name.replace(' ', '_')}_{release.export_format}.zip"
@@ -636,7 +687,9 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
             }
     
     except Exception as e:
-        logger.error(f"Failed to get package info: {str(e)}")
+        professional_logger.error("errors", f"Failed to get package info: {str(e)}", "package_info_error", {
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to read ZIP package: {str(e)}")
 
 @router.post("/datasets/{dataset_id}/rebalance")
@@ -801,7 +854,10 @@ async def get_release_versions(status: str = "PENDING", db: Session = Depends(ge
         }
         
     except Exception as e:
-        logger.error(f"Failed to get release versions: {str(e)}")
+        professional_logger.error("errors", f"Failed to get release versions: {str(e)}", "release_versions_error", {
+            'error': str(e),
+            'status': status
+        })
         raise HTTPException(status_code=500, detail=f"Failed to get release versions: {str(e)}")
 
 @router.put("/versions/{old_version}")
@@ -841,7 +897,11 @@ async def update_release_version(old_version: str, new_version_data: dict):
         }
         
     except Exception as e:
-        logger.error(f"Failed to update release version: {str(e)}")
+        professional_logger.error("errors", f"Failed to update release version: {str(e)}", "release_version_update_error", {
+            'error': str(e),
+            'old_version': old_version,
+            'new_version': new_version
+        })
         raise HTTPException(status_code=500, detail=f"Failed to update release version: {str(e)}")
 
 
@@ -878,9 +938,18 @@ def calculate_total_image_counts(db: Session, dataset_ids: List[str]) -> Tuple[i
         split_counts["test"] += test_count
         total_original += train_count + val_count + test_count
         
-        logger.info(f"Dataset {dataset_id}: train={train_count}, val={val_count}, test={test_count}")
+        professional_logger.info("operations", f"Dataset {dataset_id}: train={train_count}, val={val_count}, test={test_count}", "dataset_split_info", {
+            'dataset_id': dataset_id,
+            'train_count': train_count,
+            'val_count': val_count,
+            'test_count': test_count
+        })
     
-    logger.info(f"Total across all datasets: {total_original} images, splits: {split_counts}")
+    professional_logger.info("operations", f"Total across all datasets: {total_original} images, splits: {split_counts}", "total_datasets_summary", {
+        'total_original': total_original,
+        'split_counts': split_counts,
+        'dataset_count': len(dataset_ids)
+    })
     return total_original, split_counts
 
 
@@ -901,7 +970,10 @@ def create_complete_release_zip(
     import io
     import yaml
     
-    logger.info(f"Creating complete release ZIP for {len(dataset_ids)} datasets")
+    professional_logger.info("operations", f"Creating complete release ZIP for {len(dataset_ids)} datasets", "release_zip_creation_start", {
+        'dataset_count': len(dataset_ids),
+        'multiplier': multiplier
+    })
     
     # Prefer a project-local staging dir (same drive as final ZIP) to avoid Windows temp issues
     # Use a hidden staging directory (prefixed with a dot) so it isn't visible to users
@@ -950,7 +1022,9 @@ def create_complete_release_zip(
                     if getattr(t, 'dual_value_enabled', False) and getattr(t, 'dual_value_parameters', None):
                         db_dual_value_map.setdefault(t.transformation_type, {}).update(t.dual_value_parameters)
         except Exception as _e:
-            logger.warning(f"Failed building DB dual-value map: {_e}")
+            professional_logger.warning("errors", f"Failed building DB dual-value map: {_e}", "dual_value_map_error", {
+                'error': str(_e)
+            })
 
         # Step 1: Aggregate images by split across all datasets
         all_images_by_split = {"train": [], "val": [], "test": []}
@@ -961,7 +1035,10 @@ def create_complete_release_zip(
             if not dataset:
                 continue
                 
-            logger.info(f"Processing dataset: {dataset.name}")
+            professional_logger.info("operations", f"Processing dataset: {dataset.name}", "dataset_processing", {
+                'dataset_name': dataset.name,
+                'dataset_id': dataset_id
+            })
             
             # Get dataset path - go up one more level to get to app-2 root
             dataset_path = os.path.join(
@@ -970,7 +1047,10 @@ def create_complete_release_zip(
             )
             
             if not os.path.exists(dataset_path):
-                logger.warning(f"Dataset path not found: {dataset_path}")
+                professional_logger.warning("operations", f"Dataset path not found: {dataset_path}", "dataset_path_missing", {
+                    'dataset_path': dataset_path,
+                    'dataset_name': dataset.name
+                })
                 continue
             
             # Process each split
@@ -1012,7 +1092,11 @@ def create_complete_release_zip(
                                 "dataset_name": dataset.name
                             })
         
-        logger.info(f"Aggregated images: train={len(all_images_by_split['train'])}, val={len(all_images_by_split['val'])}, test={len(all_images_by_split['test'])}")
+        professional_logger.info("operations", f"Aggregated images: train={len(all_images_by_split['train'])}, val={len(all_images_by_split['val'])}, test={len(all_images_by_split['test'])}", "images_aggregated", {
+            'train_count': len(all_images_by_split['train']),
+            'val_count': len(all_images_by_split['val']),
+            'test_count': len(all_images_by_split['test'])
+        })
 
         # Build consistent class index mapping for YOLO labels
         # Prefer mapping by class_id → index to avoid missing class_name on transformed objects
@@ -1065,7 +1149,9 @@ def create_complete_release_zip(
             # images_per_original means augmented images per original (exclude original)
             schema.set_sampling_config(images_per_original=max(0, multiplier - 1), strategy="intelligent")
         except Exception as _e:
-            logger.warning(f"Schema initialization failed, will use fallback generation: {_e}")
+            professional_logger.warning("operations", f"Schema initialization failed, will use fallback generation: {_e}", "schema_init_fallback", {
+                'error': str(_e)
+            })
 
         # Baseline resize params if present (applied to all outputs)
         resize_baseline_params = None
@@ -1086,7 +1172,11 @@ def create_complete_release_zip(
             if not images:
                 continue
                 
-            logger.info(f"Processing {split} split with {len(images)} images, {multiplier}x multiplier")
+            professional_logger.info("operations", f"Processing {split} split with {len(images)} images, {multiplier}x multiplier", "split_processing", {
+                'split': split,
+                'image_count': len(images),
+                'multiplier': multiplier
+            })
 
             # Compute a cap on unique variants per original using central schema rules
             try:
@@ -1127,7 +1217,10 @@ def create_complete_release_zip(
                 os.makedirs(os.path.join(staging_dir, "images", safe_split), exist_ok=True)
                 os.makedirs(os.path.join(staging_dir, "labels", safe_split), exist_ok=True)
             except Exception as _e:
-                logger.warning(f"Failed to ensure split directories for {split}: {_e}")
+                professional_logger.warning("operations", f"Failed to ensure split directories for {split}: {_e}", "split_directory_error", {
+                'split': split,
+                'error': str(_e)
+            })
             
             for img_data in images:
                 # Copy original image
@@ -1179,16 +1272,27 @@ def create_complete_release_zip(
                             else:
                                 resized_img.save(dest_path)
                         except Exception as _e:
-                            logger.warning(f"Failed to apply resize to original; copying instead: {_e}")
+                            professional_logger.warning("operations", f"Failed to apply resize to original; copying instead: {_e}", "resize_fallback_copy", {
+                'original_path': original_path,
+                'error': str(_e)
+            })
                             try:
                                 shutil.copy2(original_path, dest_path)
                             except Exception as _e2:
-                                logger.warning(f"copy2 failed, falling back to manual copy: {_e2}")
+                                professional_logger.warning("operations", f"copy2 failed, falling back to manual copy: {_e2}", "copy2_fallback", {
+                                'source': original_path,
+                                'destination': dest_path,
+                                'error': str(_e2)
+                            })
                                 try:
                                     with open(original_path, 'rb') as src, open(dest_path, 'wb') as dst:
                                         dst.write(src.read())
                                 except Exception as _e3:
-                                    logger.error(f"Manual copy failed for {dest_path}: {_e3}")
+                                    professional_logger.error("errors", f"Manual copy failed for {dest_path}: {_e3}", "manual_copy_error", {
+                                    'source': original_path,
+                                    'destination': dest_path,
+                                    'error': str(_e3)
+                                })
                                     raise
                     else:
                         # No resize requested → copy original with format conversion
@@ -1201,16 +1305,28 @@ def create_complete_release_zip(
                             else:
                                 pil_img.save(dest_path)
                         except Exception as _e2:
-                            logger.warning(f"Format conversion failed, falling back to copy: {_e2}")
+                            professional_logger.warning("operations", f"Format conversion failed, falling back to copy: {_e2}", "format_conversion_fallback", {
+                                'original_path': original_path,
+                                'target_format': getattr(config, 'output_format', 'original'),
+                                'error': str(_e2)
+                            })
                             try:
                                 shutil.copy2(original_path, dest_path)
                             except Exception as _e3:
-                                logger.warning(f"copy2 failed, falling back to manual copy: {_e3}")
+                                professional_logger.warning("operations", f"copy2 failed, falling back to manual copy: {_e3}", "copy2_fallback_format", {
+                                'source': original_path,
+                                'destination': dest_path,
+                                'error': str(_e3)
+                            })
                                 try:
                                     with open(original_path, 'rb') as src, open(dest_path, 'wb') as dst:
                                         dst.write(src.read())
                                 except Exception as _e4:
-                                    logger.error(f"Manual copy failed for {dest_path}: {_e4}")
+                                    professional_logger.error("errors", f"Manual copy failed for {dest_path}: {_e4}", "manual_copy_format_error", {
+                                    'source': original_path,
+                                    'destination': dest_path,
+                                    'error': str(_e4)
+                                })
                                     raise
                     
                     # Create label file (choose detection vs segmentation)
@@ -1271,7 +1387,10 @@ def create_complete_release_zip(
                             with open(label_path, 'w') as f:
                                 f.write(label_content)
                     except Exception as _e:
-                        logger.warning(f"Failed to write original labels (resize-aware): {_e}")
+                        professional_logger.warning("operations", f"Failed to write original labels (resize-aware): {_e}", "original_labels_write_error", {
+                            'original_filename': original_filename,
+                            'error': str(_e)
+                        })
                         label_content = create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode)
                         with open(label_path, 'w') as f:
                             f.write(label_content)
@@ -1288,7 +1407,10 @@ def create_complete_release_zip(
                             image_id_local = os.path.splitext(original_filename)[0]
                             aug_plan = schema.generate_transformation_configs_for_image(image_id_local)[:num_aug_to_generate]
                         except Exception as _e:
-                            logger.warning(f"Schema plan failed for {original_filename}: {_e}")
+                            professional_logger.warning("operations", f"Schema plan failed for {original_filename}: {_e}", "schema_plan_error", {
+                        'original_filename': original_filename,
+                        'error': str(_e)
+                    })
                             aug_plan = []
                     if not aug_plan and num_aug_to_generate > 0:
                         # Fallback: replicate payload transformations as a single plan
@@ -1339,7 +1461,10 @@ def create_complete_release_zip(
                                 pil_img = PILImage.open(original_path).convert('RGB')
                                 augmented_image = transformer.apply_transformations(pil_img, config_dict)
                         except Exception as _e:
-                            logger.warning(f"Falling back to simple apply for {original_path}: {_e}")
+                            professional_logger.warning("operations", f"Falling back to simple apply for {original_path}: {_e}", "simple_apply_fallback", {
+                            'original_path': original_path,
+                            'error': str(_e)
+                        })
                             augmented_image = None
                         if augmented_image:
                                 # Safety: if resize target specified, enforce final size
@@ -1391,7 +1516,10 @@ def create_complete_release_zip(
                                         with open(aug_label_path, 'w') as f:
                                             f.write("")
                                 except Exception as _e:
-                                    logger.warning(f"Failed to create transformed aug labels: {_e}")
+                                    professional_logger.warning("operations", f"Failed to create transformed aug labels: {_e}", "aug_labels_creation_error", {
+                            'aug_filename': aug_filename,
+                            'error': str(_e)
+                        })
                                     with open(aug_label_path, 'w') as f:
                                         f.write(create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode))
                                 
@@ -1417,7 +1545,10 @@ def create_complete_release_zip(
             yaml.dump(data_yaml, f, default_flow_style=False)
         
         # Step 4: Create ZIP file
-        logger.info(f"Creating ZIP file with {final_image_count} total images")
+        professional_logger.info("operations", f"Creating ZIP file with {final_image_count} total images", "zip_creation_start", {
+            'final_image_count': final_image_count,
+            'zip_path': str(zip_path)
+        })
         
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(staging_dir):
@@ -1426,7 +1557,10 @@ def create_complete_release_zip(
                     arc_path = os.path.relpath(file_path, staging_dir)
                     zipf.write(file_path, arc_path)
         
-        logger.info(f"Successfully created ZIP file: {zip_path}")
+        professional_logger.info("operations", f"Successfully created ZIP file: {zip_path}", "zip_creation_complete", {
+            'zip_path': str(zip_path),
+            'final_image_count': final_image_count
+        })
     finally:
         # Cleanup staging
         try:
@@ -1683,7 +1817,10 @@ def apply_transformations_to_image(image_path: str, transformations: List[dict])
         return image
         
     except Exception as e:
-        logger.error(f"Failed to apply transformations to {image_path}: {str(e)}")
+        professional_logger.error("errors", f"Failed to apply transformations to {image_path}: {str(e)}", "transformation_application_error", {
+            'image_path': image_path,
+            'error': str(e)
+        })
         return None
 
 def generate_descriptive_suffix(transformations: dict) -> str:

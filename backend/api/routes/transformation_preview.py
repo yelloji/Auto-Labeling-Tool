@@ -11,16 +11,23 @@ import tempfile
 import os
 import numpy as np
 import logging
+import sys
 from pathlib import Path
 from PIL import Image, ImageEnhance, ImageFilter
 
 from ..services.image_transformer import ImageTransformer
 from utils.image_utils import encode_image_to_base64, resize_image_for_preview
 
+# Import professional logging system
+from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
+
+# Initialize professional logger
+professional_logger = get_professional_logger()
+
 router = APIRouter(prefix="/api/transformation", tags=["transformation"])
 
-# Initialize logger and image transformer
-logger = logging.getLogger(__name__)
+# Old logger replaced with professional logger
+# logger = logging.getLogger(__name__)
 transformer = ImageTransformer()
 
 @router.post("/preview")
@@ -291,7 +298,10 @@ async def generate_preview_with_image_id(
             # Join with forward slashes for Linux
             image_file_normalized = os.path.join(project_root, image_file_normalized).replace('\\', '/')
         
-        logger.info(f"Attempting to load image from: {image_file_normalized}")
+        professional_logger.info("operations", f"Attempting to load image from: {image_file_normalized}", "image_load_attempt", {
+            'image_path': image_file_normalized,
+            'endpoint': '/api/transformation/preview'
+        })
         sample_image = cv2.imread(image_file_normalized)
         if sample_image is None:
             raise HTTPException(status_code=400, detail=f"Failed to load image file: {image_file_normalized}")
@@ -351,8 +361,11 @@ async def generate_preview_with_image_id(
         raise
     except Exception as e:
         import traceback
-        logger.error(f"Transformation preview error: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        professional_logger.error("errors", f"Transformation preview error: {str(e)}", "transformation_preview_error", {
+            'error': str(e),
+            'traceback': traceback.format_exc(),
+            'endpoint': '/api/transformation/preview'
+        })
         raise HTTPException(status_code=500, detail=f"Failed to generate preview: {str(e)}")
 
 @router.post("/batch-preview")

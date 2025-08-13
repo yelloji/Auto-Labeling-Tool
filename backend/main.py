@@ -26,7 +26,11 @@ from api.routes import image_transformations, logs
 from api import active_learning
 from core.config import settings
 from database.database import init_db
-from utils.logger import sya_logger, log_info, log_error
+# Import professional logging system
+from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
+
+# Initialize professional logger
+professional_logger = get_professional_logger()
 import time
 
 # Initialize FastAPI app
@@ -62,24 +66,33 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
         
-        # Log request
-        sya_logger.log_api_request(
-            request.method,
-            str(request.url.path),
-            dict(request.query_params) if request.query_params else None
+        # Log request with professional logger
+        professional_logger.track_api_call(
+            user_id=None,  # Will be set when auth is implemented
+            endpoint=str(request.url.path),
+            method=request.method,
+            status_code=None,  # Will be set after response
+            details={
+                "query_params": dict(request.query_params) if request.query_params else None,
+                "headers": dict(request.headers),
+                "client_ip": request.client.host if request.client else None
+            }
         )
         
         try:
             response = await call_next(request)
             duration = time.time() - start_time
             
-            # Log successful response
-            sya_logger.log_api_response(
-                request.method,
-                str(request.url.path),
-                response.status_code,
-                None,  # Don't log response body for performance
-                duration
+            # Log successful response with professional logger
+            professional_logger.track_api_response_time(
+                endpoint=str(request.url.path),
+                method=request.method,
+                response_time=duration,
+                status_code=response.status_code,
+                details={
+                    "response_size": len(response.body) if hasattr(response, 'body') else None,
+                    "content_type": response.headers.get("content-type", None)
+                }
             )
             
             return response
@@ -87,18 +100,13 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             duration = time.time() - start_time
             
-            # Log error response
-            sya_logger.log_api_response(
-                request.method,
-                str(request.url.path),
-                500,
-                str(e),
-                duration
-            )
-            
-            sya_logger.log_error(e, {
+            # Log error response with professional logger
+            professional_logger.error("errors", f"API error: {str(e)}", "api_error", {
                 'method': request.method,
                 'path': str(request.url.path),
+                'status_code': 500,
+                'duration': duration,
+                'error': str(e),
                 'query_params': dict(request.query_params)
             })
             
@@ -311,18 +319,18 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and create tables"""
-    log_info("🚀 SYA Backend starting up", {
+    professional_logger.info("app", "🚀 SYA Backend starting up", "startup", {
         'version': '1.0.0',
         'environment': 'development',
         'port': 12000
     })
     await init_db()
-    log_info("✅ Database initialized successfully")
+    professional_logger.info("app", "✅ Database initialized successfully", "database_initialized")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    log_info("🛑 SYA Backend shutting down")
+    professional_logger.info("app", "🛑 SYA Backend shutting down", "shutdown")
 
 if __name__ == "__main__":
     # Run the application

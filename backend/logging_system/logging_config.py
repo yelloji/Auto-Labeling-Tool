@@ -207,7 +207,7 @@ def validate_config(config: Dict[str, Any]) -> bool:
 
 def get_log_directory() -> str:
     """Get the log directory path."""
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "logs"))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "logs"))
 
 def get_category_config(category: str) -> Dict[str, Any]:
     """Get configuration for a specific log category."""

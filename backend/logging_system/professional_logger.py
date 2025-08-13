@@ -48,19 +48,19 @@ class ProfessionalLogger:
         # Thread-local storage for request context
         self._local = threading.local()
         
-        # Log system initialization
-        self.app.info("Professional logging system initialized", {
-            "config": {
-                "log_level": self.config.get("log_level"),
-                "rotation_interval": self.config.get("rotation_interval"),
-                "retention_days": self.config.get("retention_days"),
-                "performance_enabled": self.performance_enabled,
-                "audit_enabled": self.audit_enabled
-            }
-        })
+        # Log system initialization (skip during setup to avoid recursion)
+        # self._log("app", "INFO", "Professional logging system initialized", "system_init", {
+        #     "config": {
+        #         "log_level": self.config.get("log_level"),
+        #         "rotation_interval": self.config.get("rotation_interval"),
+        #         "retention_days": self.config.get("retention_days"),
+        #         "performance_enabled": self.performance_enabled,
+        #         "audit_enabled": self.audit_enabled
+        #     }
+        # })
     
     def _setup_loggers(self):
-        """Setup individual loggers for each category."""
+        """Setup individual loggers for each category - dynamic creation."""
         categories = self.config.get("categories", {})
         
         for category_name, category_config in categories.items():
@@ -73,13 +73,17 @@ class ProfessionalLogger:
             # Clear existing handlers
             logger.handlers.clear()
             
-            # Create file handler with rotation
+            # Dynamically create log file path
             log_file = os.path.join(self.log_dir, category_name, f"{category_name}.log")
+            
+            # Automatically create directory if it doesn't exist
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
             
+            # Get configuration for this category
             max_bytes = self._parse_size(category_config.get("max_size", "50MB"))
             backup_count = category_config.get("backup_count", 5)
             
+            # Create rotating file handler
             handler = logging.handlers.RotatingFileHandler(
                 log_file,
                 maxBytes=max_bytes,
@@ -96,6 +100,14 @@ class ProfessionalLogger:
             
             # Store logger
             self.loggers[category_name] = logger
+            
+            # Log that this category was initialized (but skip during initial setup)
+            # self._log("app", "INFO", f"Logger category '{category_name}' initialized", "logger_setup", {
+            #     "category": category_name,
+            #     "log_file": log_file,
+            #     "max_size": category_config.get("max_size", "50MB"),
+            #     "backup_count": backup_count
+            # })
     
     def _parse_size(self, size_str: str) -> int:
         """Parse size string like '50MB' to bytes."""
