@@ -9,6 +9,12 @@ This file contains all settings for log rotation, retention, and categories.
 import os
 from typing import Dict, Any
 
+# Import professional logging system
+from .professional_logger import get_professional_logger
+
+# Initialize professional logger for this configuration file
+logger = get_professional_logger()
+
 # =============================================================================
 # CORE LOGGING CONFIGURATION
 # =============================================================================
@@ -40,11 +46,11 @@ LOGGING_CONFIG: Dict[str, Any] = {
     "enable_json_format": True,      # Use structured JSON logging
     
     # ========================================================================
-    # LOG CATEGORIES - DETAILED STRUCTURE (20+ LOG FILES)
+    # LOG CATEGORIES - DETAILED STRUCTURE (17 LOG FILES)
     # ========================================================================
     "categories": {
         # ====================================================================
-        # APP CATEGORY (4 files) - Based on actual activities
+        # APP CATEGORY (6 files) - Application level logs
         # ====================================================================
         "app": {
             "enabled": True,
@@ -53,14 +59,16 @@ LOGGING_CONFIG: Dict[str, Any] = {
             "backup_count": 3,
             "files": {
                 "frontend": {"enabled": True, "level": "INFO"},
+                "api": {"enabled": True, "level": "INFO"},
+                "startup": {"enabled": True, "level": "INFO"},
+                "app": {"enabled": True, "level": "INFO"},
                 "backend": {"enabled": True, "level": "INFO"},
-                "database": {"enabled": True, "level": "INFO"},
-                "startup": {"enabled": True, "level": "INFO"}
+                "database": {"enabled": True, "level": "INFO"}
             }
         },
         
         # ====================================================================
-        # OPERATIONS CATEGORY (6 files) - Based on actual activities
+        # OPERATIONS CATEGORY (7 files) - Business operations logs
         # ====================================================================
         "operations": {
             "enabled": True,
@@ -69,16 +77,17 @@ LOGGING_CONFIG: Dict[str, Any] = {
             "backup_count": 5,
             "files": {
                 "images": {"enabled": True, "level": "INFO"},
-                "transformations": {"enabled": True, "level": "INFO"},
                 "datasets": {"enabled": True, "level": "INFO"},
-                "annotations": {"enabled": True, "level": "INFO"},
                 "exports": {"enabled": True, "level": "INFO"},
-                "releases": {"enabled": True, "level": "INFO"}
+                "operations": {"enabled": True, "level": "INFO"},
+                "annotations": {"enabled": True, "level": "INFO"},
+                "releases": {"enabled": True, "level": "INFO"},
+                "transformations": {"enabled": True, "level": "INFO"}
             }
         },
         
         # ====================================================================
-        # ERRORS CATEGORY (3 files) - Based on actual error types
+        # ERRORS CATEGORY (4 files) - Error and debug logs
         # ====================================================================
         "errors": {
             "enabled": True,
@@ -86,65 +95,12 @@ LOGGING_CONFIG: Dict[str, Any] = {
             "max_size": "50MB", 
             "backup_count": 10,
             "files": {
-                "errors": {"enabled": True, "level": "ERROR"},
+                "system": {"enabled": True, "level": "ERROR"},
                 "validation": {"enabled": True, "level": "ERROR"},
-                "system": {"enabled": True, "level": "ERROR"}
-            }
-        },
-        
-        # ====================================================================
-        # PERFORMANCE CATEGORY (2 files) - Based on actual performance tracking
-        # ====================================================================
-        "performance": {
-            "enabled": True,
-            "level": "INFO",
-            "max_size": "50MB",
-            "backup_count": 3,
-            "files": {
-                "api": {"enabled": True, "level": "INFO"},
-                "database": {"enabled": True, "level": "INFO"}
-            }
-        },
-        
-        # ====================================================================
-        # AUDIT CATEGORY (3 files)
-        # ====================================================================
-        "audit": {
-            "enabled": True,
-            "level": "INFO",
-            "max_size": "100MB",
-            "backup_count": 7,
-            "files": {
-                "user_actions": {"enabled": True, "level": "INFO"},
-                "security": {"enabled": True, "level": "INFO"},
-                "audit": {"enabled": True, "level": "INFO"}
+                "errors": {"enabled": True, "level": "ERROR"},
+                "debug": {"enabled": True, "level": "DEBUG"}
             }
         }
-    },
-    
-    # ========================================================================
-    # PERFORMANCE MONITORING
-    # ========================================================================
-    "performance": {
-        "track_api_response_times": True,
-        "track_database_query_times": True,
-        "track_memory_usage": True,
-        "track_cpu_usage": True,
-        "track_image_processing_times": True,
-        "slow_query_threshold": 1.0,  # Seconds
-        "slow_api_threshold": 2.0,    # Seconds
-    },
-    
-    # ========================================================================
-    # AUDIT & SECURITY
-    # ========================================================================
-    "audit": {
-        "track_user_actions": True,
-        "track_api_calls": True,
-        "track_file_operations": True,
-        "track_database_changes": True,
-        "mask_sensitive_data": True,
-        "sensitive_fields": ["password", "token", "key", "secret"]
     },
     
     # ========================================================================
@@ -156,32 +112,6 @@ LOGGING_CONFIG: Dict[str, Any] = {
         "include_request_data": True,
         "max_error_message_length": 1000,
         "error_notification": False  # Future: email/SMS notifications
-    },
-    
-    # ========================================================================
-    # FUTURE FEATURES (Auto-labeling, YOLO Training, GPU)
-    # ========================================================================
-    "future_features": {
-        "auto_labeling": {
-            "enabled": False,
-            "track_model_performance": True,
-            "track_labeling_accuracy": True,
-            "track_processing_times": True
-        },
-        "yolo_training": {
-            "enabled": False,
-            "track_training_progress": True,
-            "track_model_metrics": True,
-            "track_gpu_usage": True,
-            "track_memory_usage": True
-        },
-        "gpu_monitoring": {
-            "enabled": False,
-            "track_gpu_utilization": True,
-            "track_gpu_memory": True,
-            "track_temperature": True,
-            "track_power_usage": True
-        }
     }
 }
 
@@ -194,6 +124,11 @@ def get_config() -> Dict[str, Any]:
     Get configuration with environment variable overrides.
     Environment variables can override any setting.
     """
+    logger.debug("app.backend", "Loading logging configuration with environment overrides", "config_loading_start", {
+        "operation": "configuration_loading",
+        "base_config_keys": list(LOGGING_CONFIG.keys())
+    })
+    
     config = LOGGING_CONFIG.copy()
     
     # Override with environment variables if present
@@ -202,21 +137,59 @@ def get_config() -> Dict[str, Any]:
         "LOG_ROTATION_INTERVAL": "rotation_interval", 
         "LOG_RETENTION_DAYS": "retention_days",
         "LOG_MAX_FILE_SIZE": "max_file_size",
-        "LOG_ENABLE_PERFORMANCE": "enable_performance",
-        "LOG_ENABLE_AUDIT": "enable_audit",
         "LOG_ENABLE_JSON": "enable_json_format"
     }
     
+    logger.debug("app.backend", "Processing environment variable overrides", "env_override_start", {
+        "env_mappings_count": len(env_mappings),
+        "available_env_vars": list(env_mappings.keys())
+    })
+    
+    overrides_applied = 0
     for env_var, config_key in env_mappings.items():
         env_value = os.getenv(env_var)
         if env_value is not None:
             # Convert string values to appropriate types
             if config_key in ["retention_days", "backup_count"]:
-                config[config_key] = int(env_value)
-            elif config_key in ["enable_performance", "enable_audit", "enable_json_format"]:
+                try:
+                    config[config_key] = int(env_value)
+                    overrides_applied += 1
+                    logger.debug("app.backend", f"Applied integer override: {config_key} = {env_value}", "env_override_applied", {
+                        "env_var": env_var,
+                        "config_key": config_key,
+                        "value": env_value,
+                        "type": "integer"
+                    })
+                except ValueError as e:
+                    logger.warning("errors.validation", f"Invalid integer value for {config_key}: {env_value}", "env_override_validation_error", {
+                        "env_var": env_var,
+                        "config_key": config_key,
+                        "value": env_value,
+                        "error": str(e)
+                    })
+            elif config_key in ["enable_json_format"]:
                 config[config_key] = env_value.lower() in ["true", "1", "yes"]
+                overrides_applied += 1
+                logger.debug("app.backend", f"Applied boolean override: {config_key} = {config[config_key]}", "env_override_applied", {
+                    "env_var": env_var,
+                    "config_key": config_key,
+                    "value": env_value,
+                    "result": config[config_key]
+                })
             else:
                 config[config_key] = env_value
+                overrides_applied += 1
+                logger.debug("app.backend", f"Applied string override: {config_key} = {env_value}", "env_override_applied", {
+                    "env_var": env_var,
+                    "config_key": config_key,
+                    "value": env_value
+                })
+    
+    logger.info("app.backend", "Configuration loaded successfully with environment overrides", "config_loading_complete", {
+        "overrides_applied": overrides_applied,
+        "total_env_vars_checked": len(env_mappings),
+        "final_config_keys": list(config.keys())
+    })
     
     return config
 
@@ -229,22 +202,73 @@ def validate_config(config: Dict[str, Any]) -> bool:
     Validate the logging configuration.
     Returns True if valid, raises ValueError if invalid.
     """
+    logger.debug("app.backend", "Starting configuration validation", "config_validation_start", {
+        "config_keys": list(config.keys()),
+        "validation_checks": ["log_levels", "rotation_intervals", "numeric_values"]
+    })
+    
     # Validate log levels
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     if config["log_level"] not in valid_levels:
-        raise ValueError(f"Invalid log_level: {config['log_level']}. Must be one of {valid_levels}")
+        error_msg = f"Invalid log_level: {config['log_level']}. Must be one of {valid_levels}"
+        logger.error("errors.validation", error_msg, "config_validation_error", {
+            "validation_type": "log_level",
+            "invalid_value": config["log_level"],
+            "valid_values": valid_levels
+        })
+        raise ValueError(error_msg)
+    
+    logger.debug("app.backend", "Log level validation passed", "config_validation_step", {
+        "step": "log_level_validation",
+        "value": config["log_level"],
+        "valid_values": valid_levels
+    })
     
     # Validate rotation interval
     valid_intervals = ["1h", "6h", "12h", "24h", "7d", "30d"]
     if config["rotation_interval"] not in valid_intervals:
-        raise ValueError(f"Invalid rotation_interval: {config['rotation_interval']}. Must be one of {valid_intervals}")
+        error_msg = f"Invalid rotation_interval: {config['rotation_interval']}. Must be one of {valid_intervals}"
+        logger.error("errors.validation", error_msg, "config_validation_error", {
+            "validation_type": "rotation_interval",
+            "invalid_value": config["rotation_interval"],
+            "valid_values": valid_intervals
+        })
+        raise ValueError(error_msg)
+    
+    logger.debug("app.backend", "Rotation interval validation passed", "config_validation_step", {
+        "step": "rotation_interval_validation",
+        "value": config["rotation_interval"],
+        "valid_values": valid_intervals
+    })
     
     # Validate numeric values
     if config["retention_days"] < 1:
-        raise ValueError(f"retention_days must be >= 1, got {config['retention_days']}")
+        error_msg = f"retention_days must be >= 1, got {config['retention_days']}"
+        logger.error("errors.validation", error_msg, "config_validation_error", {
+            "validation_type": "retention_days",
+            "invalid_value": config["retention_days"],
+            "minimum_value": 1
+        })
+        raise ValueError(error_msg)
     
     if config["backup_count"] < 1:
-        raise ValueError(f"backup_count must be >= 1, got {config['backup_count']}")
+        error_msg = f"backup_count must be >= 1, got {config['backup_count']}"
+        logger.error("errors.validation", error_msg, "config_validation_error", {
+            "validation_type": "backup_count",
+            "invalid_value": config["backup_count"],
+            "minimum_value": 1
+        })
+        raise ValueError(error_msg)
+    
+    logger.info("app.backend", "Configuration validation completed successfully", "config_validation_complete", {
+        "validation_steps": ["log_levels", "rotation_intervals", "numeric_values"],
+        "config_summary": {
+            "log_level": config["log_level"],
+            "rotation_interval": config["rotation_interval"],
+            "retention_days": config["retention_days"],
+            "backup_count": config["backup_count"]
+        }
+    })
     
     return True
 
@@ -254,17 +278,54 @@ def validate_config(config: Dict[str, Any]) -> bool:
 
 def get_log_directory() -> str:
     """Get the log directory path."""
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "logs"))
+    log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "logs"))
+    logger.debug("app.backend", "Retrieved log directory path", "log_directory_retrieved", {
+        "log_directory": log_dir,
+        "operation": "path_resolution"
+    })
+    return log_dir
 
 def get_category_config(category: str) -> Dict[str, Any]:
     """Get configuration for a specific log category."""
+    logger.debug("app.backend", f"Retrieving configuration for category: {category}", "category_config_retrieval", {
+        "category": category,
+        "operation": "category_config_lookup"
+    })
+    
     config = get_config()
-    return config["categories"].get(category, {})
+    category_config = config["categories"].get(category, {})
+    
+    if category_config:
+        logger.debug("app.backend", f"Category configuration found for: {category}", "category_config_found", {
+            "category": category,
+            "config_keys": list(category_config.keys()),
+            "enabled": category_config.get("enabled", False)
+        })
+    else:
+        logger.warning("errors.validation", f"Category configuration not found: {category}", "category_config_not_found", {
+            "category": category,
+            "available_categories": list(config["categories"].keys())
+        })
+    
+    return category_config
 
 def is_category_enabled(category: str) -> bool:
     """Check if a log category is enabled."""
+    logger.debug("app.backend", f"Checking if category is enabled: {category}", "category_enabled_check", {
+        "category": category,
+        "operation": "enabled_status_check"
+    })
+    
     category_config = get_category_config(category)
-    return category_config.get("enabled", False)
+    is_enabled = category_config.get("enabled", False)
+    
+    logger.debug("app.backend", f"Category enabled status: {category} = {is_enabled}", "category_enabled_status", {
+        "category": category,
+        "enabled": is_enabled,
+        "config_available": bool(category_config)
+    })
+    
+    return is_enabled
 
 # =============================================================================
 # INITIALIZATION
@@ -272,14 +333,40 @@ def is_category_enabled(category: str) -> bool:
 
 if __name__ == "__main__":
     # Test configuration loading
+    logger.info("app.backend", "Starting configuration file test execution", "config_test_start", {
+        "test_type": "standalone_execution",
+        "file": __file__
+    })
+    
     try:
         config = get_config()
+        logger.debug("app.backend", "Configuration loaded, starting validation", "config_test_validation_start", {
+            "config_keys_count": len(config),
+            "validation_phase": "pre_validation"
+        })
+        
         validate_config(config)
+        
+        log_dir = get_log_directory()
+        
+        logger.info("app.backend", "Configuration test completed successfully", "config_test_success", {
+            "log_directory": log_dir,
+            "log_level": config['log_level'],
+            "rotation_interval": config['rotation_interval'],
+            "retention_days": config['retention_days']
+        })
+        
         print("✅ Logging configuration loaded successfully!")
-        print(f"📁 Log directory: {get_log_directory()}")
+        print(f"📁 Log directory: {log_dir}")
         print(f"📊 Log level: {config['log_level']}")
         print(f"🔄 Rotation: {config['rotation_interval']}")
         print(f"📅 Retention: {config['retention_days']} days")
+        
     except Exception as e:
+        logger.error("errors.system", f"Configuration test failed: {str(e)}", "config_test_failure", {
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "test_phase": "configuration_testing"
+        })
         print(f"❌ Configuration error: {e}")
         exit(1)

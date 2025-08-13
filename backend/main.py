@@ -27,10 +27,10 @@ from api import active_learning
 from core.config import settings
 from database.database import init_db
 # Import professional logging system
-from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
+from logging_system.professional_logger import get_professional_logger
 
 # Initialize professional logger
-professional_logger = get_professional_logger()
+logger = get_professional_logger()
 import time
 
 # Initialize FastAPI app
@@ -67,33 +67,26 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
         
         # Log request with professional logger
-        professional_logger.track_api_call(
-            user_id=None,  # Will be set when auth is implemented
-            endpoint=str(request.url.path),
-            method=request.method,
-            status_code=None,  # Will be set after response
-            details={
-                "query_params": dict(request.query_params) if request.query_params else None,
-                "headers": dict(request.headers),
-                "client_ip": request.client.host if request.client else None
-            }
-        )
+        logger.info("app.api", f"API Request: {request.method} {request.url.path}", "api_request", {
+            "endpoint": str(request.url.path),
+            "method": request.method,
+            "query_params": dict(request.query_params) if request.query_params else None,
+            "client_ip": request.client.host if request.client else None
+        })
         
         try:
             response = await call_next(request)
             duration = time.time() - start_time
             
             # Log successful response with professional logger
-            professional_logger.track_api_response_time(
-                endpoint=str(request.url.path),
-                method=request.method,
-                response_time=duration,
-                status_code=response.status_code,
-                details={
-                    "response_size": len(response.body) if hasattr(response, 'body') else None,
-                    "content_type": response.headers.get("content-type", None)
-                }
-            )
+            logger.info("app.api", f"API Response: {request.method} {request.url.path} - {response.status_code}", "api_response", {
+                "endpoint": str(request.url.path),
+                "method": request.method,
+                "response_time": duration,
+                "status_code": response.status_code,
+                "response_size": len(response.body) if hasattr(response, 'body') else None,
+                "content_type": response.headers.get("content-type", None)
+            })
             
             return response
             
@@ -101,7 +94,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             duration = time.time() - start_time
             
             # Log error response with professional logger
-            professional_logger.error("errors", f"API error: {str(e)}", "api_error", {
+            logger.error("errors.system", f"API error: {str(e)}", "api_error", {
                 'method': request.method,
                 'path': str(request.url.path),
                 'status_code': 500,
@@ -174,8 +167,9 @@ async def fix_orphaned_labels():
         existing_projects = db.query(Project).all()
         existing_project_ids = [p.id for p in existing_projects]
         
-        print(f"\n\n================ EMERGENCY LABEL CLEANUP ================")
-        print(f"Valid projects: {existing_project_ids}")
+        logger.info("app.backend", "Starting emergency label cleanup", "emergency_cleanup_start", {
+            "valid_projects": existing_project_ids
+        })
         
         # Find orphaned labels (null project_id or non-existent project)
         orphaned_labels = db.query(Label).filter(
@@ -184,14 +178,23 @@ async def fix_orphaned_labels():
         ).all()
         
         orphaned_count = len(orphaned_labels)
-        print(f"Found {orphaned_count} orphaned labels")
+        logger.info("operations.operations", f"Found {orphaned_count} orphaned labels", "orphaned_labels_found", {
+            "count": orphaned_count
+        })
         
         for label in orphaned_labels:
-            print(f"Deleting orphaned label: ID {label.id}, Name: {label.name}, Project ID: {label.project_id}")
+            logger.info("operations.operations", f"Deleting orphaned label", "orphaned_label_deletion", {
+                "label_id": label.id,
+                "label_name": label.name,
+                "project_id": label.project_id
+            })
             db.delete(label)
         
         # Commit all changes
         db.commit()
+        logger.info("app.database", "Database changes committed", "cleanup_commit", {
+            "deleted_count": orphaned_count
+        })
         
         # Verify that all orphaned labels are gone
         remaining = db.query(Label).filter(
@@ -200,24 +203,30 @@ async def fix_orphaned_labels():
         ).all()
         
         if remaining:
-            print(f"WARNING: {len(remaining)} orphaned labels still remain!")
+            logger.warning("errors.validation", f"{len(remaining)} orphaned labels still remain", "cleanup_incomplete", {
+                "remaining_count": len(remaining)
+            })
             return {
                 "success": False,
                 "message": f"Failed to delete all orphaned labels - {len(remaining)} remain"
             }
         else:
-            print("SUCCESS: All orphaned labels have been removed")
+            logger.info("operations.operations", "All orphaned labels successfully removed", "cleanup_complete", {
+                "deleted_count": orphaned_count
+            })
             return {
                 "success": True,
                 "message": f"Successfully deleted {orphaned_count} orphaned labels"
             }
     except Exception as e:
-        print(f"ERROR: {str(e)}")
+        logger.error("errors.system", f"Emergency cleanup failed: {str(e)}", "cleanup_error", {
+            "error": str(e)
+        })
         db.rollback()
         return {"success": False, "error": str(e)}
     finally:
         db.close()
-        print("================ CLEANUP COMPLETE ================\n\n")
+        logger.info("app.backend", "Emergency cleanup completed", "cleanup_finished")
 
 @app.get("/api/v1/list-labels")
 async def list_all_labels():
@@ -258,9 +267,13 @@ async def list_all_labels():
         
         return result
     except Exception as e:
+        logger.error("errors.system", f"Failed to list labels: {str(e)}", "list_labels_error", {
+            "error": str(e)
+        })
         return {"error": str(e)}
     finally:
         db.close()
+        logger.info("app.database", "Database connection closed", "db_connection_closed")
 
 # Include Smart Segmentation routes
 from api import smart_segmentation
@@ -319,18 +332,18 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and create tables"""
-    professional_logger.info("app", "🚀 SYA Backend starting up", "startup", {
+    logger.info("app.startup", "🚀 SYA Backend starting up", "startup", {
         'version': '1.0.0',
         'environment': 'development',
         'port': 12000
     })
     await init_db()
-    professional_logger.info("app", "✅ Database initialized successfully", "database_initialized")
+    logger.info("app.database", "✅ Database initialized successfully", "database_initialized")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    professional_logger.info("app", "🛑 SYA Backend shutting down", "shutdown")
+    logger.info("app.startup", "🛑 SYA Backend shutting down", "shutdown")
 
 if __name__ == "__main__":
     # Run the application

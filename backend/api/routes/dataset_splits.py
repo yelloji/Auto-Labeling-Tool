@@ -66,7 +66,7 @@ async def assign_images_to_splits(
         import random, math  # for shuffling and ceil
 
         # Verify dataset & project
-        logger.debug("operations.database", f"Fetching dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching dataset {dataset_id}", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
             logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
@@ -74,7 +74,7 @@ async def assign_images_to_splits(
             })
             raise HTTPException(status_code=404, detail="Dataset not found")
         
-        logger.debug("operations.database", f"Fetching project for dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching project for dataset {dataset_id}", "database_query")
         project = ProjectOperations.get_project(db, dataset.project_id)
         if not project:
             logger.warning("errors.validation", f"Project not found for dataset {dataset_id}", "project_not_found", {
@@ -84,7 +84,7 @@ async def assign_images_to_splits(
             raise HTTPException(status_code=404, detail="Project not found")
 
         # Fetch all labeled images
-        logger.debug("operations.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
         labeled_images = ImageOperations.get_images_by_dataset(db, dataset_id, labeled_only=True)
         if not labeled_images:
             logger.warning("errors.validation", f"No labeled images found in dataset {dataset_id}", "no_labeled_images", {
@@ -219,12 +219,12 @@ async def assign_images_to_splits(
             raise HTTPException(status_code=400, detail="Unsupported split method")
 
         # Commit once after handling whichever branch
-        logger.info("operations.database", f"Committing split assignments to database", "database_commit")
+        logger.info("app.database", f"Committing split assignments to database", "database_commit")
         db.commit()
           
 
         # Recalculate stats and refresh
-        logger.debug("operations.database", f"Updating dataset stats for {dataset_id}", "database_update")
+        logger.debug("app.database", f"Updating dataset stats for {dataset_id}", "database_update")
         DatasetOperations.update_dataset_stats(db, dataset_id)
         db.refresh(dataset)
 
@@ -246,7 +246,7 @@ async def assign_images_to_splits(
         }
 
     except HTTPException:
-        logger.debug("operations.database", f"Rolling back split assignment due to HTTPException", "database_rollback")
+        logger.debug("app.database", f"Rolling back split assignment due to HTTPException", "database_rollback")
         db.rollback()
         raise
     except Exception as e:
@@ -277,7 +277,7 @@ async def get_dataset_split_stats(
     
     try:
         # Verify dataset exists
-        logger.debug("operations.database", f"Fetching dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching dataset {dataset_id}", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
             logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
@@ -286,7 +286,7 @@ async def get_dataset_split_stats(
             raise HTTPException(status_code=404, detail="Dataset not found")
             
         # Get all labeled images for this dataset
-        logger.debug("operations.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
         labeled_images = ImageOperations.get_images_by_dataset(
             db, dataset_id, labeled_only=True
         )
@@ -370,7 +370,7 @@ async def get_images_by_split(
     
     try:
         # Verify dataset exists
-        logger.debug("operations.database", f"Fetching dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching dataset {dataset_id}", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
             logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
@@ -379,7 +379,7 @@ async def get_images_by_split(
             raise HTTPException(status_code=404, detail="Dataset not found")
             
         # Get all labeled images for this dataset
-        logger.debug("operations.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
         labeled_images = ImageOperations.get_images_by_dataset(
             db, dataset_id, labeled_only=True
         )

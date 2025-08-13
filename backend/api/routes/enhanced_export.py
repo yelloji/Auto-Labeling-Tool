@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from backend.logging_system.professional_logger import get_professional_logger
+from logging_system.professional_logger import get_professional_logger
 
 logger = get_professional_logger()
 
@@ -467,8 +467,27 @@ task: segment  # for segmentation
 @router.post("/export")
 async def export_annotations(request: ExportRequest):
     """Export annotations in specified format with intelligent format selection"""
+    logger.info("app.backend", f"Starting export operation", "export_operation_start", {
+        "dataset_name": request.dataset_name,
+        "format": request.format,
+        "task_type": request.task_type,
+        "project_type": request.project_type,
+        "annotation_count": len(request.annotations),
+        "image_count": len(request.images),
+        "class_count": len(request.classes),
+        "include_images": request.include_images,
+        "endpoint": "/export"
+    })
+    
     try:
         # Intelligently select optimal format based on task type and project type
+        logger.debug("operations.exports", f"Selecting optimal export format", "format_selection", {
+            "task_type": request.task_type or "object_detection",
+            "project_type": request.project_type or "general",
+            "annotation_count": len(request.annotations),
+            "user_format": request.format
+        })
+        
         optimal_format = ExportFormats.select_optimal_format(
             task_type=request.task_type or "object_detection",
             project_type=request.project_type or "general", 
@@ -477,11 +496,26 @@ async def export_annotations(request: ExportRequest):
         )
         
         # Get the appropriate export method
+        logger.debug("operations.exports", f"Getting export method for format {optimal_format}", "export_method_selection", {
+            "optimal_format": optimal_format,
+            "supported_formats": ["coco", "yolo_detection", "yolo_segmentation", "pascal_voc", "csv"]
+        })
+        
         export_method = ExportFormats.get_export_method(optimal_format)
         if not export_method:
+            logger.warning("errors.validation", f"Unsupported export format requested", "unsupported_format", {
+                "requested_format": optimal_format,
+                "supported_formats": ["coco", "yolo_detection", "yolo_segmentation", "pascal_voc", "csv"]
+            })
             raise HTTPException(status_code=400, detail=f"Unsupported format: {optimal_format}")
         
         # Execute the export
+        logger.info("operations.exports", f"Executing export in {optimal_format} format", "export_execution", {
+            "format": optimal_format,
+            "dataset_name": request.dataset_name,
+            "annotation_count": len(request.annotations)
+        })
+        
         if optimal_format == "coco":
             data = export_method(request)
             return {
@@ -523,16 +557,54 @@ async def export_annotations(request: ExportRequest):
             }
         
         else:
+            logger.warning("errors.validation", f"Unsupported format encountered during execution", "unsupported_format_execution", {
+                "format": optimal_format,
+                "dataset_name": request.dataset_name
+            })
             raise HTTPException(status_code=400, detail=f"Unsupported format: {optimal_format}")
+        
+        # Log successful export completion
+        logger.info("operations.exports", f"Export completed successfully", "export_success", {
+            "format": optimal_format,
+            "dataset_name": request.dataset_name,
+            "annotation_count": len(request.annotations),
+            "image_count": len(request.images),
+            "class_count": len(request.classes)
+        })
     
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
+        raise
     except Exception as e:
+        logger.error("errors.system", f"Export operation failed", "export_failure", {
+            "dataset_name": request.dataset_name,
+            "format": request.format,
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
         raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 @router.post("/export/download")
 async def download_export(request: ExportRequest):
     """Export and download as ZIP file"""
+    logger.info("app.backend", f"Starting export download operation", "export_download_start", {
+        "dataset_name": request.dataset_name,
+        "format": request.format,
+        "task_type": request.task_type,
+        "project_type": request.project_type,
+        "annotation_count": len(request.annotations),
+        "image_count": len(request.images),
+        "class_count": len(request.classes),
+        "include_images": request.include_images,
+        "endpoint": "/export/download"
+    })
+    
     try:
         format_name = request.format.lower()
+        logger.debug("operations.exports", f"Processing download for format {format_name}", "download_format_processing", {
+            "format": format_name,
+            "dataset_name": request.dataset_name
+        })
         
         if format_name == "coco":
             data = ExportFormats.export_coco(request)
@@ -613,15 +685,42 @@ async def download_export(request: ExportRequest):
                 raise e
         
         else:
+            logger.warning("errors.validation", f"Unsupported export format for download", "unsupported_download_format", {
+                "requested_format": format_name,
+                "supported_formats": ["coco", "yolo_detection", "yolo_segmentation", "pascal_voc", "csv"],
+                "dataset_name": request.dataset_name
+            })
             raise HTTPException(status_code=400, detail=f"Unsupported export format: {format_name}")
+        
+        # Log successful download completion
+        logger.info("operations.exports", f"Export download completed successfully", "export_download_success", {
+            "format": format_name,
+            "dataset_name": request.dataset_name,
+            "annotation_count": len(request.annotations)
+        })
     
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
+        raise
     except Exception as e:
+        logger.error("errors.system", f"Export download operation failed", "export_download_failure", {
+            "dataset_name": request.dataset_name,
+            "format": request.format,
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
         raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
 
 @router.get("/formats")
 async def get_export_formats():
     """Get all supported export formats"""
-    return {
+    logger.info("app.backend", f"Retrieving supported export formats", "formats_retrieval", {
+        "endpoint": "/formats",
+        "total_formats": 5
+    })
+    
+    try:
+        formats_data = {
         "formats": [
             {
                 "name": "COCO",
@@ -687,4 +786,18 @@ async def get_export_formats():
             "our_formats": 5,
             "advantage": "Focused on essential formats with better implementation"
         }
-    }
+        }
+        
+        logger.info("operations.exports", f"Export formats retrieved successfully", "formats_retrieval_success", {
+            "total_formats": 5,
+            "supported_task_types": ["detection", "segmentation"]
+        })
+        
+        return formats_data
+        
+    except Exception as e:
+        logger.error("errors.system", f"Failed to retrieve export formats", "formats_retrieval_failure", {
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve export formats: {str(e)}")

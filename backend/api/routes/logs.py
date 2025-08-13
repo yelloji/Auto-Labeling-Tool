@@ -12,10 +12,10 @@ from datetime import datetime
 from pathlib import Path
 
 # Import professional logging system
-from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning
+from logging_system.professional_logger import get_professional_logger
 
 # Initialize professional logger
-professional_logger = get_professional_logger()
+logger = get_professional_logger()
 
 router = APIRouter()
 
@@ -58,7 +58,7 @@ async def receive_frontend_logs(request: FrontendLogsRequest):
                 f.write(log_line + "\n")
         
         # Log the operation with professional logger
-        professional_logger.info("operations", f"Received {len(request.logs)} frontend log entries", "frontend_logs_received", {
+        logger.info("operations.operations", f"Received {len(request.logs)} frontend log entries", "frontend_logs_received", {
             'source': request.source,
             'log_count': len(request.logs),
             'timestamp': request.timestamp,
@@ -72,7 +72,7 @@ async def receive_frontend_logs(request: FrontendLogsRequest):
         }
         
     except Exception as e:
-        professional_logger.error("errors", "Failed to store frontend logs", "frontend_logs_error", {
+        logger.error("errors.system", "Failed to store frontend logs", "frontend_logs_error", {
             'error': str(e),
             'endpoint': '/logs/frontend',
             'log_count': len(request.logs) if 'request' in locals() else 0
@@ -125,7 +125,7 @@ async def get_logs_summary():
         return summary
         
     except Exception as e:
-        professional_logger.error("errors", "Failed to get logs summary", "logs_summary_error", {
+        logger.error("errors.system", "Failed to get logs summary", "logs_summary_error", {
             'error': str(e),
             'endpoint': '/logs/summary'
         })
@@ -156,7 +156,7 @@ async def get_log_content(log_type: str, lines: int = 100):
         }
         
     except Exception as e:
-        professional_logger.error("errors", f"Failed to read {log_type} log", "log_read_error", {
+        logger.error("errors.system", f"Failed to read {log_type} log", "log_read_error", {
             'error': str(e),
             'log_type': log_type,
             'endpoint': f'/logs/{log_type}',
@@ -178,7 +178,7 @@ async def clear_log_file(log_type: str):
         with open(log_file, "w", encoding="utf-8") as f:
             f.write("")
         
-        professional_logger.info("operations", f"Cleared {log_type} log file", "log_clear", {
+        logger.info("operations.operations", f"Cleared {log_type} log file", "log_clear", {
             'log_type': log_type,
             'endpoint': f'/logs/{log_type}'
         })
@@ -190,7 +190,7 @@ async def clear_log_file(log_type: str):
         }
         
     except Exception as e:
-        professional_logger.error("errors", f"Failed to clear {log_type} log", "log_clear_error", {
+        logger.error("errors.system", f"Failed to clear {log_type} log", "log_clear_error", {
             'error': str(e),
             'log_type': log_type,
             'endpoint': f'/logs/{log_type}'
@@ -225,7 +225,7 @@ async def export_all_logs():
         with open(export_file, "w", encoding="utf-8") as f:
             json.dump(export_data, f, indent=2)
         
-        professional_logger.info("operations", f"Exported all logs to {export_file.name}", "logs_export", {
+        logger.info("operations.operations", f"Exported all logs to {export_file.name}", "logs_export", {
             'export_file': export_file.name,
             'file_count': len(export_data["logs"]),
             'endpoint': '/logs/export'
@@ -239,7 +239,7 @@ async def export_all_logs():
         }
         
     except Exception as e:
-        professional_logger.error("errors", "Failed to export logs", "logs_export_error", {
+        logger.error("errors.system", "Failed to export logs", "logs_export_error", {
             'error': str(e),
             'endpoint': '/logs/export'
         })

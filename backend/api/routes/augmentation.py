@@ -27,6 +27,10 @@ from core.transformation_config import (
     get_random_zoom_parameters, get_affine_transform_parameters,
     get_perspective_warp_parameters
 )
+from logging_system.professional_logger import get_professional_logger
+
+# Initialize professional logger
+logger = get_professional_logger()
 
 router = APIRouter(prefix="/api/augmentation", tags=["augmentation"])
 
@@ -48,56 +52,84 @@ class AugmentationPresetRequest(BaseModel):
 @router.get("/presets")
 async def get_augmentation_presets():
     """Get available augmentation presets"""
-    augmenter = AdvancedDataAugmentation()
-    presets = augmenter.get_preset_configs()
+    logger.info("app.backend", "Getting augmentation presets", "augmentation_presets_retrieval", {
+        "endpoint": "/api/augmentation/presets"
+    })
     
-    return {
-        "presets": {
-            name: {
-                "name": name.replace("_", " ").title(),
-                "description": get_preset_description(name),
-                "config": config
+    try:
+        augmenter = AdvancedDataAugmentation()
+        presets = augmenter.get_preset_configs()
+        
+        logger.info("operations.transformations", "Augmentation presets retrieved successfully", "presets_retrieved", {
+            "preset_count": len(presets)
+        })
+        
+        return {
+            "presets": {
+                name: {
+                    "name": name.replace("_", " ").title(),
+                    "description": get_preset_description(name),
+                    "config": config
+                }
+                for name, config in presets.items()
             }
-            for name, config in presets.items()
         }
-    }
+    except Exception as e:
+        logger.error("errors.system", f"Error retrieving augmentation presets: {str(e)}", "presets_retrieval_error", {
+            "error": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Error retrieving augmentation presets: {str(e)}")
 
 
 @router.get("/default-config")
 async def get_default_augmentation_config():
     """Get default augmentation configuration"""
-    augmenter = AdvancedDataAugmentation()
-    config = augmenter.get_default_config()
+    logger.info("app.backend", "Getting default augmentation configuration", "default_config_retrieval", {
+        "endpoint": "/api/augmentation/default-config"
+    })
     
-    return {
-        "config": config,
-        "categories": {
-            "geometric": [
-                "rotation", "flip", "shear", "perspective", "elastic_transform",
-                "crop", "zoom"
-            ],
-            "color": [
-                "brightness", "contrast", "saturation", "hue", "gamma",
-                "channel_shuffle", "color_jitter"
-            ],
-            "noise_blur": [
-                "gaussian_blur", "motion_blur", "median_blur", "gaussian_noise",
-                "iso_noise", "multiplicative_noise"
-            ],
-            "weather": [
-                "rain", "snow", "fog", "sun_flare", "shadow"
-            ],
-            "cutout": [
-                "cutout", "grid_dropout", "channel_dropout"
-            ],
-            "distortion": [
-                "optical_distortion", "grid_distortion", "piecewise_affine"
-            ],
-            "quality": [
-                "jpeg_compression", "downscale"
-            ]
+    try:
+        augmenter = AdvancedDataAugmentation()
+        config = augmenter.get_default_config()
+        
+        logger.info("operations.transformations", "Default augmentation configuration retrieved successfully", "default_config_retrieved", {
+            "config_keys": list(config.keys()) if config else []
+        })
+        
+        return {
+            "config": config,
+            "categories": {
+                "geometric": [
+                    "rotation", "flip", "shear", "perspective", "elastic_transform",
+                    "crop", "zoom"
+                ],
+                "color": [
+                    "brightness", "contrast", "saturation", "hue", "gamma",
+                    "channel_shuffle", "color_jitter"
+                ],
+                "noise_blur": [
+                    "gaussian_blur", "motion_blur", "median_blur", "gaussian_noise",
+                    "iso_noise", "multiplicative_noise"
+                ],
+                "weather": [
+                    "rain", "snow", "fog", "sun_flare", "shadow"
+                ],
+                "cutout": [
+                    "cutout", "grid_dropout", "channel_dropout"
+                ],
+                "distortion": [
+                    "optical_distortion", "grid_distortion", "piecewise_affine"
+                ],
+                "quality": [
+                    "jpeg_compression", "downscale"
+                ]
+            }
         }
-    }
+    except Exception as e:
+        logger.error("errors.system", f"Error retrieving default augmentation configuration: {str(e)}", "default_config_retrieval_error", {
+            "error": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Error retrieving default augmentation configuration: {str(e)}")
 
 
 @router.post("/create")
@@ -155,13 +187,32 @@ async def preview_augmentation(
     db: Session = Depends(get_db)
 ):
     """Preview augmentation effects on sample images"""
+    logger.info("app.backend", "Previewing augmentation effects", "augmentation_preview_request", {
+        "endpoint": "/api/augmentation/preview",
+        "dataset_id": request.dataset_id,
+        "images_per_original": request.images_per_original,
+        "apply_to_split": request.apply_to_split
+    })
+    
     try:
         # Get a few sample images from the dataset
+        logger.debug("app.database", f"Fetching sample images from dataset {request.dataset_id}", "database_query", {
+            "dataset_id": request.dataset_id,
+            "limit": 3
+        })
+        
         images = crud.get_images_by_dataset(db, request.dataset_id, limit=3)
         if not images:
+            logger.warning("errors.validation", f"No images found in dataset {request.dataset_id}", "no_images_found", {
+                "dataset_id": request.dataset_id
+            })
             raise HTTPException(status_code=404, detail="No images found in dataset")
         
         # Create augmentation pipeline
+        logger.debug("operations.transformations", "Creating augmentation pipeline", "pipeline_creation", {
+            "config_keys": list(request.augmentation_config.keys())
+        })
+        
         augmenter = AdvancedDataAugmentation()
         pipeline = augmenter.create_augmentation_pipeline(request.augmentation_config)
         
@@ -171,6 +222,12 @@ async def preview_augmentation(
             name for name, config in request.augmentation_config.items()
             if isinstance(config, dict) and config.get("enabled", False)
         ]
+        
+        logger.info("operations.transformations", "Augmentation preview generated successfully", "preview_generated", {
+            "sample_images_count": len(images),
+            "enabled_augmentations_count": len(enabled_augmentations),
+            "estimated_output_images": len(images) * request.images_per_original
+        })
         
         return {
             "sample_images": [
@@ -186,15 +243,43 @@ async def preview_augmentation(
             "config_summary": get_config_summary(request.augmentation_config)
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error("errors.system", f"Error generating augmentation preview: {str(e)}", "preview_generation_error", {
+            "dataset_id": request.dataset_id,
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Error generating preview: {str(e)}")
 
 
 async def run_augmentation_job(job_id: str, config: Dict[str, Any]):
     """Background task to run augmentation job"""
-    # This would be implemented to actually process images
-    # For now, it's a placeholder
-    pass
+    logger.info("operations.transformations", f"Starting augmentation job {job_id}", "augmentation_job_started", {
+        "job_id": job_id,
+        "config_keys": list(config.keys()) if config else []
+    })
+    
+    try:
+        # This would be implemented to actually process images
+        # For now, it's a placeholder
+        logger.debug("operations.transformations", f"Augmentation job {job_id} processing", "job_processing", {
+            "job_id": job_id
+        })
+        
+        # Placeholder for actual processing
+        pass
+        
+        logger.info("operations.transformations", f"Augmentation job {job_id} completed", "augmentation_job_completed", {
+            "job_id": job_id
+        })
+        
+    except Exception as e:
+        logger.error("errors.system", f"Error in augmentation job {job_id}: {str(e)}", "augmentation_job_error", {
+            "job_id": job_id,
+            "error": str(e)
+        })
+        raise
 
 
 def get_preset_description(preset_name: str) -> str:
@@ -262,10 +347,24 @@ async def save_transformation_config(
     Save transformation configuration to database
     Enhanced version that supports new transformation types
     """
+    logger.info("app.backend", "Saving transformation configuration", "transformation_config_save", {
+        "endpoint": "/api/augmentation/transformation-config",
+        "dataset_id": config_request.dataset_id,
+        "name": config_request.name,
+        "images_per_original": config_request.images_per_original
+    })
+    
     try:
         # Validate dataset exists
+        logger.debug("app.database", f"Validating dataset {config_request.dataset_id} exists", "database_query", {
+            "dataset_id": config_request.dataset_id
+        })
+        
         dataset = crud.get_dataset(db, config_request.dataset_id)
         if not dataset:
+            logger.warning("errors.validation", f"Dataset {config_request.dataset_id} not found", "dataset_not_found", {
+                "dataset_id": config_request.dataset_id
+            })
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Create augmentation record with new transformation config
@@ -280,7 +379,17 @@ async def save_transformation_config(
             "status": "pending"
         }
         
+        logger.info("operations.transformations", "Transformation configuration validation successful", "config_validated", {
+            "dataset_id": config_request.dataset_id,
+            "config_name": config_request.name
+        })
+        
         # This function is deprecated - use ImageTransformation API instead
+        logger.warning("app.backend", "Deprecated endpoint called - redirecting to ImageTransformation API", "deprecated_endpoint", {
+            "endpoint": "/api/augmentation/transformation-config",
+            "redirect_to": "/api/image-transformations/"
+        })
+        
         raise HTTPException(status_code=410, detail="Use /api/image-transformations/ instead")
         
         return {
@@ -292,6 +401,10 @@ async def save_transformation_config(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("errors.system", f"Failed to save transformation configuration: {str(e)}", "config_save_error", {
+            "dataset_id": config_request.dataset_id,
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to save configuration: {str(e)}")
 
 @router.get("/transformation-config/{augmentation_id}")
@@ -302,11 +415,31 @@ async def get_transformation_config(
     """
     Retrieve saved transformation configuration
     """
+    logger.info("app.backend", f"Retrieving transformation configuration {augmentation_id}", "transformation_config_retrieval", {
+        "endpoint": f"/api/augmentation/transformation-config/{augmentation_id}",
+        "augmentation_id": augmentation_id
+    })
+    
     try:
+        logger.warning("app.backend", "Deprecated endpoint called - redirecting to ImageTransformation API", "deprecated_endpoint", {
+            "endpoint": f"/api/augmentation/transformation-config/{augmentation_id}",
+            "redirect_to": "/api/image-transformations/"
+        })
+        
         # This function is deprecated - use ImageTransformation API instead
         raise HTTPException(status_code=410, detail="Use /api/image-transformations/ instead")
+        
+        augmentation = crud.get_augmentation_config_by_id(db, augmentation_id)
+        
         if not augmentation:
+            logger.warning("errors.validation", f"Augmentation configuration {augmentation_id} not found", "config_not_found", {
+                "augmentation_id": augmentation_id
+            })
             raise HTTPException(status_code=404, detail="Augmentation configuration not found")
+        
+        logger.info("operations.transformations", f"Transformation configuration {augmentation_id} retrieved successfully", "config_retrieved", {
+            "augmentation_id": augmentation_id
+        })
         
         return {
             "success": True,
@@ -326,6 +459,10 @@ async def get_transformation_config(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("errors.system", f"Failed to retrieve transformation configuration {augmentation_id}: {str(e)}", "config_retrieval_error", {
+            "augmentation_id": augmentation_id,
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to retrieve configuration: {str(e)}")
 
 
@@ -338,9 +475,19 @@ async def get_available_transformations():
     Get available transformations with their parameters for the new UI
     Enhanced version for the redesigned transformation section
     """
+    logger.info("app.backend", "Getting available transformations", "available_transformations_retrieval", {
+        "endpoint": "/api/augmentation/available-transformations"
+    })
+    
     try:
+        logger.debug("operations.transformations", "Creating AdvancedDataAugmentation instance", "augmenter_creation")
+        
         augmenter = AdvancedDataAugmentation()
         default_config = augmenter.get_default_config()
+        
+        logger.debug("operations.transformations", "Retrieved default augmentation configuration", "default_config_retrieved", {
+            "config_keys": list(default_config.keys()) if default_config else []
+        })
         
         # Organize transformations by category for the new UI
         transformations = {
@@ -618,6 +765,10 @@ async def get_available_transformations():
             }
         }
         
+        logger.info("operations.transformations", "Available transformations retrieved successfully", "transformations_retrieved", {
+            "total_count": len(transformations["basic"]) + len(transformations["advanced"])
+        })
+        
         return {
             "success": True,
             "data": {
@@ -627,6 +778,9 @@ async def get_available_transformations():
         }
         
     except Exception as e:
+        logger.error("errors.system", f"Failed to get available transformations: {str(e)}", "transformations_retrieval_error", {
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to get available transformations: {str(e)}")
 
 @router.post("/generate-preview")
