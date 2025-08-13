@@ -1,0 +1,5 @@
+[33mef1dfd3[m[33m ([m[1;36mHEAD -> [m[1;32mfinal[m[33m)[m Fix: Move class_list_sorted logging after variable definition to prevent NameError
+[33md3dd546[m[33m ([m[1;31morigin/final[m[33m)[m Add debugging logs for class collection and data.yaml creation to identify class indexing issues
+[33ma319074[m Revert: data.yaml should only show classes from selected datasets, not all project datasets
+[33md9170ef[m Fix data.yaml class collection: collect from ALL datasets in project, not just selected datasets for release
+[33me3b3802[m Fix YOLO class indexing: collect all classes from datasets, improve class mapping logic, ensure data.yaml shows all available classes
