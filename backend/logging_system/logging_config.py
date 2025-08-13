@@ -44,7 +44,7 @@ LOGGING_CONFIG: Dict[str, Any] = {
     # ========================================================================
     "categories": {
         # ====================================================================
-        # APP CATEGORY (4 files)
+        # APP CATEGORY (4 files) - Based on actual activities
         # ====================================================================
         "app": {
             "enabled": True,
@@ -55,12 +55,12 @@ LOGGING_CONFIG: Dict[str, Any] = {
                 "frontend": {"enabled": True, "level": "INFO"},
                 "backend": {"enabled": True, "level": "INFO"},
                 "database": {"enabled": True, "level": "INFO"},
-                "app": {"enabled": True, "level": "INFO"}
+                "startup": {"enabled": True, "level": "INFO"}
             }
         },
         
         # ====================================================================
-        # OPERATIONS CATEGORY (5 files)
+        # OPERATIONS CATEGORY (6 files) - Based on actual activities
         # ====================================================================
         "operations": {
             "enabled": True,
@@ -70,14 +70,15 @@ LOGGING_CONFIG: Dict[str, Any] = {
             "files": {
                 "images": {"enabled": True, "level": "INFO"},
                 "transformations": {"enabled": True, "level": "INFO"},
-                "releases": {"enabled": True, "level": "INFO"},
+                "datasets": {"enabled": True, "level": "INFO"},
                 "annotations": {"enabled": True, "level": "INFO"},
-                "operations": {"enabled": True, "level": "INFO"}
+                "exports": {"enabled": True, "level": "INFO"},
+                "releases": {"enabled": True, "level": "INFO"}
             }
         },
         
         # ====================================================================
-        # ERRORS CATEGORY (4 files)
+        # ERRORS CATEGORY (3 files) - Based on actual error types
         # ====================================================================
         "errors": {
             "enabled": True,
@@ -85,15 +86,14 @@ LOGGING_CONFIG: Dict[str, Any] = {
             "max_size": "50MB", 
             "backup_count": 10,
             "files": {
-                "critical": {"enabled": True, "level": "CRITICAL"},
-                "warnings": {"enabled": True, "level": "WARNING"},
-                "debug": {"enabled": True, "level": "DEBUG"},
-                "errors": {"enabled": True, "level": "ERROR"}
+                "errors": {"enabled": True, "level": "ERROR"},
+                "validation": {"enabled": True, "level": "ERROR"},
+                "system": {"enabled": True, "level": "ERROR"}
             }
         },
         
         # ====================================================================
-        # PERFORMANCE CATEGORY (4 files)
+        # PERFORMANCE CATEGORY (2 files) - Based on actual performance tracking
         # ====================================================================
         "performance": {
             "enabled": True,
@@ -101,10 +101,8 @@ LOGGING_CONFIG: Dict[str, Any] = {
             "max_size": "50MB",
             "backup_count": 3,
             "files": {
-                "api_response": {"enabled": True, "level": "INFO"},
-                "memory": {"enabled": True, "level": "INFO"},
-                "cpu": {"enabled": True, "level": "INFO"},
-                "performance": {"enabled": True, "level": "INFO"}
+                "api": {"enabled": True, "level": "INFO"},
+                "database": {"enabled": True, "level": "INFO"}
             }
         },
         

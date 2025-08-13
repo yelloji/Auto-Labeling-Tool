@@ -78,7 +78,7 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
     
     try:
         # Check if annotation exists
-        logger.debug("operations.database", f"Checking if annotation {annotation_id} exists", "database_query")
+        logger.debug("app.database", f"Checking if annotation {annotation_id} exists", "database_query")
         existing = db.query(Annotation).filter(Annotation.id == annotation_id).first()
         if not existing:
             logger.warning("errors.validation", f"Annotation {annotation_id} not found", "annotation_not_found", {
@@ -87,7 +87,7 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
             raise HTTPException(status_code=404, detail=f"Annotation with ID {annotation_id} not found")
         
         # Get image and dataset info to find project
-        logger.debug("operations.database", f"Fetching image and dataset info for annotation {annotation_id}", "database_query")
+        logger.debug("app.database", f"Fetching image and dataset info for annotation {annotation_id}", "database_query")
         from database.models import Image, Dataset, Label
         image = db.query(Image).filter(Image.id == existing.image_id).first()
         if not image:
@@ -245,7 +245,7 @@ async def delete_annotation(annotation_id: str, db: Session = Depends(get_db)):
     
     try:
         # Get the annotation first to make sure it exists
-        logger.debug("operations.database", f"Checking if annotation {annotation_id} exists for deletion", "database_query")
+        logger.debug("app.database", f"Checking if annotation {annotation_id} exists for deletion", "database_query")
         annotation = db.query(Annotation).filter(Annotation.id == annotation_id).first()
         if not annotation:
             logger.warning("errors.validation", f"Annotation {annotation_id} not found for deletion", "annotation_not_found", {
@@ -311,7 +311,7 @@ async def get_image_annotations(image_id: str, db: Session = Depends(get_db)):
     })
     
     try:
-        logger.debug("operations.database", f"Fetching annotations for image {image_id}", "database_query")
+        logger.debug("app.database", f"Fetching annotations for image {image_id}", "database_query")
         annotations = AnnotationOperations.get_annotations_by_image(db, image_id)
         
         logger.info("operations.annotations", f"Retrieved {len(annotations)} annotations for image {image_id}", "annotations_retrieved", {

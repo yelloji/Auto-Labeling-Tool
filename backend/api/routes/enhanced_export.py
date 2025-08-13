@@ -17,6 +17,10 @@ from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from backend.logging_system.professional_logger import get_professional_logger
+
+logger = get_professional_logger()
+
 router = APIRouter()
 
 class ExportRequest(BaseModel):
