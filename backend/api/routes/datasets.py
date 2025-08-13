@@ -66,7 +66,7 @@ async def get_datasets(
     
     try:
         if project_id:
-            logger.debug("operations.database", f"Verifying project {project_id} exists", "database_query")
+            logger.debug("app.database", f"Verifying project {project_id} exists", "database_query")
             # Verify project exists
             project = ProjectOperations.get_project(db, project_id)
             if not project:
@@ -138,7 +138,7 @@ async def create_dataset(
     
     try:
         # Verify project exists
-        logger.debug("operations.database", f"Verifying project {request.project_id} exists", "database_query")
+        logger.debug("app.database", f"Verifying project {request.project_id} exists", "database_query")
         project = ProjectOperations.get_project(db, request.project_id)
         if not project:
             logger.warning("errors.validation", f"Project {request.project_id} not found", "project_not_found", {
@@ -148,7 +148,7 @@ async def create_dataset(
         
         # Validate model_id if provided
         if request.model_id:
-            logger.debug("operations.ml", f"Validating model ID {request.model_id}", "model_validation")
+            logger.debug("operations.operations", f"Validating model ID {request.model_id}", "model_validation")
             model_info = model_manager.get_model_info(request.model_id)
             if not model_info:
                 logger.warning("errors.validation", f"Invalid model ID {request.model_id}", "invalid_model_id", {
@@ -223,7 +223,7 @@ async def upload_dataset(
     try:
         # If no project_id provided, create a new project with next number
         if not project_id:
-            logger.info("operations.projects", f"Creating new auto-project for dataset upload", "auto_project_creation", {
+            logger.info("operations.operations", f"Creating new auto-project for dataset upload", "auto_project_creation", {
                 "dataset_name": name
             })
             # Get existing projects to determine next project number
@@ -248,13 +248,13 @@ async def upload_dataset(
             )
             project_id = new_project.id
             project_name = new_project.name
-            logger.info("operations.projects", f"Auto-project created successfully", "auto_project_created", {
+            logger.info("operations.operations", f"Auto-project created successfully", "auto_project_created", {
                 "project_id": project_id,
                 "project_name": project_name
             })
         else:
             # Verify project exists
-            logger.debug("operations.database", f"Verifying project {project_id} exists", "database_query")
+            logger.debug("app.database", f"Verifying project {project_id} exists", "database_query")
             project = ProjectOperations.get_project(db, project_id)
             if not project:
                 logger.warning("errors.validation", f"Project {project_id} not found", "project_not_found", {
@@ -279,7 +279,7 @@ async def upload_dataset(
         )
         
         # Upload files to the dataset
-        logger.info("operations.files", f"Starting file upload to dataset", "file_upload_start", {
+        logger.info("operations.operations", f"Starting file upload to dataset", "file_upload_start", {
             "dataset_id": dataset.id,
             "file_count": len(files),
             "auto_label": auto_label
@@ -328,7 +328,7 @@ async def get_dataset(dataset_id: str, db: Session = Depends(get_db)):
     })
     
     try:
-        logger.debug("operations.database", f"Fetching dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching dataset {dataset_id}", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
             logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
@@ -337,7 +337,7 @@ async def get_dataset(dataset_id: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Get recent images
-        logger.debug("operations.database", f"Fetching recent images for dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching recent images for dataset {dataset_id}", "database_query")
         recent_images = ImageOperations.get_images_by_dataset(
             db, dataset_id, skip=0, limit=10
         )
@@ -407,7 +407,7 @@ async def upload_images(
     
     try:
         # Verify dataset exists
-        logger.debug("operations.database", f"Verifying dataset {dataset_id} exists", "database_query")
+        logger.debug("app.database", f"Verifying dataset {dataset_id} exists", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
             logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
@@ -416,7 +416,7 @@ async def upload_images(
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Upload images
-        logger.info("operations.files", f"Starting image upload to dataset", "image_upload_start", {
+        logger.info("operations.operations", f"Starting image upload to dataset", "image_upload_start", {
             "dataset_id": dataset_id,
             "file_count": len(files),
             "auto_label": auto_label
@@ -425,7 +425,7 @@ async def upload_images(
             files, dataset_id, auto_label=auto_label
         )
         
-        logger.info("operations.files", f"Image upload completed successfully", "image_upload_success", {
+        logger.info("operations.operations", f"Image upload completed successfully", "image_upload_success", {
             "dataset_id": dataset_id,
             "file_count": len(files),
             "upload_results": upload_results
@@ -464,7 +464,7 @@ async def start_auto_labeling(
     
     try:
         # Verify dataset exists
-        logger.debug("operations.database", f"Verifying dataset {dataset_id} exists", "database_query")
+        logger.debug("app.database", f"Verifying dataset {dataset_id} exists", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
             logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
@@ -473,7 +473,7 @@ async def start_auto_labeling(
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Verify model exists
-        logger.debug("operations.ml", f"Verifying model {request.model_id} exists", "model_validation")
+        logger.debug("operations.operations", f"Verifying model {request.model_id} exists", "model_validation")
         model_info = model_manager.get_model_info(request.model_id)
         if not model_info:
             logger.warning("errors.validation", f"Invalid model ID {request.model_id}", "invalid_model_id", {
@@ -482,7 +482,7 @@ async def start_auto_labeling(
             raise HTTPException(status_code=400, detail="Invalid model ID")
         
         # Create auto-label job
-        logger.info("operations.ml", f"Creating auto-label job", "auto_label_job_creation", {
+        logger.info("operations.operations", f"Creating auto-label job", "auto_label_job_creation", {
             "dataset_id": dataset_id,
             "model_id": request.model_id
         })
@@ -496,7 +496,7 @@ async def start_auto_labeling(
         )
         
         # Start auto-labeling in background
-        logger.info("operations.ml", f"Adding auto-labeling task to background", "background_task_added", {
+        logger.info("operations.operations", f"Adding auto-labeling task to background", "background_task_added", {
             "job_id": job.id,
             "dataset_id": dataset_id
         })
@@ -510,7 +510,7 @@ async def start_auto_labeling(
             job_id=job.id
         )
         
-        logger.info("operations.ml", f"Auto-labeling job started successfully", "auto_labeling_job_started", {
+        logger.info("operations.operations", f"Auto-labeling job started successfully", "auto_labeling_job_started", {
             "job_id": job.id,
             "dataset_id": dataset_id,
             "model_id": request.model_id
@@ -555,7 +555,7 @@ async def get_dataset_images(
     
     try:
         # Verify dataset exists
-        logger.debug("operations.database", f"Verifying dataset {dataset_id} exists", "database_query")
+        logger.debug("app.database", f"Verifying dataset {dataset_id} exists", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
             logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
@@ -564,7 +564,7 @@ async def get_dataset_images(
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Get images
-        logger.debug("operations.database", f"Fetching images for dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching images for dataset {dataset_id}", "database_query")
         images = ImageOperations.get_images_by_dataset(
             db, dataset_id, skip=skip, limit=limit, labeled_only=labeled_only
         )
@@ -628,7 +628,7 @@ async def get_image_by_id(
     
     try:
         # Get image
-        logger.debug("operations.database", f"Fetching image {image_id}", "database_query")
+        logger.debug("app.database", f"Fetching image {image_id}", "database_query")
         image = ImageOperations.get_image(db, image_id)
         if not image:
             logger.warning("errors.validation", f"Image {image_id} not found", "image_not_found", {
@@ -701,7 +701,7 @@ async def update_image_split_section(
             raise HTTPException(status_code=400, detail="Invalid split section. Must be train, val, or test")
         
         # Get the image
-        logger.debug("operations.database", f"Fetching image {image_id} for split update", "database_query")
+        logger.debug("app.database", f"Fetching image {image_id} for split update", "database_query")
         image = ImageOperations.get_image(db, image_id)
         if not image:
             logger.warning("errors.validation", f"Image {image_id} not found for split update", "image_not_found", {
@@ -775,7 +775,7 @@ async def update_dataset(
     
     try:
         # Check if dataset exists
-        logger.debug("operations.database", f"Verifying dataset {dataset_id} exists", "database_query")
+        logger.debug("app.database", f"Verifying dataset {dataset_id} exists", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
             logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
@@ -784,7 +784,7 @@ async def update_dataset(
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Get project info for folder renaming
-        logger.debug("operations.database", f"Fetching project info for dataset {dataset_id}", "database_query")
+        logger.debug("app.database", f"Fetching project info for dataset {dataset_id}", "database_query")
         project = ProjectOperations.get_project(db, dataset.project_id)
         if not project:
             logger.warning("errors.validation", f"Project {dataset.project_id} not found", "project_not_found", {
@@ -798,7 +798,7 @@ async def update_dataset(
         
         # Validate model_id if provided
         if request.model_id:
-            logger.debug("operations.ml", f"Validating model ID {request.model_id}", "model_validation")
+            logger.debug("operations.operations", f"Validating model ID {request.model_id}", "model_validation")
             model_info = model_manager.get_model_info(request.model_id)
             if not model_info:
                 logger.warning("errors.validation", f"Invalid model ID {request.model_id}", "invalid_model_id", {
@@ -829,7 +829,7 @@ async def update_dataset(
         
         # Rename folder if dataset name changed
         if request.name and request.name != old_dataset_name:
-            logger.info("operations.files", f"Renaming dataset folder", "folder_rename", {
+            logger.info("operations.operations", f"Renaming dataset folder", "folder_rename", {
                 "old_name": old_dataset_name,
                 "new_name": request.name,
                 "project_name": project.name
@@ -840,7 +840,7 @@ async def update_dataset(
                 new_dataset_name=request.name
             )
             if not folder_renamed:
-                logger.warning("operations.files", f"Failed to rename dataset folder", "folder_rename_failed", {
+                logger.warning("operations.operations", f"Failed to rename dataset folder", "folder_rename_failed", {
                     "old_name": old_dataset_name,
                     "new_name": request.name
                 })
@@ -887,7 +887,7 @@ async def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
     
     try:
         # Check if dataset exists
-        logger.debug("operations.database", f"Verifying dataset {dataset_id} exists", "database_query")
+        logger.debug("app.database", f"Verifying dataset {dataset_id} exists", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
             logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
@@ -896,19 +896,19 @@ async def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Get project info for folder cleanup
-        logger.debug("operations.database", f"Fetching project info for cleanup", "database_query")
+        logger.debug("app.database", f"Fetching project info for cleanup", "database_query")
         project = ProjectOperations.get_project(db, str(dataset.project_id))
         
         # Clean up files using project and dataset names
         if project:
-            logger.info("operations.files", f"Cleaning up dataset files by path", "file_cleanup", {
+            logger.info("operations.operations", f"Cleaning up dataset files by path", "file_cleanup", {
                 "project_name": project.name,
                 "dataset_name": dataset.name
             })
             file_handler.cleanup_dataset_files_by_path(project.name, dataset.name)
         else:
             # Fallback to old method
-            logger.info("operations.files", f"Cleaning up dataset files by ID", "file_cleanup", {
+            logger.info("operations.operations", f"Cleaning up dataset files by ID", "file_cleanup", {
                 "dataset_id": dataset_id
             })
             file_handler.cleanup_dataset_files(dataset_id)
