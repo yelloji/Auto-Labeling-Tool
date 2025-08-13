@@ -40,38 +40,87 @@ LOGGING_CONFIG: Dict[str, Any] = {
     "enable_json_format": True,      # Use structured JSON logging
     
     # ========================================================================
-    # LOG CATEGORIES
+    # LOG CATEGORIES - DETAILED STRUCTURE (20+ LOG FILES)
     # ========================================================================
     "categories": {
+        # ====================================================================
+        # APP CATEGORY (4 files)
+        # ====================================================================
         "app": {
             "enabled": True,
             "level": "INFO",
             "max_size": "50MB",
-            "backup_count": 3
+            "backup_count": 3,
+            "files": {
+                "frontend": {"enabled": True, "level": "INFO"},
+                "backend": {"enabled": True, "level": "INFO"},
+                "database": {"enabled": True, "level": "INFO"},
+                "app": {"enabled": True, "level": "INFO"}
+            }
         },
+        
+        # ====================================================================
+        # OPERATIONS CATEGORY (5 files)
+        # ====================================================================
         "operations": {
             "enabled": True,
             "level": "INFO", 
             "max_size": "100MB",
-            "backup_count": 5
+            "backup_count": 5,
+            "files": {
+                "images": {"enabled": True, "level": "INFO"},
+                "transformations": {"enabled": True, "level": "INFO"},
+                "releases": {"enabled": True, "level": "INFO"},
+                "annotations": {"enabled": True, "level": "INFO"},
+                "operations": {"enabled": True, "level": "INFO"}
+            }
         },
+        
+        # ====================================================================
+        # ERRORS CATEGORY (4 files)
+        # ====================================================================
         "errors": {
             "enabled": True,
             "level": "ERROR",
             "max_size": "50MB", 
-            "backup_count": 10
+            "backup_count": 10,
+            "files": {
+                "critical": {"enabled": True, "level": "CRITICAL"},
+                "warnings": {"enabled": True, "level": "WARNING"},
+                "debug": {"enabled": True, "level": "DEBUG"},
+                "errors": {"enabled": True, "level": "ERROR"}
+            }
         },
+        
+        # ====================================================================
+        # PERFORMANCE CATEGORY (4 files)
+        # ====================================================================
         "performance": {
             "enabled": True,
             "level": "INFO",
             "max_size": "50MB",
-            "backup_count": 3
+            "backup_count": 3,
+            "files": {
+                "api_response": {"enabled": True, "level": "INFO"},
+                "memory": {"enabled": True, "level": "INFO"},
+                "cpu": {"enabled": True, "level": "INFO"},
+                "performance": {"enabled": True, "level": "INFO"}
+            }
         },
+        
+        # ====================================================================
+        # AUDIT CATEGORY (3 files)
+        # ====================================================================
         "audit": {
             "enabled": True,
             "level": "INFO",
             "max_size": "100MB",
-            "backup_count": 7
+            "backup_count": 7,
+            "files": {
+                "user_actions": {"enabled": True, "level": "INFO"},
+                "security": {"enabled": True, "level": "INFO"},
+                "audit": {"enabled": True, "level": "INFO"}
+            }
         }
     },
     

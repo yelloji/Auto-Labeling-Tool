@@ -60,34 +60,133 @@ class ProfessionalLogger:
         # })
     
     def _setup_loggers(self):
-        """Setup individual loggers for each category - dynamic creation."""
+        """Setup individual loggers for each category - dynamic creation with detailed file structure."""
         categories = self.config.get("categories", {})
+        print(f"Setting up loggers for {len(categories)} categories...")
         
         for category_name, category_config in categories.items():
             if not category_config.get("enabled", True):
                 continue
+            
+            print(f"Setting up category: {category_name}")
+            
+            # Get detailed files configuration for this category
+            files_config = category_config.get("files", {})
+            
+            # If no detailed files config, create basic category logger
+            if not files_config:
+                print(f"  Creating basic logger for {category_name}")
+                self._create_category_logger(category_name, category_config)
+                continue
+            
+            # Create detailed file loggers for this category
+            print(f"  Creating detailed loggers for {category_name} with {len(files_config)} files")
+            for file_name, file_config in files_config.items():
+                if not file_config.get("enabled", True):
+                    continue
                 
-            logger = logging.getLogger(f"{self.name}.{category_name}")
-            logger.setLevel(getattr(logging, category_config.get("level", "INFO")))
+                print(f"    Creating logger: {category_name}.{file_name}")
+                
+                # Create logger name with file suffix
+                logger_name = f"{self.name}.{category_name}.{file_name}"
+                logger = logging.getLogger(logger_name)
+                logger.setLevel(getattr(logging, file_config.get("level", category_config.get("level", "INFO"))))
+                
+                # Clear existing handlers
+                logger.handlers.clear()
+                
+                # Create detailed log file path
+                log_file = os.path.join(self.log_dir, category_name, f"{file_name}.log")
+                
+                # Automatically create directory if it doesn't exist
+                os.makedirs(os.path.dirname(log_file), exist_ok=True)
+                
+                # Get configuration for this category
+                max_bytes = self._parse_size(category_config.get("max_size", "50MB"))
+                backup_count = category_config.get("backup_count", 5)
+                
+                # Create rotating file handler
+                handler = logging.handlers.RotatingFileHandler(
+                    log_file,
+                    maxBytes=max_bytes,
+                    backupCount=backup_count,
+                    encoding='utf-8'
+                )
+                
+                # Create formatter
+                formatter = logging.Formatter('%(message)s')
+                handler.setFormatter(formatter)
+                
+                # Add handler to logger
+                logger.addHandler(handler)
+                
+                # Store logger with detailed name
+                self.loggers[f"{category_name}.{file_name}"] = logger
+                print(f"      Created logger: {category_name}.{file_name} -> {log_file}")
+        
+        print(f"Total loggers created: {len(self.loggers)}")
+        print(f"Logger names: {list(self.loggers.keys())}")
+        
+        # PHASE 1: Validate no duplication
+        self._validate_no_duplication()
+    
+    def _create_category_logger(self, category_name: str, category_config: Dict):
+        """Create basic category logger (fallback method)."""
+        logger = logging.getLogger(f"{self.name}.{category_name}")
+        logger.setLevel(getattr(logging, category_config.get("level", "INFO")))
+        
+        # Clear existing handlers
+        logger.handlers.clear()
+        
+        # Dynamically create log file path
+        log_file = os.path.join(self.log_dir, category_name, f"{category_name}.log")
+        
+        # Automatically create directory if it doesn't exist
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        
+        # Get configuration for this category
+        max_bytes = self._parse_size(category_config.get("max_size", "50MB"))
+        backup_count = category_config.get("backup_count", 5)
+        
+        # Create rotating file handler
+        handler = logging.handlers.RotatingFileHandler(
+            log_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding='utf-8'
+        )
+        
+        # Create formatter
+        formatter = logging.Formatter('%(message)s')
+        handler.setFormatter(formatter)
+        
+        # Add handler to logger
+        logger.addHandler(handler)
+        
+        # Store logger
+        self.loggers[category_name] = logger
+    
+    def _create_fallback_logger(self, category: str):
+        """Create a fallback logger when the requested category doesn't exist."""
+        try:
+            # Create a basic logger for this category
+            logger = logging.getLogger(f"{self.name}.{category}")
+            logger.setLevel(logging.INFO)
             
             # Clear existing handlers
             logger.handlers.clear()
             
-            # Dynamically create log file path
-            log_file = os.path.join(self.log_dir, category_name, f"{category_name}.log")
+            # Create log file path
+            log_file = os.path.join(self.log_dir, category, f"{category}.log")
             
             # Automatically create directory if it doesn't exist
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
             
-            # Get configuration for this category
-            max_bytes = self._parse_size(category_config.get("max_size", "50MB"))
-            backup_count = category_config.get("backup_count", 5)
-            
             # Create rotating file handler
             handler = logging.handlers.RotatingFileHandler(
                 log_file,
-                maxBytes=max_bytes,
-                backupCount=backup_count,
+                maxBytes=50*1024*1024,  # 50MB
+                backupCount=5,
                 encoding='utf-8'
             )
             
@@ -99,15 +198,35 @@ class ProfessionalLogger:
             logger.addHandler(handler)
             
             # Store logger
-            self.loggers[category_name] = logger
+            self.loggers[category] = logger
             
-            # Log that this category was initialized (but skip during initial setup)
-            # self._log("app", "INFO", f"Logger category '{category_name}' initialized", "logger_setup", {
-            #     "category": category_name,
-            #     "log_file": log_file,
-            #     "max_size": category_config.get("max_size", "50MB"),
-            #     "backup_count": backup_count
-            # })
+            print(f"PHASE 1: Created fallback logger for category: {category}")
+            
+        except Exception as e:
+            print(f"PHASE 1 ERROR: Failed to create fallback logger for {category}: {e}")
+    
+    def _validate_no_duplication(self):
+        """PHASE 1: Validate that no duplication exists between basic and detailed loggers."""
+        basic_categories = set()
+        detailed_categories = set()
+        
+        for logger_name in self.loggers.keys():
+            if '.' in logger_name:
+                detailed_categories.add(logger_name)
+                base_category = logger_name.split('.')[0]
+                basic_categories.add(base_category)
+            else:
+                basic_categories.add(logger_name)
+        
+        # Check for potential duplication
+        for basic_cat in basic_categories:
+            if basic_cat in detailed_categories:
+                print(f"PHASE 1 WARNING: Potential duplication detected for '{basic_cat}'")
+                print(f"  - Basic logger: {basic_cat}")
+                print(f"  - Detailed loggers: {[d for d in detailed_categories if d.startswith(f'{basic_cat}.')]}")
+        
+        print(f"PHASE 1: Validation complete - {len(basic_categories)} basic, {len(detailed_categories)} detailed loggers")
+        return len(basic_categories) + len(detailed_categories)
     
     def _parse_size(self, size_str: str) -> int:
         """Parse size string like '50MB' to bytes."""
@@ -146,12 +265,49 @@ class ProfessionalLogger:
     
     def _log(self, category: str, level: str, message: str, 
              operation: str = None, details: Dict = None):
-        """Internal logging method."""
-        if category not in self.loggers:
-            # Fallback to app logger
-            category = "app"
+        """Internal logging method - PHASE 1 FIX: Prevent duplication and route to specific files only."""
+        logger = None
+        
+        # PHASE 1 FIX: Route to specific detailed files only, prevent duplication
+        if '.' in category:
+            # If category already has a dot (e.g., "app.frontend"), use it directly
+            if category in self.loggers:
+                logger = self.loggers[category]
+            else:
+                # Try to find a matching detailed logger
+                for logger_name in self.loggers.keys():
+                    if logger_name == category:
+                        logger = self.loggers[logger_name]
+                        break
+        else:
+            # If basic category (e.g., "app"), route to the most appropriate detailed logger
+            # PHASE 1 FIX: Prefer specific detailed loggers over basic ones
+            detailed_logger_found = False
             
-        logger = self.loggers[category]
+            # First, try to find a detailed logger for this category
+            for logger_name in self.loggers.keys():
+                if logger_name.startswith(f"{category}."):
+                    # PHASE 1 FIX: Route to the first detailed logger found
+                    logger = self.loggers[logger_name]
+                    detailed_logger_found = True
+                    print(f"PHASE 1: Routing '{category}' to detailed logger '{logger_name}'")
+                    break
+            
+            # If no detailed logger found, only then try basic category
+            if not detailed_logger_found:
+                if category in self.loggers:
+                    logger = self.loggers[category]
+                    print(f"PHASE 1: Using basic logger for '{category}' (no detailed logger found)")
+                else:
+                    # Final fallback: create a fallback logger
+                    print(f"PHASE 1: Creating fallback logger for '{category}'")
+                    self._create_fallback_logger(category)
+                    logger = self.loggers.get(category)
+        
+        if logger is None:
+            print(f"PHASE 1 ERROR: Could not find or create logger for category '{category}'")
+            return
+            
         log_entry = self._create_log_entry(level, message, category, operation, details)
         
         # Log as JSON string
@@ -198,23 +354,23 @@ class ProfessionalLogger:
     # Convenience methods for common log levels
     def info(self, category: str, message: str, operation: str = None, details: Dict = None):
         """Log info level message to specified category."""
-        getattr(self, category).info(message, operation, details)
+        self._log(category, "INFO", message, operation, details)
     
     def warning(self, category: str, message: str, operation: str = None, details: Dict = None):
         """Log warning level message to specified category."""
-        getattr(self, category).warning(message, operation, details)
+        self._log(category, "WARNING", message, operation, details)
     
     def error(self, category: str, message: str, operation: str = None, details: Dict = None):
         """Log error level message to specified category."""
-        getattr(self, category).error(message, operation, details)
+        self._log(category, "ERROR", message, operation, details)
     
     def critical(self, category: str, message: str, operation: str = None, details: Dict = None):
         """Log critical level message to specified category."""
-        getattr(self, category).critical(message, operation, details)
+        self._log(category, "CRITICAL", message, operation, details)
     
     def debug(self, category: str, message: str, operation: str = None, details: Dict = None):
         """Log debug level message to specified category."""
-        getattr(self, category).debug(message, operation, details)
+        self._log(category, "DEBUG", message, operation, details)
     
     # Performance tracking methods
     def track_api_response_time(self, endpoint: str, method: str, response_time: float, 
