@@ -4,6 +4,7 @@ Professional Logging System - Core Logger
 ========================================
 Implements structured JSON logging with exactly 17 log files
 in 3 categories: app, operations, errors.
+SIMPLE DUAL MODE: Developer mode (17 files) OR User mode (3 files)
 """
 
 import os
@@ -16,6 +17,9 @@ from pathlib import Path
 import traceback
 import threading
 from functools import wraps
+import asyncio
+import queue
+import time
 
 # Import our configuration
 try:
@@ -27,16 +31,89 @@ except ImportError:
     def get_config():
         return {
             "enable_stack_traces": True,
-            "log_level": "INFO"
+            "log_level": "INFO",
+            "logging_mode": "developer",  # "developer" or "user"
+            "async_logging": True,
+            "log_rotation_size_mb": 100,
+            "log_rotation_backup_count": 5
         }
     
     def get_log_directory():
         return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
+class AsyncLogHandler:
+    """Asynchronous log handler for performance optimization."""
+    
+    def __init__(self, max_queue_size=1000):
+        self.queue = queue.Queue(maxsize=max_queue_size)
+        self.worker_thread = None
+        self.running = False
+        self._start_worker()
+    
+    def _start_worker(self):
+        """Start the background worker thread."""
+        self.running = True
+        self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self.worker_thread.start()
+    
+    def _worker_loop(self):
+        """Background worker that processes log entries."""
+        while self.running:
+            try:
+                # Get log entry with timeout
+                entry = self.queue.get(timeout=1.0)
+                if entry is None:  # Shutdown signal
+                    break
+                
+                # Process the log entry
+                self._write_log_entry(entry)
+                self.queue.task_done()
+                
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"Log worker error: {e}")
+    
+    def _write_log_entry(self, entry):
+        """Write log entry to file."""
+        try:
+            log_file = entry.get('log_file')
+            message = entry.get('message')
+            
+            if log_file and message:
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(log_file), exist_ok=True)
+                
+                # Write to file
+                with open(log_file, 'a', encoding='utf-8') as f:
+                    f.write(message + '\n')
+                    
+        except Exception as e:
+            print(f"Failed to write log entry: {e}")
+    
+    def enqueue(self, log_file: str, message: str):
+        """Enqueue a log entry for async processing."""
+        try:
+            self.queue.put_nowait({
+                'log_file': log_file,
+                'message': message,
+                'timestamp': time.time()
+            })
+        except queue.Full:
+            # If queue is full, write synchronously as fallback
+            self._write_log_entry({'log_file': log_file, 'message': message})
+    
+    def shutdown(self):
+        """Shutdown the async handler."""
+        self.running = False
+        if self.worker_thread:
+            self.queue.put(None)  # Shutdown signal
+            self.worker_thread.join(timeout=5.0)
+
 class ProfessionalLogger:
     """
     Professional logging system with structured JSON output.
-    Creates exactly 17 log files in 3 categories as per the plan.
+    SIMPLE DUAL MODE: Developer mode (17 files) OR User mode (3 files)
     """
     
     def __init__(self, name: str = "professional_logger"):
@@ -47,89 +124,132 @@ class ProfessionalLogger:
         # Thread-local storage for request context
         self._local = threading.local()
         
-        # Initialize loggers for each of the 17 specific log files
+        # Initialize async log handler
+        self.async_handler = AsyncLogHandler() if self.config.get("async_logging", True) else None
+        
+        # Get logging mode
+        self.logging_mode = self.config.get("logging_mode", "developer")
+        
+        # Initialize loggers based on mode
         self.loggers = {}
-        self._setup_perfect_loggers()
+        self._setup_loggers()
     
-    def _setup_perfect_loggers(self):
-        """Setup exactly 17 loggers for the specific log files from the plan."""
+    def _setup_loggers(self):
+        """Setup loggers based on logging mode."""
+        
+        if self.logging_mode == "developer":
+            self._setup_developer_loggers()
+        else:  # user mode
+            self._setup_user_loggers()
+    
+    def _setup_developer_loggers(self):
+        """Setup exactly 17 loggers for developer mode."""
         
         # Define the exact 17 log files from your plan
         log_files = {
             # APP CATEGORY (6 files)
-            "app.frontend": "logs/app/frontend.log",
-            "app.api": "logs/app/api.log", 
-            "app.startup": "logs/app/startup.log",
-            "app.app": "logs/app/app.log",
-            "app.backend": "logs/app/backend.log",
-            "app.database": "logs/app/database.log",
+            "app.frontend": "develop-logs/app/frontend.log",
+            "app.api": "develop-logs/app/api.log", 
+            "app.startup": "develop-logs/app/startup.log",
+            "app.app": "develop-logs/app/app.log",
+            "app.backend": "develop-logs/app/backend.log",
+            "app.database": "develop-logs/app/database.log",
             
             # OPERATIONS CATEGORY (7 files)
-            "operations.images": "logs/operations/images.log",
-            "operations.datasets": "logs/operations/datasets.log",
-            "operations.exports": "logs/operations/exports.log",
-            "operations.operations": "logs/operations/operations.log",
-            "operations.annotations": "logs/operations/annotations.log",
-            "operations.releases": "logs/operations/releases.log",
-            "operations.transformations": "logs/operations/transformations.log",
+            "operations.images": "develop-logs/operations/images.log",
+            "operations.datasets": "develop-logs/operations/datasets.log",
+            "operations.exports": "develop-logs/operations/exports.log",
+            "operations.operations": "develop-logs/operations/operations.log",
+            "operations.annotations": "develop-logs/operations/annotations.log",
+            "operations.releases": "develop-logs/operations/releases.log",
+            "operations.transformations": "develop-logs/operations/transformations.log",
             
             # ERRORS CATEGORY (4 files)
-            "errors.system": "logs/errors/system.log",
-            "errors.validation": "logs/errors/validation.log",
-            "errors.errors": "logs/errors/errors.log",
-            "errors.debug": "logs/errors/debug.log"
+            "errors.system": "develop-logs/errors/system.log",
+            "errors.validation": "develop-logs/errors/validation.log",
+            "errors.errors": "develop-logs/errors/errors.log",
+            "errors.debug": "develop-logs/errors/debug.log"
         }
         
-        print(f"🎯 Setting up PERFECT 17-log-file system...")
+        print(f"🎯 Setting up DEVELOPER MODE - 17-log-file system...")
         
         for logger_name, log_file_path in log_files.items():
-            try:
-                # Create logger
-                logger = logging.getLogger(f"{self.name}.{logger_name}")
-                logger.setLevel(logging.DEBUG)  # Allow all levels
-                
-                # Clear existing handlers
-                logger.handlers.clear()
-                
-                # Create full path
-                full_log_path = os.path.join(self.log_dir, log_file_path)
-                
-                # Create directory structure automatically
-                os.makedirs(os.path.dirname(full_log_path), exist_ok=True)
-                
-                # Create rotating file handler
-                handler = logging.handlers.RotatingFileHandler(
-                    full_log_path,
-                    maxBytes=100*1024*1024,  # 100MB
-                    backupCount=5,
-                    encoding='utf-8'
-                )
-                
-                # Set level based on category
+            self._setup_logger(logger_name, log_file_path, "developer")
+        
+        print(f"🎉 DEVELOPER MODE ready! 17 loggers created in develop-logs/")
+    
+    def _setup_user_loggers(self):
+        """Setup 3 simple loggers for user mode."""
+        
+        # Define 3 simple log files for user mode
+        log_files = {
+            "user.errors": "user-logs/errors.log",
+            "user.warnings": "user-logs/warnings.log", 
+            "user.info": "user-logs/info.log"
+        }
+        
+        print(f"🎯 Setting up USER MODE - 3-log-file system...")
+        
+        for logger_name, log_file_path in log_files.items():
+            self._setup_logger(logger_name, log_file_path, "user")
+        
+        print(f"🎉 USER MODE ready! 3 loggers created in user-logs/")
+    
+    def _setup_logger(self, logger_name: str, log_file_path: str, logger_type: str):
+        """Setup individual logger with rotation and formatting."""
+        try:
+            # Create logger
+            logger = logging.getLogger(f"{self.name}.{logger_name}")
+            logger.setLevel(logging.DEBUG)
+            
+            # Clear existing handlers
+            logger.handlers.clear()
+            
+            # Create full path
+            full_log_path = os.path.join(self.log_dir, log_file_path)
+            
+            # Create directory structure automatically
+            os.makedirs(os.path.dirname(full_log_path), exist_ok=True)
+            
+            # Get rotation settings from config
+            max_bytes = self.config.get("log_rotation_size_mb", 100) * 1024 * 1024
+            backup_count = self.config.get("log_rotation_backup_count", 5)
+            
+            # Create rotating file handler
+            handler = logging.handlers.RotatingFileHandler(
+                full_log_path,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding='utf-8'
+            )
+            
+            # Set level based on type
+            if logger_type == "user":
+                handler.setLevel(logging.INFO)
+            else:  # developer
                 if logger_name.startswith("errors."):
                     handler.setLevel(logging.ERROR)
-                elif logger_name.startswith("app."):
+                else:
                     handler.setLevel(logging.INFO)
-                else:  # operations
-                    handler.setLevel(logging.INFO)
-                
-                # Create formatter (just the message, since we structure it ourselves)
+            
+            # Create formatter based on type
+            if logger_type == "user":
+                # User-friendly: Simple, clean format
+                formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            else:
+                # Developer: JSON format
                 formatter = logging.Formatter('%(message)s')
-                handler.setFormatter(formatter)
-                
-                # Add handler to logger
-                logger.addHandler(handler)
-                
-                # Store logger
-                self.loggers[logger_name] = logger
-                
-                print(f"✅ Created logger: {logger_name} -> {full_log_path}")
-                
-            except Exception as e:
-                print(f"❌ Failed to create logger {logger_name}: {e}")
-        
-        print(f"🎉 PERFECT 17-log-file system ready! Created {len(self.loggers)} loggers")
-        print(f"📁 Log directory: {self.log_dir}")
+            
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            
+            # Store logger
+            self.loggers[logger_name] = logger
+            
+            print(f"✅ Created {logger_type} logger: {logger_name} -> {full_log_path}")
+            
+        except Exception as e:
+            print(f"❌ Failed to create logger {logger_name}: {e}")
     
     def _create_log_entry(self, level: str, message: str, category: str, 
                          operation: str = None, details: Dict = None) -> Dict[str, Any]:
@@ -147,16 +267,43 @@ class ProfessionalLogger:
         }
         
         if details:
-            entry["details"] = details
+            # Convert any non-serializable objects to strings
+            safe_details = {}
+            for key, value in details.items():
+                try:
+                    # Test if value is JSON serializable
+                    json.dumps(value)
+                    safe_details[key] = value
+                except (TypeError, ValueError):
+                    safe_details[key] = str(value)
+            entry["details"] = safe_details
             
         if self.config.get("enable_stack_traces", True) and level in ["ERROR", "CRITICAL"]:
             entry["stack_trace"] = traceback.format_exc()
             
         return entry
     
+    def _create_user_message(self, level: str, message: str, operation: str = None) -> str:
+        """Create user-friendly log message."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        if operation:
+            return f"[{timestamp}] {level}: {message} (Operation: {operation})"
+        else:
+            return f"[{timestamp}] {level}: {message}"
+    
     def _log(self, category: str, level: str, message: str, 
              operation: str = None, details: Dict = None):
-        """Log to the specific category - PERFECT routing to 17 log files."""
+        """Log based on current mode."""
+        
+        if self.logging_mode == "developer":
+            self._log_developer(category, level, message, operation, details)
+        else:  # user mode
+            self._log_user(level, message, operation)
+    
+    def _log_developer(self, category: str, level: str, message: str, 
+                      operation: str = None, details: Dict = None):
+        """Log to developer mode - specific category files."""
         
         # Check if this is a valid category from our 17-log-file plan
         if category not in self.loggers:
@@ -170,8 +317,33 @@ class ProfessionalLogger:
         # Create structured log entry
         log_entry = self._create_log_entry(level, message, category, operation, details)
         
+        # Format JSON with proper indentation for readability
+        json_message = json.dumps(log_entry, ensure_ascii=False, indent=2)
+        
         # Log as JSON string
-        logger.log(getattr(logging, level), json.dumps(log_entry, ensure_ascii=False))
+        logger.log(getattr(logging, level), json_message)
+    
+    def _log_user(self, level: str, message: str, operation: str = None):
+        """Log to user mode - simple files based on level."""
+        
+        user_message = self._create_user_message(level, message, operation)
+        
+        # Route to appropriate user log based on level
+        if level in ["ERROR", "CRITICAL"]:
+            log_file = os.path.join(self.log_dir, "user-logs/errors.log")
+        elif level == "WARNING":
+            log_file = os.path.join(self.log_dir, "user-logs/warnings.log")
+        else:  # INFO, DEBUG
+            log_file = os.path.join(self.log_dir, "user-logs/info.log")
+        
+        # Use async logging if enabled
+        if self.async_handler:
+            self.async_handler.enqueue(log_file, user_message)
+        else:
+            # Synchronous fallback
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(user_message + '\n')
     
     def set_context(self, request_id: str = None, user_id: str = None, session_id: str = None):
         """Set context for current request/operation."""
@@ -188,7 +360,7 @@ class ProfessionalLogger:
         self._local.user_id = None
         self._local.session_id = None
     
-    # Convenience methods for common log levels - PERFECT for 17-log-file system
+    # Convenience methods for common log levels
     def info(self, category: str, message: str, operation: str = None, details: Dict = None):
         """Log info level message to specified category."""
         self._log(category, "INFO", message, operation, details)
@@ -225,6 +397,11 @@ class ProfessionalLogger:
                     raise
             return wrapper
         return decorator
+    
+    def shutdown(self):
+        """Shutdown the logger and async handler."""
+        if self.async_handler:
+            self.async_handler.shutdown()
 
 # Global logger instance
 _professional_logger = None
@@ -262,12 +439,12 @@ def log_debug(category: str, message: str, operation: str = None, details: Dict 
     get_professional_logger().debug(category, message, operation, details)
 
 if __name__ == "__main__":
-    # Test the PERFECT 17-log-file system
-    print("🧪 Testing PERFECT 17-log-file system...")
+    # Test the SIMPLE DUAL LOGGING SYSTEM
+    print("🧪 Testing SIMPLE DUAL LOGGING SYSTEM...")
     
     logger = setup_professional_logging()
     
-    # Test all categories from your plan
+    # Test developer mode
     logger.info("app.backend", "Application started", "startup")
     logger.info("app.database", "Database connected", "database_connection")
     logger.info("operations.images", "Image processing started", "image_processing")
@@ -276,5 +453,9 @@ if __name__ == "__main__":
     logger.warning("errors.validation", "Input validation warning", "validation_check")
     logger.error("errors.system", "System error occurred", "system_error")
     
-    print("✅ PERFECT 17-log-file system test completed!")
-    print("🎯 All logs went to correct files in your plan!")
+    print("✅ SIMPLE DUAL LOGGING SYSTEM test completed!")
+    print(f"🎯 Mode: {logger.logging_mode}")
+    if logger.logging_mode == "developer":
+        print("📁 Developer logs created in develop-logs/")
+    else:
+        print("📁 User logs created in user-logs/")
