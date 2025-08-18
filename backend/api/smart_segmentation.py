@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from logging_system.professional_logger import get_professional_logger
 
-professional_logger = get_professional_logger()
+logger = get_professional_logger()
 
 router = APIRouter()
 
@@ -55,7 +55,7 @@ async def click_to_segment(request: SegmentationRequest):
     Advanced click-to-segment functionality using multiple algorithms
     """
     try:
-        professional_logger.info("operations.annotations", f"Processing segmentation request for point ({request.point.x}, {request.point.y})", "segmentation_request", {
+        logger.info("operations.annotations", f"Processing segmentation request for point ({request.point.x}, {request.point.y})", "segmentation_request", {
             'point_x': request.point.x,
             'point_y': request.point.y,
             'model_type': request.model_type,
@@ -78,10 +78,23 @@ async def click_to_segment(request: SegmentationRequest):
             # Default to intelligent hybrid approach
             result = await segment_with_hybrid(image, request.point, request.class_index)
         
+        # Success log
+        try:
+            logger.info("operations.annotations", "Segmentation completed", "segmentation_success", {
+                'model_type': request.model_type,
+                'confidence': float(getattr(result, 'confidence', 0.0)),
+                'mask_area': int(getattr(result, 'mask_area', 0)),
+                'point_x': request.point.x,
+                'point_y': request.point.y
+            })
+        except Exception:
+            # Ignore logging failures
+            pass
+
         return result
         
     except Exception as e:
-        professional_logger.error("errors", f"Segmentation failed: {str(e)}", "segmentation_failed", {
+        logger.error("errors.system", f"Segmentation failed: {str(e)}", "segmentation_failed", {
             'error': str(e),
             'point_x': request.point.x,
             'point_y': request.point.y,
@@ -92,17 +105,35 @@ async def click_to_segment(request: SegmentationRequest):
 async def load_image_from_url(image_url: str) -> np.ndarray:
     """Load image from URL or base64 data"""
     try:
+        source_type = 'base64' if image_url.startswith('data:image') else 'url'
+        logger.info("operations.images", "Loading image", "load_image_start", {
+            'source_type': source_type
+        })
         if image_url.startswith('data:image'):
             # Handle base64 encoded images
             header, data = image_url.split(',', 1)
             image_data = base64.b64decode(data)
             image = Image.open(BytesIO(image_data))
-            return np.array(image.convert('RGB'))
+            img = np.array(image.convert('RGB'))
+            logger.info("operations.images", "Image loaded from base64", "load_image_success", {
+                'width': int(img.shape[1]),
+                'height': int(img.shape[0])
+            })
+            return img
         else:
             # Handle regular URLs (placeholder - in real implementation would fetch from URL)
             # For now, create a sample image
-            return np.random.randint(0, 255, (600, 800, 3), dtype=np.uint8)
+            img = np.random.randint(0, 255, (600, 800, 3), dtype=np.uint8)
+            logger.info("operations.images", "Image loaded from url (mock)", "load_image_success", {
+                'width': 800,
+                'height': 600
+            })
+            return img
     except Exception as e:
+        logger.error("errors.validation", f"Failed to load image: {e}", "load_image_error", {
+            'error': str(e),
+            'source_preview': image_url[:30] if image_url else ''
+        })
         raise HTTPException(status_code=400, detail=f"Failed to load image: {str(e)}")
 
 async def segment_with_sam(image: np.ndarray, point: SegmentationPoint) -> SegmentationResponse:
@@ -131,6 +162,11 @@ async def segment_with_sam(image: np.ndarray, point: SegmentationPoint) -> Segme
         )
         
     except Exception as e:
+        logger.error("errors.system", f"SAM segmentation failed: {e}", "sam_segmentation_failed", {
+            'error': str(e),
+            'point_x': point.x,
+            'point_y': point.y
+        })
         raise HTTPException(status_code=500, detail=f"SAM segmentation failed: {str(e)}")
 
 async def segment_with_yolo(image: np.ndarray, point: SegmentationPoint, class_index: int) -> SegmentationResponse:
@@ -161,6 +197,12 @@ async def segment_with_yolo(image: np.ndarray, point: SegmentationPoint, class_i
         )
         
     except Exception as e:
+        logger.error("errors.system", f"YOLO segmentation failed: {e}", "yolo_segmentation_failed", {
+            'error': str(e),
+            'point_x': point.x,
+            'point_y': point.y,
+            'class_index': class_index
+        })
         raise HTTPException(status_code=500, detail=f"YOLO segmentation failed: {str(e)}")
 
 async def segment_with_watershed(image: np.ndarray, point: SegmentationPoint) -> SegmentationResponse:
@@ -185,6 +227,11 @@ async def segment_with_watershed(image: np.ndarray, point: SegmentationPoint) ->
         )
         
     except Exception as e:
+        logger.error("errors.system", f"Watershed segmentation failed: {e}", "watershed_segmentation_failed", {
+            'error': str(e),
+            'point_x': point.x,
+            'point_y': point.y
+        })
         raise HTTPException(status_code=500, detail=f"Watershed segmentation failed: {str(e)}")
 
 async def segment_with_hybrid(image: np.ndarray, point: SegmentationPoint, class_index: int) -> SegmentationResponse:
@@ -208,12 +255,25 @@ async def segment_with_hybrid(image: np.ndarray, point: SegmentationPoint, class
         return await segment_with_watershed(image, point)
         
     except Exception as e:
+        logger.error("errors.system", f"Hybrid segmentation failed: {e}", "hybrid_segmentation_failed", {
+            'error': str(e),
+            'point_x': point.x,
+            'point_y': point.y,
+            'class_index': class_index
+        })
         raise HTTPException(status_code=500, detail=f"Hybrid segmentation failed: {str(e)}")
 
 def generate_realistic_polygon(center_x: int, center_y: int, width: int, height: int) -> List[tuple]:
     """Generate a realistic object-like polygon"""
     import math
     import random
+    
+    logger.info("operations.annotations", "Generating realistic polygon", "generate_realistic_polygon", {
+        'center_x': center_x,
+        'center_y': center_y,
+        'width': width,
+        'height': height
+    })
     
     # Base radius
     base_radius = min(width, height) * 0.1
@@ -236,14 +296,26 @@ def generate_realistic_polygon(center_x: int, center_y: int, width: int, height:
         
         points.append((x, y))
     
+    logger.info("operations.annotations", "Realistic polygon generated", "generate_realistic_polygon_complete", {
+        'point_count': len(points),
+        'base_radius': base_radius
+    })
+    
     return points
 
 def generate_person_like_polygon(center_x: int, center_y: int, width: int, height: int) -> List[tuple]:
     """Generate a person-like polygon (taller than wide)"""
+    logger.info("operations.annotations", "Generating person-like polygon", "generate_person_polygon", {
+        'center_x': center_x,
+        'center_y': center_y,
+        'width': width,
+        'height': height
+    })
+    
     w = min(width, height) * 0.08
     h = min(width, height) * 0.15
     
-    return [
+    points = [
         (center_x - w, center_y - h),
         (center_x - w*0.7, center_y - h*1.2),  # Head
         (center_x + w*0.7, center_y - h*1.2),
@@ -257,13 +329,28 @@ def generate_person_like_polygon(center_x: int, center_y: int, width: int, heigh
         (center_x - w, center_y + h*0.5),
         (center_x - w*1.2, center_y),
     ]
+    
+    logger.info("operations.annotations", "Person-like polygon generated", "generate_person_polygon_complete", {
+        'point_count': len(points),
+        'width_ratio': w,
+        'height_ratio': h
+    })
+    
+    return points
 
 def generate_car_like_polygon(center_x: int, center_y: int, width: int, height: int) -> List[tuple]:
     """Generate a car-like polygon (wider than tall)"""
+    logger.info("operations.annotations", "Generating car-like polygon", "generate_car_polygon", {
+        'center_x': center_x,
+        'center_y': center_y,
+        'width': width,
+        'height': height
+    })
+    
     w = min(width, height) * 0.15
     h = min(width, height) * 0.08
     
-    return [
+    points = [
         (center_x - w, center_y - h*0.5),
         (center_x - w*0.8, center_y - h),
         (center_x + w*0.8, center_y - h),
@@ -273,11 +360,26 @@ def generate_car_like_polygon(center_x: int, center_y: int, width: int, height: 
         (center_x - w*0.8, center_y + h),
         (center_x - w, center_y + h*0.5),
     ]
+    
+    logger.info("operations.annotations", "Car-like polygon generated", "generate_car_polygon_complete", {
+        'point_count': len(points),
+        'width_ratio': w,
+        'height_ratio': h
+    })
+    
+    return points
 
 def generate_watershed_polygon(center_x: int, center_y: int, width: int, height: int) -> List[tuple]:
     """Generate an irregular watershed-like polygon"""
     import math
     import random
+    
+    logger.info("operations.annotations", "Generating watershed polygon", "generate_watershed_polygon", {
+        'center_x': center_x,
+        'center_y': center_y,
+        'width': width,
+        'height': height
+    })
     
     points = []
     num_points = random.randint(12, 20)
@@ -300,11 +402,24 @@ def generate_watershed_polygon(center_x: int, center_y: int, width: int, height:
         
         points.append((x, y))
     
+    logger.info("operations.annotations", "Watershed polygon generated", "generate_watershed_polygon_complete", {
+        'point_count': len(points),
+        'base_radius': base_radius,
+        'num_points': num_points
+    })
+    
     return points
 
 def calculate_polygon_area(points: List[tuple]) -> int:
     """Calculate polygon area using shoelace formula"""
+    logger.info("operations.annotations", "Calculating polygon area", "calculate_polygon_area", {
+        'point_count': len(points)
+    })
+    
     if len(points) < 3:
+        logger.warning("errors.validation", "Insufficient points for area calculation", "calculate_polygon_area_insufficient", {
+            'point_count': len(points)
+        })
         return 0
     
     area = 0
@@ -313,11 +428,25 @@ def calculate_polygon_area(points: List[tuple]) -> int:
         area += points[i][0] * points[j][1]
         area -= points[j][0] * points[i][1]
     
-    return abs(area) // 2
+    result = abs(area) // 2
+    
+    logger.info("operations.annotations", "Polygon area calculated", "calculate_polygon_area_complete", {
+        'area': result,
+        'point_count': len(points)
+    })
+    
+    return result
 
 def calculate_polygon_bbox(points: List[tuple]) -> Dict[str, float]:
     """Calculate bounding box of polygon"""
+    logger.info("operations.annotations", "Calculating polygon bounding box", "calculate_polygon_bbox", {
+        'point_count': len(points)
+    })
+    
     if not points:
+        logger.warning("errors.validation", "No points for bounding box calculation", "calculate_polygon_bbox_empty", {
+            'point_count': 0
+        })
         return {"x": 0, "y": 0, "width": 0, "height": 0}
     
     xs = [p[0] for p in points]
@@ -326,12 +455,19 @@ def calculate_polygon_bbox(points: List[tuple]) -> Dict[str, float]:
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
     
-    return {
+    bbox = {
         "x": min_x,
         "y": min_y,
         "width": max_x - min_x,
         "height": max_y - min_y
     }
+    
+    logger.info("operations.annotations", "Polygon bounding box calculated", "calculate_polygon_bbox_complete", {
+        'bbox': bbox,
+        'point_count': len(points)
+    })
+    
+    return bbox
 
 @router.post("/segment/batch")
 async def batch_segment(points: List[SegmentationRequest]):
@@ -339,12 +475,26 @@ async def batch_segment(points: List[SegmentationRequest]):
     Batch segmentation for multiple points
     """
     results = []
-    for request in points:
+    logger.info("operations.annotations", "Starting batch segmentation", "batch_segmentation_start", {
+        'request_count': len(points)
+    })
+    for idx, request in enumerate(points):
         try:
             result = await click_to_segment(request)
             results.append({"success": True, "result": result})
         except Exception as e:
+            logger.warning("errors.system", f"Batch item failed: {e}", "batch_segmentation_item_failed", {
+                'index': idx,
+                'error': str(e),
+                'model_type': getattr(request, 'model_type', None)
+            })
             results.append({"success": False, "error": str(e)})
+    success_count = sum(1 for r in results if r.get('success'))
+    failure_count = len(results) - success_count
+    logger.info("operations.annotations", "Completed batch segmentation", "batch_segmentation_complete", {
+        'success_count': success_count,
+        'failure_count': failure_count
+    })
     
     return {"results": results}
 
@@ -353,6 +503,9 @@ async def get_available_models():
     """
     Get list of available segmentation models
     """
+    logger.info("app.backend", "Returning available segmentation models", "get_available_models", {
+        'model_count': 4
+    })
     return {
         "models": [
             {
@@ -395,7 +548,7 @@ async def segment_polygon(request: SmartPolygonRequest):
     using various computer vision algorithms.
     """
     try:
-        professional_logger.info("operations.annotations", f"🎯 Smart Polygon: Processing request for image {request.image_id} at ({request.x}, {request.y})", "smart_polygon_request", {
+        logger.info("operations.annotations", f"🎯 Smart Polygon: Processing request for image {request.image_id} at ({request.x}, {request.y})", "smart_polygon_request", {
             'image_id': request.image_id,
             'click_x': request.x,
             'click_y': request.y,
@@ -415,7 +568,7 @@ async def segment_polygon(request: SmartPolygonRequest):
             raise HTTPException(status_code=400, detail="Failed to load image")
         
         height, width = image.shape[:2]
-        professional_logger.info("operations.images", f"📏 Image loaded: {width}x{height}", "image_loaded", {
+        logger.info("operations.images", f"📏 Image loaded: {width}x{height}", "image_loaded", {
             'image_id': request.image_id,
             'width': width,
             'height': height
@@ -443,7 +596,7 @@ async def segment_polygon(request: SmartPolygonRequest):
             points, confidence = segment_with_flood_fill(image, request.x, request.y)
             algorithm = "flood_fill"
         
-        professional_logger.info("operations.annotations", f"✅ Smart Polygon: Generated {len(points)} points with confidence {confidence}", "polygon_generated", {
+        logger.info("operations.annotations", f"✅ Smart Polygon: Generated {len(points)} points with confidence {confidence}", "polygon_generated", {
             'image_id': request.image_id,
             'point_count': len(points),
             'confidence': confidence,
@@ -460,7 +613,7 @@ async def segment_polygon(request: SmartPolygonRequest):
     except HTTPException:
         raise
     except Exception as e:
-        professional_logger.error("errors", f"❌ Smart Polygon: Segmentation failed: {str(e)}", "smart_polygon_failed", {
+        logger.error("errors.system", f"❌ Smart Polygon: Segmentation failed: {str(e)}", "smart_polygon_failed", {
             'error': str(e),
             'image_id': request.image_id,
             'click_x': request.x,
@@ -494,20 +647,20 @@ async def get_image_path_from_id(image_id: str) -> Optional[str]:
         
         for path in possible_paths:
             if os.path.exists(path):
-                professional_logger.info("operations.annotations", f"📁 Found image at: {path}", "image_path_found", {
+                logger.info("operations.images", f"📁 Found image at: {path}", "image_path_found", {
             'image_id': image_id,
             'path': path
         })
                 return path
         
-        professional_logger.warning("errors", f"⚠️ Image file not found for ID {image_id}, tried paths: {possible_paths}", "image_not_found", {
+        logger.warning("errors.validation", f"⚠️ Image file not found for ID {image_id}, tried paths: {possible_paths}", "image_not_found", {
             'image_id': image_id,
             'tried_paths': possible_paths
         })
         return None
         
     except Exception as e:
-        professional_logger.error("errors", f"❌ Error getting image path: {e}", "image_path_error", {
+        logger.error("errors.system", f"❌ Error getting image path: {e}", "image_path_error", {
             'error': str(e),
             'image_id': image_id
         })
@@ -540,20 +693,37 @@ def choose_best_algorithm(image: np.ndarray, x: int, y: int) -> str:
         
         # Choose algorithm based on characteristics
         if edge_density > 0.1 and color_variance > 1000:
-            return "grabcut"  # Complex objects with clear edges
+            algorithm = "grabcut"  # Complex objects with clear edges
         elif edge_density > 0.05:
-            return "contour"  # Objects with moderate edges
+            algorithm = "contour"  # Objects with moderate edges
         else:
-            return "flood_fill"  # Simple objects or uniform regions
+            algorithm = "flood_fill"  # Simple objects or uniform regions
+        
+        logger.info("operations.annotations", "Algorithm selection completed", "algorithm_selection_complete", {
+            'selected_algorithm': algorithm,
+            'edge_density': edge_density,
+            'color_variance': color_variance,
+            'click_x': x,
+            'click_y': y
+        })
+        
+        return algorithm
             
     except Exception as e:
-        professional_logger.warning("operations.annotations", f"Algorithm selection failed, using default: {e}", "algorithm_selection_failed", {
+        logger.warning("operations.annotations", f"Algorithm selection failed, using default: {e}", "algorithm_selection_failed", {
             'error': str(e)
         })
         return "flood_fill"
 
 def segment_with_grabcut(image: np.ndarray, x: int, y: int) -> tuple:
     """Segment using GrabCut algorithm"""
+    logger.info("operations.annotations", "Starting GrabCut segmentation", "grabcut_segmentation_start", {
+        'click_x': x,
+        'click_y': y,
+        'image_height': image.shape[0],
+        'image_width': image.shape[1]
+    })
+    
     try:
         height, width = image.shape[:2]
         
@@ -600,10 +770,17 @@ def segment_with_grabcut(image: np.ndarray, x: int, y: int) -> tuple:
         points = [(int(p[0][0]), int(p[0][1])) for p in simplified]
         confidence = 0.85
         
+        logger.info("operations.annotations", "GrabCut segmentation completed", "grabcut_segmentation_complete", {
+            'point_count': len(points),
+            'confidence': confidence,
+            'click_x': x,
+            'click_y': y
+        })
+        
         return points, confidence
         
     except Exception as e:
-        professional_logger.warning("operations.annotations", f"GrabCut failed, using fallback: {e}", "grabcut_failed", {
+        logger.warning("operations.annotations", f"GrabCut failed, using fallback: {e}", "grabcut_failed", {
             'error': str(e),
             'click_x': x,
             'click_y': y
@@ -612,6 +789,13 @@ def segment_with_grabcut(image: np.ndarray, x: int, y: int) -> tuple:
 
 def segment_with_watershed_cv(image: np.ndarray, x: int, y: int) -> tuple:
     """Segment using Watershed algorithm"""
+    logger.info("operations.annotations", "Starting Watershed segmentation", "watershed_segmentation_start", {
+        'click_x': x,
+        'click_y': y,
+        'image_height': image.shape[0],
+        'image_width': image.shape[1]
+    })
+    
     try:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         
@@ -647,10 +831,17 @@ def segment_with_watershed_cv(image: np.ndarray, x: int, y: int) -> tuple:
         points = [(int(p[0][0]), int(p[0][1])) for p in simplified]
         confidence = 0.75
         
+        logger.info("operations.annotations", "Watershed segmentation completed", "watershed_segmentation_complete", {
+            'point_count': len(points),
+            'confidence': confidence,
+            'click_x': x,
+            'click_y': y
+        })
+        
         return points, confidence
         
     except Exception as e:
-        professional_logger.warning("operations.annotations", f"Watershed failed, using fallback: {e}", "watershed_failed", {
+        logger.warning("operations.annotations", f"Watershed failed, using fallback: {e}", "watershed_failed", {
             'error': str(e),
             'click_x': x,
             'click_y': y
@@ -659,6 +850,13 @@ def segment_with_watershed_cv(image: np.ndarray, x: int, y: int) -> tuple:
 
 def segment_with_contour_detection(image: np.ndarray, x: int, y: int) -> tuple:
     """Segment using edge detection and contour finding"""
+    logger.info("operations.annotations", "Starting contour detection segmentation", "contour_detection_start", {
+        'click_x': x,
+        'click_y': y,
+        'image_height': image.shape[0],
+        'image_width': image.shape[1]
+    })
+    
     try:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         
@@ -701,10 +899,17 @@ def segment_with_contour_detection(image: np.ndarray, x: int, y: int) -> tuple:
         points = [(int(p[0][0]), int(p[0][1])) for p in simplified]
         confidence = 0.70
         
+        logger.info("operations.annotations", "Contour detection segmentation completed", "contour_detection_complete", {
+            'point_count': len(points),
+            'confidence': confidence,
+            'click_x': x,
+            'click_y': y
+        })
+        
         return points, confidence
         
     except Exception as e:
-        professional_logger.warning("operations.annotations", f"Contour detection failed, using fallback: {e}", "contour_detection_failed", {
+        logger.warning("operations.annotations", f"Contour detection failed, using fallback: {e}", "contour_detection_failed", {
             'error': str(e),
             'click_x': x,
             'click_y': y
@@ -713,6 +918,13 @@ def segment_with_contour_detection(image: np.ndarray, x: int, y: int) -> tuple:
 
 def segment_with_flood_fill(image: np.ndarray, x: int, y: int) -> tuple:
     """Segment using flood fill algorithm (fallback method)"""
+    logger.info("operations.annotations", "Starting flood fill segmentation", "flood_fill_segmentation_start", {
+        'click_x': x,
+        'click_y': y,
+        'image_height': image.shape[0],
+        'image_width': image.shape[1]
+    })
+    
     try:
         height, width = image.shape[:2]
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -744,6 +956,12 @@ def segment_with_flood_fill(image: np.ndarray, x: int, y: int) -> tuple:
                 (min(width - 1, x + size), min(height - 1, y + size)),
                 (max(0, x - size), min(height - 1, y + size))
             ]
+            logger.warning("operations.annotations", "No contours found in flood fill, using simple rectangle", "flood_fill_no_contours", {
+                'click_x': x,
+                'click_y': y,
+                'point_count': len(points),
+                'confidence': 0.3
+            })
             return points, 0.3
         
         # Get largest contour
@@ -756,10 +974,17 @@ def segment_with_flood_fill(image: np.ndarray, x: int, y: int) -> tuple:
         points = [(int(p[0][0]), int(p[0][1])) for p in simplified]
         confidence = 0.60
         
+        logger.info("operations.annotations", "Flood fill segmentation completed", "flood_fill_segmentation_complete", {
+            'point_count': len(points),
+            'confidence': confidence,
+            'click_x': x,
+            'click_y': y
+        })
+        
         return points, confidence
         
     except Exception as e:
-        professional_logger.error("errors", f"Flood fill failed: {e}", "flood_fill_failed", {
+        logger.error("errors.system", f"Flood fill failed: {e}", "flood_fill_failed", {
             'error': str(e),
             'click_x': x,
             'click_y': y
@@ -772,4 +997,11 @@ def segment_with_flood_fill(image: np.ndarray, x: int, y: int) -> tuple:
             (min(image.shape[1] - 1, x + size), min(image.shape[0] - 1, y + size)),
             (max(0, x - size), min(image.shape[0] - 1, y + size))
         ]
+        logger.warning("operations.annotations", "Using ultimate fallback - simple rectangle", "ultimate_fallback", {
+            'click_x': x,
+            'click_y': y,
+            'point_count': len(points),
+            'confidence': 0.1,
+            'error': str(e)
+        })
         return points, 0.1

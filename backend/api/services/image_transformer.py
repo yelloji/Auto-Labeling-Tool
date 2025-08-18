@@ -13,7 +13,7 @@ import sys
 import os
 from logging_system.professional_logger import get_professional_logger
 
-professional_logger = get_professional_logger()
+logger = get_professional_logger()
 
 # Add the backend directory to the path to import core modules
 backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -42,7 +42,7 @@ class ImageTransformer:
     """
     
     def __init__(self):
-        professional_logger.info("operations.transformations", "Initializing ImageTransformer service", "transformer_init", {
+        logger.info("operations.transformations", "Initializing ImageTransformer service", "transformer_init", {
             'transformation_count': 18,
             'basic_transformations': ['resize', 'rotate', 'flip', 'crop', 'brightness', 'contrast', 'blur', 'noise'],
             'advanced_transformations': ['color_jitter', 'cutout', 'random_zoom', 'affine_transform', 'perspective_warp', 'grayscale', 'shear', 'gamma_correction', 'equalize', 'clahe'],
@@ -70,7 +70,7 @@ class ImageTransformer:
         self._get_affine_transform_params = get_affine_transform_parameters
         self._get_perspective_warp_params = get_perspective_warp_parameters
         
-        professional_logger.info("operations.transformations", "Central config parameters loaded successfully", "config_loaded", {
+        logger.info("operations.transformations", "Central config parameters loaded successfully", "config_loaded", {
             'parameter_functions': 19,
             'config_sources': ['shear', 'rotation', 'brightness', 'contrast', 'blur', 'hue', 'saturation', 'gamma', 'resize', 'noise', 'clahe_clip_limit', 'clahe_grid_size', 'cutout_num_holes', 'cutout_hole_size', 'crop', 'color_jitter', 'random_zoom', 'affine_transform', 'perspective_warp']
         })
@@ -114,7 +114,7 @@ class ImageTransformer:
             original_size = image.size
             enabled_transformations = [name for name, params in config.items() if params.get('enabled', True)]
             
-            professional_logger.info("operations.transformations", f"Starting image transformations", "transformations_start", {
+            logger.info("operations.transformations", f"Starting image transformations", "transformations_start", {
                 'transformation_count': len(config),
                 'enabled_transformations': enabled_transformations,
                 'image_size': f"{original_size[0]}x{original_size[1]}",
@@ -129,7 +129,7 @@ class ImageTransformer:
             for transform_name, params in config.items():
                 if transform_name in self.transformation_methods and params.get('enabled', True):
                     try:
-                        professional_logger.info("operations.transformations", f"Applying transformation: {transform_name}", "transformation_apply", {
+                        logger.info("operations.transformations", f"Applying transformation: {transform_name}", "transformation_apply", {
                             'transform_name': transform_name,
                             'params': params,
                             'image_size_before': f"{result_image.size[0]}x{result_image.size[1]}"
@@ -138,13 +138,13 @@ class ImageTransformer:
                         result_image = self.transformation_methods[transform_name](result_image, params)
                         applied_transformations.append(transform_name)
                         
-                        professional_logger.info("operations.transformations", f"Successfully applied transformation: {transform_name}", "transformation_success", {
+                        logger.info("operations.transformations", f"Successfully applied transformation: {transform_name}", "transformation_success", {
                             'transform_name': transform_name,
                             'image_size_after': f"{result_image.size[0]}x{result_image.size[1]}"
                         })
                         
                     except Exception as e:
-                        professional_logger.warning("errors.system", f"Failed to apply {transform_name}: {str(e)}", "transformation_failed", {
+                        logger.warning("errors.system", f"Failed to apply {transform_name}: {str(e)}", "transformation_failed", {
                             'transform_name': transform_name,
                             'error': str(e),
                             'params': params
@@ -152,7 +152,7 @@ class ImageTransformer:
                         failed_transformations.append(transform_name)
                         continue
             
-            professional_logger.info("operations.transformations", f"Completed image transformations", "transformations_complete", {
+            logger.info("operations.transformations", f"Completed image transformations", "transformations_complete", {
                 'applied_transformations': applied_transformations,
                 'failed_transformations': failed_transformations,
                 'success_rate': f"{len(applied_transformations)}/{len(applied_transformations) + len(failed_transformations)}",
@@ -163,7 +163,7 @@ class ImageTransformer:
             return result_image
             
         except Exception as e:
-            professional_logger.error("errors", f"Error applying transformations: {str(e)}", "transformations_error", {
+            logger.error("errors.system", f"Error applying transformations: {str(e)}", "transformations_error", {
                 'error': str(e),
                 'config': config,
                 'image_size': f"{image.size[0]}x{image.size[1]}" if image else 'None'
@@ -177,7 +177,7 @@ class ImageTransformer:
         Returns:
             Dictionary with transformation specifications
         """
-        professional_logger.info("operations.transformations", "Getting available transformations", "get_transformations", {
+        logger.info("operations.transformations", "Getting available transformations", "get_transformations", {
             'transformation_count': 18,
             'basic_count': 8,
             'advanced_count': 10
@@ -578,7 +578,7 @@ class ImageTransformer:
             original_size = image.size
             preset_resolution = params.get('preset_resolution', 'custom')
             
-            professional_logger.info("operations.transformations", f"Applying resize transformation", "resize_start", {
+            logger.info("operations.transformations", f"Applying resize transformation", "resize_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'preset_resolution': preset_resolution,
                 'params': params
@@ -589,7 +589,7 @@ class ImageTransformer:
                 # Parse preset resolution (e.g., '640x640' -> width=640, height=640)
                 try:
                     width, height = map(int, preset_resolution.split('x'))
-                    professional_logger.info("operations.transformations", f"Using preset resolution: {preset_resolution}", "resize_preset", {
+                    logger.info("operations.transformations", f"Using preset resolution: {preset_resolution}", "resize_preset", {
                         'preset': preset_resolution,
                         'parsed_size': f"{width}x{height}"
                     })
@@ -597,7 +597,7 @@ class ImageTransformer:
                     # Fallback to custom values if preset parsing fails
                     width = params.get('width', 640)
                     height = params.get('height', 640)
-                    professional_logger.warning("operations.transformations", f"Failed to parse preset resolution, using fallback", "resize_preset_fallback", {
+                    logger.warning("operations.transformations", f"Failed to parse preset resolution, using fallback", "resize_preset_fallback", {
                         'preset': preset_resolution,
                         'fallback_size': f"{width}x{height}"
                     })
@@ -742,7 +742,7 @@ class ImageTransformer:
                 # Default to stretch_to
                 result = image.resize((target_width, target_height), resample)
             
-            professional_logger.info("operations.transformations", f"Resize transformation completed", "resize_success", {
+            logger.info("operations.transformations", f"Resize transformation completed", "resize_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'resize_mode': resize_mode,
@@ -752,7 +752,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Resize transformation failed: {str(e)}", "resize_error", {
+            logger.error("errors.system", f"Resize transformation failed: {str(e)}", "resize_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -768,7 +768,7 @@ class ImageTransformer:
             angle = params.get('angle', rotation_params['default'])
             fill_color = params.get('fill_color', 'white')
             
-            professional_logger.info("operations.transformations", f"Applying rotate transformation", "rotate_start", {
+            logger.info("operations.transformations", f"Applying rotate transformation", "rotate_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'angle': angle,
                 'fill_color': fill_color,
@@ -792,7 +792,7 @@ class ImageTransformer:
                 fillcolor=fill_color
             )
             
-            professional_logger.info("operations.transformations", f"Rotate transformation completed", "rotate_success", {
+            logger.info("operations.transformations", f"Rotate transformation completed", "rotate_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'angle': angle,
@@ -802,7 +802,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Rotate transformation failed: {str(e)}", "rotate_error", {
+            logger.error("errors.system", f"Rotate transformation failed: {str(e)}", "rotate_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -816,7 +816,7 @@ class ImageTransformer:
             horizontal = params.get('horizontal', False)
             vertical = params.get('vertical', False)
             
-            professional_logger.info("operations.transformations", f"Applying flip transformation", "flip_start", {
+            logger.info("operations.transformations", f"Applying flip transformation", "flip_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'horizontal_flip': horizontal,
                 'vertical_flip': vertical,
@@ -826,16 +826,16 @@ class ImageTransformer:
             result = image
             if horizontal:
                 result = result.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-                professional_logger.info("operations.transformations", f"Applied horizontal flip", "flip_horizontal", {
+                logger.info("operations.transformations", f"Applied horizontal flip", "flip_horizontal", {
                     'applied': True
                 })
             if vertical:
                 result = result.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-                professional_logger.info("operations.transformations", f"Applied vertical flip", "flip_vertical", {
+                logger.info("operations.transformations", f"Applied vertical flip", "flip_vertical", {
                     'applied': True
                 })
             
-            professional_logger.info("operations.transformations", f"Flip transformation completed", "flip_success", {
+            logger.info("operations.transformations", f"Flip transformation completed", "flip_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'horizontal_flip': horizontal,
@@ -845,7 +845,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Flip transformation failed: {str(e)}", "flip_error", {
+            logger.error("errors.system", f"Flip transformation failed: {str(e)}", "flip_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -861,7 +861,7 @@ class ImageTransformer:
             crop_percentage = params.get('crop_percentage', params.get('scale', crop_params['default']))  # Support both old and new parameter names
             crop_mode = params.get('crop_mode', 'center')  # Default to center crop
             
-            professional_logger.info("operations.transformations", f"Applying crop transformation", "crop_start", {
+            logger.info("operations.transformations", f"Applying crop transformation", "crop_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'crop_percentage': crop_percentage,
                 'crop_mode': crop_mode,
@@ -877,7 +877,7 @@ class ImageTransformer:
                 scale = crop_percentage
                 
             if scale >= 1.0:
-                professional_logger.info("operations.transformations", f"Crop transformation skipped (scale >= 1.0)", "crop_skipped", {
+                logger.info("operations.transformations", f"Crop transformation skipped (scale >= 1.0)", "crop_skipped", {
                     'scale': scale,
                     'reason': 'scale >= 1.0'
                 })
@@ -917,7 +917,7 @@ class ImageTransformer:
                 left = (width - new_width) // 2
                 top = (height - new_height) // 2
             
-            professional_logger.info("operations.transformations", f"Crop parameters calculated", "crop_params", {
+            logger.info("operations.transformations", f"Crop parameters calculated", "crop_params", {
                 'crop_size': f"{new_width}x{new_height}",
                 'crop_position': f"({left}, {top})",
                 'scale': scale
@@ -926,7 +926,7 @@ class ImageTransformer:
             cropped = image.crop((left, top, left + new_width, top + new_height))
             result = cropped.resize((width, height), Image.Resampling.LANCZOS)
             
-            professional_logger.info("operations.transformations", f"Crop transformation completed", "crop_success", {
+            logger.info("operations.transformations", f"Crop transformation completed", "crop_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'crop_size': f"{new_width}x{new_height}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
@@ -936,7 +936,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Crop transformation failed: {str(e)}", "crop_error", {
+            logger.error("errors.system", f"Crop transformation failed: {str(e)}", "crop_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -954,7 +954,7 @@ class ImageTransformer:
             # Get percentage value (centralized format)
             percentage = params.get('percentage', params.get('adjustment', params.get('factor', brightness_params['default'])))
             
-            professional_logger.info("operations.transformations", f"Applying brightness transformation", "brightness_start", {
+            logger.info("operations.transformations", f"Applying brightness transformation", "brightness_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'percentage': percentage,
                 'params': params
@@ -970,7 +970,7 @@ class ImageTransformer:
             enhancer = ImageEnhance.Brightness(image)
             result = enhancer.enhance(factor)
             
-            professional_logger.info("operations.transformations", f"Brightness transformation completed", "brightness_success", {
+            logger.info("operations.transformations", f"Brightness transformation completed", "brightness_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'percentage': percentage,
@@ -980,7 +980,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Brightness transformation failed: {str(e)}", "brightness_error", {
+            logger.error("errors.system", f"Brightness transformation failed: {str(e)}", "brightness_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -998,7 +998,7 @@ class ImageTransformer:
             # Get percentage value (centralized format)
             percentage = params.get('percentage', params.get('adjustment', params.get('factor', contrast_params['default'])))
             
-            professional_logger.info("operations.transformations", f"Applying contrast transformation", "contrast_start", {
+            logger.info("operations.transformations", f"Applying contrast transformation", "contrast_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'percentage': percentage,
                 'params': params
@@ -1014,7 +1014,7 @@ class ImageTransformer:
             enhancer = ImageEnhance.Contrast(image)
             result = enhancer.enhance(factor)
             
-            professional_logger.info("operations.transformations", f"Contrast transformation completed", "contrast_success", {
+            logger.info("operations.transformations", f"Contrast transformation completed", "contrast_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'percentage': percentage,
@@ -1024,7 +1024,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Contrast transformation failed: {str(e)}", "contrast_error", {
+            logger.error("errors.system", f"Contrast transformation failed: {str(e)}", "contrast_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1040,7 +1040,7 @@ class ImageTransformer:
             blur_type = params.get('blur_type', 'gaussian')
             radius = params.get('radius', params.get('intensity', blur_params['default']))  # Support both old and new parameter names
             
-            professional_logger.info("operations.transformations", f"Applying blur transformation", "blur_start", {
+            logger.info("operations.transformations", f"Applying blur transformation", "blur_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'blur_type': blur_type,
                 'radius': radius,
@@ -1071,7 +1071,7 @@ class ImageTransformer:
                 # Default to Gaussian
                 result = image.filter(ImageFilter.GaussianBlur(radius=radius))
             
-            professional_logger.info("operations.transformations", f"Blur transformation completed", "blur_success", {
+            logger.info("operations.transformations", f"Blur transformation completed", "blur_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'blur_type': blur_type,
@@ -1081,7 +1081,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Blur transformation failed: {str(e)}", "blur_error", {
+            logger.error("errors.system", f"Blur transformation failed: {str(e)}", "blur_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1097,7 +1097,7 @@ class ImageTransformer:
             noise_type = params.get('noise_type', 'gaussian')
             strength = params.get('strength', params.get('intensity', noise_params['default']))  # Support both old and new parameter names
             
-            professional_logger.info("operations.transformations", f"Applying noise transformation", "noise_start", {
+            logger.info("operations.transformations", f"Applying noise transformation", "noise_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'noise_type': noise_type,
                 'strength': strength,
@@ -1138,7 +1138,7 @@ class ImageTransformer:
             noisy_array = np.clip(img_array + noise, 0, 255).astype(np.uint8)
             result = Image.fromarray(noisy_array)
             
-            professional_logger.info("operations.transformations", f"Noise transformation completed", "noise_success", {
+            logger.info("operations.transformations", f"Noise transformation completed", "noise_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'noise_type': noise_type,
@@ -1149,7 +1149,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Noise transformation failed: {str(e)}", "noise_error", {
+            logger.error("errors.system", f"Noise transformation failed: {str(e)}", "noise_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1162,7 +1162,7 @@ class ImageTransformer:
         try:
             original_size = image.size
             
-            professional_logger.info("operations.transformations", f"Applying color jitter transformation", "color_jitter_start", {
+            logger.info("operations.transformations", f"Applying color jitter transformation", "color_jitter_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'params': params
             })
@@ -1182,7 +1182,7 @@ class ImageTransformer:
                 hue_factor = hue_shift
             
             if hue_factor != 0:
-                professional_logger.info("operations.transformations", f"Applying hue shift in color jitter", "color_jitter_hue", {
+                logger.info("operations.transformations", f"Applying hue shift in color jitter", "color_jitter_hue", {
                     'hue_shift': hue_shift,
                     'hue_factor': hue_factor
                 })
@@ -1206,7 +1206,7 @@ class ImageTransformer:
                 brightness_factor = brightness_variation
             
             if brightness_factor != 1.0:
-                professional_logger.info("operations.transformations", f"Applying brightness variation in color jitter", "color_jitter_brightness", {
+                logger.info("operations.transformations", f"Applying brightness variation in color jitter", "color_jitter_brightness", {
                     'brightness_variation': brightness_variation,
                     'brightness_factor': brightness_factor
                 })
@@ -1226,7 +1226,7 @@ class ImageTransformer:
                 contrast_factor = contrast_variation
             
             if contrast_factor != 1.0:
-                professional_logger.info("operations.transformations", f"Applying contrast variation in color jitter", "color_jitter_contrast", {
+                logger.info("operations.transformations", f"Applying contrast variation in color jitter", "color_jitter_contrast", {
                     'contrast_variation': contrast_variation,
                     'contrast_factor': contrast_factor
                 })
@@ -1246,7 +1246,7 @@ class ImageTransformer:
                 saturation_factor = saturation_variation
             
             if saturation_factor != 1.0:
-                professional_logger.info("operations.transformations", f"Applying saturation variation in color jitter", "color_jitter_saturation", {
+                logger.info("operations.transformations", f"Applying saturation variation in color jitter", "color_jitter_saturation", {
                     'saturation_variation': saturation_variation,
                     'saturation_factor': saturation_factor
                 })
@@ -1254,7 +1254,7 @@ class ImageTransformer:
                 result = enhancer.enhance(saturation_factor)
                 applied_effects.append('saturation_variation')
             
-            professional_logger.info("operations.transformations", f"Color jitter transformation completed", "color_jitter_success", {
+            logger.info("operations.transformations", f"Color jitter transformation completed", "color_jitter_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'applied_effects': applied_effects,
@@ -1267,7 +1267,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Color jitter transformation failed: {str(e)}", "color_jitter_error", {
+            logger.error("errors.system", f"Color jitter transformation failed: {str(e)}", "color_jitter_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1284,7 +1284,7 @@ class ImageTransformer:
             num_holes = params.get('num_holes', cutout_num_holes_params['default'])
             hole_size = params.get('hole_size', cutout_hole_size_params['default'])
             
-            professional_logger.info("operations.transformations", f"Applying cutout transformation", "cutout_start", {
+            logger.info("operations.transformations", f"Applying cutout transformation", "cutout_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'num_holes': num_holes,
                 'hole_size': hole_size,
@@ -1303,7 +1303,7 @@ class ImageTransformer:
             
             result = Image.fromarray(img_array)
             
-            professional_logger.info("operations.transformations", f"Cutout transformation completed", "cutout_success", {
+            logger.info("operations.transformations", f"Cutout transformation completed", "cutout_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'num_holes': num_holes,
@@ -1314,7 +1314,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Cutout transformation failed: {str(e)}", "cutout_error", {
+            logger.error("errors.system", f"Cutout transformation failed: {str(e)}", "cutout_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1329,14 +1329,14 @@ class ImageTransformer:
             random_zoom_params = self._get_random_zoom_params()
             zoom_factor = params.get('zoom_factor', params.get('zoom_range', random_zoom_params['default']))  # Support both old and new parameter names
             
-            professional_logger.info("operations.transformations", f"Applying random zoom transformation", "zoom_start", {
+            logger.info("operations.transformations", f"Applying random zoom transformation", "zoom_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'zoom_factor': zoom_factor,
                 'params': params
             })
             
             if zoom_factor == 1.0:
-                professional_logger.info("operations.transformations", f"Random zoom skipped (zoom_factor = 1.0)", "zoom_skipped", {
+                logger.info("operations.transformations", f"Random zoom skipped (zoom_factor = 1.0)", "zoom_skipped", {
                     'zoom_factor': zoom_factor,
                     'reason': 'zoom_factor = 1.0'
                 })
@@ -1367,7 +1367,7 @@ class ImageTransformer:
                 result = new_image
                 zoom_type = "zoom_out"
             
-            professional_logger.info("operations.transformations", f"Random zoom transformation completed", "zoom_success", {
+            logger.info("operations.transformations", f"Random zoom transformation completed", "zoom_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'zoom_factor': zoom_factor,
@@ -1377,7 +1377,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Random zoom transformation failed: {str(e)}", "zoom_error", {
+            logger.error("errors.system", f"Random zoom transformation failed: {str(e)}", "zoom_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1391,7 +1391,7 @@ class ImageTransformer:
             # Get parameters from central config
             affine_params = self._get_affine_transform_params()
             
-            professional_logger.info("operations.transformations", f"Applying affine transformation", "affine_start", {
+            logger.info("operations.transformations", f"Applying affine transformation", "affine_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'params': params
             })
@@ -1403,7 +1403,7 @@ class ImageTransformer:
             # Handle rotation (new parameter name: rotation_angle)
             rotation_angle = params.get('rotation_angle', params.get('rotate', affine_params['rotation']['default']))  # Support both old and new parameter names
             if rotation_angle != 0:
-                professional_logger.info("operations.transformations", f"Applying rotation in affine transform", "affine_rotation", {
+                logger.info("operations.transformations", f"Applying rotation in affine transform", "affine_rotation", {
                     'rotation_angle': rotation_angle
                 })
                 result = result.rotate(rotation_angle, expand=False, fillcolor=(255, 255, 255))
@@ -1411,7 +1411,7 @@ class ImageTransformer:
             # Handle scaling (new parameter name: scale_factor)
             scale_factor = params.get('scale_factor', params.get('scale', affine_params['scale']['default']))  # Support both old and new parameter names
             if scale_factor != 1.0:
-                professional_logger.info("operations.transformations", f"Applying scaling in affine transform", "affine_scaling", {
+                logger.info("operations.transformations", f"Applying scaling in affine transform", "affine_scaling", {
                     'scale_factor': scale_factor
                 })
                 width, height = result.size
@@ -1455,7 +1455,7 @@ class ImageTransformer:
             
             # Apply shifts if needed
             if shift_x_factor != 0 or shift_y_factor != 0:
-                professional_logger.info("operations.transformations", f"Applying shifts in affine transform", "affine_shifts", {
+                logger.info("operations.transformations", f"Applying shifts in affine transform", "affine_shifts", {
                     'horizontal_shift': horizontal_shift,
                     'vertical_shift': vertical_shift,
                     'shift_x_factor': shift_x_factor,
@@ -1484,7 +1484,7 @@ class ImageTransformer:
                 
                 result = new_image
             
-            professional_logger.info("operations.transformations", f"Affine transformation completed", "affine_success", {
+            logger.info("operations.transformations", f"Affine transformation completed", "affine_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'rotation_angle': rotation_angle,
@@ -1496,7 +1496,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Affine transformation failed: {str(e)}", "affine_error", {
+            logger.error("errors.system", f"Affine transformation failed: {str(e)}", "affine_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1511,7 +1511,7 @@ class ImageTransformer:
             perspective_params = self._get_perspective_warp_parameters()
             distortion_strength = params.get('distortion_strength', params.get('distortion', perspective_params['default']))  # Support both old and new parameter names
             
-            professional_logger.info("operations.transformations", f"Applying perspective warp transformation", "perspective_start", {
+            logger.info("operations.transformations", f"Applying perspective warp transformation", "perspective_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'distortion_strength': distortion_strength,
                 'params': params
@@ -1526,7 +1526,7 @@ class ImageTransformer:
                 distortion = distortion_strength
             
             if distortion == 0:
-                professional_logger.info("operations.transformations", f"Perspective warp skipped (distortion = 0)", "perspective_skipped", {
+                logger.info("operations.transformations", f"Perspective warp skipped (distortion = 0)", "perspective_skipped", {
                     'distortion': distortion,
                     'reason': 'distortion = 0'
                 })
@@ -1553,7 +1553,7 @@ class ImageTransformer:
             warped = cv2.warpPerspective(img_array, matrix, (width, height), borderValue=(255, 255, 255))
             result = Image.fromarray(warped)
             
-            professional_logger.info("operations.transformations", f"Perspective warp transformation completed", "perspective_success", {
+            logger.info("operations.transformations", f"Perspective warp transformation completed", "perspective_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'distortion_strength': distortion_strength,
@@ -1564,7 +1564,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Perspective warp transformation failed: {str(e)}", "perspective_error", {
+            logger.error("errors.system", f"Perspective warp transformation failed: {str(e)}", "perspective_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1576,14 +1576,14 @@ class ImageTransformer:
         try:
             original_size = image.size
             
-            professional_logger.info("operations.transformations", f"Applying grayscale transformation", "grayscale_start", {
+            logger.info("operations.transformations", f"Applying grayscale transformation", "grayscale_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'params': params
             })
             
             result = ImageOps.grayscale(image).convert('RGB')
             
-            professional_logger.info("operations.transformations", f"Grayscale transformation completed", "grayscale_success", {
+            logger.info("operations.transformations", f"Grayscale transformation completed", "grayscale_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}"
             })
@@ -1591,7 +1591,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Grayscale transformation failed: {str(e)}", "grayscale_error", {
+            logger.error("errors.system", f"Grayscale transformation failed: {str(e)}", "grayscale_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1606,14 +1606,14 @@ class ImageTransformer:
             shear_params = self._get_shear_params()
             shear_angle = params.get('shear_angle', params.get('angle', shear_params['default']))  # Support both old and new parameter names
             
-            professional_logger.info("operations.transformations", f"Applying shear transformation", "shear_start", {
+            logger.info("operations.transformations", f"Applying shear transformation", "shear_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'shear_angle': shear_angle,
                 'params': params
             })
             
             if shear_angle == 0:
-                professional_logger.info("operations.transformations", f"Shear transformation skipped (angle = 0)", "shear_skipped", {
+                logger.info("operations.transformations", f"Shear transformation skipped (angle = 0)", "shear_skipped", {
                     'shear_angle': shear_angle,
                     'reason': 'angle = 0'
                 })
@@ -1633,7 +1633,7 @@ class ImageTransformer:
             sheared = cv2.warpAffine(img_array, shear_matrix, (width, height), borderValue=(255, 255, 255))
             result = Image.fromarray(sheared)
             
-            professional_logger.info("operations.transformations", f"Shear transformation completed", "shear_success", {
+            logger.info("operations.transformations", f"Shear transformation completed", "shear_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'shear_angle': shear_angle,
@@ -1643,7 +1643,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Shear transformation failed: {str(e)}", "shear_error", {
+            logger.error("errors.system", f"Shear transformation failed: {str(e)}", "shear_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1658,14 +1658,14 @@ class ImageTransformer:
             gamma_params = self._get_gamma_params()
             gamma = params.get('gamma', gamma_params['default'])
             
-            professional_logger.info("operations.transformations", f"Applying gamma correction transformation", "gamma_start", {
+            logger.info("operations.transformations", f"Applying gamma correction transformation", "gamma_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'gamma': gamma,
                 'params': params
             })
             
             if gamma == 1.0:
-                professional_logger.info("operations.transformations", f"Gamma correction skipped (gamma = 1.0)", "gamma_skipped", {
+                logger.info("operations.transformations", f"Gamma correction skipped (gamma = 1.0)", "gamma_skipped", {
                     'gamma': gamma,
                     'reason': 'gamma = 1.0'
                 })
@@ -1680,7 +1680,7 @@ class ImageTransformer:
             result_array = (corrected * 255).astype(np.uint8)
             result = Image.fromarray(result_array)
             
-            professional_logger.info("operations.transformations", f"Gamma correction transformation completed", "gamma_success", {
+            logger.info("operations.transformations", f"Gamma correction transformation completed", "gamma_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'gamma': gamma
@@ -1689,7 +1689,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Gamma correction transformation failed: {str(e)}", "gamma_error", {
+            logger.error("errors.system", f"Gamma correction transformation failed: {str(e)}", "gamma_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1701,14 +1701,14 @@ class ImageTransformer:
         try:
             original_size = image.size
             
-            professional_logger.info("operations.transformations", f"Applying equalize transformation", "equalize_start", {
+            logger.info("operations.transformations", f"Applying equalize transformation", "equalize_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'params': params
             })
             
             result = ImageOps.equalize(image)
             
-            professional_logger.info("operations.transformations", f"Equalize transformation completed", "equalize_success", {
+            logger.info("operations.transformations", f"Equalize transformation completed", "equalize_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}"
             })
@@ -1716,7 +1716,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Equalize transformation failed: {str(e)}", "equalize_error", {
+            logger.error("errors.system", f"Equalize transformation failed: {str(e)}", "equalize_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
@@ -1733,7 +1733,7 @@ class ImageTransformer:
             clip_limit = params.get('clip_limit', clahe_clip_limit_params['default'])
             grid_size = params.get('grid_size', clahe_grid_size_params['default'])
             
-            professional_logger.info("operations.transformations", f"Applying CLAHE transformation", "clahe_start", {
+            logger.info("operations.transformations", f"Applying CLAHE transformation", "clahe_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'clip_limit': clip_limit,
                 'grid_size': grid_size,
@@ -1759,7 +1759,7 @@ class ImageTransformer:
             
             result = Image.fromarray(result_array)
             
-            professional_logger.info("operations.transformations", f"CLAHE transformation completed", "clahe_success", {
+            logger.info("operations.transformations", f"CLAHE transformation completed", "clahe_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'clip_limit': clip_limit,
@@ -1770,7 +1770,7 @@ class ImageTransformer:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"CLAHE transformation failed: {str(e)}", "clahe_error", {
+            logger.error("errors.system", f"CLAHE transformation failed: {str(e)}", "clahe_error", {
                 'error': str(e),
                 'params': params,
                 'original_size': f"{image.size[0]}x{image.size[1]}"
