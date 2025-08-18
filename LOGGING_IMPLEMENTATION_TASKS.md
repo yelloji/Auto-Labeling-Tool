@@ -50,7 +50,7 @@
 ## 🎉 **MAJOR MILESTONE ACHIEVED! 🎉**
 ### **📊 CURRENT IMPLEMENTATION STATUS:**
 - **`backend/api/routes/`**: 15/15 files completed (100% complete) - **🎉 MILESTONE ACHIEVED!**
-- **`backend/core/`**: 1/11 files completed (9% complete)
+- **`backend/core/`**: 9/11 files completed (82% complete) - **🎯 NEXT PRIORITY!**
 - **`backend/utils/`**: 0/6 files completed (0% complete)
 - **`backend/api/`**: 0/2 files completed (0% complete)
 - **`backend/database/`**: 0/5 files completed (0% complete)
@@ -193,6 +193,7 @@
 - Business logic operations
 - General operational activities
 - Process execution steps
+- Machine learning operations, training sessions
 
 **`annotations.log`** - Annotation Operations
 - Labeling activities, annotation creation
@@ -475,42 +476,62 @@
   - **Category**: `errors.system` → **Log File**: `logs/errors/system.log` (System errors)
   - **Import Fixed**: Changed from `backend.logging_system` to `logging_system` ✅
 
-- [ ] `backend/core/transformation_schema.py` - ⏳ NEEDS CHECK
-  - **Category**: `operations.transformations` → **Log File**: `logs/operations/transformations.log`
-  - **Category**: `app.backend` → **Log File**: `logs/app/backend.log`
+- [x] `backend/core/transformation_schema.py` - ✅ COMPLETED (Professional logger integrated with comprehensive logging)
+  - **Category**: `operations.transformations` → **Log File**: `logs/operations/transformations.log` (Transformation operations, combination generation, sampling)
+  - **Category**: `app.backend` → **Log File**: `logs/app/backend.log` (Backend operations, initialization, testing)
+  - **Category**: `errors.validation` → **Log File**: `logs/errors/validation.log` (Validation errors, parameter parsing)
+  - **Perfect Integration**: Comprehensive logging across all transformation schema operations
+  - **Structured JSON**: Perfect JSON logging with rich context data and operation tracking
+  - **Complete Coverage**: All methods logged including initialization, database loading, combination generation, validation
 
-- [ ] `backend/core/release_controller.py` - ⏳ NEEDS CHECK
-  - **Category**: `operations.releases` → **Log File**: `logs/operations/releases.log`
-  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log`
+- [x] `backend/core/release_controller.py` - ✅ COMPLETED (Professional logger integrated with comprehensive logging)
+  - **Category**: `operations.releases` → **Log File**: `logs/operations/releases.log` (Release operations, generation, progress tracking, history)
+  - **Category**: `operations.images` → **Log File**: `logs/operations/images.log` (Image operations, copying, format conversion, processing)
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log` (General operations, progress updates, cleanup)
+  - **Category**: `errors.system` → **Log File**: `logs/errors/system.log` (System errors, database failures, file operations)
+  - **Category**: `errors.validation` → **Log File**: `logs/errors/validation.log` (Validation errors, missing files, path issues)
+  - **Perfect Integration**: Comprehensive logging across all release controller operations
+  - **Structured JSON**: Perfect JSON logging with rich context data and operation tracking
+  - **Complete Coverage**: All methods logged including release generation, image processing, export creation, ZIP packaging
 
-- [ ] `backend/core/image_generator.py` - ⏳ NEEDS CHECK
-  - **Category**: `operations.images` → **Log File**: `logs/operations/images.log`
-  - **Category**: `operations.transformations` → **Log File**: `logs/operations/transformations.log`
+- ✅ `backend/core/image_generator.py` - **COMPLETED** - Perfect logging implementation with uniform pattern
+  - **Category**: `operations.transformations` → **Log File**: `logs/operations/transformations.log` (Engine initialization, dual-value resolution, config resolution, transformations applied, annotations updated, directory cleanup, multi-dataset processing)
+  - **Category**: `operations.images` → **Log File**: `logs/operations/images.log` (Image loading, saving, format conversion, augmented image generation, image processing)
+  - **Category**: `errors.validation` → **Log File**: `logs/errors/validation.log` (Unsupported formats, dual-value resolution failures, empty transformation configs, invalid bounding boxes, invalid polygons, no transformation configs)
+  - **Category**: `errors.system` → **Log File**: `logs/errors/system.log` (Image save errors, transformation application errors, config processing errors, image processing errors)
 
-- [ ] `backend/core/active_learning.py` - ⏳ NEEDS CHECK
-  - **Category**: `operations.ml` → **Log File**: `logs/operations/ml.log`
-  - **Category**: `operations.annotations` → **Log File**: `logs/operations/annotations.log`
+- ✅ `backend/core/active_learning.py` - **COMPLETED** - Perfect logging implementation with uniform pattern
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log` (Training session creation, training iteration start/completion, training failures)
+  - **Category**: `operations.annotations` → **Log File**: `logs/operations/annotations.log` (Uncertain samples generation)
+  - **Category**: `errors.system` → **Log File**: `logs/errors/system.log` (Training failures, uncertain samples generation failures, uncertainty calculation errors)
 
-- [ ] `backend/core/auto_labeler.py` - ⏳ NEEDS CHECK
-  - **Category**: `operations.annotations` → **Log File**: `logs/operations/annotations.log`
-  - **Category**: `operations.ml` → **Log File**: `logs/operations/ml.log`
+- ✅ `backend/core/auto_labeler.py` - **COMPLETED** - Perfect logging implementation with uniform pattern
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log` (Auto-labeling job management, model loading, job progress tracking, statistics calculation, model usage updates)
+  - **Category**: `operations.images` → **Log File**: `logs/operations/images.log` (Image processing, inference operations, image status updates, file validation)
+  - **Category**: `operations.annotations` → **Log File**: `logs/operations/annotations.log` (Annotation creation, deletion, clearing existing annotations)
+  - **Category**: `operations.datasets` → **Log File**: `logs/operations/datasets.log` (Dataset statistics updates)
+  - **Category**: `errors.validation` → **Log File**: `logs/errors/validation.log` (Model not found, image not found, already labeled validation)
+  - **Category**: `errors.system` → **Log File**: `logs/errors/system.log` (Model loading failures, inference errors, image processing failures, job failures)
 
-- [ ] `backend/core/config.py` - ⏳ NEEDS CHECK
-  - **Category**: `app.backend` → **Log File**: `logs/app/backend.log`
-  - **Category**: `app.config` → **Log File**: `logs/app/config.log`
+- ✅ `backend/core/config.py` - **COMPLETED** - Perfect logging implementation with uniform pattern
+  - **Category**: `app.backend` → **Log File**: `logs/app/backend.log` (Application settings initialization, directory creation, global settings instance creation)
 
-- [ ] `backend/core/dataset_manager.py` - ⏳ NEEDS CHECK
-  - **Category**: `operations.datasets` → **Log File**: `logs/operations/datasets.log`
-  - **Category**: `operations.files` → **Log File**: `logs/operations/files.log`
-  - **Category**: `operations.database` → **Log File**: `logs/operations/database.log`
+- ✅ `backend/core/dataset_manager.py` - **COMPLETED** - Perfect logging implementation with uniform pattern
+  - **Category**: `operations.datasets` → **Log File**: `logs/operations/datasets.log` (Dataset operations, getting labeled/unlabeled images, class names retrieval)
+  - **Category**: `app.database` → **Log File**: `logs/app/database.log` (Database operations, SQL query execution)
+  - **Category**: `errors.system` → **Log File**: `logs/errors/system.log` (Database query failures, system errors)
 
-- [ ] `backend/core/file_handler.py` - ⏳ NEEDS CHECK
-  - **Category**: `operations.files` → **Log File**: `logs/operations/files.log`
-  - **Category**: `operations.images` → **Log File**: `logs/operations/images.log`
+- ✅ `backend/core/file_handler.py` - **COMPLETED** - Perfect logging implementation with uniform pattern
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log` (File operations, uploads, saves, deletes, folder operations, validation)
+  - **Category**: `operations.images` → **Log File**: `logs/operations/images.log` (Image processing, metadata extraction, URL generation, path migration)
+  - **Category**: `app.database` → **Log File**: `logs/app/database.log` (Database operations, image record creation)
+  - **Category**: `errors.validation` → **Log File**: `logs/errors/validation.log` (File validation errors, dataset not found)
+  - **Category**: `errors.system` → **Log File**: `logs/errors/system.log` (File system errors, upload failures, cleanup failures)
 
-- [ ] `backend/core/transformation_config.py` - ⏳ NEEDS CHECK
-  - **Category**: `app.backend` → **Log File**: `logs/app/backend.log`
-  - **Category**: `app.config` → **Log File**: `logs/app/config.log`
+- ✅ `backend/core/transformation_config.py` - **COMPLETED** - Perfect logging implementation with uniform pattern
+  - **Category**: `app.backend` → **Log File**: `logs/app/backend.log` (Configuration loading, parameter initialization, successful loading completion)
+  - **Category**: `operations.transformations` → **Log File**: `logs/operations/transformations.log` (Parameter conversions, dual-value operations, transformation analysis, image count calculations, parameter retrieval for ALL functions including get_random_zoom_parameters, get_affine_transform_parameters, get_perspective_warp_parameters, get_clahe_clip_limit_parameters, get_clahe_grid_size_parameters, get_cutout_num_holes_parameters, get_cutout_hole_size_parameters)
+  - **Category**: `errors.validation` → **Log File**: `logs/errors/validation.log` (Conversion failures, parameter validation errors)
 
 - [ ] `backend/core/__init__.py` - ⏳ NEEDS CHECK
   - **Category**: `app.backend` → **Log File**: `logs/app/backend.log`
@@ -523,9 +544,9 @@
 #### **📁 FOLDER: backend/api/ (2 files)**
 - [ ] `backend/api/smart_segmentation.py` - ⏳ NEEDS CHECK
   - **Category**: `operations.images` → **Log File**: `logs/operations/images.log`
-  - **Category**: `operations.ml` → **Log File**: `logs/operations/ml.log`
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log`
 - [ ] `backend/api/active_learning.py` - ⏳ NEEDS CHECK
-  - **Category**: `operations.ml` → **Log File**: `logs/operations/ml.log`
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log`
   - **Category**: `operations.annotations` → **Log File**: `logs/operations/annotations.log`
 
 #### **📁 FOLDER: backend/utils/ (6 files)**
@@ -561,15 +582,15 @@
 
 #### **📁 FOLDER: backend/models/ (3 files - FUTURE WORK)**
 - [ ] `backend/models/model_manager.py` - ⏳ NEEDS CHECK - **NOTE: Active Learning not implemented yet**
-  - **Category**: `operations.ml` → **Log File**: `logs/operations/ml.log`
-  - **Category**: `operations.training` → **Log File**: `logs/operations/training.log`
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log`
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log`
 
 - [ ] `backend/models/training.py` - ⏳ NEEDS CHECK - **NOTE: Active Learning not implemented yet**
-  - **Category**: `operations.ml` → **Log File**: `logs/operations/ml.log`
-  - **Category**: `operations.training` → **Log File**: `logs/operations/training.log`
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log`
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log`
 
 - [ ] `backend/models/__init__.py` - ⏳ NEEDS CHECK - **NOTE: Active Learning not implemented yet**
-  - **Category**: `operations.ml` → **Log File**: `logs/operations/ml.log`
+  - **Category**: `operations.operations` → **Log File**: `logs/operations/operations.log`
 
 #### **📁 FOLDER: backend/logging_system/ (3 files)**
 - [x] `backend/logging_system/__init__.py` - ✅ COMPLETED (Professional logger integrated with comprehensive logging)
@@ -632,7 +653,7 @@
 - **✅ COMPLETED**: analytics, annotations, augmentation, datasets, dataset_management, dataset_splits, enhanced_export, image_transformations, labels, logs, models, projects, releases, **__init__.py**, **transformation_preview.py**
 - **🎯 MILESTONE ACHIEVED**: Routes folder 100% complete!
 
-**🎯 NEXT MILESTONE**: Complete `backend/core/` folder (11 files) to achieve next major milestone!
+**🎯 NEXT MILESTONE**: Complete `backend/core/` folder (11 files) to achieve next major milestone! **CURRENT: 9/11 files completed (82% complete)**
 
 **Success Criteria**:
 - All 30+ files have professional logging
@@ -753,6 +774,62 @@
 - YOLO training monitoring
 - GPU performance tracking
 - Distributed system support
+
+---
+
+## 🎯 **SMART LOGGING STRATEGY - PERFORMANCE OPTIMIZATION PLAN**
+
+### **📋 IMPLEMENTATION APPROACH:**
+1. **Complete Logging Implementation First**
+   - Implement comprehensive logging to **all files** (17 log files)
+   - Add logging to **every operation** for complete debugging capability
+   - This gives us **full development/testing capability**
+
+2. **Configurable Logging Levels**
+   - Use the **config file** to control logging behavior
+   - **Production mode**: Only important logs (errors, warnings, major operations)
+   - **Development mode**: Full detailed logging with all 17 files
+   - **User can control** what gets logged
+
+3. **Smart Logging Control**
+   - Even with **lots of logging code**, we can **disable most of it** via config
+   - **Performance optimized** for production
+   - **Full debugging** available when needed
+
+### **🔧 CONFIG FILE STRUCTURE:**
+```python
+# logging_config.py
+LOGGING_LEVELS = {
+    "production": {
+        "log_level": "WARNING",  # Only warnings and errors
+        "enable_detailed_logs": False,
+        "log_files": ["errors.system", "errors.validation"]  # Only error logs
+    },
+    "development": {
+        "log_level": "DEBUG",    # All logs
+        "enable_detailed_logs": True,
+        "log_files": "all"       # All 17 log files
+    },
+    "testing": {
+        "log_level": "INFO",     # Info and above
+        "enable_detailed_logs": True,
+        "log_files": "all"       # All 17 log files
+    }
+}
+```
+
+### **✅ BENEFITS:**
+1. **Complete logging code** - Available for debugging
+2. **Performance optimized** - Production uses minimal logging
+3. **User configurable** - Users can control logging level
+4. **No code changes needed** - Just change config file
+5. **Best of both worlds** - Full debugging + fast production
+
+### **🚀 IMPLEMENTATION ORDER:**
+1. **Continue complete logging** to all files first
+2. **Add configurable logging system** 
+3. **Performance optimization** via config controls
+4. **User can choose** logging level based on needs
 
 ---
 

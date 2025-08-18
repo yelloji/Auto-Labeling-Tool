@@ -16,11 +16,11 @@ from database.database import get_db
 from models.training import TrainingSession, TrainingIteration, UncertainSample, ModelVersion
 from core.dataset_manager import DatasetManager
 
-# Import professional logging system
-from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
+# Import professional logging system - CORRECT UNIFORM PATTERN
+from logging_system.professional_logger import get_professional_logger
 
 # Initialize professional logger
-professional_logger = get_professional_logger()
+logger = get_professional_logger()
 
 
 class ActiveLearningPipeline:
@@ -64,7 +64,7 @@ class ActiveLearningPipeline:
         session_dir = self.training_dir / f"session_{session.id}"
         session_dir.mkdir(exist_ok=True)
         
-        professional_logger.info("operations", f"Created training session {session.id}: {name}", "training_session_created", {
+        logger.info("operations.operations", f"Created training session {session.id}: {name}", "training_session_created", {
             'session_id': session.id,
             'session_name': name,
             'dataset_id': dataset_id,
@@ -156,7 +156,7 @@ class ActiveLearningPipeline:
             }
             
             # Train model
-            professional_logger.info("operations", f"Starting training for session {session.id}, iteration {iteration.iteration_number}", "training_iteration_start", {
+            logger.info("operations.operations", f"Starting training for session {session.id}, iteration {iteration.iteration_number}", "training_iteration_start", {
             'session_id': session.id,
             'iteration_number': iteration.iteration_number,
             'newly_labeled_count': len(newly_labeled_images) if newly_labeled_images else 0
@@ -197,13 +197,13 @@ class ActiveLearningPipeline:
                 session.completed_at = datetime.utcnow()
                 db.commit()
             
-            professional_logger.info("operations", f"Training completed for session {session.id}, iteration {iteration.iteration_number}", "training_iteration_completed", {
+            logger.info("operations.operations", f"Training completed for session {session.id}, iteration {iteration.iteration_number}", "training_iteration_completed", {
                 'session_id': session.id,
                 'iteration_number': iteration.iteration_number
             })
             
         except Exception as e:
-            professional_logger.error("errors", f"Training failed for session {session.id}, iteration {iteration.iteration_number}: {str(e)}", "training_iteration_failed", {
+            logger.error("errors.system", f"Training failed for session {session.id}, iteration {iteration.iteration_number}: {str(e)}", "training_iteration_failed", {
                 'error': str(e),
                 'session_id': session.id,
                 'iteration_number': iteration.iteration_number
@@ -359,14 +359,14 @@ class ActiveLearningPipeline:
             
             db.commit()
             
-            professional_logger.info("operations", f"Generated {len(top_samples)} uncertain samples for iteration {iteration.iteration_number}", "uncertain_samples_generated", {
+            logger.info("operations.annotations", f"Generated {len(top_samples)} uncertain samples for iteration {iteration.iteration_number}", "uncertain_samples_generated", {
             'uncertain_sample_count': len(top_samples),
             'iteration_number': iteration.iteration_number,
             'session_id': session.id
         })
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to generate uncertain samples: {str(e)}", "uncertain_samples_generation_failed", {
+            logger.error("errors.system", f"Failed to generate uncertain samples: {str(e)}", "uncertain_samples_generation_failed", {
                 'error': str(e),
                 'session_id': session.id,
                 'iteration_number': iteration.iteration_number
@@ -521,7 +521,7 @@ class ActiveLearningPipeline:
                 })
                 
             except Exception as e:
-                professional_logger.error("errors", f"Error calculating uncertainty for {image_path}: {e}", "uncertainty_calculation_error", {
+                logger.error("errors.system", f"Error calculating uncertainty for {image_path}: {e}", "uncertainty_calculation_error", {
                     'error': str(e),
                     'image_path': image_path
                 })

@@ -17,6 +17,12 @@ from database.operations import ImageOperations, DatasetOperations
 from database.database import SessionLocal
 from utils.path_utils import path_manager
 
+# Import professional logging system - CORRECT UNIFORM PATTERN
+from logging_system.professional_logger import get_professional_logger
+
+# Initialize professional logger
+logger = get_professional_logger()
+
 
 class FileHandler:
     """Handle file uploads and processing"""
@@ -25,20 +31,47 @@ class FileHandler:
     MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
     
     def __init__(self):
+        logger.info("operations.operations", "Initializing FileHandler", "file_handler_init", {
+            'projects_dir': str(settings.PROJECTS_DIR)
+        })
+        
         # Ensure projects directory exists
         os.makedirs(settings.PROJECTS_DIR, exist_ok=True)
+        logger.info("operations.operations", "Projects directory ensured", "projects_dir_created", {
+            'projects_dir': str(settings.PROJECTS_DIR)
+        })
     
     def validate_image_file(self, file: UploadFile) -> bool:
         """Validate uploaded image file"""
+        logger.info("operations.operations", f"Validating image file: {file.filename}", "file_validation_start", {
+            'filename': file.filename,
+            'content_type': file.content_type
+        })
+        
         # Check file extension
         file_ext = Path(file.filename).suffix.lower()
         if file_ext not in self.ALLOWED_EXTENSIONS:
+            logger.error("errors.validation", f"Invalid file extension: {file_ext}", "invalid_file_extension", {
+                'filename': file.filename,
+                'file_extension': file_ext,
+                'allowed_extensions': list(self.ALLOWED_EXTENSIONS)
+            })
             return False
         
         # Check file size (if available)
         if hasattr(file, 'size') and file.size > self.MAX_FILE_SIZE:
+            logger.error("errors.validation", f"File too large: {file.size} bytes", "file_too_large", {
+                'filename': file.filename,
+                'file_size': file.size,
+                'max_size': self.MAX_FILE_SIZE
+            })
             return False
         
+        logger.info("operations.operations", f"File validation successful: {file.filename}", "file_validation_success", {
+            'filename': file.filename,
+            'file_extension': file_ext,
+            'file_size': getattr(file, 'size', 'unknown')
+        })
         return True
     
     def extract_clean_filename(self, filename: str) -> str:
@@ -99,6 +132,10 @@ class FileHandler:
     
     def get_image_info(self, file_path: str) -> Dict[str, Any]:
         """Extract image metadata"""
+        logger.info("operations.images", f"Extracting image metadata: {file_path}", "image_metadata_extraction_start", {
+            'file_path': file_path
+        })
+        
         try:
             # Try with PIL first
             with Image.open(file_path) as img:
@@ -108,14 +145,28 @@ class FileHandler:
             # Get file size
             file_size = os.path.getsize(file_path)
             
-            return {
+            image_info = {
                 'width': width,
                 'height': height,
                 'format': format_name,
                 'file_size': file_size
             }
+            
+            logger.info("operations.images", f"Image metadata extracted successfully: {file_path}", "image_metadata_extraction_success", {
+                'file_path': file_path,
+                'width': width,
+                'height': height,
+                'format': format_name,
+                'file_size': file_size
+            })
+            
+            return image_info
+            
         except Exception as e:
-            print(f"Error getting image info for {file_path}: {e}")
+            logger.error("errors.system", f"Error getting image info for {file_path}: {e}", "image_metadata_extraction_failed", {
+                'file_path': file_path,
+                'error': str(e)
+            })
             return {
                 'width': None,
                 'height': None,
@@ -135,7 +186,19 @@ class FileHandler:
         Save uploaded file and return relative file path and metadata
         Returns: (relative_file_path, image_info)
         """
+        logger.info("operations.operations", f"Saving uploaded file: {file.filename}", "file_save_start", {
+            'filename': file.filename,
+            'dataset_id': dataset_id,
+            'project_name': project_name,
+            'dataset_name': dataset_name,
+            'split_type': split_type
+        })
+        
         if not self.validate_image_file(file):
+            logger.error("errors.validation", f"File validation failed: {file.filename}", "file_validation_failed", {
+                'filename': file.filename,
+                'dataset_id': dataset_id
+            })
             raise HTTPException(
                 status_code=400, 
                 detail=f"Invalid file type. Allowed: {', '.join(self.ALLOWED_EXTENSIONS)}"
@@ -147,6 +210,13 @@ class FileHandler:
             project_name = project_name or f"Project_{dataset_id[:8]}"
             dataset_name = dataset_name or f"Dataset_{dataset_id[:8]}"
         
+        logger.info("operations.operations", f"Using storage path for file: {file.filename}", "storage_path_setup", {
+            'filename': file.filename,
+            'project_name': project_name,
+            'dataset_name': dataset_name,
+            'split_type': split_type
+        })
+        
         # Get standardized storage directory
         storage_dir = path_manager.get_image_storage_path(project_name, dataset_name, split_type)
         path_manager.ensure_directory_exists(storage_dir)
@@ -156,12 +226,24 @@ class FileHandler:
         clean_filename = self.extract_clean_filename(file.filename)
         unique_filename = self.generate_unique_filename(clean_filename, storage_dir)
         
+        logger.info("operations.operations", f"Generated unique filename: {unique_filename}", "unique_filename_generated", {
+            'original_filename': file.filename,
+            'clean_filename': clean_filename,
+            'unique_filename': unique_filename,
+            'storage_dir': str(storage_dir)
+        })
+        
         # Save file
         file_path = storage_dir / unique_filename
         
         try:
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
+            
+            logger.info("operations.operations", f"File saved successfully: {file_path}", "file_save_success", {
+                'file_path': str(file_path),
+                'file_size': os.path.getsize(file_path)
+            })
             
             # Get image metadata
             image_info = self.get_image_info(str(file_path))
@@ -171,12 +253,27 @@ class FileHandler:
                 project_name, dataset_name, unique_filename, split_type
             )
             
+            logger.info("operations.operations", f"File upload completed: {file.filename}", "file_upload_complete", {
+                'filename': file.filename,
+                'relative_path': relative_path,
+                'file_size': image_info['file_size'],
+                'image_dimensions': f"{image_info['width']}x{image_info['height']}"
+            })
+            
             return relative_path, image_info
             
         except Exception as e:
+            logger.error("errors.system", f"Failed to save file: {file.filename}", "file_save_failed", {
+                'filename': file.filename,
+                'file_path': str(file_path),
+                'error': str(e)
+            })
             # Clean up file if something went wrong
             if file_path.exists():
                 file_path.unlink()
+                logger.info("operations.operations", f"Cleaned up failed file: {file_path}", "failed_file_cleanup", {
+                    'file_path': str(file_path)
+                })
             raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
     
     async def upload_images_to_dataset(
@@ -192,12 +289,22 @@ class FileHandler:
         Upload multiple images to a dataset with standardized path management
         Returns upload results and statistics
         """
+        logger.info("operations.operations", f"Starting batch upload for dataset: {dataset_id}", "batch_upload_start", {
+            'dataset_id': dataset_id,
+            'total_files': len(files),
+            'auto_label': auto_label,
+            'split_type': split_type
+        })
+        
         db = SessionLocal()
         
         try:
             # Verify dataset exists
             dataset = DatasetOperations.get_dataset(db, dataset_id)
             if not dataset:
+                logger.error("errors.validation", f"Dataset not found: {dataset_id}", "dataset_not_found", {
+                    'dataset_id': dataset_id
+                })
                 raise HTTPException(status_code=404, detail="Dataset not found")
             
             # Get project info if not provided
@@ -254,12 +361,23 @@ class FileHandler:
                     
                 except Exception as e:
                     error_msg = f"Failed to upload {file.filename}: {str(e)}"
+                    logger.error("errors.system", error_msg, "file_upload_failed", {
+                        'filename': file.filename,
+                        'dataset_id': dataset_id,
+                        'error': str(e)
+                    })
                     results['errors'].append(error_msg)
                     results['failed_uploads'] += 1
-                    print(error_msg)
             
             # Update dataset statistics
             DatasetOperations.update_dataset_stats(db, dataset_id)
+            
+            logger.info("operations.operations", f"Batch upload completed for dataset: {dataset_id}", "batch_upload_complete", {
+                'dataset_id': dataset_id,
+                'total_files': results['total_files'],
+                'successful_uploads': results['successful_uploads'],
+                'failed_uploads': results['failed_uploads']
+            })
             
             return results
             
@@ -268,17 +386,35 @@ class FileHandler:
     
     def delete_image_file(self, file_path: str) -> bool:
         """Delete image file from filesystem"""
+        logger.info("operations.operations", f"Deleting image file: {file_path}", "file_delete_start", {
+            'file_path': file_path
+        })
+        
         try:
             if os.path.exists(file_path):
                 os.remove(file_path)
+                logger.info("operations.operations", f"File deleted successfully: {file_path}", "file_delete_success", {
+                    'file_path': file_path
+                })
                 return True
-            return False
+            else:
+                logger.warning("operations.operations", f"File not found for deletion: {file_path}", "file_not_found", {
+                    'file_path': file_path
+                })
+                return False
         except Exception as e:
-            print(f"Error deleting file {file_path}: {e}")
+            logger.error("errors.system", f"Error deleting file {file_path}: {e}", "file_delete_failed", {
+                'file_path': file_path,
+                'error': str(e)
+            })
             return False
     
     def get_image_url(self, image_id: str) -> Optional[str]:
         """Get URL for serving an image with cross-platform path handling"""
+        logger.info("operations.images", f"Getting image URL for: {image_id}", "image_url_request", {
+            'image_id': image_id
+        })
+        
         db = SessionLocal()
         try:
             image = ImageOperations.get_image(db, image_id)
@@ -286,71 +422,137 @@ class FileHandler:
                 # Check if file exists using path manager
                 if path_manager.file_exists(image.file_path):
                     # Return web URL using path manager
-                    return path_manager.get_web_url(image.file_path)
+                    url = path_manager.get_web_url(image.file_path)
+                    logger.info("operations.images", f"Image URL retrieved: {image_id}", "image_url_success", {
+                        'image_id': image_id,
+                        'file_path': image.file_path
+                    })
+                    return url
                 else:
                     # Try to migrate old path format
+                    logger.info("operations.images", f"Attempting path migration for: {image_id}", "path_migration_attempt", {
+                        'image_id': image_id,
+                        'old_path': image.file_path
+                    })
                     migrated_path = path_manager.migrate_old_path(image.file_path)
                     if migrated_path and path_manager.file_exists(migrated_path):
                         # Update database with new path
                         ImageOperations.update_image_path(db, image_id, migrated_path)
-                        return path_manager.get_web_url(migrated_path)
+                        url = path_manager.get_web_url(migrated_path)
+                        logger.info("operations.images", f"Path migration successful: {image_id}", "path_migration_success", {
+                            'image_id': image_id,
+                            'old_path': image.file_path,
+                            'new_path': migrated_path
+                        })
+                        return url
+                    else:
+                        logger.warning("operations.images", f"Path migration failed: {image_id}", "path_migration_failed", {
+                            'image_id': image_id,
+                            'file_path': image.file_path
+                        })
+            else:
+                logger.warning("operations.images", f"Image not found: {image_id}", "image_not_found", {
+                    'image_id': image_id
+                })
             return None
         finally:
             db.close()
     
     def rename_dataset_folder(self, project_name: str, old_dataset_name: str, new_dataset_name: str) -> bool:
         """Rename dataset folder when dataset name is updated"""
+        logger.info("operations.operations", f"Renaming dataset folder: {old_dataset_name} -> {new_dataset_name}", "folder_rename_start", {
+            'project_name': project_name,
+            'old_dataset_name': old_dataset_name,
+            'new_dataset_name': new_dataset_name
+        })
+        
         try:
             old_path = Path(settings.PROJECTS_DIR) / project_name / old_dataset_name
             new_path = Path(settings.PROJECTS_DIR) / project_name / new_dataset_name
             
             # Check if old folder exists
             if not old_path.exists():
-                print(f"Old dataset folder does not exist: {old_path}")
+                logger.warning("operations.operations", f"Old dataset folder does not exist: {old_path}", "old_folder_not_found", {
+                    'old_path': str(old_path)
+                })
                 return True  # Return True since there's nothing to rename
             
             # Check if new folder already exists
             if new_path.exists():
-                print(f"New dataset folder already exists: {new_path}")
+                logger.error("errors.validation", f"New dataset folder already exists: {new_path}", "new_folder_exists", {
+                    'new_path': str(new_path)
+                })
                 return False
             
             # Rename the folder
             old_path.rename(new_path)
-            print(f"Renamed dataset folder from {old_path} to {new_path}")
+            logger.info("operations.operations", f"Dataset folder renamed successfully", "folder_rename_success", {
+                'old_path': str(old_path),
+                'new_path': str(new_path)
+            })
             return True
             
         except Exception as e:
-            print(f"Error renaming dataset folder from {old_dataset_name} to {new_dataset_name}: {e}")
+            logger.error("errors.system", f"Error renaming dataset folder: {e}", "folder_rename_failed", {
+                'project_name': project_name,
+                'old_dataset_name': old_dataset_name,
+                'new_dataset_name': new_dataset_name,
+                'error': str(e)
+            })
             return False
     
     def cleanup_dataset_files_by_path(self, project_name: str, dataset_name: str) -> bool:
         """Delete dataset folder using project and dataset names"""
+        logger.info("operations.operations", f"Cleaning up dataset files: {project_name}/{dataset_name}", "dataset_cleanup_start", {
+            'project_name': project_name,
+            'dataset_name': dataset_name
+        })
+        
         try:
             dataset_dir = Path(settings.PROJECTS_DIR) / project_name / dataset_name
             if dataset_dir.exists():
                 shutil.rmtree(dataset_dir)
-                print(f"Deleted dataset folder: {dataset_dir}")
+                logger.info("operations.operations", f"Dataset folder deleted successfully", "dataset_cleanup_success", {
+                    'dataset_dir': str(dataset_dir)
+                })
                 return True
             else:
-                print(f"Dataset folder not found: {dataset_dir}")
+                logger.warning("operations.operations", f"Dataset folder not found: {dataset_dir}", "dataset_folder_not_found", {
+                    'dataset_dir': str(dataset_dir)
+                })
                 return True  # Return True since there's nothing to clean up
         except Exception as e:
-            print(f"Error cleaning up dataset folder {project_name}/{dataset_name}: {e}")
+            logger.error("errors.system", f"Error cleaning up dataset folder: {e}", "dataset_cleanup_failed", {
+                'project_name': project_name,
+                'dataset_name': dataset_name,
+                'error': str(e)
+            })
             return False
 
     def cleanup_dataset_files(self, dataset_id: str) -> bool:
         """Delete all files for a dataset (legacy method for dataset_id-based folders)"""
+        logger.info("operations.operations", f"Cleaning up dataset files (legacy): {dataset_id}", "legacy_dataset_cleanup_start", {
+            'dataset_id': dataset_id
+        })
+        
         try:
             dataset_dir = Path(settings.PROJECTS_DIR) / dataset_id
             if dataset_dir.exists():
                 shutil.rmtree(dataset_dir)
-                print(f"Deleted dataset folder: {dataset_dir}")
+                logger.info("operations.operations", f"Legacy dataset folder deleted successfully", "legacy_dataset_cleanup_success", {
+                    'dataset_dir': str(dataset_dir)
+                })
                 return True
             else:
-                print(f"Dataset folder not found: {dataset_dir}")
+                logger.warning("operations.operations", f"Legacy dataset folder not found: {dataset_dir}", "legacy_dataset_folder_not_found", {
+                    'dataset_dir': str(dataset_dir)
+                })
                 return True  # Return True since there's nothing to clean up
         except Exception as e:
-            print(f"Error cleaning up dataset {dataset_id}: {e}")
+            logger.error("errors.system", f"Error cleaning up legacy dataset: {e}", "legacy_dataset_cleanup_failed", {
+                'dataset_id': dataset_id,
+                'error': str(e)
+            })
             return False
 
 

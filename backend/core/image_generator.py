@@ -17,11 +17,11 @@ from api.services.image_transformer import ImageTransformer
 # Import dual-value transformation functions
 from core.transformation_config import is_dual_value_transformation, generate_auto_value
 
-# Import professional logging system
-from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
+# Import professional logging system - CORRECT UNIFORM PATTERN
+from logging_system.professional_logger import get_professional_logger
 
 # Initialize professional logger
-professional_logger = get_professional_logger()
+logger = get_professional_logger()
 
 @dataclass
 class BoundingBox:
@@ -67,7 +67,7 @@ class ImageAugmentationEngine:
         for split in ['train', 'val', 'test']:
             (self.output_base_dir / split).mkdir(parents=True, exist_ok=True)
         
-        professional_logger.info("operations", f"Initialized ImageAugmentationEngine with output dir: {self.output_base_dir}", "augmentation_engine_initialized", {
+        logger.info("operations.transformations", f"Initialized ImageAugmentationEngine with output dir: {self.output_base_dir}", "augmentation_engine_initialized", {
             'output_base_dir': str(self.output_base_dir)
         })
     
@@ -83,7 +83,7 @@ class ImageAugmentationEngine:
                 image = image.convert('RGB')
             
             original_dims = image.size  # (width, height)
-            professional_logger.info("operations", f"Loaded image: {image_path}, dimensions: {original_dims}", "image_loaded", {
+            logger.info("operations.images", f"Loaded image: {image_path}, dimensions: {original_dims}", "image_loaded", {
                 'image_path': image_path,
                 'dimensions': original_dims
             })
@@ -131,19 +131,19 @@ class ImageAugmentationEngine:
                 image.save(output_path, format="TIFF", quality=95)
             else:
                 # Fallback to original format
-                professional_logger.warning("operations", f"Unsupported output format: {output_format}, using original", "unsupported_format", {
+                logger.warning("errors.validation", f"Unsupported output format: {output_format}, using original", "unsupported_format", {
                 'output_format': output_format,
                 'output_path': str(output_path)
             })
                 image.save(output_path, quality=95, optimize=True)
                 
-            professional_logger.info("operations", f"Saved image as {output_format.upper()}: {output_path}", "image_saved", {
+            logger.info("operations.images", f"Saved image as {output_format.upper()}: {output_path}", "image_saved", {
                 'output_format': output_format.upper(),
                 'output_path': str(output_path)
             })
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to save image in format {output_format}: {str(e)}", "image_save_error", {
+            logger.error("errors.system", f"Failed to save image in format {output_format}: {str(e)}", "image_save_error", {
                 'error': str(e),
                 'output_format': output_format,
                 'output_path': str(output_path)
@@ -199,7 +199,7 @@ class ImageAugmentationEngine:
                     if 'user_value' in param_value and param_value['user_value'] is not None:
                         # Priority 1: Use user value
                         resolved_params[param_name] = param_value['user_value']
-                        professional_logger.info("operations", f"Resolved {tool_type}.{param_name}: user_value = {param_value['user_value']}", "dual_value_resolved", {
+                        logger.info("operations.transformations", f"Resolved {tool_type}.{param_name}: user_value = {param_value['user_value']}", "dual_value_resolved", {
                             'tool_type': tool_type,
                             'param_name': param_name,
                             'value_type': 'user_value',
@@ -208,7 +208,7 @@ class ImageAugmentationEngine:
                     elif 'auto_value' in param_value and param_value['auto_value'] is not None:
                         # Priority 2: Use auto value
                         resolved_params[param_name] = param_value['auto_value']
-                        professional_logger.info("operations", f"Resolved {tool_type}.{param_name}: auto_value = {param_value['auto_value']}", "dual_value_resolved", {
+                        logger.info("operations.transformations", f"Resolved {tool_type}.{param_name}: auto_value = {param_value['auto_value']}", "dual_value_resolved", {
                             'tool_type': tool_type,
                             'param_name': param_name,
                             'value_type': 'auto_value',
@@ -217,7 +217,7 @@ class ImageAugmentationEngine:
                     else:
                         # Fallback: Use the dict as-is (shouldn't happen)
                         resolved_params[param_name] = param_value
-                        professional_logger.warning("operations", f"Could not resolve dual-value for {tool_type}.{param_name}: {param_value}", "dual_value_resolution_failed", {
+                        logger.warning("errors.validation", f"Could not resolve dual-value for {tool_type}.{param_name}: {param_value}", "dual_value_resolution_failed", {
                             'tool_type': tool_type,
                             'param_name': param_name,
                             'param_value': param_value
@@ -228,7 +228,7 @@ class ImageAugmentationEngine:
             
             resolved_config[tool_type] = resolved_params
         
-        professional_logger.info("operations", f"Resolved transformation config: {resolved_config}", "transformation_config_resolved", {
+        logger.info("operations.transformations", f"Resolved transformation config: {resolved_config}", "transformation_config_resolved", {
             'resolved_config': resolved_config
         })
         return resolved_config
@@ -242,14 +242,14 @@ class ImageAugmentationEngine:
             
             # Use the existing ImageTransformer service
             transformed_image = self.transformer.apply_transformations(image, resolved_config)
-            professional_logger.info("operations", f"Applied transformations: {list(resolved_config.keys())}", "transformations_applied", {
+            logger.info("operations.transformations", f"Applied transformations: {list(resolved_config.keys())}", "transformations_applied", {
                 'transformation_types': list(resolved_config.keys()),
                 'config_count': len(resolved_config)
             })
             return transformed_image
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to apply transformations: {str(e)}", "transformations_application_error", {
+            logger.error("errors.system", f"Failed to apply transformations: {str(e)}", "transformations_application_error", {
                 'error': str(e),
                 'transformation_config': transformation_config
             })
@@ -280,14 +280,14 @@ class ImageAugmentationEngine:
                 if updated_annotation:
                     updated_annotations.append(updated_annotation)
             except Exception as e:
-                professional_logger.warning("operations", f"Failed to update annotation: {str(e)}", "annotation_update_failed", {
+                logger.warning("errors.validation", f"Failed to update annotation: {str(e)}", "annotation_update_failed", {
                     'error': str(e),
                     'annotation_type': type(annotation).__name__
                 })
                 # Keep original annotation if update fails
                 updated_annotations.append(annotation)
         
-        professional_logger.info("operations", f"Updated {len(updated_annotations)} annotations", "annotations_updated", {
+        logger.info("operations.transformations", f"Updated {len(updated_annotations)} annotations", "annotations_updated", {
             'annotation_count': len(updated_annotations),
             'original_count': len(annotations)
         })
@@ -352,7 +352,7 @@ class ImageAugmentationEngine:
         
         # Ensure min < max
         if x_min >= x_max or y_min >= y_max:
-            professional_logger.warning("operations", "Invalid bounding box after transformation, skipping", "invalid_bbox_skipped", {
+            logger.warning("errors.validation", "Invalid bounding box after transformation, skipping", "invalid_bbox_skipped", {
                 'bbox_coords': (x_min, y_min, x_max, y_max),
                 'original_dims': original_dims,
                 'new_dims': new_dims
@@ -401,7 +401,7 @@ class ImageAugmentationEngine:
             valid_points.append((x, y))
         
         if len(valid_points) < 3:
-            professional_logger.warning("operations", "Polygon has less than 3 valid points after transformation, skipping", "invalid_polygon_skipped", {
+            logger.warning("errors.validation", "Polygon has less than 3 valid points after transformation, skipping", "invalid_polygon_skipped", {
                 'valid_points': len(valid_points),
                 'original_points': len(polygon.points)
             })
@@ -430,7 +430,7 @@ class ImageAugmentationEngine:
         try:
             # Validate transformation config
             if not transformation_config:
-                professional_logger.warning("operations", f"Empty transformation config for image: {image_path}", "empty_transformation_config", {
+                logger.warning("errors.validation", f"Empty transformation config for image: {image_path}", "empty_transformation_config", {
                     'image_path': image_path
                 })
                 transformation_config = {}
@@ -466,7 +466,7 @@ class ImageAugmentationEngine:
                 config_id=config_id
             )
             
-            professional_logger.info("operations", f"Generated augmented image: {augmented_filename}", "augmented_image_generated", {
+            logger.info("operations.transformations", f"Generated augmented image: {augmented_filename}", "augmented_image_generated", {
                 'augmented_filename': augmented_filename,
                 'config_id': config_id,
                 'output_path': str(output_path)
@@ -474,7 +474,7 @@ class ImageAugmentationEngine:
             return result
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to generate augmented image: {str(e)}", "augmented_image_generation_error", {
+            logger.error("errors.system", f"Failed to generate augmented image: {str(e)}", "augmented_image_generation_error", {
                 'error': str(e),
                 'image_path': image_path,
                 'config_id': config_id
@@ -518,14 +518,14 @@ class ImageAugmentationEngine:
                 results.append(result)
                 
             except Exception as e:
-                professional_logger.error("errors", f"Failed to process config {config_data.get('config_id', 'unknown')}: {str(e)}", "config_processing_error", {
+                logger.error("errors.system", f"Failed to process config {config_data.get('config_id', 'unknown')}: {str(e)}", "config_processing_error", {
                     'error': str(e),
                     'config_id': config_data.get('config_id', 'unknown'),
                     'image_path': image_path
                 })
                 continue
         
-        professional_logger.info("operations", f"Processed {len(results)} configurations for image: {os.path.basename(image_path)}", "configurations_processed", {
+        logger.info("operations.transformations", f"Processed {len(results)} configurations for image: {os.path.basename(image_path)}", "configurations_processed", {
             'config_count': len(results),
             'image_filename': os.path.basename(image_path)
         })
@@ -544,7 +544,7 @@ class ImageAugmentationEngine:
                 for file in split_dir.glob("*"):
                     if file.is_file():
                         file.unlink()
-                professional_logger.info("operations", f"Cleaned up {dataset_split} directory", "directory_cleaned", {
+                logger.info("operations.transformations", f"Cleaned up {dataset_split} directory", "directory_cleaned", {
             'dataset_split': dataset_split,
             'output_base_dir': str(self.output_base_dir)
         })
@@ -584,7 +584,7 @@ def process_release_images(image_paths: List[str],
     all_results = {}
     dataset_sources = dataset_sources or {}
     
-    professional_logger.info("operations", f"🎨 PROCESSING {len(image_paths)} IMAGES FROM MULTIPLE DATASETS", "multi_dataset_processing_start", {
+    logger.info("operations.transformations", f"🎨 PROCESSING {len(image_paths)} IMAGES FROM MULTIPLE DATASETS", "multi_dataset_processing_start", {
         'total_images': len(image_paths),
         'dataset_count': len(set(img['dataset_name'] for img in image_paths))
     })
@@ -600,7 +600,7 @@ def process_release_images(image_paths: List[str],
                 original_filename = source_info.get("original_filename", image_filename)
                 image_id = Path(original_filename).stem
                 dataset_name = source_info.get("dataset_name", "unknown")
-                professional_logger.info("operations", f"   Processing {dataset_name}/{original_filename}", "image_processing_start", {
+                logger.info("operations.transformations", f"   Processing {dataset_name}/{original_filename}", "image_processing_start", {
                     'dataset_name': dataset_name,
                     'original_filename': original_filename,
                     'image_path': image_path
@@ -612,7 +612,7 @@ def process_release_images(image_paths: List[str],
             # Get transformation configs for this image
             configs = transformation_configs.get(image_id, [])
             if not configs:
-                professional_logger.warning("operations", f"No transformation configs found for image: {image_id} (from {dataset_name})", "no_transformation_configs", {
+                logger.warning("errors.validation", f"No transformation configs found for image: {image_id} (from {dataset_name})", "no_transformation_configs", {
                     'image_id': image_id,
                     'dataset_name': dataset_name,
                     'image_path': image_path
@@ -633,13 +633,13 @@ def process_release_images(image_paths: List[str],
             all_results[image_path] = results
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to process image {image_path}: {str(e)}", "image_processing_error", {
+            logger.error("errors.system", f"Failed to process image {image_path}: {str(e)}", "image_processing_error", {
                 'error': str(e),
                 'image_path': image_path
             })
             continue
     
-    professional_logger.info("operations", f"Processed {len(all_results)} images for release generation", "release_images_processed", {
+    logger.info("operations.transformations", f"Processed {len(all_results)} images for release generation", "release_images_processed", {
         'processed_images': len(all_results),
         'total_images': len(image_paths)
     })
@@ -649,7 +649,7 @@ def process_release_images(image_paths: List[str],
 if __name__ == "__main__":
     # Example usage and testing
     # Initialize professional logger
-    professional_logger = get_professional_logger()
+    logger = get_professional_logger()
     
     # Test the augmentation engine
     engine = create_augmentation_engine("test_output")

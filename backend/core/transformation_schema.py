@@ -1,4 +1,4 @@
-"""
+﻿"""
 Transformation Schema System for Auto-Labeling Tool Release Pipeline
 Handles transformation tool combinations and sampling strategies
 """
@@ -19,14 +19,11 @@ from core.transformation_config import (
     DUAL_VALUE_TRANSFORMATIONS
 )
 
-# Import professional logging system
-from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
+# Import professional logging system - CORRECT PATTERN
+from logging_system.professional_logger import get_professional_logger
 
 # Initialize professional logger
-professional_logger = get_professional_logger()
-
-# Old logger replaced with professional logger
-# logger = logging.getLogger(__name__)
+logger = get_professional_logger()
 
 @dataclass
 class TransformationConfig:
@@ -53,6 +50,10 @@ class TransformationSchema:
     def __init__(self):
         self.transformations: List[TransformationConfig] = []
         self.sampling_config = SamplingConfig()
+        logger.info("operations.transformations", "TransformationSchema initialized", "schema_initialization", {
+            'transformations_count': 0,
+            'sampling_config': str(self.sampling_config)
+        })
         
     def add_transformation(self, tool_type: str, parameters: Dict[str, Any], 
                           enabled: bool = True, order_index: int = 0) -> None:
@@ -64,15 +65,20 @@ class TransformationSchema:
             order_index=order_index
         )
         self.transformations.append(config)
-        professional_logger.info("operations.transformations", f"Added transformation: {tool_type} with parameters: {parameters}", "transformation_added", {
+        logger.info("operations.transformations", f"Added transformation: {tool_type} with parameters: {parameters}", "transformation_added", {
             'tool_type': tool_type,
             'parameters': parameters,
             'enabled': enabled,
-            'order_index': order_index
+            'order_index': order_index,
+            'total_transformations': len(self.transformations)
         })
     
     def load_from_database_records(self, db_transformations: List[Dict]) -> None:
         """Load transformations from database records"""
+        logger.info("operations.transformations", f"Loading transformations from database records", "database_load_start", {
+            'db_records_count': len(db_transformations)
+        })
+        
         self.transformations.clear()
         
         for record in db_transformations:
@@ -83,7 +89,7 @@ class TransformationSchema:
                     try:
                         parameters = json.loads(parameters)
                     except json.JSONDecodeError:
-                        professional_logger.error("errors", f"Failed to parse parameters for {record['transformation_type']}", "parameter_parse_error", {
+                        logger.error("errors.validation", f"Failed to parse parameters for {record['transformation_type']}", "parameter_parse_error", {
                             'transformation_type': record['transformation_type'],
                             'parameters': record['parameters']
                         })
@@ -98,13 +104,14 @@ class TransformationSchema:
         
         # Sort by order_index
         self.transformations.sort(key=lambda x: x.order_index)
-        professional_logger.info("operations.transformations", f"Loaded {len(self.transformations)} transformations from database", "transformations_loaded", {
-            'transformation_count': len(self.transformations)
+        logger.info("operations.transformations", f"Loaded {len(self.transformations)} transformations from database", "transformations_loaded", {
+            'transformation_count': len(self.transformations),
+            'enabled_count': len([t for t in self.transformations if t.enabled])
         })
         
         # Calculate and log combination count
         combination_count = self.get_combination_count_estimate()
-        professional_logger.info("operations.transformations", f"Maximum possible combinations: {combination_count}", "combination_count_calculated", {
+        logger.info("operations.transformations", f"Maximum possible combinations: {combination_count}", "combination_count_calculated", {
             'combination_count': combination_count
         })
     
@@ -114,7 +121,7 @@ class TransformationSchema:
         Phase 1: Uses current single-value system
         """
         if not self.transformations:
-            professional_logger.warning("operations.transformations", "No transformations available for combination generation", "no_transformations_warning", {
+            logger.warning("operations.transformations", "No transformations available for combination generation", "no_transformations_warning", {
                 'operation': 'generate_single_value_combinations'
             })
             return [{}]  # Return empty config for no transformations
@@ -123,7 +130,7 @@ class TransformationSchema:
         enabled_transformations = [t for t in self.transformations if t.enabled]
         
         if not enabled_transformations:
-            professional_logger.warning("operations.transformations", "No enabled transformations found", "no_enabled_transformations_single", {
+            logger.warning("operations.transformations", "No enabled transformations found", "no_enabled_transformations_single", {
                 'total_transformations': len(self.transformations),
                 'enabled_count': len(enabled_transformations)
             })
@@ -144,7 +151,7 @@ class TransformationSchema:
             
             combinations.append(combination)
         
-        professional_logger.info("operations.transformations", f"Generated {len(combinations)} single-value combinations", "single_value_combinations_generated", {
+        logger.info("operations.transformations", f"Generated {len(combinations)} single-value combinations", "single_value_combinations_generated", {
             'combination_count': len(combinations),
             'enabled_transformations': len(enabled_transformations)
         })
@@ -160,7 +167,7 @@ class TransformationSchema:
         3rd: Random Combinations (fill remaining slots)
         """
         if not self.transformations:
-            professional_logger.warning("operations.transformations", "No transformations available for dual-value combination generation", "no_transformations_dual_value", {
+            logger.warning("operations.transformations", "No transformations available for dual-value combination generation", "no_transformations_dual_value", {
                 'operation': 'generate_dual_value_combinations'
             })
             return [{}]
@@ -169,7 +176,7 @@ class TransformationSchema:
         enabled_transformations = [t for t in self.transformations if t.enabled]
         
         if not enabled_transformations:
-            professional_logger.warning("operations.transformations", "No enabled transformations found", "no_enabled_transformations_dual", {
+            logger.warning("operations.transformations", "No enabled transformations found", "no_enabled_transformations_dual", {
                 'total_transformations': len(self.transformations),
                 'enabled_count': len(enabled_transformations)
             })
@@ -181,11 +188,11 @@ class TransformationSchema:
         dual_value_transformations = []
         regular_transformations = []
         
-        professional_logger.info("operations.transformations", f"🔍 DEBUG - Input transformations:", "debug_input_transformations", {
+        logger.info("operations.transformations", f"🔍 DEBUG - Input transformations:", "debug_input_transformations", {
             'enabled_count': len(enabled_transformations)
         })
         for t in enabled_transformations:
-            professional_logger.info("operations.transformations", f"  Tool: {t.tool_type}, Params: {t.parameters}, Dual-value: {is_dual_value_transformation(t.tool_type)}", "debug_transformation_details", {
+            logger.info("operations.transformations", f"  Tool: {t.tool_type}, Params: {t.parameters}, Dual-value: {is_dual_value_transformation(t.tool_type)}", "debug_transformation_details", {
                 'tool_type': t.tool_type,
                 'is_dual_value': is_dual_value_transformation(t.tool_type)
             })
@@ -193,7 +200,7 @@ class TransformationSchema:
         for transformation in enabled_transformations:
             # Skip resize as it's a baseline transformation applied to all images
             if transformation.tool_type == 'resize':
-                professional_logger.info("operations.transformations", f"🔄 Skipping resize from combination generation (baseline transformation)", "skip_resize_baseline", {
+                logger.info("operations.transformations", f"⏭️ Skipping resize from combination generation (baseline transformation)", "skip_resize_baseline", {
                     'tool_type': transformation.tool_type
                 })
                 continue
@@ -203,7 +210,7 @@ class TransformationSchema:
                 regular_transformations.append(transformation)
         
         # PRIORITY 1: User Selected Values (individual transformations)
-        professional_logger.info("operations.transformations", "Generating Priority 1: User Selected Values", "priority1_start", {
+        logger.info("operations.transformations", "Generating Priority 1: User Selected Values", "priority1_start", {
             'dual_value_count': len(dual_value_transformations)
         })
         for transformation in dual_value_transformations:
@@ -219,25 +226,25 @@ class TransformationSchema:
             
             combination = {transformation.tool_type: user_params}
             combinations.append(combination)
-            professional_logger.info("operations.transformations", f"🔵 PRIORITY 1 - Added user value combination: {combination}", "priority1_user_combination", {
+            logger.info("operations.transformations", f"✅ PRIORITY 1 - Added user value combination: {combination}", "priority1_user_combination", {
                 'tool_type': transformation.tool_type,
                 'combination': combination
             })
         
         # Add single-value transformations to Priority 1 as well
-        professional_logger.info("operations.transformations", "Adding single-value transformations to Priority 1", "priority1_single_value_start", {
+        logger.info("operations.transformations", "Adding single-value transformations to Priority 1", "priority1_single_value_start", {
             'regular_count': len(regular_transformations)
         })
         for transformation in regular_transformations:
             combination = {transformation.tool_type: transformation.parameters.copy()}
             combinations.append(combination)
-            professional_logger.info("operations.transformations", f"🔵 PRIORITY 1 - Added single-value combination: {combination}", "priority1_single_combination", {
+            logger.info("operations.transformations", f"✅ PRIORITY 1 - Added single-value combination: {combination}", "priority1_single_combination", {
                 'tool_type': transformation.tool_type,
                 'combination': combination
             })
         
         # PRIORITY 2: Auto-Generated Values (opposite values)
-        professional_logger.info("operations.transformations", "Generating Priority 2: Auto-Generated Values", "priority2_start", {
+        logger.info("operations.transformations", "Generating Priority 2: Auto-Generated Values", "priority2_start", {
             'dual_value_count': len(dual_value_transformations)
         })
         for transformation in dual_value_transformations:
@@ -257,13 +264,13 @@ class TransformationSchema:
             
             combination = {transformation.tool_type: auto_params}
             combinations.append(combination)
-            professional_logger.info("operations.transformations", f"🟠 PRIORITY 2 - Added auto value combination: {combination}", "priority2_auto_combination", {
+            logger.info("operations.transformations", f"🔄 PRIORITY 2 - Added auto value combination: {combination}", "priority2_auto_combination", {
                 'tool_type': transformation.tool_type,
                 'combination': combination
             })
         
         # PRIORITY 3: Random Combinations (if more images needed)
-        professional_logger.info("operations.transformations", f"Generating Priority 3: Random Combinations (current: {len(combinations)}, target: {self.sampling_config.images_per_original})", "priority3_start", {
+        logger.info("operations.transformations", f"Generating Priority 3: Random Combinations (current: {len(combinations)}, target: {self.sampling_config.images_per_original})", "priority3_start", {
             'current_combinations': len(combinations),
             'target_images': self.sampling_config.images_per_original
         })
@@ -318,7 +325,7 @@ class TransformationSchema:
             
             # ✅ NEW: Generate combinations with single-value tools
             if len(dual_value_transformations) >= 1 and len(regular_transformations) >= 1:
-                professional_logger.info("operations.transformations", "Generating dual-value + single-value combinations", "dual_single_combinations_start", {
+                logger.info("operations.transformations", "Generating dual-value + single-value combinations", "dual_single_combinations_start", {
                 'remaining_slots': remaining_slots
             })
                 for dual_transformation in dual_value_transformations:
@@ -344,7 +351,7 @@ class TransformationSchema:
                             single_transformation.tool_type: single_transformation.parameters.copy()
                         }
                         additional_combinations.append(combo1)
-                        professional_logger.info("operations.transformations", f"🟣 PRIORITY 3 - Added dual(user)+single combination: {combo1}", "priority3_dual_user_single", {
+                        logger.info("operations.transformations", f"🎲 PRIORITY 3 - Added dual(user)+single combination: {combo1}", "priority3_dual_user_single", {
                             'dual_tool': dual_transformation.tool_type,
                             'single_tool': single_transformation.tool_type,
                             'combination': combo1
@@ -356,7 +363,7 @@ class TransformationSchema:
                             single_transformation.tool_type: single_transformation.parameters.copy()
                         }
                         additional_combinations.append(combo2)
-                        professional_logger.info("operations.transformations", f"🟣 PRIORITY 3 - Added dual(auto)+single combination: {combo2}", "priority3_dual_auto_single", {
+                        logger.info("operations.transformations", f"🎲 PRIORITY 3 - Added dual(auto)+single combination: {combo2}", "priority3_dual_auto_single", {
                             'dual_tool': dual_transformation.tool_type,
                             'single_tool': single_transformation.tool_type,
                             'combination': combo2
@@ -366,11 +373,11 @@ class TransformationSchema:
             random.shuffle(additional_combinations)
             combinations.extend(additional_combinations[:remaining_slots])
         
-        professional_logger.info("operations.transformations", f"🎯 FINAL RESULT - Generated {len(combinations)} transformation combinations:", "final_combinations_result", {
+        logger.info("operations.transformations", f"🎉 FINAL RESULT - Generated {len(combinations)} transformation combinations:", "final_combinations_result", {
             'total_combinations': len(combinations)
         })
         for i, combo in enumerate(combinations):
-            professional_logger.info("operations.transformations", f"  {i+1}. {combo}", "combination_detail", {
+            logger.info("operations.transformations", f"  {i+1}. {combo}", "combination_detail", {
                 'combination_index': i+1,
                 'combination': combo
             })
@@ -404,9 +411,11 @@ class TransformationSchema:
             )
             sampled.extend(additional_samples)
         
-        professional_logger.info("operations.transformations", f"Sampled {len(sampled)} combinations from {len(combinations)} total", "combinations_sampled", {
+        logger.info("operations.transformations", f"Sampled {len(sampled)} combinations from {len(combinations)} total", "combinations_sampled", {
             'sampled_count': len(sampled),
-            'total_combinations': len(combinations)
+            'total_combinations': len(combinations),
+            'fixed_count': fixed_count,
+            'remaining_needed': remaining_needed
         })
         return sampled
     
@@ -415,6 +424,11 @@ class TransformationSchema:
         Generate transformation configurations for a single image
         Returns list of configs to apply to the image
         """
+        logger.info("operations.transformations", f"Generating transformation configs for image {image_id}", "config_generation_start", {
+            'image_id': image_id,
+            'transformations_count': len(self.transformations)
+        })
+        
         # Check if we have dual-value transformations
         has_dual_value_transformations = any(
             is_dual_value_transformation(t.tool_type) 
@@ -423,13 +437,13 @@ class TransformationSchema:
         
         # Generate combinations based on system type
         if has_dual_value_transformations:
-            professional_logger.info("operations.transformations", f"Using dual-value combination generation for image {image_id}", "dual_value_generation_selected", {
+            logger.info("operations.transformations", f"Using dual-value combination generation for image {image_id}", "dual_value_generation_selected", {
             'image_id': image_id,
             'generation_type': 'dual_value'
         })
             all_combinations = self.generate_dual_value_combinations()
         else:
-            professional_logger.info("operations.transformations", f"Using single-value combination generation for image {image_id}", "single_value_generation_selected", {
+            logger.info("operations.transformations", f"Using single-value combination generation for image {image_id}", "single_value_generation_selected", {
             'image_id': image_id,
             'generation_type': 'single_value'
         })
@@ -463,9 +477,10 @@ class TransformationSchema:
             }
             configs_with_metadata.append(config_with_metadata)
         
-        professional_logger.info("operations.transformations", f"Generated {len(configs_with_metadata)} transformation configs for image {image_id}", "configs_generated", {
+        logger.info("operations.transformations", f"Generated {len(configs_with_metadata)} transformation configs for image {image_id}", "configs_generated", {
             'image_id': image_id,
-            'config_count': len(configs_with_metadata)
+            'config_count': len(configs_with_metadata),
+            'sampling_strategy': self.sampling_config.strategy
         })
         return configs_with_metadata
     
@@ -493,8 +508,12 @@ class TransformationSchema:
             fixed_combinations=fixed_combinations,
             random_seed=random_seed
         )
-        professional_logger.info("operations.transformations", f"Updated sampling config: {self.sampling_config}", "sampling_config_updated", {
-            'sampling_config': str(self.sampling_config)
+        logger.info("operations.transformations", f"Updated sampling config: {self.sampling_config}", "sampling_config_updated", {
+            'sampling_config': str(self.sampling_config),
+            'images_per_original': images_per_original,
+            'strategy': strategy,
+            'fixed_combinations': fixed_combinations,
+            'random_seed': random_seed
         })
     
     def get_combination_count_estimate(self) -> int:
@@ -514,6 +533,13 @@ class TransformationSchema:
         # Use centralized calculation from transformation_config
         from core.transformation_config import calculate_max_images_per_original
         result = calculate_max_images_per_original(transformation_list)
+        
+        logger.info("operations.transformations", f"Calculated combination count estimate", "combination_count_estimate", {
+            'transformation_count': len(transformation_list),
+            'enabled_count': len([t for t in transformation_list if t['enabled']]),
+            'max_images': result.get('max', 1)
+        })
+        
         return result.get('max', 1)
     
     def validate_configuration(self) -> Tuple[bool, List[str]]:
@@ -521,6 +547,11 @@ class TransformationSchema:
         Validate the current schema configuration
         Returns (is_valid, list_of_errors)
         """
+        logger.info("operations.transformations", "Validating schema configuration", "validation_start", {
+            'transformations_count': len(self.transformations),
+            'sampling_config': str(self.sampling_config)
+        })
+        
         errors = []
         
         if not self.transformations:
@@ -548,10 +579,26 @@ class TransformationSchema:
                 errors.append(f"Invalid parameters for {transformation.tool_type}")
         
         is_valid = len(errors) == 0
+        
+        if is_valid:
+            logger.info("operations.transformations", "Schema configuration validation passed", "validation_success", {
+                'transformations_count': len(self.transformations),
+                'enabled_count': len(enabled_transformations)
+            })
+        else:
+            logger.error("errors.validation", f"Schema configuration validation failed: {errors}", "validation_failed", {
+                'errors': errors,
+                'transformations_count': len(self.transformations)
+            })
+        
         return is_valid, errors
     
     def to_dict(self) -> Dict[str, Any]:
         """Export schema configuration to dictionary"""
+        logger.info("operations.transformations", "Exporting schema configuration to dictionary", "schema_export", {
+            'transformations_count': len(self.transformations)
+        })
+        
         return {
             "transformations": [
                 {
@@ -572,6 +619,10 @@ class TransformationSchema:
     
     def from_dict(self, data: Dict[str, Any]) -> None:
         """Load schema configuration from dictionary"""
+        logger.info("operations.transformations", "Loading schema configuration from dictionary", "schema_import", {
+            'data_keys': list(data.keys())
+        })
+        
         self.transformations.clear()
         
         for t_data in data.get("transformations", []):
@@ -597,9 +648,20 @@ def create_schema_from_database(db_transformations: List[Dict],
     """
     Convenience function to create schema from database records
     """
+    logger.info("operations.transformations", "Creating schema from database records", "schema_creation_start", {
+        'db_transformations_count': len(db_transformations),
+        'images_per_original': images_per_original
+    })
+    
     schema = TransformationSchema()
     schema.load_from_database_records(db_transformations)
     schema.set_sampling_config(images_per_original=images_per_original)
+    
+    logger.info("operations.transformations", "Schema created successfully from database", "schema_creation_complete", {
+        'transformations_count': len(schema.transformations),
+        'enabled_count': len([t for t in schema.transformations if t.enabled])
+    })
+    
     return schema
 
 
@@ -617,11 +679,20 @@ def generate_release_configurations(db_transformations: List[Dict],
     Returns:
         Dictionary mapping image_id to list of transformation configs
     """
+    logger.info("operations.transformations", "Generating release configurations", "release_config_generation_start", {
+        'db_transformations_count': len(db_transformations),
+        'image_ids_count': len(image_ids),
+        'images_per_original': images_per_original
+    })
+    
     schema = create_schema_from_database(db_transformations, images_per_original)
     
     # Validate schema
     is_valid, errors = schema.validate_configuration()
     if not is_valid:
+        logger.error("errors.validation", f"Invalid schema configuration: {errors}", "schema_validation_failed", {
+            'errors': errors
+        })
         raise ValueError(f"Invalid schema configuration: {errors}")
     
     # Generate configurations for all images
@@ -629,8 +700,9 @@ def generate_release_configurations(db_transformations: List[Dict],
     for image_id in image_ids:
         all_configs[image_id] = schema.generate_transformation_configs_for_image(image_id)
     
-    professional_logger.info("operations.transformations", f"Generated configurations for {len(image_ids)} images", "configurations_complete", {
-        'image_count': len(image_ids)
+    logger.info("operations.transformations", f"Generated configurations for {len(image_ids)} images", "configurations_complete", {
+        'image_count': len(image_ids),
+        'total_configs': sum(len(image_configs) for image_configs in all_configs.values())
     })
     return all_configs
 
@@ -638,6 +710,10 @@ def generate_release_configurations(db_transformations: List[Dict],
 if __name__ == "__main__":
     # Example usage and testing
     logging.basicConfig(level=logging.INFO)
+    
+    logger.info("app.backend", "Starting transformation schema test", "test_start", {
+        'test_type': 'transformation_schema_example'
+    })
     
     # Example transformation records (as they would come from database)
     example_transformations = [
@@ -672,8 +748,15 @@ if __name__ == "__main__":
         images_per_original=3
     )
     
+    logger.info("app.backend", "Transformation schema test completed successfully", "test_complete", {
+        'configs_generated': len(configs),
+        'total_image_configs': sum(len(image_configs) for image_configs in configs.values())
+    })
+    
     print("Generated configurations:")
     for image_id, image_configs in configs.items():
         print(f"\n{image_id}:")
         for config in image_configs:
             print(f"  Config {config['order']}: {config['transformations']}")
+
+

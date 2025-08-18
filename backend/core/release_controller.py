@@ -25,11 +25,11 @@ from sqlalchemy.orm import Session
 # Import export system
 from api.routes.enhanced_export import ExportFormats, ExportRequest
 
-# Import professional logging system
-from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
+# Import professional logging system - CORRECT UNIFORM PATTERN
+from logging_system.professional_logger import get_professional_logger
 
 # Initialize professional logger
-professional_logger = get_professional_logger()
+logger = get_professional_logger()
 
 @dataclass
 class ReleaseConfig:
@@ -98,7 +98,7 @@ class ReleaseController:
             self.db.add(release)
             self.db.commit()
             
-            professional_logger.info("operations.releases", f"Created release record: {release_id}", "release_record_created", {
+            logger.info("operations.releases", f"Created release record: {release_id}", "release_record_created", {
                 'release_id': release_id,
                 'project_id': config.project_id,
                 'release_name': config.release_name
@@ -107,7 +107,7 @@ class ReleaseController:
             
         except Exception as e:
             self.db.rollback()
-            professional_logger.error("errors", f"Failed to create release record: {str(e)}", "release_record_creation_error", {
+            logger.error("errors.system", f"Failed to create release record: {str(e)}", "release_record_creation_error", {
                 'error': str(e),
                 'project_id': config.project_id,
                 'release_name': config.release_name
@@ -136,14 +136,14 @@ class ReleaseController:
                 }
                 transformation_records.append(record)
             
-            professional_logger.info("operations.releases", f"Loaded {len(transformation_records)} pending transformations for version {release_version}", "transformations_loaded", {
+            logger.info("operations.releases", f"Loaded {len(transformation_records)} pending transformations for version {release_version}", "transformations_loaded", {
                 'transformation_count': len(transformation_records),
                 'release_version': release_version
             })
             return transformation_records
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to load pending transformations: {str(e)}", "transformations_load_error", {
+            logger.error("errors.system", f"Failed to load pending transformations: {str(e)}", "transformations_load_error", {
                 'error': str(e),
                 'release_version': release_version
             })
@@ -212,7 +212,7 @@ class ReleaseController:
                 }
                 image_records.append(record)
             
-            professional_logger.info("operations.releases", f"📊 MULTI-DATASET LOADING COMPLETE: Total images: {len(image_records)}", "dataset_loading_complete", {
+            logger.info("operations.releases", f"📊 MULTI-DATASET LOADING COMPLETE: Total images: {len(image_records)}", "dataset_loading_complete", {
                 'total_images': len(image_records),
                 'dataset_stats': dataset_stats,
                 'split_stats': split_stats,
@@ -223,7 +223,7 @@ class ReleaseController:
             return image_records
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to get dataset images: {str(e)}", "dataset_images_error", {
+            logger.error("errors.system", f"Failed to get dataset images: {str(e)}", "dataset_images_error", {
                 'error': str(e),
                 'dataset_ids': dataset_ids,
                 'split_sections': split_sections
@@ -254,7 +254,7 @@ class ReleaseController:
             return str(Path(file_path).parent)
             
         except Exception as e:
-            professional_logger.warning("operations.releases", f"Could not extract source path from {file_path}: {e}", "path_extraction_warning", {
+            logger.warning("errors.validation", f"Could not extract source path from {file_path}: {e}", "path_extraction_warning", {
                 'file_path': file_path,
                 'error': str(e)
             })
@@ -284,7 +284,7 @@ class ReleaseController:
         if progress.total_images > 0:
             progress.progress_percentage = (progress.processed_images / progress.total_images) * 100
         
-        professional_logger.info("operations.releases", f"Updated progress for release {release_id}: {progress.progress_percentage:.1f}%", "progress_updated", {
+        logger.info("operations.releases", f"Updated progress for release {release_id}: {progress.progress_percentage:.1f}%", "progress_updated", {
             'release_id': release_id,
             'progress_percentage': progress.progress_percentage,
             'current_step': progress.current_step,
@@ -304,7 +304,7 @@ class ReleaseController:
                 transform.release_id = release_id
             
             self.db.commit()
-            professional_logger.info("operations.releases", f"Marked {len(transformations)} transformations as completed", "transformations_completed", {
+            logger.info("operations.releases", f"Marked {len(transformations)} transformations as completed", "transformations_completed", {
                 'transformation_count': len(transformations),
                 'release_id': release_id,
                 'transformation_ids': transformation_ids
@@ -312,7 +312,7 @@ class ReleaseController:
             
         except Exception as e:
             self.db.rollback()
-            professional_logger.error("errors", f"Failed to mark transformations as completed: {str(e)}", "transformations_completion_error", {
+            logger.error("errors.system", f"Failed to mark transformations as completed: {str(e)}", "transformations_completion_error", {
                 'error': str(e),
                 'release_id': release_id,
                 'transformation_ids': transformation_ids
@@ -389,7 +389,7 @@ class ReleaseController:
             staging_dir = f"{output_dir}/staging"
             os.makedirs(staging_dir, exist_ok=True)
             
-            professional_logger.info("operations.releases", f"🔄 COPYING IMAGES FROM MULTIPLE DATASETS:", "image_copying_start", {
+            logger.info("operations.releases", f"🔄 COPYING IMAGES FROM MULTIPLE DATASETS:", "image_copying_start", {
                 'dataset_count': len(set(img['dataset_name'] for img in image_records)),
                 'total_images': len(image_paths),
                 'output_format': config.output_format
@@ -400,7 +400,7 @@ class ReleaseController:
                 source_path = self._resolve_image_path(img_record["file_path"])
                 
                 if not os.path.exists(source_path):
-                    professional_logger.warning("operations.releases", f"Source image not found: {source_path}", "source_image_missing", {
+                    logger.warning("errors.validation", f"Source image not found: {source_path}", "source_image_missing", {
                     'source_path': source_path,
                     'dataset_name': img_record['dataset_name'],
                     'filename': img_record['filename']
@@ -419,7 +419,7 @@ class ReleaseController:
                         # Just copy the file as-is if using original format
                         staging_path = os.path.join(staging_dir, unique_filename)
                         shutil.copy2(source_path, staging_path)
-                        professional_logger.info("operations.releases", f"   Copied (original format): {source_path} → {staging_path}", "image_copied_original", {
+                        logger.info("operations.images", f"   Copied (original format): {source_path} → {staging_path}", "image_copied_original", {
                         'source_path': source_path,
                         'staging_path': staging_path,
                         'dataset_name': img_record['dataset_name']
@@ -447,21 +447,21 @@ class ReleaseController:
                                 staging_path, 
                                 config.output_format
                             )
-                            professional_logger.info("operations.releases", f"   Copied and converted to {config.output_format}: {source_path} → {staging_path}", "image_converted", {
-                            'source_path': source_path,
-                            'staging_path': staging_path,
-                            'output_format': config.output_format,
-                            'dataset_name': img_record['dataset_name']
-                        })
+                            logger.info("operations.images", f"   Copied and converted to {config.output_format}: {source_path} → {staging_path}", "image_converted", {
+                                'source_path': source_path,
+                                'staging_path': staging_path,
+                                'output_format': config.output_format,
+                                'dataset_name': img_record['dataset_name']
+                            })
                         except Exception as format_error:
                             # Fallback to regular copy if conversion fails
-                            professional_logger.warning("operations.releases", f"   Format conversion failed for {source_path}: {format_error}", "format_conversion_failed", {
+                            logger.warning("errors.validation", f"   Format conversion failed for {source_path}: {format_error}", "format_conversion_failed", {
                                 'source_path': source_path,
                                 'format_error': str(format_error),
                                 'output_format': config.output_format,
                                 'dataset_name': img_record['dataset_name']
                             })
-                            professional_logger.warning("operations.releases", f"   Falling back to original format copy", "format_fallback", {
+                            logger.warning("operations.images", f"   Falling back to original format copy", "format_fallback", {
                                 'source_path': source_path,
                                 'dataset_name': img_record['dataset_name']
                             })
@@ -479,7 +479,7 @@ class ReleaseController:
                     }
                     
                 except Exception as e:
-                    professional_logger.error("errors", f"Failed to copy {source_path}: {e}", "image_copy_error", {
+                    logger.error("errors.system", f"Failed to copy {source_path}: {e}", "image_copy_error", {
                         'source_path': source_path,
                         'error': str(e),
                         'dataset_name': img_record['dataset_name'],
@@ -489,13 +489,13 @@ class ReleaseController:
             
             # Log format conversion information
             if config.output_format.lower() == "original":
-                professional_logger.info("operations.releases", f"✅ Successfully copied {len(image_paths)} images from {len(set(img['dataset_name'] for img in image_records))} datasets (preserving original formats)", "images_copied_success", {
+                logger.info("operations.images", f"✅ Successfully copied {len(image_paths)} images from {len(set(img['dataset_name'] for img in image_records))} datasets (preserving original formats)", "images_copied_success", {
                 'image_count': len(image_paths),
                 'dataset_count': len(set(img['dataset_name'] for img in image_records)),
                 'output_format': 'original'
             })
             else:
-                professional_logger.info("operations.releases", f"✅ Successfully copied and converted {len(image_paths)} images to {config.output_format.upper()} format from {len(set(img['dataset_name'] for img in image_records))} datasets", "images_converted_success", {
+                logger.info("operations.images", f"✅ Successfully copied and converted {len(image_paths)} images to {config.output_format.upper()} format from {len(set(img['dataset_name'] for img in image_records))} datasets", "images_converted_success", {
                     'image_count': len(image_paths),
                     'dataset_count': len(set(img['dataset_name'] for img in image_records)),
                     'output_format': config.output_format.upper()
@@ -576,13 +576,13 @@ class ReleaseController:
                     release.export_format = optimal_export_format
                     release.task_type = config.task_type if hasattr(config, 'task_type') else 'object_detection'
                     self.db.commit()
-                    professional_logger.info("operations.releases", f"✅ ZIP package created successfully: {zip_path}", "zip_created_success", {
+                    logger.info("operations.releases", f"✅ ZIP package created successfully: {zip_path}", "zip_created_success", {
                         'zip_path': zip_path,
                         'release_id': release_id,
                         'file_size': os.path.getsize(zip_path) if os.path.exists(zip_path) else 0
                     })
             except Exception as e:
-                professional_logger.error("errors", f"Failed to create ZIP package: {str(e)}", "zip_creation_error", {
+                logger.error("errors.system", f"Failed to create ZIP package: {str(e)}", "zip_creation_error", {
                     'error': str(e),
                     'release_id': release_id,
                     'zip_path': zip_path
@@ -612,7 +612,7 @@ class ReleaseController:
                 dataset_name = img_record["dataset_name"]
                 dataset_counts[dataset_name] = dataset_counts.get(dataset_name, 0) + 1
             
-            professional_logger.info("operations.releases", f"✅ MULTI-DATASET RELEASE GENERATION COMPLETED: {release_id}", "release_generation_complete", {
+            logger.info("operations.releases", f"✅ MULTI-DATASET RELEASE GENERATION COMPLETED: {release_id}", "release_generation_complete", {
                 'release_id': release_id,
                 'dataset_counts': dataset_counts,
                 'total_original_images': len(image_paths),
@@ -625,7 +625,7 @@ class ReleaseController:
             
         except Exception as e:
             error_msg = f"Failed to generate release: {str(e)}"
-            professional_logger.error("errors", error_msg, "release_generation_error", {
+            logger.error("errors.system", error_msg, "release_generation_error", {
                 'error': str(e),
                 'release_id': release_id
             })
@@ -649,11 +649,11 @@ class ReleaseController:
         try:
             if os.path.exists(staging_dir):
                 shutil.rmtree(staging_dir)
-                professional_logger.info("operations.releases", f"🧹 Cleaned up staging directory: {staging_dir}", "staging_cleanup_success", {
+                logger.info("operations.releases", f"🧹 Cleaned up staging directory: {staging_dir}", "staging_cleanup_success", {
                     'staging_dir': staging_dir
                 })
         except Exception as e:
-            professional_logger.warning("operations.releases", f"Failed to cleanup staging directory {staging_dir}: {e}", "staging_cleanup_failed", {
+            logger.warning("errors.validation", f"Failed to cleanup staging directory {staging_dir}: {e}", "staging_cleanup_failed", {
                 'staging_dir': staging_dir,
                 'error': str(e)
             })
@@ -690,7 +690,7 @@ class ReleaseController:
         """
         # If user explicitly chose a format, respect it
         if user_format and user_format != "auto":
-            professional_logger.info("operations.releases", f"Using user-selected export format: {user_format}", "export_format_selected", {
+            logger.info("operations.releases", f"Using user-selected export format: {user_format}", "export_format_selected", {
                 'user_format': user_format,
                 'task_type': task_type
             })
@@ -734,7 +734,7 @@ class ReleaseController:
             optimal_format = "coco"
             reason = "Unknown task type - using flexible COCO format"
         
-            professional_logger.info("operations.releases", f"Intelligently selected export format: {optimal_format} ({reason})", "export_format_auto_selected", {
+            logger.info("operations.releases", f"Intelligently selected export format: {optimal_format} ({reason})", "export_format_auto_selected", {
                 'optimal_format': optimal_format,
                 'reason': reason,
                 'task_type': task_type,
@@ -758,7 +758,7 @@ class ReleaseController:
             Path to generated export files
         """
         try:
-            professional_logger.info("operations.releases", f"Generating export files for release {release_id} in format {export_format}", "export_files_generation_start", {
+            logger.info("operations.releases", f"Generating export files for release {release_id} in format {export_format}", "export_files_generation_start", {
                 'release_id': release_id,
                 'export_format': export_format,
                 'task_type': task_type
@@ -783,7 +783,7 @@ class ReleaseController:
             # Generate export files based on format
             export_path = self._create_export_files(export_request, release_id)
             
-            professional_logger.info("operations.releases", f"Successfully generated export files at {export_path}", "export_files_generated", {
+            logger.info("operations.releases", f"Successfully generated export files at {export_path}", "export_files_generated", {
                 'export_path': export_path,
                 'release_id': release_id,
                 'export_format': export_format
@@ -791,7 +791,7 @@ class ReleaseController:
             return export_path
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to generate export files for release {release_id}: {str(e)}", "export_files_generation_error", {
+            logger.error("errors.system", f"Failed to generate export files for release {release_id}: {str(e)}", "export_files_generation_error", {
                 'error': str(e),
                 'release_id': release_id,
                 'export_format': export_format
@@ -976,7 +976,7 @@ class ReleaseController:
             Path to the generated ZIP file
         """
         try:
-            professional_logger.info("operations.releases", f"Creating ZIP package for release {release_id}", "zip_package_creation_start", {
+            logger.info("operations.releases", f"Creating ZIP package for release {release_id}", "zip_package_creation_start", {
                 'release_id': release_id,
                 'output_path': output_path
             })
@@ -1025,7 +1025,7 @@ class ReleaseController:
                     
                     # Skip if output path doesn't exist
                     if not output_path or not os.path.exists(output_path):
-                        professional_logger.warning("operations.releases", f"Output path not found: {output_path}", "output_path_missing", {
+                        logger.warning("errors.validation", f"Output path not found: {output_path}", "output_path_missing", {
                     'output_path': output_path,
                     'release_id': release_id
                 })
@@ -1170,14 +1170,14 @@ class ReleaseController:
             # Clean up temp directory
             shutil.rmtree(temp_dir)
             
-            professional_logger.info("operations.releases", f"Successfully created ZIP package at {zip_path}", "zip_package_created", {
+            logger.info("operations.releases", f"Successfully created ZIP package at {zip_path}", "zip_package_created", {
                 'zip_path': zip_path,
                 'release_id': release_id
             })
             return zip_path
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to create ZIP package: {str(e)}", "zip_creation_error", {
+            logger.error("errors.system", f"Failed to create ZIP package: {str(e)}", "zip_creation_error", {
                 'error': str(e),
                 'release_id': release_id,
                 'zip_path': zip_path
@@ -1214,7 +1214,7 @@ class ReleaseController:
             return history
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to get release history: {str(e)}", "release_history_error", {
+            logger.error("errors.system", f"Failed to get release history: {str(e)}", "release_history_error", {
                 'error': str(e),
                 'project_id': project_id,
                 'limit': limit
@@ -1236,7 +1236,7 @@ class ReleaseController:
             if output_dir.exists():
                 import shutil
                 shutil.rmtree(output_dir)
-                professional_logger.info("operations.releases", f"Cleaned up output directory for failed release: {release_id}", "failed_release_cleanup", {
+                logger.info("operations.releases", f"Cleaned up output directory for failed release: {release_id}", "failed_release_cleanup", {
                     'release_id': release_id,
                     'project_id': project_id,
                     'output_dir': str(output_dir)
@@ -1247,7 +1247,7 @@ class ReleaseController:
                 del self.release_progress[release_id]
             
         except Exception as e:
-            professional_logger.error("errors", f"Failed to cleanup failed release {release_id}: {str(e)}", "failed_release_cleanup_error", {
+            logger.error("errors.system", f"Failed to cleanup failed release {release_id}: {str(e)}", "failed_release_cleanup_error", {
                 'error': str(e),
                 'release_id': release_id,
                 'project_id': project_id
@@ -1262,7 +1262,7 @@ class ReleaseController:
             zip_path: Path where the ZIP file should be created
         """
         try:
-            professional_logger.info("operations.releases", f"Creating ZIP file with real data at {zip_path}", "minimal_zip_creation_start", {
+            logger.info("operations.releases", f"Creating ZIP file with real data at {zip_path}", "minimal_zip_creation_start", {
                 'zip_path': zip_path
             })
             
@@ -1283,11 +1283,11 @@ class ReleaseController:
                 try:
                     # Get up to 10 real images from the database
                     real_images = self.db.query(Image).filter(Image.path != None).limit(10).all()
-                    professional_logger.info("operations.releases", f"Found {len(real_images)} real images to include in the ZIP file", "real_images_found", {
+                    logger.info("operations.releases", f"Found {len(real_images)} real images to include in the ZIP file", "real_images_found", {
                         'real_image_count': len(real_images)
                     })
                 except Exception as e:
-                    professional_logger.warning("operations.releases", f"Could not fetch real images from database: {str(e)}", "real_images_fetch_error", {
+                    logger.warning("errors.system", f"Could not fetch real images from database: {str(e)}", "real_images_fetch_error", {
                         'error': str(e)
                     })
                 
@@ -1305,7 +1305,7 @@ class ReleaseController:
                                 # Copy the image to the temp directory
                                 dest_path = os.path.join(temp_dir, "images", "train", img_filename)
                                 shutil.copy(img_path, dest_path)
-                                professional_logger.info("operations.releases", f"Copied real image: {img_path} to {dest_path}", "real_image_copied", {
+                                logger.info("operations.releases", f"Copied real image: {img_path} to {dest_path}", "real_image_copied", {
                             'source_path': img_path,
                             'dest_path': dest_path,
                             'image_id': img.id
@@ -1328,7 +1328,7 @@ class ReleaseController:
                                 if annotation_path and os.path.exists(annotation_path):
                                     # Copy real annotation if available
                                     shutil.copy(annotation_path, label_path)
-                                    professional_logger.info("operations.releases", f"Copied real annotation: {annotation_path} to {label_path}", "real_annotation_copied", {
+                                    logger.info("operations.releases", f"Copied real annotation: {annotation_path} to {label_path}", "real_annotation_copied", {
                                 'annotation_path': annotation_path,
                                 'label_path': label_path,
                                 'image_id': img.id
@@ -1342,7 +1342,7 @@ class ReleaseController:
                                             with open(label_path, "w") as f:
                                                 f.write("0 0.5 0.5 0.3 0.3")
                                     except Exception as e:
-                                        professional_logger.warning("operations.releases", f"Could not create annotation for {img_filename}: {str(e)}", "annotation_creation_failed", {
+                                        logger.warning("errors.validation", f"Could not create annotation for {img_filename}: {str(e)}", "annotation_creation_failed", {
                                             'img_filename': img_filename,
                                             'error': str(e),
                                             'image_id': img.id
@@ -1351,14 +1351,14 @@ class ReleaseController:
                                         with open(label_path, "w") as f:
                                             f.write("0 0.5 0.5 0.3 0.3")
                         except Exception as e:
-                            professional_logger.warning("operations.releases", f"Could not process real image {i}: {str(e)}", "real_image_processing_error", {
+                            logger.warning("errors.system", f"Could not process real image {i}: {str(e)}", "real_image_processing_error", {
                                 'image_index': i,
                                 'error': str(e),
                                 'img_filename': img_filename
                             })
                 else:
                     # If no real images found, try to find any image files in the project directory
-                    professional_logger.warning("operations.releases", "No real images found in database, searching filesystem for images", "no_real_images_found", {
+                    logger.warning("errors.validation", "No real images found in database, searching filesystem for images", "no_real_images_found", {
                     'searching_filesystem': True
                 })
                     
@@ -1395,7 +1395,7 @@ class ReleaseController:
                             # Copy the image to the temp directory
                             dest_path = os.path.join(temp_dir, "images", "train", img_filename)
                             shutil.copy(img_path, dest_path)
-                            professional_logger.info("operations.releases", f"Copied filesystem image: {img_path} to {dest_path}", "filesystem_image_copied", {
+                            logger.info("operations.releases", f"Copied filesystem image: {img_path} to {dest_path}", "filesystem_image_copied", {
                             'source_path': img_path,
                             'dest_path': dest_path,
                             'image_index': i
@@ -1406,7 +1406,7 @@ class ReleaseController:
                             with open(os.path.join(temp_dir, "labels", "train", label_filename), "w") as f:
                                 f.write("0 0.5 0.5 0.3 0.3")
                         except Exception as e:
-                            professional_logger.warning("operations.releases", f"Could not process filesystem image {i}: {str(e)}", "filesystem_image_processing_error", {
+                            logger.warning("errors.system", f"Could not process filesystem image {i}: {str(e)}", "filesystem_image_processing_error", {
                                 'image_index': i,
                                 'error': str(e),
                                 'img_path': img_path
@@ -1447,13 +1447,13 @@ class ReleaseController:
                             rel_path = os.path.relpath(file_path, temp_dir)
                             zf.write(file_path, rel_path)
             
-            professional_logger.info("operations.releases", f"Successfully created ZIP file at {zip_path}", "minimal_zip_created", {
+            logger.info("operations.releases", f"Successfully created ZIP file at {zip_path}", "minimal_zip_created", {
                 'zip_path': zip_path,
                 'file_size': os.path.getsize(zip_path) if os.path.exists(zip_path) else 0
             })
             return True
         except Exception as e:
-            professional_logger.error("errors", f"Failed to create ZIP file: {str(e)}", "minimal_zip_creation_error", {
+            logger.error("errors.system", f"Failed to create ZIP file: {str(e)}", "minimal_zip_creation_error", {
                 'error': str(e),
                 'zip_path': zip_path
             })
@@ -1498,7 +1498,7 @@ def quick_release_generation(project_id: int, dataset_ids: List[str],
 if __name__ == "__main__":
     # Example usage and testing
     # Initialize professional logger
-    professional_logger = get_professional_logger()
+    logger = get_professional_logger()
     
     # Test release controller
     controller = create_release_controller()

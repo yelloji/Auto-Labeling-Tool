@@ -5,9 +5,20 @@ Single source of truth for all transformation parameters in the application
 All components should import parameters from this file to ensure consistency.
 """
 
+# Import professional logging system
+from logging_system.professional_logger import get_professional_logger
+
+# Initialize professional logger
+logger = get_professional_logger()
+
 # =====================================================================
 # TRANSFORMATION PARAMETERS - SINGLE SOURCE OF TRUTH
 # =====================================================================
+
+logger.info("app.backend", "Loading transformation configuration parameters", "config_loading_start", {
+    'file': 'transformation_config.py',
+    'total_parameters': 25  # Approximate count of parameter sets
+})
 
 # Shear transformation parameters (ENHANCED: Added unit display)
 SHEAR_ANGLE_MIN = -30
@@ -37,7 +48,24 @@ BRIGHTNESS_DESCRIPTION = "Brightness adjustment (-50% darker to +50% brighter)"
 # Conversion function: percentage → factor
 def brightness_percentage_to_factor(percentage):
     """Convert brightness percentage (-50 to +50) to factor (0.5 to 1.5)"""
-    return 1.0 + (percentage / 100.0)
+    logger.info("operations.transformations", f"Converting brightness percentage to factor: {percentage}%", "brightness_conversion", {
+        'percentage': percentage,
+        'conversion_type': 'percentage_to_factor'
+    })
+    
+    try:
+        factor = 1.0 + (percentage / 100.0)
+        logger.info("operations.transformations", f"Brightness conversion successful: {percentage}% → {factor:.3f}", "brightness_conversion_success", {
+            'percentage': percentage,
+            'factor': factor
+        })
+        return factor
+    except Exception as e:
+        logger.error("errors.validation", f"Brightness conversion failed: {percentage}%", "brightness_conversion_failed", {
+            'percentage': percentage,
+            'error': str(e)
+        })
+        return 1.0  # Return default factor on error
 
 # Contrast parameters (UPDATED: Factor → Percentage for better UX)
 # OLD: factor (0.5-1.5) → NEW: percentage (-50% to +50%)
@@ -51,7 +79,24 @@ CONTRAST_DESCRIPTION = "Contrast adjustment (-50% less to +50% more contrast)"
 # Conversion function: percentage → factor
 def contrast_percentage_to_factor(percentage):
     """Convert contrast percentage (-50 to +50) to factor (0.5 to 1.5)"""
-    return 1.0 + (percentage / 100.0)
+    logger.info("operations.transformations", f"Converting contrast percentage to factor: {percentage}%", "contrast_conversion", {
+        'percentage': percentage,
+        'conversion_type': 'percentage_to_factor'
+    })
+    
+    try:
+        factor = 1.0 + (percentage / 100.0)
+        logger.info("operations.transformations", f"Contrast conversion successful: {percentage}% → {factor:.3f}", "contrast_conversion_success", {
+            'percentage': percentage,
+            'factor': factor
+        })
+        return factor
+    except Exception as e:
+        logger.error("errors.validation", f"Contrast conversion failed: {percentage}%", "contrast_conversion_failed", {
+            'percentage': percentage,
+            'error': str(e)
+        })
+        return 1.0  # Return default factor on error
 
 # Blur parameters (ENHANCED: Added unit display)
 BLUR_RADIUS_MIN = 0.5
@@ -81,7 +126,24 @@ NOISE_DESCRIPTION = "Noise strength (1% subtle to 50% heavy)"
 # Conversion function: percentage → intensity
 def noise_strength_to_intensity(strength):
     """Convert noise strength percentage (1-50) to intensity (0.001-0.05)"""
-    return strength / 1000.0
+    logger.info("operations.transformations", f"Converting noise strength to intensity: {strength}%", "noise_conversion", {
+        'strength': strength,
+        'conversion_type': 'strength_to_intensity'
+    })
+    
+    try:
+        intensity = strength / 1000.0
+        logger.info("operations.transformations", f"Noise conversion successful: {strength}% → {intensity:.6f}", "noise_conversion_success", {
+            'strength': strength,
+            'intensity': intensity
+        })
+        return intensity
+    except Exception as e:
+        logger.error("errors.validation", f"Noise conversion failed: {strength}%", "noise_conversion_failed", {
+            'strength': strength,
+            'error': str(e)
+        })
+        return 0.005  # Return default intensity on error
 
 # Crop parameters (UPDATED: Scale → Percentage for better UX)
 # OLD: scale (0.8-1.0) → NEW: crop_percentage (50-100%)
@@ -250,7 +312,11 @@ CUTOUT_HOLE_SIZE_DESCRIPTION = "Size of each cutout hole in pixels"
 
 def get_brightness_parameters():
     """Get brightness parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving brightness parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'brightness'
+    })
+    
+    params = {
         'min': BRIGHTNESS_MIN,
         'max': BRIGHTNESS_MAX,
         'default': BRIGHTNESS_DEFAULT,
@@ -258,10 +324,23 @@ def get_brightness_parameters():
         'unit': BRIGHTNESS_UNIT,
         'description': BRIGHTNESS_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Brightness parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'brightness',
+        'min': BRIGHTNESS_MIN,
+        'max': BRIGHTNESS_MAX,
+        'default': BRIGHTNESS_DEFAULT
+    })
+    
+    return params
 
 def get_contrast_parameters():
     """Get contrast parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving contrast parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'contrast'
+    })
+    
+    params = {
         'min': CONTRAST_MIN,
         'max': CONTRAST_MAX,
         'default': CONTRAST_DEFAULT,
@@ -269,10 +348,23 @@ def get_contrast_parameters():
         'unit': CONTRAST_UNIT,
         'description': CONTRAST_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Contrast parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'contrast',
+        'min': CONTRAST_MIN,
+        'max': CONTRAST_MAX,
+        'default': CONTRAST_DEFAULT
+    })
+    
+    return params
 
 def get_blur_parameters():
     """Get blur parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving blur parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'blur'
+    })
+    
+    params = {
         'min': BLUR_RADIUS_MIN,
         'max': BLUR_RADIUS_MAX,
         'default': BLUR_RADIUS_DEFAULT,
@@ -280,10 +372,23 @@ def get_blur_parameters():
         'unit': BLUR_UNIT,
         'description': BLUR_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Blur parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'blur',
+        'min': BLUR_RADIUS_MIN,
+        'max': BLUR_RADIUS_MAX,
+        'default': BLUR_RADIUS_DEFAULT
+    })
+    
+    return params
 
 def get_hue_parameters():
     """Get hue parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving hue parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'hue'
+    })
+    
+    params = {
         'min': HUE_SHIFT_MIN,
         'max': HUE_SHIFT_MAX,
         'default': HUE_SHIFT_DEFAULT,
@@ -291,10 +396,23 @@ def get_hue_parameters():
         'unit': HUE_UNIT,
         'description': HUE_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Hue parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'hue',
+        'min': HUE_SHIFT_MIN,
+        'max': HUE_SHIFT_MAX,
+        'default': HUE_SHIFT_DEFAULT
+    })
+    
+    return params
 
 def get_noise_parameters():
     """Get noise parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving noise parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'noise'
+    })
+    
+    params = {
         'min': NOISE_STRENGTH_MIN,
         'max': NOISE_STRENGTH_MAX,
         'default': NOISE_STRENGTH_DEFAULT,
@@ -302,10 +420,23 @@ def get_noise_parameters():
         'unit': NOISE_UNIT,
         'description': NOISE_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Noise parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'noise',
+        'min': NOISE_STRENGTH_MIN,
+        'max': NOISE_STRENGTH_MAX,
+        'default': NOISE_STRENGTH_DEFAULT
+    })
+    
+    return params
 
 def get_shear_parameters():
     """Get shear parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving shear parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'shear'
+    })
+    
+    params = {
         'min': SHEAR_ANGLE_MIN,
         'max': SHEAR_ANGLE_MAX,
         'default': SHEAR_ANGLE_DEFAULT,
@@ -313,10 +444,23 @@ def get_shear_parameters():
         'unit': SHEAR_UNIT,
         'description': SHEAR_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Shear parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'shear',
+        'min': SHEAR_ANGLE_MIN,
+        'max': SHEAR_ANGLE_MAX,
+        'default': SHEAR_ANGLE_DEFAULT
+    })
+    
+    return params
 
 def get_rotation_parameters():
     """Get rotation parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving rotation parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'rotation'
+    })
+    
+    params = {
         'min': ROTATION_ANGLE_MIN,
         'max': ROTATION_ANGLE_MAX,
         'default': ROTATION_ANGLE_DEFAULT,
@@ -324,10 +468,23 @@ def get_rotation_parameters():
         'unit': ROTATION_UNIT,
         'description': ROTATION_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Rotation parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'rotation',
+        'min': ROTATION_ANGLE_MIN,
+        'max': ROTATION_ANGLE_MAX,
+        'default': ROTATION_ANGLE_DEFAULT
+    })
+    
+    return params
 
 def get_saturation_parameters():
     """Get saturation parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving saturation parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'saturation'
+    })
+    
+    params = {
         'min': SATURATION_MIN,
         'max': SATURATION_MAX,
         'default': SATURATION_DEFAULT,
@@ -335,10 +492,23 @@ def get_saturation_parameters():
         'unit': SATURATION_UNIT,
         'description': SATURATION_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Saturation parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'saturation',
+        'min': SATURATION_MIN,
+        'max': SATURATION_MAX,
+        'default': SATURATION_DEFAULT
+    })
+    
+    return params
 
 def get_gamma_parameters():
     """Get gamma parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving gamma parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'gamma'
+    })
+    
+    params = {
         'min': GAMMA_MIN,
         'max': GAMMA_MAX,
         'default': GAMMA_DEFAULT,
@@ -346,10 +516,23 @@ def get_gamma_parameters():
         'unit': GAMMA_UNIT,
         'description': GAMMA_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Gamma parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'gamma',
+        'min': GAMMA_MIN,
+        'max': GAMMA_MAX,
+        'default': GAMMA_DEFAULT
+    })
+    
+    return params
 
 def get_resize_parameters():
     """Get resize parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving resize parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'resize'
+    })
+    
+    params = {
         'width_min': RESIZE_WIDTH_MIN,
         'width_max': RESIZE_WIDTH_MAX,
         'width_default': RESIZE_WIDTH_DEFAULT,
@@ -359,10 +542,26 @@ def get_resize_parameters():
         'unit': RESIZE_UNIT,
         'description': RESIZE_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Resize parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'resize',
+        'width_min': RESIZE_WIDTH_MIN,
+        'width_max': RESIZE_WIDTH_MAX,
+        'width_default': RESIZE_WIDTH_DEFAULT,
+        'height_min': RESIZE_HEIGHT_MIN,
+        'height_max': RESIZE_HEIGHT_MAX,
+        'height_default': RESIZE_HEIGHT_DEFAULT
+    })
+    
+    return params
 
 def get_clahe_clip_limit_parameters():
     """Get CLAHE clip limit parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving CLAHE clip limit parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'clahe_clip_limit'
+    })
+    
+    params = {
         'min': CLAHE_CLIP_LIMIT_MIN,
         'max': CLAHE_CLIP_LIMIT_MAX,
         'default': CLAHE_CLIP_LIMIT_DEFAULT,
@@ -370,10 +569,23 @@ def get_clahe_clip_limit_parameters():
         'unit': CLAHE_CLIP_LIMIT_UNIT,
         'description': CLAHE_CLIP_LIMIT_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "CLAHE clip limit parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'clahe_clip_limit',
+        'min': CLAHE_CLIP_LIMIT_MIN,
+        'max': CLAHE_CLIP_LIMIT_MAX,
+        'default': CLAHE_CLIP_LIMIT_DEFAULT
+    })
+    
+    return params
 
 def get_clahe_grid_size_parameters():
     """Get CLAHE grid size parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving CLAHE grid size parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'clahe_grid_size'
+    })
+    
+    params = {
         'min': CLAHE_GRID_SIZE_MIN,
         'max': CLAHE_GRID_SIZE_MAX,
         'default': CLAHE_GRID_SIZE_DEFAULT,
@@ -381,10 +593,23 @@ def get_clahe_grid_size_parameters():
         'unit': CLAHE_GRID_SIZE_UNIT,
         'description': CLAHE_GRID_SIZE_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "CLAHE grid size parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'clahe_grid_size',
+        'min': CLAHE_GRID_SIZE_MIN,
+        'max': CLAHE_GRID_SIZE_MAX,
+        'default': CLAHE_GRID_SIZE_DEFAULT
+    })
+    
+    return params
 
 def get_cutout_num_holes_parameters():
     """Get cutout num holes parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving cutout num holes parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'cutout_num_holes'
+    })
+    
+    params = {
         'min': CUTOUT_NUM_HOLES_MIN,
         'max': CUTOUT_NUM_HOLES_MAX,
         'default': CUTOUT_NUM_HOLES_DEFAULT,
@@ -392,10 +617,23 @@ def get_cutout_num_holes_parameters():
         'unit': CUTOUT_NUM_HOLES_UNIT,
         'description': CUTOUT_NUM_HOLES_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Cutout num holes parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'cutout_num_holes',
+        'min': CUTOUT_NUM_HOLES_MIN,
+        'max': CUTOUT_NUM_HOLES_MAX,
+        'default': CUTOUT_NUM_HOLES_DEFAULT
+    })
+    
+    return params
 
 def get_cutout_hole_size_parameters():
     """Get cutout hole size parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving cutout hole size parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'cutout_hole_size'
+    })
+    
+    params = {
         'min': CUTOUT_HOLE_SIZE_MIN,
         'max': CUTOUT_HOLE_SIZE_MAX,
         'default': CUTOUT_HOLE_SIZE_DEFAULT,
@@ -403,10 +641,23 @@ def get_cutout_hole_size_parameters():
         'unit': CUTOUT_HOLE_SIZE_UNIT,
         'description': CUTOUT_HOLE_SIZE_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Cutout hole size parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'cutout_hole_size',
+        'min': CUTOUT_HOLE_SIZE_MIN,
+        'max': CUTOUT_HOLE_SIZE_MAX,
+        'default': CUTOUT_HOLE_SIZE_DEFAULT
+    })
+    
+    return params
 
 def get_crop_parameters():
     """Get crop parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving crop parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'crop'
+    })
+    
+    params = {
         'min': CROP_PERCENTAGE_MIN,
         'max': CROP_PERCENTAGE_MAX,
         'default': CROP_PERCENTAGE_DEFAULT,
@@ -414,10 +665,23 @@ def get_crop_parameters():
         'unit': CROP_UNIT,
         'description': CROP_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Crop parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'crop',
+        'min': CROP_PERCENTAGE_MIN,
+        'max': CROP_PERCENTAGE_MAX,
+        'default': CROP_PERCENTAGE_DEFAULT
+    })
+    
+    return params
 
 def get_color_jitter_parameters():
     """Get color jitter parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving color jitter parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'color_jitter'
+    })
+    
+    params = {
         'hue': {
             'min': COLOR_JITTER_HUE_MIN,
             'max': COLOR_JITTER_HUE_MAX,
@@ -451,10 +715,21 @@ def get_color_jitter_parameters():
             'description': COLOR_JITTER_SATURATION_DESCRIPTION
         }
     }
+    
+    logger.info("operations.transformations", "Color jitter parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'color_jitter',
+        'sub_parameters': ['hue', 'brightness', 'contrast', 'saturation']
+    })
+    
+    return params
 
 def get_random_zoom_parameters():
     """Get random zoom parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving random zoom parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'random_zoom'
+    })
+    
+    params = {
         'min': RANDOM_ZOOM_FACTOR_MIN,
         'max': RANDOM_ZOOM_FACTOR_MAX,
         'default': RANDOM_ZOOM_FACTOR_DEFAULT,
@@ -462,10 +737,23 @@ def get_random_zoom_parameters():
         'unit': RANDOM_ZOOM_UNIT,
         'description': RANDOM_ZOOM_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Random zoom parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'random_zoom',
+        'min': RANDOM_ZOOM_FACTOR_MIN,
+        'max': RANDOM_ZOOM_FACTOR_MAX,
+        'default': RANDOM_ZOOM_FACTOR_DEFAULT
+    })
+    
+    return params
 
 def get_affine_transform_parameters():
     """Get affine transform parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving affine transform parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'affine_transform'
+    })
+    
+    params = {
         'scale': {
             'min': AFFINE_SCALE_MIN,
             'max': AFFINE_SCALE_MAX,
@@ -499,10 +787,21 @@ def get_affine_transform_parameters():
             'description': AFFINE_VERTICAL_SHIFT_DESCRIPTION
         }
     }
+    
+    logger.info("operations.transformations", "Affine transform parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'affine_transform',
+        'sub_parameters': ['scale', 'rotation', 'horizontal_shift', 'vertical_shift']
+    })
+    
+    return params
 
 def get_perspective_warp_parameters():
     """Get perspective warp parameters for UI"""
-    return {
+    logger.info("operations.transformations", "Retrieving perspective warp parameters for UI", "parameter_retrieval", {
+        'parameter_type': 'perspective_warp'
+    })
+    
+    params = {
         'min': PERSPECTIVE_DISTORTION_MIN,
         'max': PERSPECTIVE_DISTORTION_MAX,
         'default': PERSPECTIVE_DISTORTION_DEFAULT,
@@ -510,6 +809,15 @@ def get_perspective_warp_parameters():
         'unit': PERSPECTIVE_DISTORTION_UNIT,
         'description': PERSPECTIVE_DISTORTION_DESCRIPTION
     }
+    
+    logger.info("operations.transformations", "Perspective warp parameters retrieved successfully", "parameter_retrieval_success", {
+        'parameter_type': 'perspective_warp',
+        'min': PERSPECTIVE_DISTORTION_MIN,
+        'max': PERSPECTIVE_DISTORTION_MAX,
+        'default': PERSPECTIVE_DISTORTION_DEFAULT
+    })
+    
+    return params
 
 # =====================================================================
 # TRANSFORMATION CATEGORIES
@@ -546,47 +854,110 @@ DUAL_VALUE_RANGES = {
 
 def is_dual_value_transformation(transformation_type: str) -> bool:
     """Check if transformation supports dual-value system"""
-    return transformation_type in DUAL_VALUE_TRANSFORMATIONS
+    logger.info("operations.transformations", f"Checking dual-value support for: {transformation_type}", "dual_value_check", {
+        'transformation_type': transformation_type
+    })
+    
+    is_supported = transformation_type in DUAL_VALUE_TRANSFORMATIONS
+    logger.info("operations.transformations", f"Dual-value check result: {transformation_type} → {is_supported}", "dual_value_check_result", {
+        'transformation_type': transformation_type,
+        'is_supported': is_supported
+    })
+    return is_supported
 
 def generate_auto_value(transformation_type: str, user_value: float) -> float:
     """Generate automatic opposite value for dual-value transformations"""
+    logger.info("operations.transformations", f"Generating auto value for: {transformation_type}", "auto_value_generation", {
+        'transformation_type': transformation_type,
+        'user_value': user_value
+    })
+    
     if not is_dual_value_transformation(transformation_type):
+        logger.info("operations.transformations", f"Not a dual-value transformation, returning user value: {user_value}", "auto_value_skipped", {
+            'transformation_type': transformation_type,
+            'user_value': user_value
+        })
         return user_value
     
     # For symmetric transformations, generate opposite value
-    return -user_value
+    auto_value = -user_value
+    logger.info("operations.transformations", f"Auto value generated: {user_value} → {auto_value}", "auto_value_generated", {
+        'transformation_type': transformation_type,
+        'user_value': user_value,
+        'auto_value': auto_value
+    })
+    return auto_value
 
 def get_dual_value_range(transformation_type: str) -> dict:
     """Get parameter range for dual-value transformation"""
-    return DUAL_VALUE_RANGES.get(transformation_type, {})
+    logger.info("operations.transformations", f"Getting dual-value range for: {transformation_type}", "dual_value_range_request", {
+        'transformation_type': transformation_type
+    })
+    
+    range_data = DUAL_VALUE_RANGES.get(transformation_type, {})
+    logger.info("operations.transformations", f"Dual-value range retrieved: {transformation_type}", "dual_value_range_retrieved", {
+        'transformation_type': transformation_type,
+        'has_range': bool(range_data),
+        'range_keys': list(range_data.keys()) if range_data else []
+    })
+    return range_data
 
 def calculate_max_images_per_original(transformations: list) -> dict:
     """
     Calculate max images per original for UI display
     Returns both minimum guaranteed and maximum possible counts
     """
+    logger.info("operations.transformations", f"Calculating max images per original", "image_count_calculation_start", {
+        'total_transformations': len(transformations) if transformations else 0
+    })
+    
     if not transformations:
+        logger.info("operations.transformations", f"No transformations provided, returning default count", "image_count_default", {
+            'min': 1,
+            'max': 1,
+            'has_dual_value': False
+        })
         return {"min": 1, "max": 1, "has_dual_value": False}
     
     # Count dual-value and regular transformations
     # IMPORTANT: 'resize' is a mandatory baseline, not combinatorial → exclude from counts
     dual_value_count = 0
     regular_count = 0
+    disabled_count = 0
+    resize_count = 0
+    
+    logger.info("operations.transformations", f"Analyzing transformation types", "transformation_analysis_start", {
+        'total_transformations': len(transformations)
+    })
     
     for transformation in transformations:
         if not transformation.get('enabled', True):
+            disabled_count += 1
             continue
         tool_type = transformation.get('transformation_type') or transformation.get('tool_type')
         if tool_type == 'resize':
             # Baseline resize applies to all images; do not increase combinations
+            resize_count += 1
             continue
         if is_dual_value_transformation(tool_type):
             dual_value_count += 1
         else:
             regular_count += 1
     
+    logger.info("operations.transformations", f"Transformation analysis completed", "transformation_analysis_complete", {
+        'dual_value_count': dual_value_count,
+        'regular_count': regular_count,
+        'disabled_count': disabled_count,
+        'resize_count': resize_count
+    })
+    
     baseline_original = 1  # include_original is true in release config
     if dual_value_count > 0:
+        logger.info("operations.transformations", f"Processing dual-value system", "dual_value_processing_start", {
+            'dual_value_count': dual_value_count,
+            'regular_count': regular_count
+        })
+        
         # Dual-value system with Priority Order logic
         # Priority 1: User values (individual) = dual_value_count
         # Priority 2: Auto values (individual) = dual_value_count  
@@ -608,25 +979,50 @@ def calculate_max_images_per_original(transformations: list) -> dict:
         variants = priority1_count + priority2_count + priority3_count
         min_images = baseline_original + variants
         max_images = min_images
-        return {
+        
+        result = {
             "min": min_images,
             "max": max_images,
             "has_dual_value": True,
             "dual_value_count": dual_value_count,
             "regular_count": regular_count
         }
+        
+        logger.info("operations.transformations", f"Dual-value calculation completed", "dual_value_calculation_complete", {
+            'priority1_count': priority1_count,
+            'priority2_count': priority2_count,
+            'priority3_count': priority3_count,
+            'total_variants': variants,
+            'min_images': min_images,
+            'max_images': max_images,
+            'result': result
+        })
+        
+        return result
     else:
+        logger.info("operations.transformations", f"Processing single-value system", "single_value_processing_start", {
+            'regular_count': regular_count
+        })
+        
         # Single-value system (no dual-value tools)
         # If there are any regular tools, we expect one variant plus the original
         max_images = baseline_original + (1 if regular_count > 0 else 0)
         
-        return {
+        result = {
             "min": max_images,
             "max": max_images,
             "has_dual_value": False,
             "dual_value_count": 0,
             "regular_count": regular_count
         }
+        
+        logger.info("operations.transformations", f"Single-value calculation completed", "single_value_calculation_complete", {
+            'regular_count': regular_count,
+            'max_images': max_images,
+            'result': result
+        })
+        
+        return result
 
 # Transformation categories
 BASIC_TRANSFORMATIONS = [
@@ -636,4 +1032,13 @@ BASIC_TRANSFORMATIONS = [
 ADVANCED_TRANSFORMATIONS = [
     'shear', 'hue', 'saturation', 'gamma'
 ]
+
+# Log successful configuration loading
+logger.info("app.backend", "Transformation configuration loaded successfully", "config_loading_complete", {
+    'file': 'transformation_config.py',
+    'basic_transformations': len(BASIC_TRANSFORMATIONS),
+    'advanced_transformations': len(ADVANCED_TRANSFORMATIONS),
+    'dual_value_transformations': len(DUAL_VALUE_TRANSFORMATIONS),
+    'symmetric_transformations': len(SYMMETRIC_TRANSFORMATIONS)
+})
 
