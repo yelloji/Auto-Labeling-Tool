@@ -45,3 +45,14 @@ backend/logging_system/__init__.py
 backend/logging_system/logging_config.py
 backend/logging_system/professional_logger.py
 backend/main.py
+  debug-output-format-logging[m
+* [32mfeature/professional-logging-system[m
+  final[m
+  [31mremotes/origin/feature/professional-logging-system[m
+  [31mremotes/origin/final[m
+  [31mremotes/origin/final-backup[m
+  [31mremotes/origin/finla-1-before-loging[m
+  [31mremotes/origin/main[m
+  [31mremotes/origin/main-1[m
+  [31mremotes/origin/restart[m
+  [31mremotes/origin/updating-release-config-panel[m
