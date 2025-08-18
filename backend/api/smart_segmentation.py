@@ -55,7 +55,7 @@ async def click_to_segment(request: SegmentationRequest):
     Advanced click-to-segment functionality using multiple algorithms
     """
     try:
-        professional_logger.info("operations", f"Processing segmentation request for point ({request.point.x}, {request.point.y})", "segmentation_request", {
+        professional_logger.info("operations.annotations", f"Processing segmentation request for point ({request.point.x}, {request.point.y})", "segmentation_request", {
             'point_x': request.point.x,
             'point_y': request.point.y,
             'model_type': request.model_type,
@@ -395,7 +395,7 @@ async def segment_polygon(request: SmartPolygonRequest):
     using various computer vision algorithms.
     """
     try:
-        professional_logger.info("operations", f"🎯 Smart Polygon: Processing request for image {request.image_id} at ({request.x}, {request.y})", "smart_polygon_request", {
+        professional_logger.info("operations.annotations", f"🎯 Smart Polygon: Processing request for image {request.image_id} at ({request.x}, {request.y})", "smart_polygon_request", {
             'image_id': request.image_id,
             'click_x': request.x,
             'click_y': request.y,
@@ -415,7 +415,7 @@ async def segment_polygon(request: SmartPolygonRequest):
             raise HTTPException(status_code=400, detail="Failed to load image")
         
         height, width = image.shape[:2]
-        professional_logger.info("operations", f"📏 Image loaded: {width}x{height}", "image_loaded", {
+        professional_logger.info("operations.images", f"📏 Image loaded: {width}x{height}", "image_loaded", {
             'image_id': request.image_id,
             'width': width,
             'height': height
@@ -443,7 +443,7 @@ async def segment_polygon(request: SmartPolygonRequest):
             points, confidence = segment_with_flood_fill(image, request.x, request.y)
             algorithm = "flood_fill"
         
-        professional_logger.info("operations", f"✅ Smart Polygon: Generated {len(points)} points with confidence {confidence}", "polygon_generated", {
+        professional_logger.info("operations.annotations", f"✅ Smart Polygon: Generated {len(points)} points with confidence {confidence}", "polygon_generated", {
             'image_id': request.image_id,
             'point_count': len(points),
             'confidence': confidence,
@@ -494,7 +494,7 @@ async def get_image_path_from_id(image_id: str) -> Optional[str]:
         
         for path in possible_paths:
             if os.path.exists(path):
-                professional_logger.info("operations", f"📁 Found image at: {path}", "image_path_found", {
+                professional_logger.info("operations.annotations", f"📁 Found image at: {path}", "image_path_found", {
             'image_id': image_id,
             'path': path
         })
@@ -547,7 +547,7 @@ def choose_best_algorithm(image: np.ndarray, x: int, y: int) -> str:
             return "flood_fill"  # Simple objects or uniform regions
             
     except Exception as e:
-        professional_logger.warning("operations", f"Algorithm selection failed, using default: {e}", "algorithm_selection_failed", {
+        professional_logger.warning("operations.annotations", f"Algorithm selection failed, using default: {e}", "algorithm_selection_failed", {
             'error': str(e)
         })
         return "flood_fill"
@@ -603,7 +603,7 @@ def segment_with_grabcut(image: np.ndarray, x: int, y: int) -> tuple:
         return points, confidence
         
     except Exception as e:
-        professional_logger.warning("operations", f"GrabCut failed, using fallback: {e}", "grabcut_failed", {
+        professional_logger.warning("operations.annotations", f"GrabCut failed, using fallback: {e}", "grabcut_failed", {
             'error': str(e),
             'click_x': x,
             'click_y': y
@@ -650,7 +650,7 @@ def segment_with_watershed_cv(image: np.ndarray, x: int, y: int) -> tuple:
         return points, confidence
         
     except Exception as e:
-        professional_logger.warning("operations", f"Watershed failed, using fallback: {e}", "watershed_failed", {
+        professional_logger.warning("operations.annotations", f"Watershed failed, using fallback: {e}", "watershed_failed", {
             'error': str(e),
             'click_x': x,
             'click_y': y
@@ -704,7 +704,7 @@ def segment_with_contour_detection(image: np.ndarray, x: int, y: int) -> tuple:
         return points, confidence
         
     except Exception as e:
-        professional_logger.warning("operations", f"Contour detection failed, using fallback: {e}", "contour_detection_failed", {
+        professional_logger.warning("operations.annotations", f"Contour detection failed, using fallback: {e}", "contour_detection_failed", {
             'error': str(e),
             'click_x': x,
             'click_y': y

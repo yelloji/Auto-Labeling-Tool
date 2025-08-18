@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 # Log successful import completion
-logger.info("app.logging", "All logging functions imported successfully", "import_completion", {
+logger.info("app.backend", "All logging functions imported successfully", "import_completion", {
     "imported_functions": len(__all__),
     "package": "backend.logging_system",
     "status": "ready"

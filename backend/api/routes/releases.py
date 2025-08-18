@@ -1836,29 +1836,31 @@ def create_complete_release_zip(
                         db_image = db.query(Image).filter(
                             Image.dataset_id == dataset_id,
                             Image.filename == image_file,
-                            Image.split_section == split,  # Use split_section instead of split_type
-                            Image.is_labeled == True
+                            Image.split_section == split  # Use split_section instead of split_type
                         ).first()
                         
+                        # Include all images, whether they have annotations or not
+                        annotations = []
                         if db_image:
                             annotations = db.query(Annotation).filter(
                                 Annotation.image_id == db_image.id
                             ).all()
                             
-                            # Collect class names
+                            # Collect class names from annotations
                             for ann in annotations:
                                 if hasattr(ann, 'class_name') and ann.class_name:
                                     class_names.add(ann.class_name)
                                 elif hasattr(ann, 'class_id'):
                                     class_names.add(f"class_{ann.class_id}")
-                            
-                            all_images_by_split[split].append({
-                                "image_path": image_path,
-                                "filename": image_file,
-                                "annotations": annotations,
-                                "db_image": db_image,
-                                "dataset_name": dataset.name
-                            })
+                        
+                        # Add image to processing list regardless of annotation status
+                        all_images_by_split[split].append({
+                            "image_path": image_path,
+                            "filename": image_file,
+                            "annotations": annotations,
+                            "db_image": db_image,
+                            "dataset_name": dataset.name
+                        })
         
         logger.info("operations.images", f"Images aggregated by split", "images_aggregated", {
             'train_count': len(all_images_by_split['train']),
@@ -2049,6 +2051,9 @@ def create_complete_release_zip(
                                 image_format_engine._save_image_with_format(resized_img, dest_path, config.output_format)
                             else:
                                 resized_img.save(dest_path)
+                            # Explicitly close PIL images
+                            pil_img.close()
+                            resized_img.close()
                         except Exception as _e:
                             logger.warning("errors.system", f"Failed to apply resize to original, copying instead", "resize_fallback_copy", {
                                 'original_path': original_path,
@@ -2082,6 +2087,8 @@ def create_complete_release_zip(
                                 image_format_engine._save_image_with_format(pil_img, dest_path, config.output_format)
                             else:
                                 pil_img.save(dest_path)
+                            # Explicitly close PIL image
+                            pil_img.close()
                         except Exception as _e2:
                             logger.warning("errors.system", f"Format conversion failed, falling back to copy", "format_conversion_fallback", {
                                 'original_path': original_path,
@@ -2121,6 +2128,8 @@ def create_complete_release_zip(
                     label_filename = os.path.splitext(output_filename)[0] + ".txt"
                     label_path = os.path.join(staging_dir, "labels", safe_split, label_filename)
                     os.makedirs(os.path.dirname(label_path), exist_ok=True)
+                    # Initialize label_content to avoid reference before assignment
+                    label_content = None
                     try:
                         if resize_only_config and label_mode == "yolo_detection":
                             from core.annotation_transformer import transform_detection_annotations_to_yolo
@@ -2129,6 +2138,7 @@ def create_complete_release_zip(
                                 from PIL import Image as PILImage
                                 _tmp_img = PILImage.open(dest_path)
                                 img_w, img_h = _tmp_img.size
+                                _tmp_img.close()  # Close the temporary image
                             except Exception:
                                 img_w = int(getattr(img_data["db_image"], 'width', 640))
                                 img_h = int(getattr(img_data["db_image"], 'height', 480))
@@ -2139,14 +2149,16 @@ def create_complete_release_zip(
                                 transform_config=resize_only_config,
                                 class_index_resolver=resolve_class_index,
                             )
+                            label_content = "\n".join(yolo_lines)
                             with open(label_path, 'w') as f:
-                                f.write("\n".join(yolo_lines))
+                                f.write(label_content)
                         elif resize_only_config and label_mode == "yolo_segmentation":
                             from core.annotation_transformer import transform_segmentation_annotations_to_yolo
                             try:
                                 from PIL import Image as PILImage
                                 _tmp_img = PILImage.open(dest_path)
                                 img_w, img_h = _tmp_img.size
+                                _tmp_img.close()  # Close the temporary image
                             except Exception:
                                 img_w = int(getattr(img_data["db_image"], 'width', 640))
                                 img_h = int(getattr(img_data["db_image"], 'height', 480))
@@ -2157,8 +2169,9 @@ def create_complete_release_zip(
                                 transform_config=resize_only_config,
                                 class_index_resolver=resolve_class_index,
                             )
+                            label_content = "\n".join(seg_lines)
                             with open(label_path, 'w') as f:
-                                f.write("\n".join(seg_lines))
+                                f.write(label_content)
                         else:
                             # No resize: use original content
                             label_content = create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode, class_index_resolver=resolve_class_index)
@@ -2170,8 +2183,8 @@ def create_complete_release_zip(
                             'error': str(_e)
                         })
                         label_content = create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode)
-                    with open(label_path, 'w') as f:
-                        f.write(label_content)
+                        with open(label_path, 'w') as f:
+                            f.write(label_content)
                     
                     final_image_count += 1
                     
@@ -2238,6 +2251,8 @@ def create_complete_release_zip(
                             from PIL import Image as PILImage
                             pil_img = PILImage.open(original_path).convert('RGB')
                             augmented_image = transformer.apply_transformations(pil_img, config_dict)
+                            # Close the original PIL image
+                            pil_img.close()
                         except Exception as _e:
                             logger.warning("errors.system", f"Falling back to simple apply", "simple_apply_fallback", {
                                 'original_path': original_path,
@@ -2328,6 +2343,10 @@ def create_complete_release_zip(
             'zip_path': str(zip_path)
         })
         
+        # Force close any open file handles before ZIP creation
+        import gc
+        gc.collect()
+        
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(staging_dir):
                 for file in files:
@@ -2340,16 +2359,65 @@ def create_complete_release_zip(
             'final_image_count': final_image_count
         })
     finally:
-        # Cleanup staging
+        # Force cleanup staging directory with proper file handle management
         try:
-            shutil.rmtree(staging_root, ignore_errors=True)
-            logger.debug("operations.releases", f"Staging directory cleanup completed", "staging_cleanup_final_success", {
-                'staging_root': staging_root
-            })
-        except Exception as _e:
-            logger.warning("errors.system", f"Final staging cleanup failed", "staging_cleanup_final_failure", {
+            if os.path.exists(staging_root):
+                # Force garbage collection to close any open file handles
+                import gc
+                gc.collect()
+                
+                # Wait a moment for any file operations to complete
+                import time
+                time.sleep(2)  # Increased wait time
+                
+                # Try to remove with force
+                import shutil
+                import stat
+                
+                def force_remove_readonly(func, path, _):
+                    """Remove read-only attribute and retry"""
+                    try:
+                        os.chmod(path, stat.S_IWRITE)
+                        func(path)
+                    except:
+                        pass
+                
+                # Try multiple cleanup strategies
+                try:
+                    shutil.rmtree(staging_root, onerror=force_remove_readonly)
+                    logger.info("operations.releases", f"Staging directory cleaned up successfully", "staging_cleanup_force_success", {
+                        'staging_root': staging_root
+                    })
+                except Exception as cleanup_error:
+                    logger.warning("errors.system", f"First cleanup attempt failed, trying alternative method", "staging_cleanup_retry", {
+                        'staging_root': staging_root,
+                        'error': str(cleanup_error)
+                    })
+                    
+                    # Alternative: Use Windows command if available
+                    if os.name == 'nt':
+                        try:
+                            import subprocess
+                            result = subprocess.run(['cmd', '/c', 'rmdir', '/s', '/q', staging_root], 
+                                                  capture_output=True, text=True, timeout=10)
+                            if result.returncode == 0:
+                                logger.info("operations.releases", f"Staging directory cleaned up with Windows command", "staging_cleanup_windows_success", {
+                                    'staging_root': staging_root
+                                })
+                            else:
+                                raise Exception(f"Windows command failed: {result.stderr}")
+                        except Exception as win_error:
+                            logger.error("errors.system", f"Windows cleanup also failed", "staging_cleanup_windows_failed", {
+                                'staging_root': staging_root,
+                                'error': str(win_error)
+                            })
+                    else:
+                        raise cleanup_error
+                        
+        except Exception as e:
+            logger.error("errors.system", f"Staging cleanup failed completely", "staging_cleanup_force_failed", {
                 'staging_root': staging_root,
-                'error': str(_e)
+                'error': str(e)
             })
 
 
@@ -3047,3 +3115,143 @@ def generate_descriptive_suffix(transformations: dict) -> str:
     })
     
     return final_suffix
+
+
+def cleanup_staging_directory_with_retry(staging_root: str, logger) -> None:
+    """
+    Enhanced cleanup function for staging directories with retry mechanism and better error handling.
+    
+    This function attempts to clean up staging directories with multiple strategies:
+    1. Immediate cleanup with shutil.rmtree
+    2. Force cleanup with chmod if needed
+    3. Retry with delay for file locks
+    4. Log detailed information about cleanup attempts
+    """
+    import time
+    import stat
+    
+    if not os.path.exists(staging_root):
+        logger.debug("operations.releases", f"Staging directory does not exist, skipping cleanup", "staging_cleanup_skip", {
+            'staging_root': staging_root
+        })
+        return
+    
+    logger.info("operations.releases", f"Starting enhanced staging directory cleanup", "staging_cleanup_start", {
+        'staging_root': staging_root
+    })
+    
+    # Strategy 1: Try immediate cleanup
+    try:
+        shutil.rmtree(staging_root, ignore_errors=True)
+        logger.info("operations.releases", f"Staging directory cleanup completed successfully", "staging_cleanup_success", {
+            'staging_root': staging_root,
+            'strategy': 'immediate_cleanup'
+        })
+        return
+    except Exception as e:
+        logger.warning("errors.system", f"Immediate cleanup failed, trying enhanced cleanup", "staging_cleanup_immediate_failed", {
+            'staging_root': staging_root,
+            'error': str(e),
+            'strategy': 'immediate_cleanup'
+        })
+    
+    # Strategy 2: Force cleanup with chmod (for read-only files)
+    try:
+        def force_remove_readonly(func, path, _):
+            """Remove read-only attribute and retry"""
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        
+        shutil.rmtree(staging_root, onerror=force_remove_readonly)
+        logger.info("operations.releases", f"Staging directory cleanup completed with force removal", "staging_cleanup_force_success", {
+            'staging_root': staging_root,
+            'strategy': 'force_cleanup'
+        })
+        return
+    except Exception as e:
+        logger.warning("errors.system", f"Force cleanup failed, trying retry mechanism", "staging_cleanup_force_failed", {
+            'staging_root': staging_root,
+            'error': str(e),
+            'strategy': 'force_cleanup'
+        })
+    
+    # Strategy 3: Retry mechanism with delays (for file locks)
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            time.sleep(retry_delay)
+            shutil.rmtree(staging_root, ignore_errors=True)
+            logger.info("operations.releases", f"Staging directory cleanup completed on retry", "staging_cleanup_retry_success", {
+                'staging_root': staging_root,
+                'attempt': attempt + 1,
+                'strategy': 'retry_cleanup'
+            })
+            return
+        except Exception as e:
+            logger.warning("errors.system", f"Retry cleanup attempt failed", "staging_cleanup_retry_failed", {
+                'staging_root': staging_root,
+                'attempt': attempt + 1,
+                'error': str(e),
+                'strategy': 'retry_cleanup'
+            })
+    
+    # Strategy 4: Manual cleanup of individual files (last resort)
+    try:
+        logger.warning("errors.system", f"All cleanup strategies failed, attempting manual file removal", "staging_cleanup_manual_attempt", {
+            'staging_root': staging_root,
+            'strategy': 'manual_cleanup'
+        })
+        
+        for root, dirs, files in os.walk(staging_root, topdown=False):
+            # Remove files first
+            for file in files:
+                file_path = os.path.join(root, file)
+                try:
+                    os.chmod(file_path, stat.S_IWRITE)
+                    os.remove(file_path)
+                except Exception as e:
+                    logger.warning("errors.system", f"Failed to remove file during manual cleanup", "manual_cleanup_file_failed", {
+                        'file_path': file_path,
+                        'error': str(e)
+                    })
+            
+            # Remove directories
+            for dir_name in dirs:
+                dir_path = os.path.join(root, dir_name)
+                try:
+                    os.chmod(dir_path, stat.S_IWRITE)
+                    os.rmdir(dir_path)
+                except Exception as e:
+                    logger.warning("errors.system", f"Failed to remove directory during manual cleanup", "manual_cleanup_dir_failed", {
+                        'dir_path': dir_path,
+                        'error': str(e)
+                    })
+        
+        # Try to remove the root staging directory
+        try:
+            os.chmod(staging_root, stat.S_IWRITE)
+            os.rmdir(staging_root)
+            logger.info("operations.releases", f"Manual cleanup completed successfully", "staging_cleanup_manual_success", {
+                'staging_root': staging_root,
+                'strategy': 'manual_cleanup'
+            })
+            return
+        except Exception as e:
+            logger.error("errors.system", f"Failed to remove staging root directory", "staging_cleanup_root_failed", {
+                'staging_root': staging_root,
+                'error': str(e)
+            })
+    
+    except Exception as e:
+        logger.error("errors.system", f"Manual cleanup failed completely", "staging_cleanup_manual_failed", {
+            'staging_root': staging_root,
+            'error': str(e)
+        })
+    
+    # Final warning if all strategies failed
+    logger.error("errors.system", f"All staging cleanup strategies failed - manual intervention required", "staging_cleanup_all_failed", {
+        'staging_root': staging_root,
+        'note': 'This staging directory needs manual cleanup'
+    })

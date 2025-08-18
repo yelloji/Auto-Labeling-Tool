@@ -649,8 +649,8 @@ async def get_project_datasets(project_id: str, db: Session = Depends(get_db)):
         logger.info("operations.operations", f"Project datasets retrieved successfully", "get_project_datasets_success", {
             "project_id": project_id,
             "total_datasets": len(dataset_responses),
-            "total_images": sum(d.total_images or 0 for d in dataset_responses),
-            "labeled_images": sum(d.labeled_images or 0 for d in dataset_responses)
+            "total_images": sum(d["total_images"] or 0 for d in dataset_responses),
+            "labeled_images": sum(d["labeled_images"] or 0 for d in dataset_responses)
         })
         
         return {
