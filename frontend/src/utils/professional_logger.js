@@ -46,12 +46,12 @@ class ProfessionalFrontendLogger {
     
     async sendToBackend(logData) {
         try {
-            const response = await fetch(`${this.apiBaseUrl}/api/v1/logs/frontend`, {
+            const response = await fetch(`${this.apiBaseUrl}/api/v1/logs/frontend/batch`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(logData)
+                body: JSON.stringify([logData]) // Send as array for batch endpoint
             });
             
             if (!response.ok) {
@@ -103,8 +103,8 @@ class ProfessionalFrontendLogger {
         if (this.logBuffer.length === 0) return;
         
         try {
-            // TEMPORARY: Send to raw endpoint for debugging
-            const response = await fetch(`${this.apiBaseUrl}/api/v1/logs/frontend/batch/raw`, {
+            // Send to regular batch endpoint to write to log files
+            const response = await fetch(`${this.apiBaseUrl}/api/v1/logs/frontend/batch`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -113,8 +113,6 @@ class ProfessionalFrontendLogger {
             });
             
             if (response.ok) {
-                const result = await response.json();
-                console.log('Raw endpoint response:', result);
                 this.logBuffer = [];
             } else {
                 console.error('Failed to flush log buffer:', response.status);
