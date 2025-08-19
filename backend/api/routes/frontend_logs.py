@@ -72,7 +72,7 @@ async def receive_frontend_log(request: Request, log_data: FrontendLogData):
         elif level == "WARNING":
             logger.warning(category, operation, message, details)
         elif level == "ERROR":
-            logger.error(category, operation, message, None, details)
+            logger.error(category, message, operation, details)
         elif level == "DEBUG":
             logger.debug(category, operation, message, details)
         else:
@@ -88,8 +88,8 @@ async def receive_frontend_log(request: Request, log_data: FrontendLogData):
         
     except Exception as e:
         # Log the error
-        logger.error("app.api", "frontend_log_error", 
-                    f"Error processing frontend log: {str(e)}", e)
+        logger.error("app.api", f"Error processing frontend log: {str(e)}", "frontend_log_error", 
+                    {"exception": str(e), "exception_type": type(e).__name__})
         
         # Return error response
         raise HTTPException(status_code=500, detail=f"Error processing frontend log: {str(e)}")
@@ -112,9 +112,8 @@ async def receive_frontend_logs_batch_raw(request: Request):
                        f"Raw batch request received", 
                        {"body_length": len(body_str), "data_type": type(data), "data_preview": str(data)[:1000]})
         except json.JSONDecodeError as e:
-            logger.error("app.api", "frontend_logs_batch_raw_json_error", 
-                        f"Failed to parse JSON: {str(e)}", e,
-                        {"body_preview": body_str[:500]})
+            logger.error("app.api", f"Failed to parse JSON: {str(e)}", "frontend_logs_batch_raw_json_error",
+                        {"body_preview": body_str[:500], "exception": str(e), "exception_type": type(e).__name__})
             return {"error": "Invalid JSON", "details": str(e)}
         
         # If it's a list, try to validate each item
@@ -132,9 +131,8 @@ async def receive_frontend_logs_batch_raw(request: Request):
                         "item": item,
                         "error": str(e)
                     })
-                    logger.error("app.api", "frontend_logs_batch_raw_item_invalid", 
-                               f"Item {i} validation failed: {str(e)}", e,
-                               {"item": item})
+                    logger.error("app.api", f"Item {i} validation failed: {str(e)}", "frontend_logs_batch_raw_item_invalid",
+                               {"item": item, "exception": str(e), "exception_type": type(e).__name__})
             
             return {
                 "status": "validation_analysis",
@@ -148,8 +146,8 @@ async def receive_frontend_logs_batch_raw(request: Request):
             return {"error": "Data is not a list", "data_type": str(type(data))}
         
     except Exception as e:
-        logger.error("app.api", "frontend_logs_batch_raw_error", 
-                    f"Error in raw endpoint: {str(e)}", None, {"exception": str(e), "exception_type": type(e).__name__})
+        logger.error("app.api", f"Error in raw endpoint: {str(e)}", "frontend_logs_batch_raw_error", 
+                    {"exception": str(e), "exception_type": type(e).__name__})
         return {"error": str(e)}
 
 @router.post("/frontend/batch")
@@ -196,7 +194,7 @@ async def receive_frontend_logs_batch(request: Request, logs_data: list[Frontend
                 elif level == "WARNING":
                     logger.warning(category, operation, message, details)
                 elif level == "ERROR":
-                    logger.error(category, operation, message, None, details)
+                    logger.error(category, message, operation, details)
                 elif level == "DEBUG":
                     logger.debug(category, operation, message, details)
                 else:
@@ -208,8 +206,7 @@ async def receive_frontend_logs_batch(request: Request, logs_data: list[Frontend
             except Exception as e:
                 error_count += 1
                 # Log the individual log error with more details
-                logger.error("app.api", "frontend_log_batch_item_error", 
-                           f"Error processing individual frontend log at index {i}: {str(e)}", None,
+                logger.error("app.api", f"Error processing individual frontend log at index {i}: {str(e)}", "frontend_log_batch_item_error",
                            {"log_index": i, "log_data": log_data.dict() if hasattr(log_data, 'dict') else str(log_data), "exception": str(e), "exception_type": type(e).__name__})
         
         # Log batch processing summary
@@ -232,8 +229,7 @@ async def receive_frontend_logs_batch(request: Request, logs_data: list[Frontend
         except:
             body_str = "Could not read body"
             
-        logger.error("app.api", "frontend_logs_batch_error", 
-                    f"Error processing frontend logs batch: {str(e)}", None,
+        logger.error("app.api", f"Error processing frontend logs batch: {str(e)}", "frontend_logs_batch_error",
                     {"request_body": body_str[:500], "exception": str(e), "exception_type": type(e).__name__})  # Log first 500 chars of body
         
         # Return error response
@@ -260,8 +256,8 @@ async def debug_frontend_logs(request: Request):
         }
         
     except Exception as e:
-        logger.error("app.api", "frontend_logs_debug_error", 
-                    f"Error in debug endpoint: {str(e)}", None, {"exception": str(e), "exception_type": type(e).__name__})
+        logger.error("app.api", f"Error in debug endpoint: {str(e)}", "frontend_logs_debug_error", 
+                    {"exception": str(e), "exception_type": type(e).__name__})
         raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")
 
 @router.get("/frontend/health")
@@ -284,8 +280,8 @@ async def frontend_logs_health_check():
         
     except Exception as e:
         # Log health check error
-        logger.error("app.api", "frontend_logs_health_check_error", 
-                    f"Frontend logs health check failed: {str(e)}", e)
+        logger.error("app.api", f"Frontend logs health check failed: {str(e)}", "frontend_logs_health_check_error", 
+                    {"exception": str(e), "exception_type": type(e).__name__})
         
         return {
             "status": "unhealthy",
