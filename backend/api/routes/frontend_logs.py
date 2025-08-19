@@ -114,7 +114,7 @@ async def receive_frontend_logs_batch(request: Request, logs_data: list[Frontend
         processed_count = 0
         error_count = 0
         
-        for log_data in logs_data:
+        for i, log_data in enumerate(logs_data):
             try:
                 # Route each log to appropriate backend log file
                 category = log_data.category
@@ -149,9 +149,10 @@ async def receive_frontend_logs_batch(request: Request, logs_data: list[Frontend
                 
             except Exception as e:
                 error_count += 1
-                # Log the individual log error
+                # Log the individual log error with more details
                 logger.error("app.api", "frontend_log_batch_item_error", 
-                           f"Error processing individual frontend log: {str(e)}", e)
+                           f"Error processing individual frontend log at index {i}: {str(e)}", e,
+                           {"log_index": i, "log_data": log_data.dict() if hasattr(log_data, 'dict') else str(log_data)})
         
         # Log batch processing summary
         logger.info("app.api", "frontend_logs_batch_processed", 
@@ -166,12 +167,44 @@ async def receive_frontend_logs_batch(request: Request, logs_data: list[Frontend
         }
         
     except Exception as e:
-        # Log the batch error
+        # Log the batch error with request body for debugging
+        try:
+            body = await request.body()
+            body_str = body.decode('utf-8') if body else "No body"
+        except:
+            body_str = "Could not read body"
+            
         logger.error("app.api", "frontend_logs_batch_error", 
-                    f"Error processing frontend logs batch: {str(e)}", e)
+                    f"Error processing frontend logs batch: {str(e)}", e,
+                    {"request_body": body_str[:500]})  # Log first 500 chars of body
         
         # Return error response
         raise HTTPException(status_code=500, detail=f"Error processing frontend logs batch: {str(e)}")
+
+@router.post("/frontend/debug")
+async def debug_frontend_logs(request: Request):
+    """
+    Debug endpoint to see what data is being sent from frontend.
+    """
+    try:
+        body = await request.body()
+        body_str = body.decode('utf-8') if body else "No body"
+        
+        # Log the raw request
+        logger.info("app.api", "frontend_logs_debug", 
+                   f"Debug request received", 
+                   {"body_length": len(body_str), "body_preview": body_str[:1000]})
+        
+        return {
+            "status": "debug_received",
+            "body_length": len(body_str),
+            "body_preview": body_str[:1000]
+        }
+        
+    except Exception as e:
+        logger.error("app.api", "frontend_logs_debug_error", 
+                    f"Error in debug endpoint: {str(e)}", e)
+        raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")
 
 @router.get("/frontend/health")
 async def frontend_logs_health_check():
