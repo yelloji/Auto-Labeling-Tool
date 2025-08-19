@@ -94,6 +94,64 @@ async def receive_frontend_log(request: Request, log_data: FrontendLogData):
         # Return error response
         raise HTTPException(status_code=500, detail=f"Error processing frontend log: {str(e)}")
 
+@router.post("/frontend/batch/raw")
+async def receive_frontend_logs_batch_raw(request: Request):
+    """
+    Raw endpoint to receive frontend logs without Pydantic validation.
+    This helps debug validation issues.
+    """
+    try:
+        body = await request.body()
+        body_str = body.decode('utf-8') if body else "No body"
+        
+        # Try to parse as JSON
+        try:
+            import json
+            data = json.loads(body_str)
+            logger.info("app.api", "frontend_logs_batch_raw_received", 
+                       f"Raw batch request received", 
+                       {"body_length": len(body_str), "data_type": type(data), "data_preview": str(data)[:1000]})
+        except json.JSONDecodeError as e:
+            logger.error("app.api", "frontend_logs_batch_raw_json_error", 
+                        f"Failed to parse JSON: {str(e)}", e,
+                        {"body_preview": body_str[:500]})
+            return {"error": "Invalid JSON", "details": str(e)}
+        
+        # If it's a list, try to validate each item
+        if isinstance(data, list):
+            validation_errors = []
+            for i, item in enumerate(data):
+                try:
+                    # Try to create FrontendLogData from this item
+                    log_data = FrontendLogData(**item)
+                    logger.info("app.api", "frontend_logs_batch_raw_item_valid", 
+                               f"Item {i} is valid", {"item": item})
+                except Exception as e:
+                    validation_errors.append({
+                        "index": i,
+                        "item": item,
+                        "error": str(e)
+                    })
+                    logger.error("app.api", "frontend_logs_batch_raw_item_invalid", 
+                               f"Item {i} validation failed: {str(e)}", e,
+                               {"item": item})
+            
+            return {
+                "status": "validation_analysis",
+                "total_items": len(data),
+                "validation_errors": validation_errors,
+                "valid_items": len(data) - len(validation_errors)
+            }
+        else:
+            logger.error("app.api", "frontend_logs_batch_raw_not_list", 
+                        f"Data is not a list", {"data_type": type(data)})
+            return {"error": "Data is not a list", "data_type": str(type(data))}
+        
+    except Exception as e:
+        logger.error("app.api", "frontend_logs_batch_raw_error", 
+                    f"Error in raw endpoint: {str(e)}", e)
+        return {"error": str(e)}
+
 @router.post("/frontend/batch")
 async def receive_frontend_logs_batch(request: Request, logs_data: list[FrontendLogData]):
     """
