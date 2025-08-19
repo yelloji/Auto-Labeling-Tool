@@ -152,9 +152,9 @@ const LabelSelectionPopup = ({
     }
 
     setLoading(true);
+    let labelToUse = null; // Define outside try block
+    
     try {
-      let labelToUse;
-      
       if (isCreatingNew) {
         // Using the new label name directly
         labelToUse = newLabelName.trim();
@@ -204,7 +204,7 @@ const LabelSelectionPopup = ({
       console.error('Label assignment error:', error);
       logError('app.frontend.validation', 'annotation_label_failed', 'Failed to save annotation label', {
         error: error.message,
-        labelName: labelToUse,
+        labelName: labelToUse || 'unknown',
         shapeType,
         isEditing
       });
