@@ -3,6 +3,7 @@ import { Card, Button, Space, Row, Col, message, Spin, Empty, Tooltip, Tag, Divi
 import { PlusOutlined, SettingOutlined, DeleteOutlined, CloseOutlined, RocketOutlined } from '@ant-design/icons';
 import TransformationModal from './TransformationModal';
 import { augmentationAPI, imageTransformationsAPI } from '../../../services/api';
+import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 // Helper function to get transformation icon
 const getTransformationIcon = (type) => {
@@ -62,21 +63,49 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
 
   // Load available transformations and existing transformations on component mount
   useEffect(() => {
+    logInfo('app.frontend.ui', 'transformation_section_initialized', 'TransformationSection component initialized', {
+      timestamp: new Date().toISOString(),
+      component: 'TransformationSection',
+      selectedDatasetsCount: selectedDatasets.length
+    });
+
     loadAvailableTransformations();
     initializeReleaseVersion();
   }, []);
 
   // Initialize or get current release version
   const initializeReleaseVersion = async () => {
+    logInfo('app.frontend.interactions', 'release_version_initialization_started', 'Release version initialization started', {
+      timestamp: new Date().toISOString(),
+      function: 'initializeReleaseVersion'
+    });
+
     try {
       // Check if there's a stored release version in session storage
       let releaseVersion = sessionStorage.getItem('currentReleaseVersion');
       
       if (!releaseVersion) {
+        logInfo('app.frontend.ui', 'generating_new_release_version', 'Generating new release version', {
+          timestamp: new Date().toISOString(),
+          function: 'initializeReleaseVersion'
+        });
+
         // Generate a new release version
         const response = await imageTransformationsAPI.generateVersion();
         releaseVersion = response.version;
         sessionStorage.setItem('currentReleaseVersion', releaseVersion);
+
+        logInfo('app.frontend.interactions', 'new_release_version_generated', 'New release version generated successfully', {
+          timestamp: new Date().toISOString(),
+          releaseVersion: releaseVersion,
+          function: 'initializeReleaseVersion'
+        });
+      } else {
+        logInfo('app.frontend.ui', 'using_existing_release_version', 'Using existing release version from session storage', {
+          timestamp: new Date().toISOString(),
+          releaseVersion: releaseVersion,
+          function: 'initializeReleaseVersion'
+        });
       }
       
       setCurrentReleaseVersion(releaseVersion);
@@ -85,6 +114,11 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       // Load existing transformations for this version
       await loadExistingTransformations(releaseVersion);
     } catch (error) {
+      logError('app.frontend.interactions', 'release_version_initialization_failed', 'Failed to initialize release version', {
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        function: 'initializeReleaseVersion'
+      });
       console.error('Failed to initialize release version:', error);
       message.error('Failed to initialize transformation session');
     }
@@ -92,6 +126,12 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
 
   // Load existing transformations from database
   const loadExistingTransformations = async (releaseVersion) => {
+    logInfo('app.frontend.interactions', 'load_existing_transformations_started', 'Loading existing transformations started', {
+      timestamp: new Date().toISOString(),
+      releaseVersion: releaseVersion,
+      function: 'loadExistingTransformations'
+    });
+
     try {
       setLoadingTransformations(true);
       console.log('Loading transformations for version:', releaseVersion);
@@ -100,6 +140,13 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       // This ensures transformations persist across app restarts
       const transformations = await imageTransformationsAPI.getPendingTransformations();
       console.log('Loaded PENDING transformations:', transformations);
+      
+      logInfo('app.frontend.interactions', 'existing_transformations_loaded', 'Existing transformations loaded successfully', {
+        timestamp: new Date().toISOString(),
+        releaseVersion: releaseVersion,
+        transformationCount: transformations.length,
+        function: 'loadExistingTransformations'
+      });
       
       // Separate basic and advanced transformations
       const basic = [];
@@ -136,8 +183,22 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       
       if (transformations.length > 0) {
         message.success(`Loaded ${transformations.length} existing transformation(s)`);
+        logInfo('app.frontend.ui', 'existing_transformations_displayed', 'Existing transformations displayed to user', {
+          timestamp: new Date().toISOString(),
+          basicCount: basic.length,
+          advancedCount: advanced.length,
+          totalCount: transformations.length,
+          function: 'loadExistingTransformations'
+        });
       }
     } catch (error) {
+      logError('app.frontend.interactions', 'load_existing_transformations_failed', 'Failed to load existing transformations', {
+        timestamp: new Date().toISOString(),
+        releaseVersion: releaseVersion,
+        error: error.message,
+        status: error.response?.status,
+        function: 'loadExistingTransformations'
+      });
       console.error('Failed to load existing transformations:', error);
       // Don't show error message if no transformations exist (404 is expected)
       if (error.response?.status !== 404) {
@@ -145,41 +206,89 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       }
     } finally {
       setLoadingTransformations(false);
+      logInfo('app.frontend.ui', 'load_existing_transformations_completed', 'Loading existing transformations completed', {
+        timestamp: new Date().toISOString(),
+        function: 'loadExistingTransformations'
+      });
     }
   };
 
   const loadAvailableTransformations = async () => {
+    logInfo('app.frontend.interactions', 'load_available_transformations_started', 'Loading available transformations started', {
+      timestamp: new Date().toISOString(),
+      function: 'loadAvailableTransformations'
+    });
+
     try {
       setLoading(true);
       const response = await augmentationAPI.getAvailableTransformations();
       if (response.success) {
         console.log('API Response:', response.data); // Debug log
         setAvailableTransformations(response.data);
+        logInfo('app.frontend.interactions', 'available_transformations_loaded', 'Available transformations loaded successfully', {
+          timestamp: new Date().toISOString(),
+          transformationCount: response.data?.length || 0,
+          function: 'loadAvailableTransformations'
+        });
       } else {
+        logError('app.frontend.interactions', 'available_transformations_api_failed', 'API returned unsuccessful response for available transformations', {
+          timestamp: new Date().toISOString(),
+          response: response,
+          function: 'loadAvailableTransformations'
+        });
         console.error('API returned unsuccessful response:', response);
         message.error('Failed to load transformation options: API returned unsuccessful response');
       }
     } catch (error) {
+      logError('app.frontend.interactions', 'load_available_transformations_error', 'Error loading available transformations', {
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        function: 'loadAvailableTransformations'
+      });
       console.error('Failed to load available transformations:', error);
       message.error('Failed to load transformation options');
     } finally {
       setLoading(false);
+      logInfo('app.frontend.ui', 'load_available_transformations_completed', 'Loading available transformations completed', {
+        timestamp: new Date().toISOString(),
+        function: 'loadAvailableTransformations'
+      });
     }
   };
 
   const handleAddBasicTransformation = () => {
+    logUserClick('add_basic_transformation_button_clicked', 'User clicked add basic transformation button');
+    logInfo('app.frontend.ui', 'basic_transformation_modal_opened', 'Basic transformation modal opened', {
+      timestamp: new Date().toISOString(),
+      function: 'handleAddBasicTransformation'
+    });
+
     setEditingTransformation(null);
     setModalType('basic');
     setModalVisible(true);
   };
 
   const handleAddAdvancedTransformation = () => {
+    logUserClick('add_advanced_transformation_button_clicked', 'User clicked add advanced transformation button');
+    logInfo('app.frontend.ui', 'advanced_transformation_modal_opened', 'Advanced transformation modal opened', {
+      timestamp: new Date().toISOString(),
+      function: 'handleAddAdvancedTransformation'
+    });
+
     setEditingTransformation(null);
     setModalType('advanced');
     setModalVisible(true);
   };
 
   const handleDeleteTransformation = async (transformationId, isAdvanced) => {
+    logUserClick('delete_transformation_button_clicked', 'User clicked delete transformation button');
+    logInfo('app.frontend.interactions', 'delete_transformation_started', 'Delete transformation started', {
+      timestamp: new Date().toISOString(),
+      transformationId: transformationId,
+      isAdvanced: isAdvanced,
+      function: 'handleDeleteTransformation'
+    });
+
     try {
       // Find the transformation to get its database ID
       const allTransformations = [...basicTransformations, ...advancedTransformations];
@@ -188,6 +297,19 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       if (transformationToDelete?.dbId) {
         console.log('Deleting transformation from database:', transformationToDelete.dbId);
         await imageTransformationsAPI.deleteTransformation(transformationToDelete.dbId);
+        
+        logInfo('app.frontend.interactions', 'transformation_deleted_from_database', 'Transformation deleted from database successfully', {
+          timestamp: new Date().toISOString(),
+          dbId: transformationToDelete.dbId,
+          transformationType: transformationToDelete.name,
+          function: 'handleDeleteTransformation'
+        });
+      } else {
+        logError('app.frontend.validation', 'delete_transformation_no_db_id', 'Cannot delete transformation - no database ID found', {
+          timestamp: new Date().toISOString(),
+          transformationId: transformationId,
+          function: 'handleDeleteTransformation'
+        });
       }
 
       // Update UI state
@@ -202,14 +324,39 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       }
       
       message.success('Transformation removed successfully');
+      logInfo('app.frontend.interactions', 'transformation_deleted_success', 'Transformation deleted successfully', {
+        timestamp: new Date().toISOString(),
+        transformationId: transformationId,
+        isAdvanced: isAdvanced,
+        function: 'handleDeleteTransformation'
+      });
     } catch (error) {
+      logError('app.frontend.interactions', 'delete_transformation_failed', 'Failed to delete transformation', {
+        timestamp: new Date().toISOString(),
+        transformationId: transformationId,
+        isAdvanced: isAdvanced,
+        error: error.message,
+        function: 'handleDeleteTransformation'
+      });
       console.error('Failed to delete transformation:', error);
       message.error('Failed to remove transformation from database');
     }
   };
 
   const handleSaveTransformation = async (transformationConfig) => {
+    logUserClick('save_transformation_button_clicked', 'User clicked save transformation button');
+    logInfo('app.frontend.interactions', 'save_transformation_started', 'Save transformation started', {
+      timestamp: new Date().toISOString(),
+      modalType: modalType,
+      isEditing: !!editingTransformation,
+      function: 'handleSaveTransformation'
+    });
+
     if (!currentReleaseVersion) {
+      logError('app.frontend.validation', 'save_transformation_no_release_version', 'Cannot save transformation - no release version initialized', {
+        timestamp: new Date().toISOString(),
+        function: 'handleSaveTransformation'
+      });
       message.error('Release version not initialized');
       return;
     }
@@ -237,6 +384,14 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       // Save to database
       const savedTransformation = await imageTransformationsAPI.createTransformation(transformationData);
       console.log('Saved transformation:', savedTransformation);
+
+      logInfo('app.frontend.interactions', 'transformation_saved_to_database', 'Transformation saved to database successfully', {
+        timestamp: new Date().toISOString(),
+        transformationType: transformationType,
+        isAdvanced: isAdvanced,
+        dbId: savedTransformation.id,
+        function: 'handleSaveTransformation'
+      });
 
       // Create UI transformation object
       const newTransformation = {
@@ -277,7 +432,21 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       }
 
       message.success(`${transformationType} transformation saved successfully!`);
+      logInfo('app.frontend.interactions', 'transformation_save_success', 'Transformation saved successfully', {
+        timestamp: new Date().toISOString(),
+        transformationType: transformationType,
+        isAdvanced: isAdvanced,
+        isEditing: !!editingTransformation,
+        function: 'handleSaveTransformation'
+      });
     } catch (error) {
+      logError('app.frontend.interactions', 'save_transformation_failed', 'Failed to save transformation', {
+        timestamp: new Date().toISOString(),
+        transformationType: transformationConfig?.transformations ? Object.keys(transformationConfig.transformations)[0] : 'unknown',
+        isAdvanced: modalType === 'advanced',
+        error: error.message,
+        function: 'handleSaveTransformation'
+      });
       console.error('Failed to save transformation:', error);
       message.error('Failed to save transformation to database');
       return;
@@ -286,6 +455,11 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
     setModalVisible(false);
     setModalType(null);
     setEditingTransformation(null);
+    
+    logInfo('app.frontend.ui', 'transformation_modal_closed', 'Transformation modal closed after save', {
+      timestamp: new Date().toISOString(),
+      function: 'handleSaveTransformation'
+    });
     
     message.success(editingTransformation ? 'Transformation updated' : 'Transformation added');
   };
@@ -320,6 +494,13 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
   };
 
   if ((loading && !availableTransformations) || loadingTransformations) {
+    logInfo('app.frontend.ui', 'transformation_section_loading_rendered', 'TransformationSection loading state rendered', {
+      timestamp: new Date().toISOString(),
+      loading: loading,
+      loadingTransformations: loadingTransformations,
+      hasAvailableTransformations: !!availableTransformations
+    });
+
     return (
       <div className="transformations-section">
         <div className="transformations-header">
@@ -333,6 +514,19 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       </div>
     );
   }
+
+  // Log when main component is rendered
+  logInfo('app.frontend.ui', 'transformation_section_rendered', 'TransformationSection component rendered', {
+    timestamp: new Date().toISOString(),
+    component: 'TransformationSection',
+    basicTransformationsCount: basicTransformations.length,
+    advancedTransformationsCount: advancedTransformations.length,
+    totalTransformations: basicTransformations.length + advancedTransformations.length,
+    modalVisible: modalVisible,
+    modalType: modalType,
+    hasAvailableTransformations: !!availableTransformations,
+    currentReleaseVersion: currentReleaseVersion
+  });
 
   return (
     <>
@@ -352,6 +546,11 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
             return keys.length === 1 && keys[0] === 'resize';
           });
           if (!hasResize) {
+            logInfo('app.frontend.ui', 'resize_mandatory_warning_displayed', 'Resize mandatory warning displayed', {
+              timestamp: new Date().toISOString(),
+              totalTransformations: all.length,
+              function: 'render'
+            });
             return (
               <Alert 
                 type="warning" 
@@ -442,16 +641,31 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
               size="large"
               icon={<RocketOutlined />}
               onClick={() => {
+                logUserClick('continue_to_release_config_button_clicked', 'User clicked continue to release configuration button');
+                logInfo('app.frontend.navigation', 'continue_to_release_config_triggered', 'Continue to release configuration triggered', {
+                  timestamp: new Date().toISOString(),
+                  function: 'continueButton'
+                });
+
                 const all = [...basicTransformations, ...advancedTransformations];
                 const hasResize = all.some(t => {
                   const keys = Object.keys(t?.config || {});
                   return keys.length === 1 && keys[0] === 'resize';
                 });
                 if (!hasResize) {
+                  logError('app.frontend.validation', 'continue_without_resize', 'User attempted to continue without resize transformation', {
+                    timestamp: new Date().toISOString(),
+                    totalTransformations: all.length,
+                    function: 'continueButton'
+                  });
                   message.error('Resize is mandatory. Please add a Resize transformation before continuing.');
                   return;
                 }
                 if (onContinue) {
+                  logInfo('app.frontend.navigation', 'on_continue_callback_called', 'onContinue callback called', {
+                    timestamp: new Date().toISOString(),
+                    function: 'continueButton'
+                  });
                   onContinue();
                 }
               }}
@@ -479,12 +693,24 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       <TransformationModal
         visible={modalVisible}
         onCancel={() => {
+          logUserClick('transformation_modal_cancel_button_clicked', 'User clicked transformation modal cancel button');
+          logInfo('app.frontend.ui', 'transformation_modal_cancelled', 'Transformation modal cancelled', {
+            timestamp: new Date().toISOString(),
+            modalType: modalType,
+            function: 'modalCancel'
+          });
           setModalVisible(false);
           setModalType(null);
           setEditingTransformation(null);
         }}
         onSave={handleSaveTransformation}
         onContinue={() => {
+          logUserClick('transformation_modal_continue_button_clicked', 'User clicked transformation modal continue button');
+          logInfo('app.frontend.navigation', 'transformation_modal_continue_triggered', 'Transformation modal continue triggered', {
+            timestamp: new Date().toISOString(),
+            modalType: modalType,
+            function: 'modalContinue'
+          });
           setModalVisible(false);
           setModalType(null);
           setEditingTransformation(null);

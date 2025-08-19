@@ -36,11 +36,19 @@ import {
 } from '@ant-design/icons';
 import { Line, Column } from '@ant-design/plots';
 import axios from 'axios';
+import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 const { TabPane } = Tabs;
 const { Option } = Select;
 
 const ActiveLearningDashboard = () => {
+  // Log component initialization
+  logInfo('app.frontend.ui', 'active_learning_dashboard_initialized', 'ActiveLearningDashboard component initialized', {
+    timestamp: new Date().toISOString(),
+    component: 'ActiveLearningDashboard',
+    function: 'component_initialization'
+  });
+
   const [sessions, setSessions] = useState([]);
   const [selectedSession, setSelectedSession] = useState(null);
   const [progress, setProgress] = useState(null);
@@ -53,17 +61,33 @@ const ActiveLearningDashboard = () => {
   const [form] = Form.useForm();
 
   useEffect(() => {
+    logInfo('app.frontend.interactions', 'active_learning_initial_data_fetch', 'Initial data fetch started', {
+      timestamp: new Date().toISOString(),
+      function: 'useEffect_initial_fetch'
+    });
     fetchSessions();
     fetchDatasets();
   }, []);
 
   useEffect(() => {
     if (selectedSession) {
+      logInfo('app.frontend.interactions', 'active_learning_session_selected', 'Active learning session selected', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        sessionName: selectedSession.name,
+        sessionStatus: selectedSession.status,
+        function: 'useEffect_session_selected'
+      });
       fetchProgress();
       fetchUncertainSamples();
       // Auto-refresh progress every 10 seconds during training
       const interval = setInterval(() => {
         if (selectedSession.status === 'training') {
+          logInfo('app.frontend.ui', 'active_learning_auto_refresh', 'Auto-refreshing progress during training', {
+            timestamp: new Date().toISOString(),
+            sessionId: selectedSession.id,
+            function: 'useEffect_auto_refresh'
+          });
           fetchProgress();
         }
       }, 10000);
@@ -72,118 +96,310 @@ const ActiveLearningDashboard = () => {
   }, [selectedSession]);
 
   const fetchSessions = async () => {
+    logInfo('app.frontend.interactions', 'fetch_active_learning_sessions_started', 'Fetching active learning sessions started', {
+      timestamp: new Date().toISOString(),
+      function: 'fetchSessions'
+    });
+
     try {
       const response = await axios.get('/api/active-learning/sessions');
       setSessions(response.data);
+      
+      logInfo('app.frontend.interactions', 'fetch_active_learning_sessions_success', 'Active learning sessions fetched successfully', {
+        timestamp: new Date().toISOString(),
+        sessionsCount: response.data?.length || 0,
+        function: 'fetchSessions'
+      });
     } catch (error) {
+      logError('app.frontend.interactions', 'fetch_active_learning_sessions_failed', 'Failed to fetch active learning sessions', {
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        function: 'fetchSessions'
+      });
       message.error('Failed to fetch training sessions');
     }
   };
 
   const fetchDatasets = async () => {
+    logInfo('app.frontend.interactions', 'fetch_active_learning_datasets_started', 'Fetching datasets for active learning started', {
+      timestamp: new Date().toISOString(),
+      function: 'fetchDatasets'
+    });
+
     try {
       const response = await axios.get('/api/datasets');
       setDatasets(response.data);
+      
+      logInfo('app.frontend.interactions', 'fetch_active_learning_datasets_success', 'Datasets for active learning fetched successfully', {
+        timestamp: new Date().toISOString(),
+        datasetsCount: response.data?.length || 0,
+        function: 'fetchDatasets'
+      });
     } catch (error) {
+      logError('app.frontend.interactions', 'fetch_active_learning_datasets_failed', 'Failed to fetch datasets for active learning', {
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        function: 'fetchDatasets'
+      });
       message.error('Failed to fetch datasets');
     }
   };
 
   const fetchProgress = async () => {
-    if (!selectedSession) return;
+    if (!selectedSession) {
+      logInfo('app.frontend.ui', 'fetch_progress_no_session', 'No session selected for progress fetch', {
+        timestamp: new Date().toISOString(),
+        function: 'fetchProgress'
+      });
+      return;
+    }
+    
+    logInfo('app.frontend.interactions', 'fetch_active_learning_progress_started', 'Fetching active learning progress started', {
+      timestamp: new Date().toISOString(),
+      sessionId: selectedSession.id,
+      sessionName: selectedSession.name,
+      function: 'fetchProgress'
+    });
     
     try {
       const response = await axios.get(`/api/active-learning/sessions/${selectedSession.id}/progress`);
       setProgress(response.data);
       // Update selected session with latest data
       setSelectedSession(prev => ({ ...prev, ...response.data.session }));
+      
+      logInfo('app.frontend.interactions', 'fetch_active_learning_progress_success', 'Active learning progress fetched successfully', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        progressData: response.data,
+        function: 'fetchProgress'
+      });
     } catch (error) {
-      message.error('Failed to fetch training progress');
+      logError('app.frontend.interactions', 'fetch_active_learning_progress_failed', 'Failed to fetch active learning progress', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        error: error.message,
+        function: 'fetchProgress'
+      });
     }
   };
 
   const fetchUncertainSamples = async () => {
-    if (!selectedSession) return;
-    
+    if (!selectedSession) {
+      logInfo('app.frontend.ui', 'fetch_uncertain_samples_no_session', 'No session selected for uncertain samples fetch', {
+        timestamp: new Date().toISOString(),
+        function: 'fetchUncertainSamples'
+      });
+      return;
+    }
+
+    logInfo('app.frontend.interactions', 'fetch_uncertain_samples_started', 'Fetching uncertain samples started', {
+      timestamp: new Date().toISOString(),
+      sessionId: selectedSession.id,
+      sessionName: selectedSession.name,
+      function: 'fetchUncertainSamples'
+    });
+
     try {
       const response = await axios.get(`/api/active-learning/sessions/${selectedSession.id}/uncertain-samples`);
       setUncertainSamples(response.data);
+      
+      logInfo('app.frontend.interactions', 'fetch_uncertain_samples_success', 'Uncertain samples fetched successfully', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        samplesCount: response.data?.length || 0,
+        function: 'fetchUncertainSamples'
+      });
     } catch (error) {
-      message.error('Failed to fetch uncertain samples');
+      logError('app.frontend.interactions', 'fetch_uncertain_samples_failed', 'Failed to fetch uncertain samples', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        error: error.message,
+        function: 'fetchUncertainSamples'
+      });
     }
   };
 
   const createSession = async (values) => {
+    logInfo('app.frontend.interactions', 'create_active_learning_session_started', 'Creating active learning session started', {
+      timestamp: new Date().toISOString(),
+      sessionValues: values,
+      function: 'createSession'
+    });
+
     try {
       setLoading(true);
-      await axios.post('/api/active-learning/sessions', values);
-      message.success('🎉 Training session created! Ready to start your first iteration.');
+      const response = await axios.post('/api/active-learning/sessions', values);
+      setSessions(prev => [...prev, response.data]);
       setCreateModalVisible(false);
       form.resetFields();
-      fetchSessions();
+      
+      logInfo('app.frontend.interactions', 'create_active_learning_session_success', 'Active learning session created successfully', {
+        timestamp: new Date().toISOString(),
+        sessionId: response.data.id,
+        sessionName: response.data.name,
+        function: 'createSession'
+      });
+      
+      message.success('Active learning session created successfully');
     } catch (error) {
-      message.error('Failed to create training session');
+      logError('app.frontend.interactions', 'create_active_learning_session_failed', 'Failed to create active learning session', {
+        timestamp: new Date().toISOString(),
+        sessionValues: values,
+        error: error.message,
+        function: 'createSession'
+      });
+      message.error('Failed to create active learning session');
     } finally {
       setLoading(false);
     }
   };
 
   const startIteration = async () => {
-    if (!selectedSession) return;
-    
+    if (!selectedSession) {
+      logError('app.frontend.validation', 'start_iteration_no_session', 'No session selected for iteration start', {
+        timestamp: new Date().toISOString(),
+        function: 'startIteration'
+      });
+      return;
+    }
+
+    logInfo('app.frontend.interactions', 'start_active_learning_iteration_started', 'Starting active learning iteration', {
+      timestamp: new Date().toISOString(),
+      sessionId: selectedSession.id,
+      sessionName: selectedSession.name,
+      function: 'startIteration'
+    });
+
     try {
       setLoading(true);
-      await axios.post(`/api/active-learning/sessions/${selectedSession.id}/iterations`, {
-        newly_labeled_images: []
+      const response = await axios.post(`/api/active-learning/sessions/${selectedSession.id}/start-iteration`);
+      setSelectedSession(prev => ({ ...prev, status: 'training' }));
+      
+      logInfo('app.frontend.interactions', 'start_active_learning_iteration_success', 'Active learning iteration started successfully', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        response: response.data,
+        function: 'startIteration'
       });
-      message.success(`🚀 Iteration ${selectedSession.current_iteration + 1} started! Training in progress...`);
-      fetchProgress();
+      
+      message.success('🎯 Iteration started! Model is now training on the selected samples.');
     } catch (error) {
-      message.error('Failed to start training iteration');
+      logError('app.frontend.interactions', 'start_active_learning_iteration_failed', 'Failed to start active learning iteration', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        error: error.message,
+        function: 'startIteration'
+      });
+      message.error('Failed to start iteration');
     } finally {
       setLoading(false);
     }
   };
 
   const reviewSample = async (sampleId, accepted, corrected = false) => {
+    if (!selectedSession) {
+      logError('app.frontend.validation', 'review_sample_no_session', 'No session selected for sample review', {
+        timestamp: new Date().toISOString(),
+        sampleId: sampleId,
+        function: 'reviewSample'
+      });
+      return;
+    }
+
+    logInfo('app.frontend.interactions', 'review_sample_started', 'Reviewing sample started', {
+      timestamp: new Date().toISOString(),
+      sessionId: selectedSession.id,
+      sampleId: sampleId,
+      accepted: accepted,
+      corrected: corrected,
+      function: 'reviewSample'
+    });
+
     try {
-      await axios.put(`/api/active-learning/uncertain-samples/${sampleId}/review`, {
+      const response = await axios.post(`/api/active-learning/sessions/${selectedSession.id}/review-sample`, {
+        sample_id: sampleId,
         accepted,
         corrected
       });
-      const action = accepted ? (corrected ? 'corrected' : 'accepted') : 'rejected';
-      message.success(`✅ Sample ${action} successfully`);
-      fetchUncertainSamples();
-      setReviewModalVisible(false);
+      
+      // Update uncertain samples list
+      setUncertainSamples(prev => prev.filter(sample => sample.id !== sampleId));
+      
+      logInfo('app.frontend.interactions', 'review_sample_success', 'Sample reviewed successfully', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        sampleId: sampleId,
+        accepted: accepted,
+        corrected: corrected,
+        response: response.data,
+        function: 'reviewSample'
+      });
+      
+      message.success(accepted ? '✅ Sample accepted!' : '❌ Sample rejected!');
     } catch (error) {
+      logError('app.frontend.interactions', 'review_sample_failed', 'Failed to review sample', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        sampleId: sampleId,
+        accepted: accepted,
+        corrected: corrected,
+        error: error.message,
+        function: 'reviewSample'
+      });
       message.error('Failed to review sample');
     }
   };
 
   const exportModel = async () => {
-    if (!selectedSession) return;
-    
-    try {
-      const response = await axios.get(`/api/active-learning/sessions/${selectedSession.id}/export-model`);
-      message.success('🎯 Model exported successfully! Ready for production use.');
-      Modal.info({
-        title: 'Model Export Information',
-        content: (
-          <div>
-            <p><strong>Model Path:</strong> {response.data.model_path}</p>
-            <p><strong>Performance:</strong></p>
-            <ul>
-              <li>mAP50: {(response.data.performance.map50 * 100).toFixed(1)}%</li>
-              <li>mAP95: {(response.data.performance.map95 * 100).toFixed(1)}%</li>
-              <li>Precision: {(response.data.performance.precision * 100).toFixed(1)}%</li>
-              <li>Recall: {(response.data.performance.recall * 100).toFixed(1)}%</li>
-            </ul>
-            <p><strong>Training Time:</strong> {response.data.training_time}s</p>
-          </div>
-        )
+    if (!selectedSession) {
+      logError('app.frontend.validation', 'export_model_no_session', 'No session selected for model export', {
+        timestamp: new Date().toISOString(),
+        function: 'exportModel'
       });
+      return;
+    }
+
+    logInfo('app.frontend.interactions', 'export_active_learning_model_started', 'Exporting active learning model started', {
+      timestamp: new Date().toISOString(),
+      sessionId: selectedSession.id,
+      sessionName: selectedSession.name,
+      function: 'exportModel'
+    });
+
+    try {
+      setLoading(true);
+      const response = await axios.get(`/api/active-learning/sessions/${selectedSession.id}/export-model`, {
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `active-learning-model-${selectedSession.name}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      
+      logInfo('app.frontend.interactions', 'export_active_learning_model_success', 'Active learning model exported successfully', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        sessionName: selectedSession.name,
+        function: 'exportModel'
+      });
+      
+      message.success('🎉 Model exported successfully!');
     } catch (error) {
+      logError('app.frontend.interactions', 'export_active_learning_model_failed', 'Failed to export active learning model', {
+        timestamp: new Date().toISOString(),
+        sessionId: selectedSession.id,
+        sessionName: selectedSession.name,
+        error: error.message,
+        function: 'exportModel'
+      });
       message.error('Failed to export model');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -383,6 +599,19 @@ const ActiveLearningDashboard = () => {
 
   return (
     <div style={{ padding: '24px', background: '#f5f5f5', minHeight: '100vh' }}>
+      {(() => {
+        logInfo('app.frontend.ui', 'active_learning_dashboard_rendered', 'ActiveLearningDashboard component rendered', {
+          timestamp: new Date().toISOString(),
+          component: 'ActiveLearningDashboard',
+          sessionsCount: sessions.length,
+          selectedSessionId: selectedSession?.id,
+          loading: loading,
+          createModalVisible: createModalVisible,
+          reviewModalVisible: reviewModalVisible,
+          function: 'component_render'
+        });
+        return null;
+      })()}
       <Row gutter={[16, 16]}>
         {/* Header */}
         <Col span={24}>
@@ -401,7 +630,14 @@ const ActiveLearningDashboard = () => {
                   type="primary" 
                   size="large"
                   icon={<PlusOutlined />}
-                  onClick={() => setCreateModalVisible(true)}
+                  onClick={() => {
+                    logUserClick('new_training_session_button_clicked', 'User clicked New Training Session button');
+                    logInfo('app.frontend.interactions', 'create_modal_opened', 'Create training session modal opened', {
+                      timestamp: new Date().toISOString(),
+                      function: 'new_training_session_button_onClick'
+                    });
+                    setCreateModalVisible(true);
+                  }}
                   style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)' }}
                 >
                   New Training Session
@@ -466,7 +702,14 @@ const ActiveLearningDashboard = () => {
               </span>
             }
             extra={
-              <Button onClick={fetchSessions} loading={loading}>
+              <Button onClick={() => {
+                logUserClick('refresh_sessions_button_clicked', 'User clicked Refresh Sessions button');
+                logInfo('app.frontend.interactions', 'refresh_sessions_clicked', 'Refresh sessions button clicked', {
+                  timestamp: new Date().toISOString(),
+                  function: 'refresh_sessions_button_onClick'
+                });
+                fetchSessions();
+              }} loading={loading}>
                 Refresh
               </Button>
             }
@@ -479,9 +722,16 @@ const ActiveLearningDashboard = () => {
                 <Button 
                   type="primary" 
                   icon={<PlusOutlined />}
-                  onClick={() => setCreateModalVisible(true)}
+                  onClick={() => {
+                    logUserClick('create_session_empty_state_button_clicked', 'User clicked Create Session button from empty state');
+                    logInfo('app.frontend.interactions', 'create_modal_opened_empty_state', 'Create training session modal opened from empty state', {
+                      timestamp: new Date().toISOString(),
+                      function: 'create_session_empty_state_button_onClick'
+                    });
+                    setCreateModalVisible(true);
+                  }}
                 >
-                  Create First Session
+                  Create Session
                 </Button>
               </div>
             ) : (
@@ -745,9 +995,24 @@ const ActiveLearningDashboard = () => {
           </span>
         }
         open={createModalVisible}
-        onCancel={() => setCreateModalVisible(false)}
+        onCancel={() => {
+          logUserClick('create_session_modal_canceled', 'User canceled create session modal');
+          logInfo('app.frontend.ui', 'create_session_modal_closed', 'Create session modal closed', {
+            timestamp: new Date().toISOString(),
+            function: 'create_session_modal_onCancel'
+          });
+          setCreateModalVisible(false);
+        }}
         footer={null}
         width={700}
+        onOpenChange={(open) => {
+          if (open) {
+            logInfo('app.frontend.ui', 'create_session_modal_opened', 'Create session modal opened', {
+              timestamp: new Date().toISOString(),
+              function: 'create_session_modal_onOpenChange'
+            });
+          }
+        }}
       >
         <Alert
           message="🚀 Start Your Active Learning Journey"
@@ -760,7 +1025,21 @@ const ActiveLearningDashboard = () => {
         <Form
           form={form}
           layout="vertical"
-          onFinish={createSession}
+          onFinish={(values) => {
+            logInfo('app.frontend.interactions', 'create_session_form_submitted', 'Create session form submitted', {
+              timestamp: new Date().toISOString(),
+              formValues: values,
+              function: 'create_session_form_onFinish'
+            });
+            createSession(values);
+          }}
+          onFinishFailed={(errorInfo) => {
+            logError('app.frontend.validation', 'create_session_form_validation_failed', 'Create session form validation failed', {
+              timestamp: new Date().toISOString(),
+              errorInfo: errorInfo,
+              function: 'create_session_form_onFinishFailed'
+            });
+          }}
         >
           <Form.Item
             name="name"

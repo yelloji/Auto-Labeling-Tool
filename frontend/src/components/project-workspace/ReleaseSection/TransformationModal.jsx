@@ -3,6 +3,7 @@ import { Modal, Form, Input, Button, Row, Col, Card, message, Spin, Alert, Divid
 import { SettingOutlined, EyeOutlined, SaveOutlined, ArrowLeftOutlined, RocketOutlined } from '@ant-design/icons';
 import IndividualTransformationControl from './IndividualTransformationControl';
 import { augmentationAPI } from '../../../services/api';
+import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 const { TextArea } = Input;
 
@@ -58,7 +59,19 @@ const TransformationModal = ({
 
   // Calculate combination count based on parameter ranges
   const calculateCombinationCount = (config, transformationDetails) => {
+    logInfo('app.frontend.ui', 'combination_count_calculation_started', 'Combination count calculation started', {
+      timestamp: new Date().toISOString(),
+      function: 'calculateCombinationCount'
+    });
+
     if (!config || !transformationDetails || !transformationDetails.parameters) {
+      logInfo('app.frontend.ui', 'combination_count_calculation_no_config', 'Combination count calculation - no config or details', {
+        timestamp: new Date().toISOString(),
+        hasConfig: !!config,
+        hasDetails: !!transformationDetails,
+        hasParameters: !!(transformationDetails?.parameters),
+        function: 'calculateCombinationCount'
+      });
       return 1;
     }
 
@@ -94,19 +107,51 @@ const TransformationModal = ({
 
     // Cap the total combinations to prevent excessive generation
     const maxTotalCombinations = 1000;
-    return Math.min(totalCombinations, maxTotalCombinations);
+    const finalCombinationCount = Math.min(totalCombinations, maxTotalCombinations);
+
+    logInfo('app.frontend.ui', 'combination_count_calculation_completed', 'Combination count calculation completed', {
+      timestamp: new Date().toISOString(),
+      totalCombinations: totalCombinations,
+      finalCombinationCount: finalCombinationCount,
+      wasCapped: totalCombinations > maxTotalCombinations,
+      function: 'calculateCombinationCount'
+    });
+
+    return finalCombinationCount;
   };
 
   // Initialize form and config when modal opens or editing transformation changes
   useEffect(() => {
     if (visible) {
+      logInfo('app.frontend.ui', 'transformation_modal_initialized', 'TransformationModal component initialized', {
+        timestamp: new Date().toISOString(),
+        component: 'TransformationModal',
+        transformationType: transformationType,
+        isEditing: !!editingTransformation,
+        selectedDatasetsCount: selectedDatasets.length,
+        existingTransformationsCount: existingTransformations.length,
+        function: 'useEffect'
+      });
+
       if (editingTransformation) {
+        logInfo('app.frontend.ui', 'transformation_modal_editing_mode', 'TransformationModal opened in editing mode', {
+          timestamp: new Date().toISOString(),
+          editingTransformationName: editingTransformation.name,
+          editingTransformationType: Object.keys(editingTransformation.config || {})[0],
+          function: 'useEffect'
+        });
+
         form.setFieldsValue({
           name: editingTransformation.name,
           description: editingTransformation.description
         });
         setTransformationConfig(editingTransformation.config || {});
       } else {
+        logInfo('app.frontend.ui', 'transformation_modal_create_mode', 'TransformationModal opened in create mode', {
+          timestamp: new Date().toISOString(),
+          function: 'useEffect'
+        });
+
         form.resetFields();
         setTransformationConfig({});
       }
@@ -120,7 +165,17 @@ const TransformationModal = ({
 
   // Function to load the original image first
   const loadOriginalImage = async () => {
+    logInfo('app.frontend.interactions', 'load_original_image_started', 'Loading original image started', {
+      timestamp: new Date().toISOString(),
+      selectedDatasetsCount: selectedDatasets.length,
+      function: 'loadOriginalImage'
+    });
+
     if (selectedDatasets.length === 0) {
+      logError('app.frontend.validation', 'load_original_image_no_datasets', 'Cannot load original image - no datasets selected', {
+        timestamp: new Date().toISOString(),
+        function: 'loadOriginalImage'
+      });
       setPreviewError("Please select a dataset to preview transformations");
       return Promise.reject("No datasets selected");
     }
@@ -137,9 +192,23 @@ const TransformationModal = ({
       const firstDataset = selectedDatasets[0];
       const datasetId = firstDataset.id;
       
+      logInfo('app.frontend.interactions', 'fetching_dataset_images', 'Fetching dataset images for preview', {
+        timestamp: new Date().toISOString(),
+        datasetId: datasetId,
+        datasetName: firstDataset.name,
+        function: 'loadOriginalImage'
+      });
+      
       // Fetch actual images from the dataset (same API call as rebalance function)
       const datasetResponse = await fetch(`http://localhost:12000/api/v1/datasets/${datasetId}`);
       if (!datasetResponse.ok) {
+        logError('app.frontend.interactions', 'fetch_dataset_images_failed', 'Failed to fetch dataset images', {
+          timestamp: new Date().toISOString(),
+          datasetId: datasetId,
+          status: datasetResponse.status,
+          statusText: datasetResponse.statusText,
+          function: 'loadOriginalImage'
+        });
         throw new Error('Failed to fetch dataset images');
       }
       
@@ -147,6 +216,12 @@ const TransformationModal = ({
       const availableImages = datasetData.recent_images || [];
       
       if (availableImages.length === 0) {
+        logError('app.frontend.validation', 'load_original_image_no_images', 'No images available in selected dataset', {
+          timestamp: new Date().toISOString(),
+          datasetId: datasetId,
+          datasetName: firstDataset.name,
+          function: 'loadOriginalImage'
+        });
         setPreviewError("No images available in the selected dataset");
         return Promise.reject("No images available");
       }
@@ -163,6 +238,17 @@ const TransformationModal = ({
       
       console.log(`Using random image from dataset "${firstDataset.name}": ${selectedImage.filename}`);
       
+      logInfo('app.frontend.interactions', 'original_image_selected', 'Original image selected for preview', {
+        timestamp: new Date().toISOString(),
+        datasetId: datasetId,
+        datasetName: firstDataset.name,
+        imageId: selectedImage.id,
+        imageFilename: selectedImage.filename,
+        randomIndex: randomIndex,
+        totalImages: availableImages.length,
+        function: 'loadOriginalImage'
+      });
+      
       // Set the original image
       setOriginalImage(`http://localhost:12000/api/images/${selectedImage.id}`);
       
@@ -171,6 +257,11 @@ const TransformationModal = ({
       
       return Promise.resolve(selectedImage);
     } catch (error) {
+      logError('app.frontend.interactions', 'load_original_image_failed', 'Failed to load original image', {
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        function: 'loadOriginalImage'
+      });
       console.error('Failed to load original image:', error);
       setPreviewError("Failed to load original image. Please try again.");
       setPreviewLoading(false);
@@ -179,6 +270,14 @@ const TransformationModal = ({
   };
 
   const handleTransformationSelect = (transformationType, transformationDetails) => {
+    logUserClick('transformation_type_selected', 'User selected transformation type');
+    logInfo('app.frontend.interactions', 'transformation_selection_started', 'Transformation selection started', {
+      timestamp: new Date().toISOString(),
+      transformationType: transformationType,
+      transformationName: transformationDetails.name || transformationType,
+      function: 'handleTransformationSelect'
+    });
+
     // Check if this transformation type already exists
     const existingTransformation = existingTransformations.find(t => {
       const existingType = Object.keys(t.config || {})[0];
@@ -186,6 +285,12 @@ const TransformationModal = ({
     });
 
     if (existingTransformation) {
+      logError('app.frontend.validation', 'transformation_already_exists', 'User attempted to select transformation that already exists', {
+        timestamp: new Date().toISOString(),
+        transformationType: transformationType,
+        existingTransformationId: existingTransformation.id,
+        function: 'handleTransformationSelect'
+      });
       message.warning(`${transformationType} transformation already exists. You can only add each transformation type once.`);
       return;
     }
@@ -196,6 +301,13 @@ const TransformationModal = ({
       details: transformationDetails
     });
     setView('configuration');
+    
+    logInfo('app.frontend.ui', 'transformation_configuration_view_opened', 'Transformation configuration view opened', {
+      timestamp: new Date().toISOString(),
+      transformationType: transformationType,
+      transformationName: transformationDetails.name || transformationType,
+      function: 'handleTransformationSelect'
+    });
     
     // Initialize configuration with default values if available
     const defaultConfig = transformationDetails.default_config || {};
@@ -213,11 +325,23 @@ const TransformationModal = ({
       // Generate a preview with the selected transformation
       generatePreview(transformationType, defaultConfig, selectedImage);
     }).catch(error => {
+      logError('app.frontend.interactions', 'transformation_preview_initialization_failed', 'Failed to initialize transformation preview', {
+        timestamp: new Date().toISOString(),
+        transformationType: transformationType,
+        error: error.message,
+        function: 'handleTransformationSelect'
+      });
       console.error("Failed to load original image:", error);
     });
   };
 
   const handleBackToSelection = () => {
+    logUserClick('back_to_selection_button_clicked', 'User clicked back to selection button');
+    logInfo('app.frontend.ui', 'back_to_selection_view', 'User navigated back to selection view', {
+      timestamp: new Date().toISOString(),
+      function: 'handleBackToSelection'
+    });
+
     setView('selection');
     setSelectedTransformation(null);
     setPreviewImage(null);
@@ -227,6 +351,15 @@ const TransformationModal = ({
 
   const handleParameterChange = (paramKey, value) => {
     if (!selectedTransformation) return;
+    
+    logInfo('app.frontend.ui', 'parameter_change_detected', 'Parameter change detected', {
+      timestamp: new Date().toISOString(),
+      transformationType: selectedTransformation.type,
+      paramKey: paramKey,
+      oldValue: transformationConfig[selectedTransformation.type]?.[paramKey],
+      newValue: value,
+      function: 'handleParameterChange'
+    });
     
     const type = selectedTransformation.type;
     const updatedConfig = {
@@ -271,7 +404,19 @@ const TransformationModal = ({
   };
 
   const generatePreview = async (transformationType, config, providedImage = null) => {
+    logInfo('app.frontend.interactions', 'generate_preview_started', 'Generate preview started', {
+      timestamp: new Date().toISOString(),
+      transformationType: transformationType,
+      hasProvidedImage: !!providedImage,
+      selectedDatasetsCount: selectedDatasets.length,
+      function: 'generatePreview'
+    });
+
     if (selectedDatasets.length === 0) {
+      logError('app.frontend.validation', 'generate_preview_no_datasets', 'Cannot generate preview - no datasets selected', {
+        timestamp: new Date().toISOString(),
+        function: 'generatePreview'
+      });
       setPreviewError("Please select a dataset to preview transformations");
       return;
     }
@@ -284,6 +429,11 @@ const TransformationModal = ({
       let selectedImage = providedImage;
       
       if (!selectedImage) {
+        logInfo('app.frontend.interactions', 'fetching_new_image_for_preview', 'Fetching new image for preview', {
+          timestamp: new Date().toISOString(),
+          function: 'generatePreview'
+        });
+
         // Get dataset information from the selected datasets
         const selectedDatasetNames = selectedDatasets.map(dataset => dataset.name || 'unknown');
         console.log('Selected datasets for preview:', selectedDatasetNames);
@@ -295,6 +445,13 @@ const TransformationModal = ({
         // Fetch actual images from the dataset (same API call as rebalance function)
         const datasetResponse = await fetch(`http://localhost:12000/api/v1/datasets/${datasetId}`);
         if (!datasetResponse.ok) {
+          logError('app.frontend.interactions', 'fetch_dataset_for_preview_failed', 'Failed to fetch dataset for preview', {
+            timestamp: new Date().toISOString(),
+            datasetId: datasetId,
+            status: datasetResponse.status,
+            statusText: datasetResponse.statusText,
+            function: 'generatePreview'
+          });
           throw new Error('Failed to fetch dataset images');
         }
         
@@ -302,6 +459,11 @@ const TransformationModal = ({
         const availableImages = datasetData.recent_images || [];
         
         if (availableImages.length === 0) {
+          logError('app.frontend.validation', 'generate_preview_no_images', 'No images available for preview', {
+            timestamp: new Date().toISOString(),
+            datasetId: datasetId,
+            function: 'generatePreview'
+          });
           setPreviewError("No images available in the selected dataset");
           return;
         }
@@ -332,6 +494,14 @@ const TransformationModal = ({
         [transformationType]: config
       };
       
+      logInfo('app.frontend.interactions', 'calling_preview_api', 'Calling preview API', {
+        timestamp: new Date().toISOString(),
+        transformationType: transformationType,
+        imageId: selectedImage.id,
+        imageFilename: selectedImage.filename,
+        function: 'generatePreview'
+      });
+      
       // Call the real backend API for transformation preview
       const formData = new FormData();
       formData.append('image_id', selectedImage.id.toString());
@@ -343,12 +513,27 @@ const TransformationModal = ({
       });
       
       if (!previewResponse.ok) {
+        logError('app.frontend.interactions', 'preview_api_failed', 'Preview API call failed', {
+          timestamp: new Date().toISOString(),
+          transformationType: transformationType,
+          imageId: selectedImage.id,
+          status: previewResponse.status,
+          statusText: previewResponse.statusText,
+          function: 'generatePreview'
+        });
         throw new Error('Failed to generate transformation preview');
       }
       
       const previewResult = await previewResponse.json();
       
       if (!previewResult.success) {
+        logError('app.frontend.interactions', 'preview_backend_failed', 'Backend failed to generate preview', {
+          timestamp: new Date().toISOString(),
+          transformationType: transformationType,
+          imageId: selectedImage.id,
+          backendError: previewResult.error || 'Unknown backend error',
+          function: 'generatePreview'
+        });
         throw new Error('Backend failed to generate preview');
       }
       
@@ -365,6 +550,18 @@ const TransformationModal = ({
       const appliedTransformations = previewResult.data.applied_transformations;
       const processingTime = previewResult.data.processing_time_ms;
       
+      logInfo('app.frontend.interactions', 'preview_generated_successfully', 'Preview generated successfully', {
+        timestamp: new Date().toISOString(),
+        transformationType: transformationType,
+        imageId: selectedImage.id,
+        imageFilename: selectedImage.filename,
+        appliedTransformations: appliedTransformations,
+        processingTimeMs: processingTime,
+        originalDimensions: previewResult.data.image_dimensions,
+        previewDimensions: previewResult.data.preview_dimensions,
+        function: 'generatePreview'
+      });
+      
       console.log(`✅ Real transformation preview generated successfully!`);
       console.log(`📸 Image: ${selectedImage.filename}`);
       console.log(`🔧 Applied transformations: ${appliedTransformations.join(', ')}`);
@@ -373,15 +570,39 @@ const TransformationModal = ({
       console.log(`🖼️ Preview dimensions: ${previewResult.data.preview_dimensions.width}x${previewResult.data.preview_dimensions.height}`);
       
     } catch (error) {
+      logError('app.frontend.interactions', 'generate_preview_failed', 'Failed to generate preview', {
+        timestamp: new Date().toISOString(),
+        transformationType: transformationType,
+        error: error.message,
+        function: 'generatePreview'
+      });
       console.error('Failed to generate preview:', error);
       setPreviewError("Failed to generate preview. Please try again.");
     } finally {
       setPreviewLoading(false);
+      logInfo('app.frontend.ui', 'generate_preview_completed', 'Generate preview completed', {
+        timestamp: new Date().toISOString(),
+        function: 'generatePreview'
+      });
     }
   };
 
   const handleApplyTransformation = async () => {
-    if (!selectedTransformation) return;
+    logUserClick('apply_transformation_button_clicked', 'User clicked apply transformation button');
+    logInfo('app.frontend.interactions', 'apply_transformation_started', 'Apply transformation started', {
+      timestamp: new Date().toISOString(),
+      transformationType: selectedTransformation?.type,
+      combinationCount: combinationCount,
+      function: 'handleApplyTransformation'
+    });
+
+    if (!selectedTransformation) {
+      logError('app.frontend.validation', 'apply_transformation_no_selection', 'Cannot apply transformation - no transformation selected', {
+        timestamp: new Date().toISOString(),
+        function: 'handleApplyTransformation'
+      });
+      return;
+    }
     
     try {
       // Add the transformation to the config
@@ -393,6 +614,13 @@ const TransformationModal = ({
       setSelectedTransformation(null);
       setPreviewImage(null);
       setOriginalImage(null);
+      
+      logInfo('app.frontend.ui', 'transformation_applied_successfully', 'Transformation applied successfully', {
+        timestamp: new Date().toISOString(),
+        transformationType: type,
+        combinationCount: combinationCount,
+        function: 'handleApplyTransformation'
+      });
       
       // Notify parent component
       const transformationData = {
@@ -409,12 +637,25 @@ const TransformationModal = ({
       
       onSave(transformationData);
     } catch (error) {
+      logError('app.frontend.interactions', 'apply_transformation_failed', 'Failed to apply transformation', {
+        timestamp: new Date().toISOString(),
+        transformationType: selectedTransformation?.type,
+        error: error.message,
+        function: 'handleApplyTransformation'
+      });
       console.error('Failed to apply transformation:', error);
       message.error('Failed to apply transformation');
     }
   };
 
   const handleContinue = () => {
+    logUserClick('continue_to_release_config_button_clicked', 'User clicked continue to release config button');
+    logInfo('app.frontend.navigation', 'continue_to_release_config_triggered', 'Continue to release configuration triggered', {
+      timestamp: new Date().toISOString(),
+      existingTransformationsCount: existingTransformations.length,
+      function: 'handleContinue'
+    });
+
     if (onContinue) {
       onContinue();
     }
@@ -422,6 +663,11 @@ const TransformationModal = ({
 
   const renderTransformationSelectionView = () => {
     if (!availableTransformations) {
+      logInfo('app.frontend.ui', 'transformation_selection_loading', 'Transformation selection view loading', {
+        timestamp: new Date().toISOString(),
+        function: 'renderTransformationSelectionView'
+      });
+
       return (
         <div className="transformation-loading">
           <Spin size="large" />
@@ -458,6 +704,14 @@ const TransformationModal = ({
     };
     
     const { basic: basicTransformations, advanced: advancedTransformations } = processTransformations();
+
+    logInfo('app.frontend.ui', 'transformation_selection_view_rendered', 'Transformation selection view rendered', {
+      timestamp: new Date().toISOString(),
+      transformationType: transformationType,
+      basicTransformationsCount: Object.keys(basicTransformations).length,
+      advancedTransformationsCount: Object.keys(advancedTransformations).length,
+      function: 'renderTransformationSelectionView'
+    });
 
     return (
       <div className="transformation-selection-view">
@@ -525,6 +779,17 @@ const TransformationModal = ({
     const { type, details } = selectedTransformation;
     const config = transformationConfig[type] || {};
     const parameters = details.parameters || {};
+
+    logInfo('app.frontend.ui', 'transformation_configuration_view_rendered', 'Transformation configuration view rendered', {
+      timestamp: new Date().toISOString(),
+      transformationType: type,
+      parametersCount: Object.keys(parameters).length,
+      hasPreviewImage: !!previewImage,
+      hasOriginalImage: !!originalImage,
+      previewLoading: previewLoading,
+      combinationCount: combinationCount,
+      function: 'renderTransformationConfigurationView'
+    });
 
     return (
       <div className="transformation-configuration-view">
@@ -787,6 +1052,23 @@ const TransformationModal = ({
     }
     return "Add Transformation Step";
   };
+
+  // Log when main component is rendered
+  logInfo('app.frontend.ui', 'transformation_modal_rendered', 'TransformationModal component rendered', {
+    timestamp: new Date().toISOString(),
+    component: 'TransformationModal',
+    visible: visible,
+    view: view,
+    transformationType: transformationType,
+    isEditing: !!editingTransformation,
+    selectedTransformationType: selectedTransformation?.type,
+    hasPreviewImage: !!previewImage,
+    hasOriginalImage: !!originalImage,
+    previewLoading: previewLoading,
+    combinationCount: combinationCount,
+    selectedDatasetsCount: selectedDatasets.length,
+    existingTransformationsCount: existingTransformations.length
+  });
 
   return (
     <Modal
