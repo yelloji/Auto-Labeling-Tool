@@ -114,11 +114,11 @@ class FrontendLogger:
     # Frontend-specific logging methods
     def log_user_interaction(self, component: str, action: str, details: Optional[Dict[str, Any]] = None):
         """Log user interactions (clicks, form submissions, etc.)."""
-        self.info("app.frontend", "user_interaction", f"User {action} in {component}", details)
+        self.info("app.frontend.interactions", "user_interaction", f"User {action} in {component}", details)
     
     def log_page_navigation(self, from_page: str, to_page: str, details: Optional[Dict[str, Any]] = None):
         """Log page navigation events."""
-        self.info("app.frontend", "page_navigation", f"Navigation from {from_page} to {to_page}", details)
+        self.info("app.frontend.navigation", "page_navigation", f"Navigation from {from_page} to {to_page}", details)
     
     def log_api_call(self, endpoint: str, method: str, status: int, details: Optional[Dict[str, Any]] = None):
         """Log API calls from frontend."""
@@ -127,12 +127,12 @@ class FrontendLogger:
     
     def log_component_lifecycle(self, component: str, lifecycle_event: str, details: Optional[Dict[str, Any]] = None):
         """Log component lifecycle events (mount, unmount, update)."""
-        self.info("app.frontend", "component_lifecycle", f"{component} {lifecycle_event}", details)
+        self.info("app.frontend.ui", "component_lifecycle", f"{component} {lifecycle_event}", details)
     
     def log_form_validation(self, form_name: str, validation_result: str, details: Optional[Dict[str, Any]] = None):
         """Log form validation events."""
         level = "INFO" if validation_result == "valid" else "WARNING"
-        self._send_to_backend(level, "app.frontend", "form_validation", f"{form_name} validation: {validation_result}", details)
+        self._send_to_backend(level, "app.frontend.validation", "form_validation", f"{form_name} validation: {validation_result}", details)
     
     def log_file_operation(self, operation: str, file_name: str, details: Optional[Dict[str, Any]] = None):
         """Log file operations (upload, download, etc.)."""
@@ -140,7 +140,7 @@ class FrontendLogger:
     
     def log_ui_event(self, event_type: str, component: str, details: Optional[Dict[str, Any]] = None):
         """Log UI events (hover, focus, blur, etc.)."""
-        self.info("app.frontend", "ui_event", f"{event_type} on {component}", details)
+        self.info("app.frontend.ui", "ui_event", f"{event_type} on {component}", details)
 
 # Global frontend logger instance
 frontend_logger = FrontendLogger()

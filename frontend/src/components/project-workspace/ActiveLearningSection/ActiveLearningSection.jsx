@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Typography,
   Alert,
@@ -7,12 +7,30 @@ import {
 import {
   BulbOutlined
 } from '@ant-design/icons';
+import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 const { Title } = Typography;
 
 // This component is extracted from ProjectWorkspace.js
 // The main structure comes from the renderActiveLearningContent function (lines 1619-1640)
 const ActiveLearningSection = ({ navigate }) => {
+  useEffect(() => {
+    logInfo('app.frontend.ui', 'active_learning_section_initialized', 'ActiveLearningSection component initialized', {
+      timestamp: new Date().toISOString(),
+      component: 'ActiveLearningSection'
+    });
+  }, []);
+
+  const handleStartActiveLearning = () => {
+    logUserClick('active_learning_start_button_clicked', 'User clicked Start Active Learning button');
+    logInfo('app.frontend.navigation', 'active_learning_navigation_started', 'Navigating to active learning page', {
+      timestamp: new Date().toISOString(),
+      destination: '/active-learning',
+      source: 'ActiveLearningSection'
+    });
+    navigate('/active-learning');
+  };
+
   return (
     <div style={{ padding: '24px' }}>
       <Title level={2}>
@@ -29,7 +47,7 @@ const ActiveLearningSection = ({ navigate }) => {
       <Button 
         type="primary" 
         size="large"
-        onClick={() => navigate('/active-learning')}
+        onClick={handleStartActiveLearning}
       >
         Start Active Learning
       </Button>
