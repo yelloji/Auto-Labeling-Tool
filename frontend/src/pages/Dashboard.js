@@ -296,8 +296,8 @@ const Dashboard = () => {
                     <List.Item
                       actions={[
                         <Button type="link" icon={<PlayCircleOutlined />} onClick={() => {
-                          logInfo('app.frontend.navigation', 'Opening project from dashboard', 'open_project', { projectId: project.id, projectName: project.name });
-                          navigate(`/projects/${project.id}`);
+                          logInfo('app.frontend.navigation', 'Opening project workspace from dashboard', 'open_project_workspace', { projectId: project.id, projectName: project.name });
+                          navigate(`/projects/${project.id}/workspace`);
                         }}>
                           Open
                         </Button>
