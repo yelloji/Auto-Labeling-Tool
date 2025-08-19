@@ -24,7 +24,7 @@ class ProfessionalFrontendLogger {
         this.startAutoFlush();
         
         // Log session start
-        this.info('app.frontend', 'session_start', 'Frontend session started', {
+        this.info('app.frontend.ui', 'session_start', 'Frontend session started', {
             sessionId: this.sessionId,
             userAgent: navigator.userAgent,
             url: window.location.href,
