@@ -17,6 +17,7 @@ import {
   UserOutlined
 } from '@ant-design/icons';
 import { datasetsAPI } from '../../services/api';
+import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 const { Title, Paragraph } = Typography;
 
@@ -26,27 +27,60 @@ const AnnotateLauncher = () => {
   const [dataset, setDataset] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Log component mount
+  useEffect(() => {
+    logInfo('app.frontend.navigation', 'annotate_launcher_page_loaded', 'AnnotateLauncher page loaded', {
+      datasetId,
+      timestamp: new Date().toISOString()
+    });
+  }, [datasetId]);
+
   // Load dataset information
   useEffect(() => {
     const loadDataset = async () => {
       if (!datasetId) {
+        logError('app.frontend.validation', 'dataset_id_missing', 'Dataset ID is required', null, {
+          datasetId,
+          timestamp: new Date().toISOString()
+        });
         message.error('Dataset ID is required');
         navigate('/projects');
         return;
       }
 
       setLoading(true);
+      logInfo('app.frontend.interactions', 'loading_dataset', 'Loading dataset information', {
+        datasetId,
+        timestamp: new Date().toISOString()
+      });
+
       try {
         // Try to get dataset info from API
         const response = await datasetsAPI.getDataset(datasetId);
         setDataset(response);
+        logInfo('app.frontend.interactions', 'dataset_loaded_success', 'Dataset loaded successfully', {
+          datasetId,
+          datasetName: response.name,
+          datasetDescription: response.description,
+          timestamp: new Date().toISOString()
+        });
       } catch (error) {
+        logError('app.frontend.validation', 'dataset_load_failed', 'Failed to load dataset from API', error, {
+          datasetId,
+          errorMessage: error.message,
+          timestamp: new Date().toISOString()
+        });
         console.error('Error loading dataset:', error);
         // If API fails, use a fallback with the dataset ID
         setDataset({
           id: datasetId,
           name: `Dataset ${datasetId}`,
           description: 'Dataset ready for annotation'
+        });
+        logInfo('app.frontend.ui', 'fallback_dataset_created', 'Created fallback dataset', {
+          datasetId,
+          fallbackName: `Dataset ${datasetId}`,
+          timestamp: new Date().toISOString()
         });
       } finally {
         setLoading(false);
@@ -57,10 +91,30 @@ const AnnotateLauncher = () => {
   }, [datasetId, navigate]);
 
   const handleManualLabeling = () => {
+    logUserClick('AnnotateLauncher', 'manual_labeling_button', {
+      datasetId,
+      datasetName: dataset?.name,
+      timestamp: new Date().toISOString()
+    });
+    logInfo('app.frontend.navigation', 'navigate_to_manual_labeling', 'Navigating to manual labeling', {
+      datasetId,
+      targetUrl: `/annotate-progress/${datasetId}`,
+      timestamp: new Date().toISOString()
+    });
     navigate(`/annotate-progress/${datasetId}`);
   };
 
   const handleAutoLabeling = () => {
+    logUserClick('AnnotateLauncher', 'auto_labeling_button', {
+      datasetId,
+      datasetName: dataset?.name,
+      timestamp: new Date().toISOString()
+    });
+    logInfo('app.frontend.navigation', 'navigate_to_auto_labeling', 'Navigating to auto labeling', {
+      datasetId,
+      targetUrl: `/annotate/${datasetId}/auto`,
+      timestamp: new Date().toISOString()
+    });
     navigate(`/annotate/${datasetId}/auto`);
   };
 
@@ -69,6 +123,20 @@ const AnnotateLauncher = () => {
     // If dataset has a project_id property, use it; otherwise try to extract from the ID
     const projectId = dataset?.project_id || 
                      (datasetId.includes('-') ? datasetId.split('-')[0] : '1');
+    
+    logUserClick('AnnotateLauncher', 'go_back_button', {
+      datasetId,
+      projectId,
+      datasetName: dataset?.name,
+      timestamp: new Date().toISOString()
+    });
+    
+    logInfo('app.frontend.navigation', 'navigate_back_to_project', 'Navigating back to project workspace', {
+      datasetId,
+      projectId,
+      targetUrl: `/projects/${projectId}/workspace?section=management`,
+      timestamp: new Date().toISOString()
+    });
     
     console.log('Navigating back to project workspace:', {
       projectId,
@@ -84,6 +152,10 @@ const AnnotateLauncher = () => {
   };
 
   if (loading) {
+    logInfo('app.frontend.ui', 'annotate_launcher_loading', 'AnnotateLauncher loading state', {
+      datasetId,
+      timestamp: new Date().toISOString()
+    });
     return (
       <div style={{ 
         display: 'flex', 

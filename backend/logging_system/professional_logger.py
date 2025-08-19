@@ -167,7 +167,7 @@ class ProfessionalLogger:
             "errors.validation": "develop-logs/backend/errors/validation.log",
             
             # FRONTEND CATEGORY (4 files)
-            "app.frontend": "develop-logs/frontend/interactions.log",
+            "app.frontend.interactions": "develop-logs/frontend/interactions.log",
             "app.frontend.ui": "develop-logs/frontend/ui.log",
             "app.frontend.navigation": "develop-logs/frontend/navigation.log",
             "app.frontend.validation": "develop-logs/frontend/validation.log"

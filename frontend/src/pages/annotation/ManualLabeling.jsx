@@ -17,6 +17,7 @@ import {
   InfoCircleOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
+import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 // Import our annotation components
 import AnnotationCanvas from '../../components/AnnotationToolset/AnnotationCanvas';
@@ -75,16 +76,35 @@ const ManualLabeling = () => {
   // Load initial data
   useEffect(() => {
     if (datasetId) {
+      logInfo('app.frontend.navigation', 'manual_labeling_page_loaded', 'ManualLabeling page loaded', {
+        datasetId,
+        imageId,
+        timestamp: new Date().toISOString()
+      });
       console.log('Loading initial data for dataset:', datasetId);
       
       // Clean up orphaned labels on app start using the direct endpoint
       const cleanupOrphanedLabels = async () => {
         try {
+          logInfo('app.frontend.interactions', 'cleanup_orphaned_labels_started', 'Cleaning up orphaned labels', {
+            datasetId,
+            timestamp: new Date().toISOString()
+          });
           console.log('Cleaning up orphaned labels on app start');
           console.log(`DELETE ${API_BASE}/fix-labels`);
           const response = await axios.delete(`${API_BASE}/fix-labels`);
           console.log('Cleanup response:', response.data);
+          logInfo('app.frontend.interactions', 'cleanup_orphaned_labels_success', 'Orphaned labels cleanup completed', {
+            datasetId,
+            responseData: response.data,
+            timestamp: new Date().toISOString()
+          });
         } catch (error) {
+          logError('app.frontend.validation', 'cleanup_orphaned_labels_failed', 'Failed to cleanup orphaned labels', error, {
+            datasetId,
+            errorMessage: error.message,
+            timestamp: new Date().toISOString()
+          });
           console.error('Error cleaning up orphaned labels:', error);
           console.error('Error details:', error.response?.data || error.message);
         }
@@ -93,11 +113,19 @@ const ManualLabeling = () => {
       cleanupOrphanedLabels();
       
       // Load dataset images and project labels
+      logInfo('app.frontend.interactions', 'loading_initial_data', 'Loading initial dataset data', {
+        datasetId,
+        timestamp: new Date().toISOString()
+      });
       loadDatasetImages();
       loadProjectLabels(true); // Force refresh labels
       
       // Set up periodic refresh of project labels
       const labelsRefreshInterval = setInterval(() => {
+        logInfo('app.frontend.ui', 'periodic_labels_refresh', 'Refreshing project labels (periodic)', {
+          datasetId,
+          timestamp: new Date().toISOString()
+        });
         console.log('Refreshing project labels (periodic)');
         loadProjectLabels();
       }, 5000); // Refresh every 5 seconds
@@ -141,6 +169,10 @@ const ManualLabeling = () => {
   const loadDatasetImages = async () => {
     try {
       setLoading(true);
+      logInfo('app.frontend.interactions', 'loading_dataset_images', 'Loading dataset images', {
+        datasetId,
+        timestamp: new Date().toISOString()
+      });
       const response = await AnnotationAPI.getDatasetImages(datasetId);
       setImageList(response.images);
       setDatasetProgress({
@@ -149,7 +181,18 @@ const ManualLabeling = () => {
         percentage: response.images.length > 0 ? 
           Math.round((response.images.filter(img => img.is_labeled).length / response.images.length) * 100) : 0
       });
+      logInfo('app.frontend.interactions', 'dataset_images_loaded_success', 'Dataset images loaded successfully', {
+        datasetId,
+        imageCount: response.images.length,
+        labeledCount: response.images.filter(img => img.is_labeled).length,
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
+      logError('app.frontend.validation', 'dataset_images_load_failed', 'Failed to load dataset images', error, {
+        datasetId,
+        errorMessage: error.message,
+        timestamp: new Date().toISOString()
+      });
       message.error('Failed to load dataset images');
       console.error('Load images error:', error);
     } finally {
@@ -159,6 +202,11 @@ const ManualLabeling = () => {
 
   const loadProjectLabels = async (forceRefresh = false) => {
     try {
+      logInfo('app.frontend.interactions', 'loading_project_labels', 'Loading project labels', {
+        datasetId,
+        forceRefresh,
+        timestamp: new Date().toISOString()
+      });
       console.log('🔍 LOADING PROJECT LABELS - Dataset ID:', datasetId);
       
       // Get the project ID for this dataset to load labels
@@ -181,6 +229,11 @@ const ManualLabeling = () => {
       console.log('Loaded project labels from API:', apiLabels);
       
       if (apiLabels && apiLabels.length > 0) {
+        logInfo('app.frontend.interactions', 'project_labels_loaded_success', 'Project labels loaded successfully', {
+          datasetId,
+          labelCount: apiLabels.length,
+          timestamp: new Date().toISOString()
+        });
         // Transform to UI format
         const formattedLabels = apiLabels.map(label => ({
           id: label.id,
@@ -193,11 +246,21 @@ const ManualLabeling = () => {
         
         console.log('Formatted project labels:', formattedLabels);
         setProjectLabels(formattedLabels);
+        logInfo('app.frontend.ui', 'project_labels_formatted', 'Project labels formatted and set', {
+          datasetId,
+          formattedLabelCount: formattedLabels.length,
+          timestamp: new Date().toISOString()
+        });
         
         // Store in local storage as backup using both project ID and dataset ID for better availability
         localStorage.setItem(`project_labels_${projectId}`, JSON.stringify(formattedLabels));
         localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
       } else {
+        logInfo('app.frontend.ui', 'no_api_labels_found', 'No labels found from API, checking local storage', {
+          datasetId,
+          projectId,
+          timestamp: new Date().toISOString()
+        });
         // If no labels from API, try to get from local storage (check both project and dataset ID)
         const storedLabelsStr = localStorage.getItem(`project_labels_${projectId}`) || 
                                localStorage.getItem(`project_labels_${datasetId}`);
@@ -207,6 +270,11 @@ const ManualLabeling = () => {
             const storedLabels = JSON.parse(storedLabelsStr);
             console.log('Loaded project labels from local storage:', storedLabels);
             setProjectLabels(storedLabels);
+            logInfo('app.frontend.ui', 'labels_loaded_from_storage', 'Project labels loaded from local storage', {
+              datasetId,
+              storedLabelCount: storedLabels.length,
+              timestamp: new Date().toISOString()
+            });
             
             // CRITICAL: Save these labels to the database one by one
             for (const label of storedLabels) {
@@ -250,6 +318,11 @@ const ManualLabeling = () => {
         }
       }
     } catch (error) {
+      logError('app.frontend.validation', 'project_labels_load_failed', 'Failed to load project labels', error, {
+        datasetId,
+        errorMessage: error.message,
+        timestamp: new Date().toISOString()
+      });
       console.error('Load project labels error:', error);
       console.error('Error details:', error.response?.data || error.message);
       
@@ -298,6 +371,12 @@ const ManualLabeling = () => {
   const loadImageData = async (image) => {
     try {
       setLoading(true);
+      logInfo('app.frontend.interactions', 'loading_image_data', 'Loading image data', {
+        datasetId,
+        imageId: image.id,
+        imageName: image.filename,
+        timestamp: new Date().toISOString()
+      });
       setImageData(image);
       // Use split_section instead of split_type for train/val/test
       setCurrentSplit(image.split_section || 'train');
@@ -309,6 +388,12 @@ const ManualLabeling = () => {
       // Load annotations
       const fetchedAnnotations = await AnnotationAPI.getImageAnnotations(image.id);
       console.log('Fetched annotations:', fetchedAnnotations);
+      logInfo('app.frontend.interactions', 'image_annotations_loaded', 'Image annotations loaded', {
+        datasetId,
+        imageId: image.id,
+        annotationCount: fetchedAnnotations.length,
+        timestamp: new Date().toISOString()
+      });
       
       // Transform annotations for UI display
       const transformedAnnotations = fetchedAnnotations.map(ann => {
@@ -364,6 +449,12 @@ const ManualLabeling = () => {
       
       console.log('Transformed annotations for UI:', transformedAnnotations);
       setAnnotations(transformedAnnotations);
+      logInfo('app.frontend.ui', 'annotations_transformed', 'Annotations transformed for UI', {
+        datasetId,
+        imageId: image.id,
+        transformedAnnotationCount: transformedAnnotations.length,
+        timestamp: new Date().toISOString()
+      });
       
       // Extract unique labels from annotations
       const uniqueLabels = [...new Set(fetchedAnnotations.map(ann => ann.class_name || ann.label))]
@@ -380,6 +471,12 @@ const ManualLabeling = () => {
       setImageLabels(uniqueLabels);
       
     } catch (error) {
+      logError('app.frontend.validation', 'image_data_load_failed', 'Failed to load image data', error, {
+        datasetId,
+        imageId: image?.id,
+        errorMessage: error.message,
+        timestamp: new Date().toISOString()
+      });
       message.error('Failed to load image data');
       console.error('Load image data error:', error);
     } finally {
@@ -388,12 +485,31 @@ const ManualLabeling = () => {
   };
 
   const handleToolChange = useCallback((tool) => {
+    logUserClick('ManualLabeling', 'tool_change', {
+      datasetId,
+      oldTool: activeTool,
+      newTool: tool,
+      timestamp: new Date().toISOString()
+    });
+    logInfo('app.frontend.interactions', 'annotation_tool_changed', 'Annotation tool changed', {
+      datasetId,
+      oldTool: activeTool,
+      newTool: tool,
+      timestamp: new Date().toISOString()
+    });
     setActiveTool(tool);
     setSelectedAnnotation(null);
-  }, []);
+  }, [activeTool, datasetId]);
 
   const handleShapeComplete = useCallback(async (shape) => {
     console.log('🎯 handleShapeComplete called with shape:', shape);
+    
+    logInfo('app.frontend.interactions', 'shape_completed', 'Annotation shape completed', {
+      datasetId,
+      imageId: imageData?.id,
+      shapeType: shape.type,
+      timestamp: new Date().toISOString()
+    });
     
     // Make a deep copy to avoid reference issues
     const shapeCopy = JSON.parse(JSON.stringify(shape));
@@ -424,6 +540,12 @@ const ManualLabeling = () => {
     
     console.log('🎯 Setting pending shape and showing label popup');
     setPendingShape(shapeCopy);
+    logInfo('app.frontend.ui', 'label_popup_triggered', 'Label popup triggered for shape', {
+      datasetId,
+      imageId: imageData?.id,
+      shapeType: shapeCopy.type,
+      timestamp: new Date().toISOString()
+    });
     
     // Position the label popup appropriately based on shape type
     if (shapeCopy.type === 'polygon' && shapeCopy.points && shapeCopy.points.length > 0) {
@@ -466,30 +588,77 @@ const ManualLabeling = () => {
     setShowLabelPopup(true);
     
     console.log('🎯 Shape completed with type:', shapeCopy.type);
-  }, []);
+    logInfo('app.frontend.ui', 'label_popup_shown', 'Label popup shown for shape', {
+      datasetId,
+      imageId: imageData?.id,
+      shapeType: shapeCopy.type,
+      timestamp: new Date().toISOString()
+    });
+  }, [datasetId, imageData]);
 
   const handleLabelAssignment = useCallback(async (labelName) => {
   // Check if we're editing an existing annotation or creating a new one
   const isEditing = !!editingAnnotation;
   
+  logInfo('app.frontend.interactions', 'label_assignment_started', 'Label assignment started', {
+    datasetId,
+    imageId: imageData?.id,
+    labelName,
+    isEditing,
+    hasPendingShape: !!pendingShape,
+    timestamp: new Date().toISOString()
+  });
+  
   if (!isEditing && !pendingShape) {
+    logError('app.frontend.validation', 'no_pending_shape', 'No pending shape to label', null, {
+      datasetId,
+      imageId: imageData?.id,
+      timestamp: new Date().toISOString()
+    });
     console.error('No pending shape to label');
     return;
   }
   
   if (!labelName || typeof labelName !== 'string') {
+    logError('app.frontend.validation', 'invalid_label_name', 'Invalid label name provided', null, {
+      datasetId,
+      imageId: imageData?.id,
+      labelName,
+      timestamp: new Date().toISOString()
+    });
     console.error('Invalid label name:', labelName);
     throw new Error('Invalid label name');
   }
   
-  if (isEditing) {
-    console.log('Editing annotation with new label:', labelName, 'annotation:', editingAnnotation);
-  } else {
-    console.log('Assigning label:', labelName, 'to shape:', pendingShape);
-  }
+      if (isEditing) {
+      logInfo('app.frontend.interactions', 'editing_existing_annotation', 'Editing existing annotation', {
+        datasetId,
+        imageId: imageData?.id,
+        annotationId: editingAnnotation.id,
+        oldLabel: editingAnnotation.label,
+        newLabel: labelName,
+        timestamp: new Date().toISOString()
+      });
+      console.log('Editing annotation with new label:', labelName, 'annotation:', editingAnnotation);
+    } else {
+      logInfo('app.frontend.interactions', 'creating_new_annotation', 'Creating new annotation', {
+        datasetId,
+        imageId: imageData?.id,
+        labelName,
+        shapeType: pendingShape?.type,
+        timestamp: new Date().toISOString()
+      });
+      console.log('Assigning label:', labelName, 'to shape:', pendingShape);
+    }
   
   try {
     // First, ensure the label exists in the project labels
+    logInfo('app.frontend.interactions', 'saving_project_label', 'Saving project label', {
+      datasetId,
+      imageId: imageData?.id,
+      labelName,
+      timestamp: new Date().toISOString()
+    });
     console.log(`Saving label "${labelName}" to dataset ${datasetId}`);
     const savedLabel = await AnnotationAPI.saveProjectLabel(datasetId, {
       name: labelName,
@@ -497,6 +666,13 @@ const ManualLabeling = () => {
     });
     
     console.log('Label saved to project:', savedLabel);
+    logInfo('app.frontend.interactions', 'project_label_saved_success', 'Project label saved successfully', {
+      datasetId,
+      imageId: imageData?.id,
+      labelName,
+      savedLabelId: savedLabel.id,
+      timestamp: new Date().toISOString()
+    });
     
     // Check if we're editing an existing annotation
     if (isEditing) {
@@ -514,6 +690,13 @@ const ManualLabeling = () => {
       
       // Send update to API
       try {
+        logInfo('app.frontend.interactions', 'updating_annotation_api', 'Updating annotation via API', {
+          datasetId,
+          imageId: imageData?.id,
+          annotationId: editingAnnotation.id,
+          newLabel: labelName,
+          timestamp: new Date().toISOString()
+        });
         await AnnotationAPI.updateAnnotation(editingAnnotation.id, {
           class_name: labelName,
           label: labelName,
@@ -521,7 +704,22 @@ const ManualLabeling = () => {
         });
         
         message.success(`Annotation updated to "${labelName}"`);
+        logInfo('app.frontend.interactions', 'annotation_update_success', 'Annotation updated successfully', {
+          datasetId,
+          imageId: imageData?.id,
+          annotationId: editingAnnotation.id,
+          newLabel: labelName,
+          timestamp: new Date().toISOString()
+        });
       } catch (error) {
+        logError('app.frontend.validation', 'annotation_update_failed', 'Failed to update annotation', error, {
+          datasetId,
+          imageId: imageData?.id,
+          annotationId: editingAnnotation.id,
+          newLabel: labelName,
+          errorMessage: error.message,
+          timestamp: new Date().toISOString()
+        });
         console.error('Failed to update annotation:', error);
         message.error('Failed to update annotation');
       }
@@ -602,9 +800,24 @@ const ManualLabeling = () => {
         height: annotation.height
       });
     }
+    logInfo('app.frontend.interactions', 'saving_annotation_api', 'Saving annotation via API', {
+      datasetId,
+      imageId: imageData?.id,
+      annotationType: annotation.type,
+      labelName,
+      timestamp: new Date().toISOString()
+    });
     console.log('Saving annotation:', annotation);
     const response = await AnnotationAPI.saveAnnotation(annotation);
     console.log('Saved annotation response:', response);
+    logInfo('app.frontend.interactions', 'annotation_saved_success', 'Annotation saved successfully', {
+      datasetId,
+      imageId: imageData?.id,
+      annotationId: response.annotation?.id || response.id,
+      annotationType: annotation.type,
+      labelName,
+      timestamp: new Date().toISOString()
+    });
     const savedAnnotation = response.annotation || response;
     // Create UI-friendly annotation object
     const uiAnnotation = {
@@ -889,6 +1102,11 @@ const ManualLabeling = () => {
       }
     }
     if (!imageData.is_labeled) {
+      logInfo('app.frontend.ui', 'image_marked_as_labeled', 'Image marked as labeled', {
+        datasetId,
+        imageId: imageData?.id,
+        timestamp: new Date().toISOString()
+      });
       setDatasetProgress(prev => ({
         ...prev,
         labeled: prev.labeled + 1,
@@ -897,6 +1115,13 @@ const ManualLabeling = () => {
       setImageData(prev => ({ ...prev, is_labeled: true }));
     }
     message.success(`Annotation saved with label "${labelName}"`);
+    logInfo('app.frontend.interactions', 'annotation_complete', 'Annotation process completed', {
+      datasetId,
+      imageId: imageData?.id,
+      labelName,
+      annotationType: pendingShape?.type,
+      timestamp: new Date().toISOString()
+    });
     
     // Refresh annotations from server to ensure we have the latest data
     setTimeout(async () => {
@@ -947,6 +1172,13 @@ const ManualLabeling = () => {
     }, 500); // Delay to ensure server has processed the save
     
   } catch (error) {
+    logError('app.frontend.validation', 'annotation_save_failed', 'Failed to save annotation', error, {
+      datasetId,
+      imageId: imageData?.id,
+      labelName,
+      errorMessage: error.message,
+      timestamp: new Date().toISOString()
+    });
     message.error(`Failed to save annotation: ${error.message}`);
     console.error('Save annotation error:', error);
   } finally {
@@ -961,17 +1193,46 @@ const ManualLabeling = () => {
 }, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation]);
 
   const handleAnnotationSelect = useCallback((annotation) => {
+    logUserClick('ManualLabeling', 'annotation_select', {
+      datasetId,
+      imageId: imageData?.id,
+      annotationId: annotation?.id,
+      annotationLabel: annotation?.label,
+      activeTool,
+      timestamp: new Date().toISOString()
+    });
+    logInfo('app.frontend.interactions', 'annotation_selected', 'Annotation selected', {
+      datasetId,
+      imageId: imageData?.id,
+      annotationId: annotation?.id,
+      annotationLabel: annotation?.label,
+      activeTool,
+      timestamp: new Date().toISOString()
+    });
     setSelectedAnnotation(annotation);
     
     // If we're in select mode and clicked on an annotation, open label editor
     if (activeTool === 'select' && annotation) {
+      logInfo('app.frontend.ui', 'annotation_edit_mode_activated', 'Annotation edit mode activated', {
+        datasetId,
+        imageId: imageData?.id,
+        annotationId: annotation?.id,
+        annotationLabel: annotation?.label,
+        timestamp: new Date().toISOString()
+      });
       setEditingAnnotation(annotation);
       setShowLabelPopup(true);
     }
-  }, [activeTool]);
+  }, [activeTool, datasetId, imageData]);
 
   const handleAnnotationDelete = useCallback(async (annotationId) => {
     try {
+      logInfo('app.frontend.interactions', 'annotation_delete_started', 'Annotation deletion started', {
+        datasetId,
+        imageId: imageData?.id,
+        annotationId,
+        timestamp: new Date().toISOString()
+      });
       console.log('Deleting annotation with ID:', annotationId);
       await AnnotationAPI.deleteAnnotation(annotationId);
       
@@ -982,6 +1243,12 @@ const ManualLabeling = () => {
       setShowLabelPopup(false);
       
       message.success('Annotation deleted');
+      logInfo('app.frontend.interactions', 'annotation_delete_success', 'Annotation deleted successfully', {
+        datasetId,
+        imageId: imageData?.id,
+        annotationId,
+        timestamp: new Date().toISOString()
+      });
       
       // Update label counts
       const deletedAnnotation = annotations.find(ann => ann.id === annotationId);
@@ -991,25 +1258,69 @@ const ManualLabeling = () => {
         ).filter(l => l.count > 0));
       }
     } catch (error) {
+      logError('app.frontend.validation', 'annotation_delete_failed', 'Failed to delete annotation', error, {
+        datasetId,
+        imageId: imageData?.id,
+        annotationId,
+        errorMessage: error.message,
+        timestamp: new Date().toISOString()
+      });
       message.error('Failed to delete annotation');
       console.error('Delete annotation error:', error);
     }
-  }, [annotations, setAnnotations, setSelectedAnnotation, setEditingAnnotation, setShowLabelPopup, setImageLabels]);
+  }, [annotations, setAnnotations, setSelectedAnnotation, setEditingAnnotation, setShowLabelPopup, setImageLabels, datasetId, imageData]);
 
   const handleSplitChange = useCallback(async (newSplit) => {
     try {
+      logInfo('app.frontend.interactions', 'split_change_started', 'Image split change started', {
+        datasetId,
+        imageId: imageData?.id,
+        oldSplit: currentSplit,
+        newSplit,
+        timestamp: new Date().toISOString()
+      });
       // Use the split_section endpoint instead of split_type
       await AnnotationAPI.updateImageSplitSection(imageData.id, newSplit);
       setCurrentSplit(newSplit);
       setImageData(prev => ({ ...prev, split_section: newSplit }));
       message.success(`Image moved to ${newSplit} set`);
+      logInfo('app.frontend.interactions', 'split_change_success', 'Image split changed successfully', {
+        datasetId,
+        imageId: imageData?.id,
+        oldSplit: currentSplit,
+        newSplit,
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
+      logError('app.frontend.validation', 'split_change_failed', 'Failed to update image split', error, {
+        datasetId,
+        imageId: imageData?.id,
+        oldSplit: currentSplit,
+        newSplit,
+        errorMessage: error.message,
+        timestamp: new Date().toISOString()
+      });
       message.error('Failed to update split');
       console.error('Update split error:', error);
     }
-  }, [imageData]);
+  }, [imageData, datasetId, currentSplit]);
 
   const navigateToImage = useCallback((direction) => {
+    logUserClick('ManualLabeling', 'image_navigation', {
+      datasetId,
+      currentImageId: imageData?.id,
+      currentImageIndex,
+      direction,
+      timestamp: new Date().toISOString()
+    });
+    logInfo('app.frontend.navigation', 'image_navigation_started', 'Image navigation started', {
+      datasetId,
+      currentImageId: imageData?.id,
+      currentImageIndex,
+      direction,
+      timestamp: new Date().toISOString()
+    });
+    
     const newIndex = direction === 'next' ? 
       Math.min(currentImageIndex + 1, imageList.length - 1) :
       Math.max(currentImageIndex - 1, 0);
@@ -1017,11 +1328,29 @@ const ManualLabeling = () => {
     if (newIndex !== currentImageIndex) {
       setCurrentImageIndex(newIndex);
       const newImage = imageList[newIndex];
+      logInfo('app.frontend.navigation', 'image_navigation_completed', 'Image navigation completed', {
+        datasetId,
+        oldImageId: imageData?.id,
+        newImageId: newImage?.id,
+        oldIndex: currentImageIndex,
+        newIndex,
+        timestamp: new Date().toISOString()
+      });
       navigate(`/annotate/${datasetId}/manual?imageId=${newImage.id}`);
     }
-  }, [currentImageIndex, imageList, datasetId, navigate]);
+  }, [currentImageIndex, imageList, datasetId, navigate, imageData]);
 
   const handleBack = () => {
+    logUserClick('ManualLabeling', 'back_button', {
+      datasetId,
+      imageId: imageData?.id,
+      timestamp: new Date().toISOString()
+    });
+    logInfo('app.frontend.navigation', 'back_to_progress', 'Navigating back to annotation progress', {
+      datasetId,
+      imageId: imageData?.id,
+      timestamp: new Date().toISOString()
+    });
     // Go back to annotation progress page instead of projects
     navigate(`/annotate-progress/${datasetId}`);
   };
@@ -1217,6 +1546,18 @@ const ManualLabeling = () => {
       <LabelSelectionPopup
         visible={showLabelPopup}
         onCancel={() => {
+          logUserClick('ManualLabeling', 'label_popup_cancel', {
+            datasetId,
+            imageId: imageData?.id,
+            isEditing: !!editingAnnotation,
+            timestamp: new Date().toISOString()
+          });
+          logInfo('app.frontend.ui', 'label_popup_cancelled', 'Label popup cancelled', {
+            datasetId,
+            imageId: imageData?.id,
+            isEditing: !!editingAnnotation,
+            timestamp: new Date().toISOString()
+          });
           console.log('Cancel button clicked');
           setShowLabelPopup(false);
           setPendingShape(null);
@@ -1224,6 +1565,20 @@ const ManualLabeling = () => {
         }}
         onConfirm={handleLabelAssignment}
         onDelete={editingAnnotation ? () => {
+          logUserClick('ManualLabeling', 'label_popup_delete', {
+            datasetId,
+            imageId: imageData?.id,
+            annotationId: editingAnnotation.id,
+            annotationLabel: editingAnnotation.label,
+            timestamp: new Date().toISOString()
+          });
+          logInfo('app.frontend.interactions', 'annotation_delete_from_popup', 'Annotation delete triggered from popup', {
+            datasetId,
+            imageId: imageData?.id,
+            annotationId: editingAnnotation.id,
+            annotationLabel: editingAnnotation.label,
+            timestamp: new Date().toISOString()
+          });
           console.log('Delete triggered for annotation:', editingAnnotation);
           console.log('Annotation ID:', editingAnnotation.id);
           return handleAnnotationDelete(editingAnnotation.id);

@@ -1,10 +1,11 @@
 /**
  * API service for connecting frontend to backend
- * Centralized API calls with error handling
+ * Centralized API calls with error handling and professional logging
  */
 
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+import { logInfo, logError } from '../utils/professional_logger';
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -21,7 +22,20 @@ const api = axios.create({
 // Request interceptor for logging and cache busting
 api.interceptors.request.use(
   (config) => {
-    console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
+    const startTime = Date.now();
+    config.metadata = { startTime };
+    
+    // Log API request
+    logInfo('app.frontend.interactions', 'api_request', `API Request: ${config.method?.toUpperCase()} ${config.url}`, {
+      method: config.method?.toUpperCase(),
+      url: config.url,
+      baseURL: config.baseURL,
+      timeout: config.timeout,
+      headers: config.headers,
+      params: config.params,
+      data: config.data,
+      timestamp: new Date().toISOString()
+    });
     
     // Add timestamp to prevent caching for GET requests
     if (config.method === 'get') {
@@ -34,7 +48,10 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error('API Request Error:', error);
+    logError('app.frontend.validation', 'api_request_error', 'API Request Error', error, {
+      errorMessage: error.message,
+      timestamp: new Date().toISOString()
+    });
     return Promise.reject(error);
   }
 );
@@ -42,11 +59,41 @@ api.interceptors.request.use(
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => {
-    console.log(`API Response: ${response.status} ${response.config.url}`);
+    const endTime = Date.now();
+    const startTime = response.config.metadata?.startTime;
+    const responseTime = startTime ? endTime - startTime : null;
+    
+    // Log API response
+    logInfo('app.frontend.interactions', 'api_response', `API Response: ${response.status} ${response.config.url}`, {
+      method: response.config.method?.toUpperCase(),
+      url: response.config.url,
+      status: response.status,
+      statusText: response.statusText,
+      responseTime: responseTime ? `${responseTime}ms` : null,
+      dataSize: response.data ? JSON.stringify(response.data).length : 0,
+      headers: response.headers,
+      timestamp: new Date().toISOString()
+    });
+    
     return response;
   },
   (error) => {
-    console.error('API Response Error:', error.response?.data || error.message);
+    const endTime = Date.now();
+    const startTime = error.config?.metadata?.startTime;
+    const responseTime = startTime ? endTime - startTime : null;
+    
+    // Log API response error
+    logError('app.frontend.validation', 'api_response_error', 'API Response Error', error, {
+      method: error.config?.method?.toUpperCase(),
+      url: error.config?.url,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      responseTime: responseTime ? `${responseTime}ms` : null,
+      errorMessage: error.response?.data?.detail || error.response?.data?.message || error.message,
+      errorData: error.response?.data,
+      timestamp: new Date().toISOString()
+    });
+    
     return Promise.reject(error);
   }
 );
@@ -54,9 +101,17 @@ api.interceptors.response.use(
 // Helper function for handling API errors
 export const handleAPIError = (error, defaultMessage = 'API request failed') => {
   const errorMessage = error.response?.data?.detail || error.message || defaultMessage;
-  console.error(`${defaultMessage}:`, errorMessage);
-  // You can add notification/toast here if needed
-  // Example: message.error(errorMessage);
+  
+  // Log API error using professional logger
+  logError('app.frontend.validation', 'api_error_handled', `API Error: ${defaultMessage}`, error, {
+    errorMessage: errorMessage,
+    status: error.response?.status,
+    statusText: error.response?.statusText,
+    url: error.config?.url,
+    method: error.config?.method?.toUpperCase(),
+    errorData: error.response?.data,
+    timestamp: new Date().toISOString()
+  });
   
   // Return error information object that components expect
   return {
@@ -69,9 +124,19 @@ export const handleAPIError = (error, defaultMessage = 'API request failed') => 
 // Health check
 export const healthCheck = async () => {
   try {
+    logInfo('app.frontend.interactions', 'health_check_started', 'Health check started');
     const response = await api.get('/health');
+    logInfo('app.frontend.interactions', 'health_check_success', 'Health check successful', {
+      status: response.status,
+      data: response.data,
+      timestamp: new Date().toISOString()
+    });
     return response.data;
   } catch (error) {
+    logError('app.frontend.validation', 'health_check_failed', 'Health check failed', error, {
+      errorMessage: error.message,
+      timestamp: new Date().toISOString()
+    });
     throw new Error(`Health check failed: ${error.message}`);
   }
 };
