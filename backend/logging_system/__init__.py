@@ -38,6 +38,19 @@ from professional_logger import (
     ProfessionalLogger
 )
 
+# Import frontend logger
+from frontend_logger import (
+    get_frontend_logger,
+    log_frontend_info,
+    log_frontend_warning,
+    log_frontend_error,
+    log_frontend_debug,
+    log_user_click,
+    log_form_submit,
+    log_page_view,
+    log_api_request
+)
+
 __all__ = [
     'get_professional_logger',
     'log_info',
@@ -46,7 +59,16 @@ __all__ = [
     'log_critical',
     'log_debug',
     'setup_professional_logging',
-    'ProfessionalLogger'
+    'ProfessionalLogger',
+    'get_frontend_logger',
+    'log_frontend_info',
+    'log_frontend_warning',
+    'log_frontend_error',
+    'log_frontend_debug',
+    'log_user_click',
+    'log_form_submit',
+    'log_page_view',
+    'log_api_request'
 ]
 
 # Log successful import completion

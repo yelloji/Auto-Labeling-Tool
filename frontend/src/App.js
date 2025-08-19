@@ -3,8 +3,8 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Layout } from 'antd';
 import 'antd/dist/reset.css';
 
-// Initialize frontend logging
-import './utils/logger';
+// Initialize professional frontend logging
+import './utils/professional_logger';
 
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';

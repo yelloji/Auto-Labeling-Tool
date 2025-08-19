@@ -143,40 +143,44 @@ class ProfessionalLogger:
             self._setup_user_loggers()
     
     def _setup_developer_loggers(self):
-        """Setup exactly 17 loggers for developer mode."""
+        """Setup exactly 17 loggers for developer mode with enhanced backend/frontend structure."""
         
-        # Define the exact 17 log files from your plan
+        # Define the exact 17 log files with enhanced structure
         log_files = {
-            # APP CATEGORY (6 files)
-            "app.frontend": "develop-logs/app/frontend.log",
-            "app.api": "develop-logs/app/api.log", 
-            "app.startup": "develop-logs/app/startup.log",
-            "app.app": "develop-logs/app/app.log",
-            "app.backend": "develop-logs/app/backend.log",
-            "app.database": "develop-logs/app/database.log",
+            # BACKEND APP CATEGORY (4 files)
+            "app.backend": "develop-logs/backend/app/backend.log",
+            "app.api": "develop-logs/backend/app/api.log", 
+            "app.startup": "develop-logs/backend/app/startup.log",
+            "app.database": "develop-logs/backend/app/database.log",
             
-            # OPERATIONS CATEGORY (7 files)
-            "operations.images": "develop-logs/operations/images.log",
-            "operations.datasets": "develop-logs/operations/datasets.log",
-            "operations.exports": "develop-logs/operations/exports.log",
-            "operations.operations": "develop-logs/operations/operations.log",
-            "operations.annotations": "develop-logs/operations/annotations.log",
-            "operations.releases": "develop-logs/operations/releases.log",
-            "operations.transformations": "develop-logs/operations/transformations.log",
+            # BACKEND OPERATIONS CATEGORY (7 files)
+            "operations.images": "develop-logs/backend/operations/images.log",
+            "operations.datasets": "develop-logs/backend/operations/datasets.log",
+            "operations.exports": "develop-logs/backend/operations/exports.log",
+            "operations.operations": "develop-logs/backend/operations/operations.log",
+            "operations.annotations": "develop-logs/backend/operations/annotations.log",
+            "operations.releases": "develop-logs/backend/operations/releases.log",
+            "operations.transformations": "develop-logs/backend/operations/transformations.log",
             
-            # ERRORS CATEGORY (4 files)
-            "errors.system": "develop-logs/errors/system.log",
-            "errors.validation": "develop-logs/errors/validation.log",
-            "errors.errors": "develop-logs/errors/errors.log",
-            "errors.debug": "develop-logs/errors/debug.log"
+            # BACKEND ERRORS CATEGORY (2 files)
+            "errors.system": "develop-logs/backend/errors/system.log",
+            "errors.validation": "develop-logs/backend/errors/validation.log",
+            
+            # FRONTEND CATEGORY (4 files)
+            "app.frontend": "develop-logs/frontend/interactions.log",
+            "app.frontend.ui": "develop-logs/frontend/ui.log",
+            "app.frontend.navigation": "develop-logs/frontend/navigation.log",
+            "app.frontend.validation": "develop-logs/frontend/validation.log"
         }
         
-        print(f"🎯 Setting up DEVELOPER MODE - 17-log-file system...")
+        print(f"🎯 Setting up DEVELOPER MODE - Enhanced 17-log-file system...")
         
         for logger_name, log_file_path in log_files.items():
             self._setup_logger(logger_name, log_file_path, "developer")
         
-        print(f"🎉 DEVELOPER MODE ready! 17 loggers created in develop-logs/")
+        print(f"🎉 DEVELOPER MODE ready! 17 loggers created in enhanced develop-logs/ structure:")
+        print(f"   📁 Backend: 13 files (app: 4, operations: 7, errors: 2)")
+        print(f"   📁 Frontend: 4 files (interactions, ui, navigation, validation)")
     
     def _setup_user_loggers(self):
         """Setup 3 simple loggers for user mode."""

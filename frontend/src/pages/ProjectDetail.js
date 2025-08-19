@@ -21,6 +21,7 @@ import {
   Popconfirm,
   Progress
 } from 'antd';
+import { logInfo, logError, logUserClick, logPageView } from '../utils/professional_logger';
 import {
   ArrowLeftOutlined,
   EditOutlined,
@@ -53,7 +54,10 @@ const ProjectDetail = () => {
   // Load project details
   const loadProject = async () => {
     setLoading(true);
+    logInfo('app.frontend.ui', 'ProjectDetail loading state changed', 'state_change', { component: 'ProjectDetail', newState: 'loading_started' });
+    
     try {
+      logInfo('app.frontend.interactions', 'Loading project details', 'load_project', { projectId });
       const projectData = await projectsAPI.getProject(projectId);
       setProject(projectData);
       form.setFieldsValue({
@@ -62,65 +66,101 @@ const ProjectDetail = () => {
         confidence_threshold: projectData.confidence_threshold,
         iou_threshold: projectData.iou_threshold
       });
+      logInfo('app.frontend.interactions', 'Project details loaded successfully', 'load_project', { projectId, projectName: projectData.name });
+      logInfo('app.frontend.ui', 'ProjectDetail state updated', 'state_change', { component: 'ProjectDetail', newState: 'project_loaded', projectName: projectData.name });
     } catch (error) {
       const errorInfo = handleAPIError(error);
+      logError('app.frontend.interactions', 'Failed to load project details', error, { projectId, errorInfo });
       message.error(`Failed to load project: ${errorInfo.message}`);
       console.error('Load project error:', error);
     } finally {
       setLoading(false);
+      logInfo('app.frontend.ui', 'ProjectDetail loading state changed', 'state_change', { component: 'ProjectDetail', newState: 'loading_finished' });
     }
   };
 
   // Load project datasets
   const loadDatasets = async () => {
     setDatasetsLoading(true);
+    logInfo('app.frontend.ui', 'ProjectDetail datasets loading state changed', 'state_change', { component: 'ProjectDetail', newState: 'datasets_loading_started' });
+    
     try {
+      logInfo('app.frontend.interactions', 'Loading project datasets', 'load_datasets', { projectId });
       const datasetsData = await datasetsAPI.getDatasets(projectId);
       setDatasets(datasetsData);
+      logInfo('app.frontend.interactions', 'Project datasets loaded successfully', 'load_datasets', { projectId, datasetCount: datasetsData.length });
+      logInfo('app.frontend.ui', 'ProjectDetail datasets state updated', 'state_change', { component: 'ProjectDetail', newState: 'datasets_loaded', datasetCount: datasetsData.length });
     } catch (error) {
       const errorInfo = handleAPIError(error);
+      logError('app.frontend.interactions', 'Failed to load project datasets', error, { projectId, errorInfo });
       message.error(`Failed to load datasets: ${errorInfo.message}`);
       console.error('Load datasets error:', error);
     } finally {
       setDatasetsLoading(false);
+      logInfo('app.frontend.ui', 'ProjectDetail datasets loading state changed', 'state_change', { component: 'ProjectDetail', newState: 'datasets_loading_finished' });
     }
   };
 
   // Update project
   const handleUpdateProject = async (values) => {
     setUpdating(true);
+    logInfo('app.frontend.ui', 'ProjectDetail update state changed', 'state_change', { component: 'ProjectDetail', newState: 'updating_started' });
+    
     try {
+      logUserClick('ProjectDetail', 'update_project');
+      logInfo('app.frontend.interactions', 'Updating project', 'update_project', { projectId, updateData: values });
+      
       const updatedProject = await projectsAPI.updateProject(projectId, values);
       setProject(updatedProject);
       setEditModalVisible(false);
+      
+      logInfo('app.frontend.interactions', 'Project updated successfully', 'update_project', { projectId, projectName: updatedProject.name });
+      logInfo('app.frontend.ui', 'ProjectDetail state updated', 'state_change', { component: 'ProjectDetail', newState: 'project_updated', projectName: updatedProject.name });
       message.success('Project updated successfully');
     } catch (error) {
       const errorInfo = handleAPIError(error);
+      logError('app.frontend.interactions', 'Failed to update project', error, { projectId, errorInfo });
       message.error(`Failed to update project: ${errorInfo.message}`);
       console.error('Update project error:', error);
     } finally {
       setUpdating(false);
+      logInfo('app.frontend.ui', 'ProjectDetail update state changed', 'state_change', { component: 'ProjectDetail', newState: 'updating_finished' });
     }
   };
 
   // Delete project
   const handleDeleteProject = async () => {
     try {
+      logUserClick('ProjectDetail', 'delete_project');
+      logInfo('app.frontend.interactions', 'Deleting project', 'delete_project', { projectId, projectName: project?.name });
+      
       await projectsAPI.deleteProject(projectId);
+      
+      logInfo('app.frontend.interactions', 'Project deleted successfully', 'delete_project', { projectId, projectName: project?.name });
+      logInfo('app.frontend.navigation', 'Navigating to projects page after deletion', 'navigate_to_projects', { from: 'ProjectDetail' });
       message.success('Project deleted successfully');
       navigate('/projects');
     } catch (error) {
       const errorInfo = handleAPIError(error);
+      logError('app.frontend.interactions', 'Failed to delete project', error, { projectId, projectName: project?.name, errorInfo });
       message.error(`Failed to delete project: ${errorInfo.message}`);
       console.error('Delete project error:', error);
     }
   };
 
   useEffect(() => {
+    logInfo('app.frontend.navigation', 'ProjectDetail page loaded', 'page_view', { component: 'ProjectDetail', projectId });
+    logInfo('app.frontend.ui', 'ProjectDetail component mounted', 'component_mount', { component: 'ProjectDetail', projectId });
+    
     if (projectId) {
       loadProject();
       loadDatasets();
     }
+    
+    // Cleanup function for component unmount
+    return () => {
+      logInfo('app.frontend.ui', 'ProjectDetail component unmounted', 'component_unmount', { component: 'ProjectDetail', projectId });
+    };
   }, [projectId]);
 
   // Dataset table columns
@@ -187,13 +227,21 @@ const ProjectDetail = () => {
         <Space>
           <Button 
             size="small"
-            onClick={() => navigate(`/datasets/${record.id}`)}
+            onClick={() => {
+              logUserClick('ProjectDetail', 'view_dataset');
+              logInfo('app.frontend.navigation', 'Navigating to view dataset', 'navigate_to_dataset', { from: 'ProjectDetail', datasetId: record.id, datasetName: record.name });
+              navigate(`/datasets/${record.id}`);
+            }}
           >
             View
           </Button>
           <Button 
             size="small"
-            onClick={() => navigate(`/annotate/${record.id}`)}
+            onClick={() => {
+              logUserClick('ProjectDetail', 'annotate_dataset');
+              logInfo('app.frontend.navigation', 'Navigating to annotate dataset', 'navigate_to_annotate', { from: 'ProjectDetail', datasetId: record.id, datasetName: record.name });
+              navigate(`/annotate/${record.id}`);
+            }}
           >
             Annotate
           </Button>
@@ -221,7 +269,11 @@ const ProjectDetail = () => {
         type="error"
         showIcon
         action={
-          <Button onClick={() => navigate('/projects')}>
+          <Button onClick={() => {
+            logUserClick('ProjectDetail', 'back_to_projects_error');
+            logInfo('app.frontend.navigation', 'Navigating back to projects from error', 'navigate_to_projects', { from: 'ProjectDetail', reason: 'project_not_found' });
+            navigate('/projects');
+          }}>
             Back to Projects
           </Button>
         }
@@ -246,7 +298,11 @@ const ProjectDetail = () => {
         <Space>
           <Button 
             icon={<ArrowLeftOutlined />} 
-            onClick={() => navigate('/projects')}
+            onClick={() => {
+              logUserClick('ProjectDetail', 'back_to_projects');
+              logInfo('app.frontend.navigation', 'Navigating back to projects', 'navigate_to_projects', { from: 'ProjectDetail' });
+              navigate('/projects');
+            }}
           >
             Back to Projects
           </Button>
@@ -270,7 +326,11 @@ const ProjectDetail = () => {
           <Space>
             <Button 
               icon={<EditOutlined />}
-              onClick={() => setEditModalVisible(true)}
+              onClick={() => {
+                logUserClick('ProjectDetail', 'edit_project');
+                logInfo('app.frontend.ui', 'Edit modal opened', 'modal_open', { component: 'ProjectDetail', modal: 'edit_project' });
+                setEditModalVisible(true);
+              }}
             >
               Edit
             </Button>
@@ -387,7 +447,11 @@ const ProjectDetail = () => {
           <Space>
             <Button 
               icon={<ReloadOutlined />}
-              onClick={loadDatasets}
+              onClick={() => {
+                logUserClick('ProjectDetail', 'refresh_datasets');
+                logInfo('app.frontend.interactions', 'Refreshing datasets', 'refresh_datasets', { projectId });
+                loadDatasets();
+              }}
               loading={datasetsLoading}
             >
               Refresh
@@ -395,7 +459,11 @@ const ProjectDetail = () => {
             <Button 
               type="primary"
               icon={<PlusOutlined />}
-              onClick={() => navigate(`/datasets?project=${projectId}`)}
+              onClick={() => {
+                logUserClick('ProjectDetail', 'add_dataset');
+                logInfo('app.frontend.navigation', 'Navigating to add dataset', 'navigate_to_add_dataset', { from: 'ProjectDetail', projectId });
+                navigate(`/datasets?project=${projectId}`);
+              }}
             >
               Add Dataset
             </Button>
@@ -422,7 +490,11 @@ const ProjectDetail = () => {
       <Modal
         title="Edit Project"
         open={editModalVisible}
-        onCancel={() => setEditModalVisible(false)}
+        onCancel={() => {
+          logUserClick('ProjectDetail', 'cancel_edit');
+          logInfo('app.frontend.ui', 'Edit modal closed', 'modal_close', { component: 'ProjectDetail', modal: 'edit_project' });
+          setEditModalVisible(false);
+        }}
         footer={null}
         width={600}
       >
@@ -493,7 +565,11 @@ const ProjectDetail = () => {
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
             <Space>
-              <Button onClick={() => setEditModalVisible(false)}>
+              <Button onClick={() => {
+                logUserClick('ProjectDetail', 'cancel_edit_form');
+                logInfo('app.frontend.ui', 'Edit modal closed from form', 'modal_close', { component: 'ProjectDetail', modal: 'edit_project' });
+                setEditModalVisible(false);
+              }}>
                 Cancel
               </Button>
               <Button type="primary" htmlType="submit" loading={updating}>

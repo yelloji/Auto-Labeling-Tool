@@ -22,7 +22,7 @@ from api.routes import labels
 
 from api.routes import projects, datasets, annotations, models, enhanced_export, releases
 from api.routes import analytics, augmentation, dataset_management
-from api.routes import image_transformations, logs
+from api.routes import image_transformations, logs, frontend_logs
 from api import active_learning
 from core.config import settings
 from database.database import init_db
@@ -144,6 +144,7 @@ app.include_router(image_transformations.router, prefix="/api", tags=["image-tra
 
 # Include logs routes
 app.include_router(logs.router, prefix="/api/v1", tags=["logs"])
+app.include_router(frontend_logs.router, tags=["frontend-logs"])
 
 # Include dataset splits feature
 from api.routes import dataset_splits
