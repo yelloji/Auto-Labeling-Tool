@@ -10,6 +10,7 @@
 
 import React, { useState, useCallback, useRef } from 'react';
 import { message, Spin } from 'antd';
+import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 const SmartPolygonTool = ({
   imageUrl,
@@ -50,6 +51,13 @@ const SmartPolygonTool = ({
 
       // Convert screen coordinates to image coordinates for API
       const imageCoords = screenToImageCoords(clickX, clickY);
+      
+      logInfo('app.frontend.interactions', 'smart_segmentation_started', 'Smart polygon segmentation started', {
+        imageId,
+        clickPoint: { x: clickX, y: clickY },
+        imageCoords,
+        imageSize
+      });
       
       console.log('🎯 Smart Polygon: Calling segmentation API', {
         imageId,
@@ -97,6 +105,13 @@ const SmartPolygonTool = ({
 
         setEditingMode(true);
         message.success(`Smart polygon generated with ${polygonPoints.length} points`);
+        
+        logInfo('app.frontend.interactions', 'smart_segmentation_success', 'Smart polygon segmentation successful', {
+          imageId,
+          pointsCount: polygonPoints.length,
+          confidence: result.confidence || 0.8,
+          algorithm: result.algorithm || 'auto'
+        });
       } else {
         throw new Error(result.error || 'No polygon points returned');
       }
@@ -105,11 +120,22 @@ const SmartPolygonTool = ({
       console.error('❌ Smart Polygon: Segmentation failed', error);
       message.error(`Smart segmentation failed: ${error.message}`);
       
+      logError('app.frontend.validation', 'smart_segmentation_failed', 'Smart polygon segmentation failed', {
+        imageId,
+        error: error.message,
+        clickPoint: { x: clickX, y: clickY }
+      });
+      
       // Fallback: Create a simple polygon around click point
       const fallbackPolygon = createFallbackPolygon(clickX, clickY);
       setCurrentPolygon(fallbackPolygon);
       setEditingMode(true);
       message.warning('Using fallback polygon - please adjust manually');
+      
+      logInfo('app.frontend.ui', 'fallback_polygon_created', 'Fallback polygon created due to segmentation failure', {
+        imageId,
+        fallbackType: 'simple_square'
+      });
     } finally {
       setIsProcessing(false);
       processingRef.current = false;
@@ -137,6 +163,15 @@ const SmartPolygonTool = ({
   // Handle canvas click for smart segmentation
   const handleCanvasClick = useCallback(async (e) => {
     if (!isActive || processingRef.current) return;
+    
+    // Log when tool becomes active (first click)
+    if (!editingMode && !currentPolygon) {
+      logInfo('app.frontend.interactions', 'smart_polygon_tool_activated', 'Smart polygon tool activated', {
+        imageId,
+        zoomLevel,
+        imageSize
+      });
+    }
 
     const canvas = e.target;
     const rect = canvas.getBoundingClientRect();
@@ -148,6 +183,11 @@ const SmartPolygonTool = ({
     if (imageCoords.x < 0 || imageCoords.x > imageSize.width || 
         imageCoords.y < 0 || imageCoords.y > imageSize.height) {
       message.warning('Please click within the image area');
+      logInfo('app.frontend.validation', 'click_outside_image_bounds', 'User clicked outside image bounds', {
+        imageId,
+        clickPoint: { x: clickX, y: clickY },
+        imageBounds: { width: imageSize.width, height: imageSize.height }
+      });
       return;
     }
 
@@ -183,6 +223,10 @@ const SmartPolygonTool = ({
     if (clickedPointIndex >= 0) {
       // Start dragging existing point
       setDraggedPointIndex(clickedPointIndex);
+      logUserClick('polygon_point_drag_started', 'User started dragging polygon point', {
+        imageId,
+        pointIndex: clickedPointIndex
+      });
     } else {
       // Add new point on edge
       addPointOnEdge(clickX, clickY);
@@ -222,6 +266,12 @@ const SmartPolygonTool = ({
       });
       
       message.success('Point added to polygon');
+      
+      logUserClick('polygon_point_added', 'User added point to polygon', {
+        imageId,
+        newPointCount: newPoints.length,
+        insertIndex
+      });
     }
   };
 
@@ -271,8 +321,14 @@ const SmartPolygonTool = ({
 
   // Handle mouse up to stop dragging
   const handleMouseUp = useCallback(() => {
+    if (draggedPointIndex >= 0) {
+      logUserClick('polygon_point_drag_ended', 'User finished dragging polygon point', {
+        imageId,
+        pointIndex: draggedPointIndex
+      });
+    }
     setDraggedPointIndex(-1);
-  }, []);
+  }, [draggedPointIndex]);
 
   // Handle right-click to remove point
   const handleRightClick = useCallback((e) => {
@@ -311,6 +367,12 @@ const SmartPolygonTool = ({
         points: newPoints
       });
       message.success('Point removed from polygon');
+      
+      logUserClick('polygon_point_removed', 'User removed point from polygon', {
+        imageId,
+        remainingPoints: newPoints.length,
+        removedIndex: clickedPointIndex
+      });
     }
   }, [editingMode, currentPolygon, imageToScreenCoords]);
 
@@ -318,6 +380,10 @@ const SmartPolygonTool = ({
   const completePolygon = useCallback(() => {
     if (!currentPolygon || !currentPolygon.points || currentPolygon.points.length < 3) {
       message.error('Polygon must have at least 3 points');
+      logError('app.frontend.validation', 'polygon_insufficient_points', 'Polygon completion failed - insufficient points', {
+        imageId,
+        pointsCount: currentPolygon?.points?.length || 0
+      });
       return;
     }
 
@@ -339,6 +405,14 @@ const SmartPolygonTool = ({
     setDraggedPointIndex(-1);
     
     message.success('Smart polygon annotation completed!');
+    
+    logInfo('app.frontend.interactions', 'smart_polygon_completed', 'Smart polygon annotation completed', {
+      imageId,
+      pointsCount: finalPolygon.points.length,
+      confidence: finalPolygon.confidence,
+      algorithm: finalPolygon.algorithm,
+      isSmartGenerated: true
+    });
   }, [currentPolygon, onPolygonComplete]);
 
   // Cancel polygon editing
@@ -347,6 +421,10 @@ const SmartPolygonTool = ({
     setEditingMode(false);
     setDraggedPointIndex(-1);
     message.info('Polygon editing cancelled');
+    
+    logInfo('app.frontend.interactions', 'polygon_editing_cancelled', 'Polygon editing cancelled by user', {
+      imageId
+    });
   }, []);
 
   // Render polygon on canvas

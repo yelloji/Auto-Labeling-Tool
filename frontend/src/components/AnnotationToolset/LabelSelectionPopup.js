@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Select, Input, Button, Tag, Space, message, Divider } from 'antd';
 import { PlusOutlined, TagOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import AnnotationAPI from './AnnotationAPI';
+import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 const { Option } = Select;
 
@@ -32,6 +33,16 @@ const LabelSelectionPopup = ({
     console.log('🏷️ Shape type:', shapeType);
     console.log('🏷️ Is editing:', isEditing);
     
+    // Log popup visibility changes
+    if (visible) {
+      logInfo('app.frontend.ui', 'label_popup_opened', 'Label selection popup opened', {
+        shapeType,
+        isEditing,
+        existingLabelsCount: existingLabels.length,
+        defaultLabel
+      });
+    }
+    
     // Clear the flag when the popup closes
     if (!visible) {
       try {
@@ -55,6 +66,10 @@ const LabelSelectionPopup = ({
         if (datasetId) {
           console.log('Popup refreshing labels for dataset:', datasetId);
           
+          logInfo('app.frontend.interactions', 'popup_refresh_labels_started', 'Popup started refreshing labels', {
+            datasetId
+          });
+          
           // Force refresh labels from API
           fetch(`${apiBase}/datasets/${datasetId}`)
             .then(r => r.json())
@@ -65,10 +80,20 @@ const LabelSelectionPopup = ({
             .then(r => r.json())
             .then(labels => {
               console.log('Popup refreshed labels:', labels);
+              logInfo('app.frontend.interactions', 'popup_refresh_labels_success', 'Popup successfully refreshed labels', {
+                datasetId,
+                labelsCount: labels.length
+              });
               // We don't need to update state here as the parent component 
               // will receive these labels on next render
             })
-            .catch(err => console.error('Error refreshing labels in popup:', err));
+            .catch(err => {
+              console.error('Error refreshing labels in popup:', err);
+              logError('app.frontend.validation', 'popup_refresh_labels_failed', 'Failed to refresh labels in popup', {
+                datasetId,
+                error: err.message
+              });
+            });
         }
       } catch (e) {
         console.error('Error in popup label refresh:', e);
@@ -99,9 +124,17 @@ const LabelSelectionPopup = ({
         if (foundLabel) {
           console.log('🏷️ Found matching label for default:', foundLabel);
           setSelectedLabel(foundLabel.id);
+          logInfo('app.frontend.ui', 'default_label_found', 'Default label found and set', {
+            defaultLabel,
+            foundLabelId: foundLabel.id,
+            foundLabelName: foundLabel.name
+          });
         } else {
           console.log('🏷️ No matching label found for default, using as is:', defaultLabel);
           setSelectedLabel(defaultLabel);
+          logInfo('app.frontend.ui', 'default_label_not_found', 'Default label not found, using as is', {
+            defaultLabel
+          });
         }
       } else if (!isCreatingNew) {
         // If no default label and not creating new, reset selection
@@ -153,12 +186,28 @@ const LabelSelectionPopup = ({
       // Show different success message based on whether we're editing or creating
       if (isEditing) {
         message.success(`Annotation updated to "${labelToUse}"`);
+        logInfo('app.frontend.interactions', 'annotation_label_updated', 'Annotation label updated successfully', {
+          labelName: labelToUse,
+          shapeType,
+          isEditing
+        });
       } else {
         message.success(`${shapeType} labeled as "${labelToUse}"`);
+        logInfo('app.frontend.interactions', 'annotation_label_applied', 'Annotation label applied successfully', {
+          labelName: labelToUse,
+          shapeType,
+          isEditing
+        });
       }
     } catch (error) {
       message.error(`Failed to save annotation: ${error.message}`);
       console.error('Label assignment error:', error);
+      logError('app.frontend.validation', 'annotation_label_failed', 'Failed to save annotation label', {
+        error: error.message,
+        labelName: labelToUse,
+        shapeType,
+        isEditing
+      });
     } finally {
       setLoading(false);
     }
@@ -175,12 +224,21 @@ const LabelSelectionPopup = ({
         await onDelete();
         console.log('onDelete completed successfully');
         message.success('Annotation deleted successfully');
+        logInfo('app.frontend.interactions', 'annotation_deleted', 'Annotation deleted successfully', {
+          shapeType,
+          isEditing
+        });
         // Close the popup after successful deletion
         console.log('Calling onCancel to close popup');
         onCancel();
       } catch (error) {
         console.error('Delete error in popup component:', error);
         message.error(`Failed to delete annotation: ${error.message || 'Unknown error'}`);
+        logError('app.frontend.validation', 'annotation_delete_failed', 'Failed to delete annotation', {
+          error: error.message || 'Unknown error',
+          shapeType,
+          isEditing
+        });
       } finally {
         setLoading(false);
       }
@@ -191,6 +249,8 @@ const LabelSelectionPopup = ({
 
   const handleCreateNew = () => {
     console.log('Switching to create new label mode');
+    
+    logUserClick('LabelSelectionPopup', 'NewButton', 'User clicked New button');
     
     // Don't reset any text already entered
     setIsCreatingNew(true);
@@ -215,14 +275,14 @@ const LabelSelectionPopup = ({
     const selectedLabelObj = existingLabels.find(label => label.id === value);
     console.log('Found label object:', selectedLabelObj);
     
-    if (selectedLabelObj) {
-      // Log the selected label details for debugging
-      console.log('Selected label details:', {
-        id: selectedLabelObj.id,
-        name: selectedLabelObj.name,
-        color: selectedLabelObj.color
-      });
-    } else {
+          if (selectedLabelObj) {
+        // Log the selected label details for debugging
+        console.log('Selected label details:', {
+          id: selectedLabelObj.id,
+          name: selectedLabelObj.name,
+          color: selectedLabelObj.color
+        });
+      } else {
       console.warn('Could not find label object for ID:', value);
     }
     
@@ -280,7 +340,10 @@ const LabelSelectionPopup = ({
                   borderRadius: '4px',
                   fontSize: '14px'
                 }}
-                onClick={() => handleSelectExisting(label.id)}
+                onClick={() => {
+                  handleSelectExisting(label.id);
+                  logUserClick('LabelSelectionPopup', 'LabelTagClick', label.name);
+                }}
               >
                 {label.name} {label.count > 0 ? `(${label.count})` : ''}
               </Tag>
@@ -326,14 +389,20 @@ const LabelSelectionPopup = ({
             Delete
           </Button>
         ] : []),
-        <Button key="cancel" onClick={onCancel}>
+        <Button key="cancel" onClick={() => {
+          onCancel();
+          logUserClick('LabelSelectionPopup', 'CancelButton', 'User clicked Cancel');
+        }}>
           Cancel
         </Button>,
         <Button
           key="submit"
           type="primary"
           loading={loading}
-          onClick={handleConfirm}
+          onClick={() => {
+            handleConfirm();
+            logUserClick('LabelSelectionPopup', 'ApplyButton', 'User clicked Apply Label');
+          }}
           disabled={!selectedLabel && !newLabelName.trim()}
           icon={isEditing ? <EditOutlined /> : null}
         >
