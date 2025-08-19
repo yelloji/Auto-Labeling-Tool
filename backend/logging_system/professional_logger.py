@@ -273,13 +273,24 @@ class ProfessionalLogger:
         if details:
             # Convert any non-serializable objects to strings
             safe_details = {}
-            for key, value in details.items():
+            
+            # Check if details is a dictionary-like object
+            if hasattr(details, 'items') and callable(getattr(details, 'items', None)):
                 try:
-                    # Test if value is JSON serializable
-                    json.dumps(value)
-                    safe_details[key] = value
-                except (TypeError, ValueError):
-                    safe_details[key] = str(value)
+                    for key, value in details.items():
+                        try:
+                            # Test if value is JSON serializable
+                            json.dumps(value)
+                            safe_details[key] = value
+                        except (TypeError, ValueError):
+                            safe_details[key] = str(value)
+                except Exception as e:
+                    # If items() fails, convert the whole object to string
+                    safe_details = {"error": f"Failed to process details: {str(e)}", "original": str(details)}
+            else:
+                # If details is not a dictionary, convert it to string
+                safe_details = {"value": str(details)}
+            
             entry["details"] = safe_details
             
         if self.config.get("enable_stack_traces", True) and level in ["ERROR", "CRITICAL"]:

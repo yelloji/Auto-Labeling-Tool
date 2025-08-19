@@ -149,7 +149,7 @@ async def receive_frontend_logs_batch_raw(request: Request):
         
     except Exception as e:
         logger.error("app.api", "frontend_logs_batch_raw_error", 
-                    f"Error in raw endpoint: {str(e)}", e)
+                    f"Error in raw endpoint: {str(e)}", None, {"exception": str(e), "exception_type": type(e).__name__})
         return {"error": str(e)}
 
 @router.post("/frontend/batch")
@@ -209,8 +209,8 @@ async def receive_frontend_logs_batch(request: Request, logs_data: list[Frontend
                 error_count += 1
                 # Log the individual log error with more details
                 logger.error("app.api", "frontend_log_batch_item_error", 
-                           f"Error processing individual frontend log at index {i}: {str(e)}", e,
-                           {"log_index": i, "log_data": log_data.dict() if hasattr(log_data, 'dict') else str(log_data)})
+                           f"Error processing individual frontend log at index {i}: {str(e)}", None,
+                           {"log_index": i, "log_data": log_data.dict() if hasattr(log_data, 'dict') else str(log_data), "exception": str(e), "exception_type": type(e).__name__})
         
         # Log batch processing summary
         logger.info("app.api", "frontend_logs_batch_processed", 
@@ -233,8 +233,8 @@ async def receive_frontend_logs_batch(request: Request, logs_data: list[Frontend
             body_str = "Could not read body"
             
         logger.error("app.api", "frontend_logs_batch_error", 
-                    f"Error processing frontend logs batch: {str(e)}", e,
-                    {"request_body": body_str[:500]})  # Log first 500 chars of body
+                    f"Error processing frontend logs batch: {str(e)}", None,
+                    {"request_body": body_str[:500], "exception": str(e), "exception_type": type(e).__name__})  # Log first 500 chars of body
         
         # Return error response
         raise HTTPException(status_code=500, detail=f"Error processing frontend logs batch: {str(e)}")
@@ -261,7 +261,7 @@ async def debug_frontend_logs(request: Request):
         
     except Exception as e:
         logger.error("app.api", "frontend_logs_debug_error", 
-                    f"Error in debug endpoint: {str(e)}", e)
+                    f"Error in debug endpoint: {str(e)}", None, {"exception": str(e), "exception_type": type(e).__name__})
         raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")
 
 @router.get("/frontend/health")
