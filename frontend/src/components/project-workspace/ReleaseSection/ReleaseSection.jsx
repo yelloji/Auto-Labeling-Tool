@@ -5,7 +5,7 @@ import { projectsAPI } from '../../../services/api';
 import { API_BASE_URL } from '../../../config';
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Layout, Button, Space, Row, Col, Card, message, Modal, Tag, Spin, Alert, InputNumber, Progress } from 'antd';
 import { RocketOutlined, EyeOutlined, SyncOutlined } from '@ant-design/icons';
 
@@ -422,7 +422,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
   });
 
   // Function to fetch datasets
-  const fetchDatasets = async () => {
+  const fetchDatasets = useCallback(async () => {
     logInfo('app.frontend.interactions', 'fetch_datasets_started', 'Fetching project datasets started', {
       timestamp: new Date().toISOString(),
       projectId: projectId,
@@ -455,7 +455,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
       console.error("Failed to load datasets:", error);
       message.error("Failed to load datasets");
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
     if (projectId) {
