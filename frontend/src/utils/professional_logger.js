@@ -20,6 +20,10 @@ class ProfessionalFrontendLogger {
         this.maxBufferSize = 50;
         this.flushInterval = 5000; // 5 seconds
         
+        // Deduplication system
+        this.recentLogs = new Map(); // Track recent logs to prevent duplicates
+        this.deduplicationWindow = 2000; // 2 seconds window for deduplication
+        
         // Start auto-flush
         this.startAutoFlush();
         
@@ -84,6 +88,27 @@ class ProfessionalFrontendLogger {
     }
     
     async log(level, category, operation, message, details = null) {
+        // Create unique key for deduplication
+        const logKey = `${category}:${operation}:${message}`;
+        const now = Date.now();
+        
+        // Check if this log was recently sent
+        const lastLogTime = this.recentLogs.get(logKey);
+        if (lastLogTime && (now - lastLogTime) < this.deduplicationWindow) {
+            // Skip duplicate log within deduplication window
+            return;
+        }
+        
+        // Update recent logs map
+        this.recentLogs.set(logKey, now);
+        
+        // Clean up old entries from recentLogs map (older than 10 seconds)
+        for (const [key, timestamp] of this.recentLogs.entries()) {
+            if (now - timestamp > 10000) {
+                this.recentLogs.delete(key);
+            }
+        }
+        
         const logData = this.createLogData(level, category, operation, message, details);
         
         // Add to buffer
@@ -158,9 +183,17 @@ class ProfessionalFrontendLogger {
         await this.log('ERROR', category, operation, message, errorDetails);
     }
     
-    // User click logging
+    // User click logging - bypasses deduplication since user actions should always be logged
     async logUserClick(component, action, details = null) {
-        await this.info('app.frontend.interactions', 'user_click', `User clicked ${action} in ${component}`, details);
+        const logData = this.createLogData('INFO', 'app.frontend.interactions', 'user_click', `User clicked ${action} in ${component}`, details);
+        
+        // Add to buffer (no deduplication for user clicks)
+        this.logBuffer.push(logData);
+        
+        // Flush if buffer is full
+        if (this.logBuffer.length >= this.maxBufferSize) {
+            await this.flushBuffer();
+        }
     }
 }
 
