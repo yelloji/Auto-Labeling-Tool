@@ -570,10 +570,17 @@ const AnnotationCanvas = ({
       // Handle smart polygon tool
       smartPolygonTool.handleCanvasClick(e);
     } else if (activeTool === 'box') {
+      logUserClick('AnnotationCanvas', 'box_drawing_started', {
+        imageId,
+        startPoint: mousePos,
+        zoomLevel,
+        tool: activeTool
+      });
       logInfo('app.frontend.interactions', 'box_drawing_started', 'Box drawing started', {
         imageId,
         startPoint: mousePos,
-        zoomLevel
+        zoomLevel,
+        tool: activeTool
       });
       console.log('Starting box drawing');
       setIsDrawing(true);
@@ -586,11 +593,19 @@ const AnnotationCanvas = ({
         height: 0
       });
     } else if (activeTool === 'polygon') {
+      logUserClick('AnnotationCanvas', 'polygon_point_added', {
+        imageId,
+        newPoint: mousePos,
+        currentPointsCount: polygonPoints.length,
+        zoomLevel,
+        tool: activeTool
+      });
       logInfo('app.frontend.interactions', 'polygon_point_added', 'Polygon point added', {
         imageId,
         newPoint: mousePos,
         currentPointsCount: polygonPoints.length,
-        zoomLevel
+        zoomLevel,
+        totalPoints: polygonPoints.length + 1
       });
       const newPoint = mousePos;
       setPolygonPoints(prev => [...prev, newPoint]);
@@ -651,19 +666,40 @@ const AnnotationCanvas = ({
     });
 
     console.log('Mouse up - isDrawing:', isDrawing, 'currentShape:', currentShape);
-    if (!isDrawing || !currentShape || activeTool !== 'box') return;
+    if (!isDrawing || !currentShape || activeTool !== 'box') {
+      logInfo('app.frontend.interactions', 'mouse_up_no_drawing', 'Mouse up but no active drawing', {
+        imageId,
+        isDrawing,
+        hasCurrentShape: !!currentShape,
+        activeTool,
+        tool: activeTool
+      });
+      return;
+    }
 
     setIsDrawing(false);
     
     // Only create shape if it has meaningful size (reduced minimum size)
     if (currentShape.width > 5 && currentShape.height > 5) {
+      logUserClick('AnnotationCanvas', 'box_shape_completed', {
+        imageId,
+        shapeSize: { width: currentShape.width, height: currentShape.height },
+        coordinates: { x: currentShape.x, y: currentShape.y },
+        zoomLevel,
+        tool: activeTool
+      });
+      
       logInfo('app.frontend.interactions', 'box_shape_completed', 'Box shape completed successfully', {
         imageId,
         shapeSize: { width: currentShape.width, height: currentShape.height },
         coordinates: { x: currentShape.x, y: currentShape.y },
-        zoomLevel
+        zoomLevel,
+        tool: activeTool,
+        screenCoordinates: currentShape
       });
+      
       console.log('✅ Shape completed:', currentShape);
+      
       // Convert to image coordinates
       const imageCoords = screenToImageCoords(currentShape.x, currentShape.y);
       const imageWidth = currentShape.width / (zoomLevel / 100);
@@ -677,6 +713,14 @@ const AnnotationCanvas = ({
         height: imageHeight
       };
 
+      logInfo('app.frontend.interactions', 'box_coordinates_converted', 'Box coordinates converted to image space', {
+        imageId,
+        screenCoordinates: currentShape,
+        imageCoordinates: shape,
+        zoomLevel,
+        conversionFactor: zoomLevel / 100
+      });
+
       console.log('✅ Calling onShapeComplete with shape:', shape);
       console.log('✅ onShapeComplete function exists:', !!onShapeComplete);
       
@@ -685,21 +729,31 @@ const AnnotationCanvas = ({
         logInfo('app.frontend.interactions', 'on_shape_complete_called', 'onShapeComplete callback called successfully', {
           imageId,
           shapeType: shape.type,
-          shapeCoordinates: { x: shape.x, y: shape.y, width: shape.width, height: shape.height }
+          shapeCoordinates: { x: shape.x, y: shape.y, width: shape.width, height: shape.height },
+          tool: activeTool
         });
         console.log('✅ onShapeComplete called successfully');
       } else {
         logError('app.frontend.validation', 'on_shape_complete_missing', 'onShapeComplete function is not provided', {
           imageId,
-          shapeType: shape.type
+          shapeType: shape.type,
+          tool: activeTool
         });
         console.error('❌ onShapeComplete function is not provided!');
       }
     } else {
+      logUserClick('AnnotationCanvas', 'box_shape_too_small', {
+        imageId,
+        shapeSize: { width: currentShape.width, height: currentShape.height },
+        minimumSize: 5,
+        tool: activeTool
+      });
+      
       logError('app.frontend.validation', 'box_shape_too_small', 'Box shape too small, not creating annotation', {
         imageId,
         shapeSize: { width: currentShape.width, height: currentShape.height },
-        minimumSize: 5
+        minimumSize: 5,
+        tool: activeTool
       });
       console.log('❌ Shape too small, not creating annotation. Size:', currentShape.width, 'x', currentShape.height);
     }

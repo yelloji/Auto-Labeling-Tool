@@ -87,8 +87,8 @@ class ProfessionalFrontendLogger {
             operation: operation,
             message: message,
             logger_name: 'frontend_professional_logger',
-            request_id: this.requestId,
-            user_id: this.userId,
+            request_id: this.requestId || 'frontend_request',
+            user_id: this.userId || 'frontend_user',
             session_id: this.sessionId,
             details: details || {},
             source: 'frontend',
@@ -196,6 +196,10 @@ class ProfessionalFrontendLogger {
             errorDetails.error_type = error.name || 'Error';
             errorDetails.error_message = error.message || String(error);
             errorDetails.stack_trace = error.stack;
+            // Ensure error message is properly stringified
+            if (typeof errorDetails.error_message === 'object') {
+                errorDetails.error_message = JSON.stringify(errorDetails.error_message);
+            }
         }
         await this.log('ERROR', category, operation, message, errorDetails);
     }
