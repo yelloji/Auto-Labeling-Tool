@@ -258,8 +258,12 @@ class ProfessionalLogger:
     def _create_log_entry(self, level: str, message: str, category: str, 
                          operation: str = None, details: Dict = None) -> Dict[str, Any]:
         """Create structured JSON log entry."""
+        # Use consistent timestamp format matching frontend
+        current_time = datetime.now(timezone.utc)
+        timestamp = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        
         entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": timestamp,
             "level": level,
             "category": category,
             "operation": operation or "general",

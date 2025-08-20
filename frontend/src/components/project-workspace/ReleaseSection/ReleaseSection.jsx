@@ -932,6 +932,17 @@ const ReleaseSection = ({ projectId, datasetId }) => {
           exportProgress: { percentage: 0, step: 'initializing' }
         });
         
+        // Force refresh transformation section after successful release creation
+        setTransformationKey(prev => prev + 1);
+        
+        logInfo('app.frontend.ui', 'transformation_section_refreshed_after_release', 'Transformation section refreshed after release creation', {
+          timestamp: new Date().toISOString(),
+          releaseId: modalReleaseId,
+          releaseName: releaseConfig.name,
+          newTransformationKey: transformationKey + 1,
+          function: 'handleCreateRelease'
+        });
+        
         // Log the current state of the download modal
         console.log('Download modal state after setting:', {
           isOpen: true,
