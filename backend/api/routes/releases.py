@@ -905,16 +905,88 @@ def rename_release(release_id: str, new_name: dict, db: Session = Depends(get_db
             "new_name": new_name_value
         })
 
-        release.name = new_name_value
-        db.commit()
+        # ✅ ENHANCED: Also rename the ZIP file if it exists
+        old_zip_path = None
+        new_zip_path = None
         
-        logger.info("operations.releases", f"Release renamed successfully", "release_rename_success", {
+        if release.model_path and os.path.exists(release.model_path):
+            old_zip_path = release.model_path
+            zip_dir = os.path.dirname(old_zip_path)
+            zip_extension = os.path.splitext(old_zip_path)[1]  # .zip
+            
+            # Generate new ZIP filename: {new_name}_{export_format}.zip
+            new_zip_filename = f"{new_name_value}_{release.export_format.lower()}{zip_extension}"
+            new_zip_path = os.path.join(zip_dir, new_zip_filename)
+            
+            logger.info("operations.releases", f"Renaming ZIP file", "zip_file_rename", {
+                "release_id": release_id,
+                "old_zip_path": old_zip_path,
+                "new_zip_path": new_zip_path,
+                "old_name": old_name,
+                "new_name": new_name_value
+            })
+            
+            try:
+                # Rename the ZIP file
+                os.rename(old_zip_path, new_zip_path)
+                
+                # Update the model_path in database
+                release.model_path = new_zip_path
+                
+                logger.info("operations.releases", f"ZIP file renamed successfully", "zip_rename_success", {
+                    "release_id": release_id,
+                    "old_zip_path": old_zip_path,
+                    "new_zip_path": new_zip_path
+                })
+                
+            except OSError as zip_error:
+                logger.warning("operations.releases", f"Failed to rename ZIP file, continuing with database update", "zip_rename_warning", {
+                    "release_id": release_id,
+                    "old_zip_path": old_zip_path,
+                    "new_zip_path": new_zip_path,
+                    "error": str(zip_error)
+                })
+                # Continue with database update even if ZIP rename fails
+
+        # Update release name in database
+        release.name = new_name_value
+        
+        # ✅ ENHANCED: Update transformation records' Release Version
+        logger.info("operations.releases", f"Updating transformation records Release Version", "transformation_version_update", {
             "release_id": release_id,
             "old_name": old_name,
             "new_name": new_name_value
         })
         
-        return {"message": "Release renamed successfully"}
+        # Update all transformation records for this release
+        updated_transformations = db.query(ImageTransformation).filter(
+            ImageTransformation.release_id == release_id
+        ).update({"release_version": new_name_value})
+        
+        logger.info("operations.releases", f"Transformation records updated successfully", "transformation_update_success", {
+            "release_id": release_id,
+            "old_name": old_name,
+            "new_name": new_name_value,
+            "updated_count": updated_transformations
+        })
+        
+        db.commit()
+        
+        logger.info("operations.releases", f"Release renamed successfully", "release_rename_success", {
+            "release_id": release_id,
+            "old_name": old_name,
+            "new_name": new_name_value,
+            "zip_renamed": old_zip_path is not None,
+            "old_zip_path": old_zip_path,
+            "new_zip_path": new_zip_path
+        })
+        
+        return {
+            "message": "Release renamed successfully",
+            "zip_renamed": old_zip_path is not None,
+            "old_zip_path": old_zip_path,
+            "new_zip_path": new_zip_path
+        }
         
     except HTTPException:
         raise
@@ -925,6 +997,157 @@ def rename_release(release_id: str, new_name: dict, db: Session = Depends(get_db
             "error": str(e)
         })
         raise HTTPException(status_code=500, detail=f"Failed to rename release: {str(e)}")
+
+@router.delete("/releases/{release_id}")
+def delete_release(release_id: str, db: Session = Depends(get_db)):
+    """
+    Delete a release completely
+    
+    Removes the release from database and cleans up related data
+    """
+    logger = get_professional_logger()
+    
+    logger.info("app.backend", f"Deleting release", "release_delete_request", {
+        "release_id": release_id,
+        "endpoint": f"/releases/{release_id}"
+    })
+    
+    try:
+        logger.debug("app.database", f"Fetching release for deletion", "release_fetch_delete", {
+            "release_id": release_id
+        })
+        
+        release = db.query(Release).filter(Release.id == release_id).first()
+        if not release:
+            logger.warning("errors.validation", f"Release not found for deletion", "release_not_found_delete", {
+                "release_id": release_id
+            })
+            raise HTTPException(status_code=404, detail="Release not found")
+
+        release_name = release.name
+        release_id_value = release.id
+        zip_file_path = release.model_path
+        
+        logger.info("operations.releases", f"Release found, proceeding with deletion", "release_delete_proceed", {
+            "release_id": release_id,
+            "release_name": release_name,
+            "zip_file_path": zip_file_path
+        })
+        
+        # ✅ STEP 1: Delete ZIP file from file system
+        zip_deleted = False
+        if zip_file_path and os.path.exists(zip_file_path):
+            try:
+                os.remove(zip_file_path)
+                zip_deleted = True
+                logger.info("operations.releases", f"ZIP file deleted successfully", "zip_file_delete_success", {
+                    "release_id": release_id,
+                    "zip_file_path": zip_file_path
+                })
+            except OSError as zip_error:
+                logger.warning("operations.releases", f"Failed to delete ZIP file, continuing with database deletion", "zip_file_delete_warning", {
+                    "release_id": release_id,
+                    "zip_file_path": zip_file_path,
+                    "error": str(zip_error)
+                })
+        
+        # ✅ STEP 2: Clean up related transformations
+        transformations_deleted = 0
+        try:
+            # Delete transformations with status 'completed' and matching release_id
+            transformations = db.query(ImageTransformation).filter(
+                ImageTransformation.release_id == release_id,
+                ImageTransformation.status == 'completed'
+            ).all()
+            
+            for transformation in transformations:
+                db.delete(transformation)
+                transformations_deleted += 1
+            
+            logger.info("operations.releases", f"Transformations cleaned up", "transformations_cleanup", {
+                "release_id": release_id,
+                "transformations_deleted": transformations_deleted
+            })
+        except Exception as transform_error:
+            logger.warning("operations.releases", f"Failed to clean up transformations, continuing", "transformations_cleanup_warning", {
+                "release_id": release_id,
+                "error": str(transform_error)
+            })
+        
+        # ✅ STEP 3: Delete from database
+        db.delete(release)
+        db.commit()
+        
+        logger.info("operations.releases", f"Release deleted from database successfully", "release_database_delete_success", {
+            "release_id": release_id_value,
+            "release_name": release_name
+        })
+        
+        return {
+            "message": "Release deleted successfully",
+            "release_id": release_id_value,
+            "release_name": release_name,
+            "zip_deleted": zip_deleted,
+            "transformations_deleted": transformations_deleted
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("errors.system", f"Failed to delete release", "release_delete_error", {
+            "release_id": release_id,
+            "error": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Failed to delete release: {str(e)}")
+
+@router.put("/releases/{release_id}/complete-transformations")
+def complete_transformations(release_id: str, db: Session = Depends(get_db)):
+    """
+    Update transformation status from 'pending' to 'completed' for a release
+    """
+    logger = get_professional_logger()
+    
+    logger.info("app.backend", f"Completing transformations for release", "transformations_complete_request", {
+        "release_id": release_id,
+        "endpoint": f"/releases/{release_id}/complete-transformations"
+    })
+    
+    try:
+        # Check if release exists
+        release = db.query(Release).filter(Release.id == release_id).first()
+        if not release:
+            logger.warning("errors.validation", f"Release not found for transformation completion", "release_not_found_complete", {
+                "release_id": release_id
+            })
+            raise HTTPException(status_code=404, detail="Release not found")
+        
+        # Update transformation status from 'pending' to 'completed'
+        updated_count = db.query(ImageTransformation).filter(
+            ImageTransformation.release_id == release_id,
+            ImageTransformation.status == 'pending'
+        ).update({"status": "completed"})
+        
+        db.commit()
+        
+        logger.info("operations.releases", f"Transformations completed successfully", "transformations_complete_success", {
+            "release_id": release_id,
+            "updated_count": updated_count
+        })
+        
+        return {
+            "message": "Transformations completed successfully",
+            "release_id": release_id,
+            "updated_count": updated_count
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("errors.system", f"Failed to complete transformations", "transformations_complete_error", {
+            "release_id": release_id,
+            "error": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Failed to complete transformations: {str(e)}")
 
 @router.get("/releases/{release_id}/download")
 def download_release(release_id: str, db: Session = Depends(get_db)):

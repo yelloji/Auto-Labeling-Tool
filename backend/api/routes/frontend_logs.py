@@ -116,29 +116,64 @@ async def receive_frontend_logs_batch_raw(request: Request):
                         {"body_preview": body_str[:500], "exception": str(e), "exception_type": type(e).__name__})
             return {"error": "Invalid JSON", "details": str(e)}
         
-        # If it's a list, try to validate each item
+        # If it's a list, process each item
         if isinstance(data, list):
-            validation_errors = []
+            processed_count = 0
+            error_count = 0
+            
             for i, item in enumerate(data):
                 try:
                     # Try to create FrontendLogData from this item
                     log_data = FrontendLogData(**item)
-                    logger.info("app.api", "frontend_logs_batch_raw_item_valid", 
-                               f"Item {i} is valid", {"item": item})
-                except Exception as e:
-                    validation_errors.append({
-                        "index": i,
-                        "item": item,
-                        "error": str(e)
+                    
+                    # Route each log to appropriate backend log file
+                    category = log_data.category
+                    level = log_data.level.upper()
+                    operation = log_data.operation
+                    message = log_data.message
+                    details = log_data.details or {}
+                    
+                    # Add frontend context to details
+                    details.update({
+                        "frontend_session_id": log_data.session_id,
+                        "frontend_user_id": log_data.user_id,
+                        "frontend_request_id": log_data.request_id,
+                        "frontend_source": log_data.source,
+                        "frontend_timestamp": log_data.timestamp
                     })
-                    logger.error("app.api", f"Item {i} validation failed: {str(e)}", "frontend_logs_batch_raw_item_invalid",
+                    
+                    # Route to appropriate log file based on category
+                    if level == "INFO":
+                        logger.info(category, operation, message, details)
+                    elif level == "WARNING":
+                        logger.warning(category, operation, message, details)
+                    elif level == "ERROR":
+                        logger.error(category, message, operation, details)
+                    elif level == "DEBUG":
+                        logger.debug(category, operation, message, details)
+                    else:
+                        # Default to info level
+                        logger.info(category, operation, message, details)
+                    
+                    processed_count += 1
+                    logger.info("app.api", "frontend_logs_batch_raw_item_processed", 
+                               f"Item {i} processed successfully", {"item": item})
+                               
+                except Exception as e:
+                    error_count += 1
+                    logger.error("app.api", f"Item {i} processing failed: {str(e)}", "frontend_logs_batch_raw_item_error",
                                {"item": item, "exception": str(e), "exception_type": type(e).__name__})
             
+            # Log batch processing summary
+            logger.info("app.api", "frontend_logs_batch_raw_processed", 
+                       f"Raw batch processing complete: {processed_count} processed, {error_count} errors",
+                       {"processed_count": processed_count, "error_count": error_count})
+            
             return {
-                "status": "validation_analysis",
-                "total_items": len(data),
-                "validation_errors": validation_errors,
-                "valid_items": len(data) - len(validation_errors)
+                "status": "success",
+                "message": f"Raw batch processing complete: {processed_count} processed, {error_count} errors",
+                "processed_count": processed_count,
+                "error_count": error_count
             }
         else:
             logger.error("app.api", "frontend_logs_batch_raw_not_list", 
@@ -151,7 +186,93 @@ async def receive_frontend_logs_batch_raw(request: Request):
         return {"error": str(e)}
 
 @router.post("/frontend/batch")
-async def receive_frontend_logs_batch(request: Request, logs_data: list[FrontendLogData]):
+async def receive_frontend_logs_batch(request: Request):
+    """
+    Receive multiple frontend logs and route them to appropriate backend log files.
+    This endpoint now uses the same logic as the raw endpoint to avoid validation issues.
+    """
+    try:
+        body = await request.body()
+        body_str = body.decode('utf-8') if body else "No body"
+        
+        # Try to parse as JSON
+        try:
+            import json
+            data = json.loads(body_str)
+            logger.info("app.api", "frontend_logs_batch_received", 
+                       f"Batch request received", 
+                       {"body_length": len(body_str), "data_type": type(data), "data_preview": str(data)[:1000]})
+        except json.JSONDecodeError as e:
+            logger.error("app.api", f"Failed to parse JSON: {str(e)}", "frontend_logs_batch_json_error",
+                        {"body_preview": body_str[:500], "exception": str(e), "exception_type": type(e).__name__})
+            return {"error": "Invalid JSON", "details": str(e)}
+        
+        # If it's a list, process each item
+        if isinstance(data, list):
+            processed_count = 0
+            error_count = 0
+            
+            for i, item in enumerate(data):
+                try:
+                    # Try to create FrontendLogData from this item
+                    log_data = FrontendLogData(**item)
+                    
+                    # Route each log to appropriate backend log file
+                    category = log_data.category
+                    level = log_data.level.upper()
+                    operation = log_data.operation
+                    message = log_data.message
+                    details = log_data.details or {}
+                    
+                    # Add frontend context to details
+                    details.update({
+                        "frontend_session_id": log_data.session_id,
+                        "frontend_user_id": log_data.user_id,
+                        "frontend_request_id": log_data.request_id,
+                        "frontend_source": log_data.source,
+                        "frontend_timestamp": log_data.timestamp
+                    })
+                    
+                    # Route to appropriate log file based on category
+                    if level == "INFO":
+                        logger.info(category, operation, message, details)
+                    elif level == "WARNING":
+                        logger.warning(category, operation, message, details)
+                    elif level == "ERROR":
+                        logger.error(category, message, operation, details)
+                    elif level == "DEBUG":
+                        logger.debug(category, operation, message, details)
+                    else:
+                        # Default to info level
+                        logger.info(category, operation, message, details)
+                    
+                    processed_count += 1
+                    
+                except Exception as e:
+                    error_count += 1
+                    logger.error("app.api", f"Item {i} processing failed: {str(e)}", "frontend_logs_batch_item_error",
+                               {"item": item, "exception": str(e), "exception_type": type(e).__name__})
+            
+            # Log batch processing summary
+            logger.info("app.api", "frontend_logs_batch_processed", 
+                       f"Batch processing complete: {processed_count} processed, {error_count} errors",
+                       {"processed_count": processed_count, "error_count": error_count})
+            
+            return {
+                "status": "success",
+                "message": f"Batch processing complete: {processed_count} processed, {error_count} errors",
+                "processed_count": processed_count,
+                "error_count": error_count
+            }
+        else:
+            logger.error("app.api", "frontend_logs_batch_not_list", 
+                        f"Data is not a list", {"data_type": type(data)})
+            return {"error": "Data is not a list", "data_type": str(type(data))}
+        
+    except Exception as e:
+        logger.error("app.api", f"Error in batch endpoint: {str(e)}", "frontend_logs_batch_error", 
+                    {"exception": str(e), "exception_type": type(e).__name__})
+        return {"error": str(e)}
     """
     Receive multiple frontend logs and route them to appropriate backend log files.
     

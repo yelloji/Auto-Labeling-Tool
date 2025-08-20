@@ -8,7 +8,7 @@ import { logInfo, logError, logUserClick } from '../../../utils/professional_log
 
 const { confirm } = Modal;
 
-const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
+const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseClick }) => {
   const [releases, setReleases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingRelease, setEditingRelease] = useState(null);
@@ -18,46 +18,65 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
     logInfo('app.frontend.ui', 'release_history_list_initialized', 'ReleaseHistoryList component initialized', {
       timestamp: new Date().toISOString(),
       component: 'ReleaseHistoryList',
+      projectId: projectId,
       datasetId: datasetId
     });
 
-    if (datasetId) {
-      logInfo('app.frontend.ui', 'release_history_load_triggered', 'Release history load triggered by datasetId', {
+    // Load releases for the project (not just one dataset)
+    if (projectId) {
+      logInfo('app.frontend.ui', 'release_history_load_triggered', 'Release history load triggered by projectId', {
         timestamp: new Date().toISOString(),
-        datasetId: datasetId
+        projectId: projectId
       });
       loadReleases();
     } else {
-      logError('app.frontend.validation', 'release_history_no_dataset_id', 'ReleaseHistoryList initialized without datasetId', {
+      logError('app.frontend.validation', 'release_history_no_project_id', 'ReleaseHistoryList initialized without projectId', {
         timestamp: new Date().toISOString(),
         function: 'useEffect'
       });
     }
-  }, [datasetId]);
+  }, [projectId]);
+
+  // ✅ FIXED: Listen for release history refresh trigger (NO CONSTANT POLLING)
+  useEffect(() => {
+    // Only refresh when explicitly triggered, not constantly
+    if (window.releaseHistoryRefreshKey && projectId) {
+      logInfo('app.frontend.ui', 'release_history_refresh_triggered', 'Release history refresh triggered', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        refreshKey: window.releaseHistoryRefreshKey,
+        function: 'useEffect_refresh_trigger'
+      });
+      
+      console.log('🔄 Release History refresh triggered by key:', window.releaseHistoryRefreshKey);
+      loadReleases();
+    }
+  }, [projectId, window.releaseHistoryRefreshKey]); // Only depend on projectId and refreshKey
 
   const loadReleases = async () => {
     logInfo('app.frontend.interactions', 'load_releases_started', 'Loading release history started', {
       timestamp: new Date().toISOString(),
-      datasetId: datasetId,
+      projectId: projectId,
       function: 'loadReleases'
     });
 
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/v1/releases/${datasetId}/history`);
+      // Get all releases for the project
+      const response = await fetch(`${API_BASE_URL}/api/v1/projects/${projectId}/releases`);
       if (response.ok) {
         const data = await response.json();
         setReleases(data);
         logInfo('app.frontend.interactions', 'load_releases_success', 'Release history loaded successfully', {
           timestamp: new Date().toISOString(),
-          datasetId: datasetId,
+          projectId: projectId,
           releaseCount: data.length,
           function: 'loadReleases'
         });
       } else {
         logError('app.frontend.interactions', 'load_releases_failed', 'Failed to load release history from API', {
           timestamp: new Date().toISOString(),
-          datasetId: datasetId,
+          projectId: projectId,
           status: response.status,
           statusText: response.statusText,
           function: 'loadReleases'
@@ -101,7 +120,7 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
         setReleases(mockReleases);
         logInfo('app.frontend.ui', 'load_releases_mock_data', 'Using mock release data due to API failure', {
           timestamp: new Date().toISOString(),
-          datasetId: datasetId,
+          projectId: projectId,
           mockReleaseCount: mockReleases.length,
           function: 'loadReleases'
         });
@@ -109,7 +128,7 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
     } catch (error) {
       logError('app.frontend.interactions', 'load_releases_error', 'Error loading release history', {
         timestamp: new Date().toISOString(),
-        datasetId: datasetId,
+        projectId: projectId,
         error: error.message,
         function: 'loadReleases'
       });
@@ -119,7 +138,7 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
       setLoading(false);
       logInfo('app.frontend.ui', 'load_releases_completed', 'Release history loading completed', {
         timestamp: new Date().toISOString(),
-        datasetId: datasetId,
+        projectId: projectId,
         finalReleaseCount: releases.length,
         function: 'loadReleases'
       });
@@ -232,17 +251,38 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
       });
 
       if (response.ok) {
+        const result = await response.json();
+        
         setReleases(releases.map(r => 
           r.id === editingRelease.id ? { ...r, name: newName } : r
         ));
-        message.success('Release renamed successfully');
-        logInfo('app.frontend.interactions', 'release_rename_success', 'Release renamed successfully', {
-          timestamp: new Date().toISOString(),
-          releaseId: editingRelease.id,
-          oldName: editingRelease.name,
-          newName: newName,
-          function: 'handleSaveEdit'
-        });
+        
+        // ✅ ENHANCED: Handle ZIP file rename information
+        if (result.zip_renamed) {
+          message.success(`Release renamed successfully! ZIP file also renamed to: ${result.new_zip_path?.split('/').pop() || 'new_name.zip'}`);
+          
+          logInfo('app.frontend.interactions', 'release_rename_success_with_zip', 'Release and ZIP file renamed successfully', {
+            timestamp: new Date().toISOString(),
+            releaseId: editingRelease.id,
+            oldName: editingRelease.name,
+            newName: newName,
+            zipRenamed: result.zip_renamed,
+            oldZipPath: result.old_zip_path,
+            newZipPath: result.new_zip_path,
+            function: 'handleSaveEdit'
+          });
+        } else {
+          message.success('Release renamed successfully');
+          
+          logInfo('app.frontend.interactions', 'release_rename_success', 'Release renamed successfully (no ZIP file)', {
+            timestamp: new Date().toISOString(),
+            releaseId: editingRelease.id,
+            oldName: editingRelease.name,
+            newName: newName,
+            zipRenamed: result.zip_renamed,
+            function: 'handleSaveEdit'
+          });
+        }
       } else {
         logError('app.frontend.interactions', 'release_rename_failed', 'Failed to rename release', {
           timestamp: new Date().toISOString(),

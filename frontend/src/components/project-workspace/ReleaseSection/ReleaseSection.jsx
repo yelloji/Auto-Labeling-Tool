@@ -10,7 +10,7 @@ import { Layout, Button, Space, Row, Col, Card, message, Modal, Tag, Spin, Alert
 import { RocketOutlined, EyeOutlined, SyncOutlined } from '@ant-design/icons';
 
 // Import all the components we've built
-import { DatasetStats, ReleaseConfigPanel, ReleaseHistoryList, DownloadModal } from './';
+import { DatasetStats, ReleaseConfigPanel, ReleaseHistoryList, DownloadModal, ReleaseDetailsView } from './';
 
 // Import the new TransformationSection component
 import TransformationSection from './TransformationSection';
@@ -420,6 +420,12 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     isExporting: false,
     exportProgress: null
   });
+
+  // Release Details View State
+  const [selectedRelease, setSelectedRelease] = useState(null);
+  const [showReleaseDetails, setShowReleaseDetails] = useState(false);
+  const [releaseImages, setReleaseImages] = useState([]);
+  const [releaseLoading, setReleaseLoading] = useState(false);
 
   // Function to fetch datasets
   const fetchDatasets = useCallback(async () => {
@@ -935,13 +941,23 @@ const ReleaseSection = ({ projectId, datasetId }) => {
         // Force refresh transformation section after successful release creation
         setTransformationKey(prev => prev + 1);
         
+        // ✅ REFRESH RELEASE HISTORY after successful release creation
+        if (window.releaseHistoryRefreshKey) {
+          window.releaseHistoryRefreshKey = window.releaseHistoryRefreshKey + 1;
+        } else {
+          window.releaseHistoryRefreshKey = 1;
+        }
+        
         logInfo('app.frontend.ui', 'transformation_section_refreshed_after_release', 'Transformation section refreshed after release creation', {
           timestamp: new Date().toISOString(),
           releaseId: modalReleaseId,
           releaseName: releaseConfig.name,
           newTransformationKey: transformationKey + 1,
+          releaseHistoryRefreshKey: window.releaseHistoryRefreshKey,
           function: 'handleCreateRelease'
         });
+        
+        console.log('✅ Release History refresh triggered after successful release creation');
         
         // Log the current state of the download modal
         console.log('Download modal state after setting:', {
@@ -1015,6 +1031,19 @@ const ReleaseSection = ({ projectId, datasetId }) => {
         }));
 
         if (currentStep.step === 'completed') {
+          // ✅ CLEAR TRANSFORMATION TOOLS WHEN EXPORT COMPLETES
+          setTransformations([]);
+          setTransformationKey(prev => prev + 1);
+          
+          logInfo('app.frontend.ui', 'transformation_tools_cleared_on_export_complete', 'Transformation tools cleared when export completed', {
+            timestamp: new Date().toISOString(),
+            releaseId: release.id,
+            releaseName: release.name,
+            function: 'updateProgress'
+          });
+          
+          console.log('✅ Transformation tools cleared when export completed');
+          
           // Export completed, switch to download mode
           setTimeout(() => {
             logInfo('app.frontend.ui', 'export_completed_switch_to_download', 'Export completed, switching to download mode', {
@@ -1044,7 +1073,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     setTimeout(updateProgress, 500);
   };
 
-  // Handle release history item click to open download modal
+  // Handle release history item click to show release details view
   const handleReleaseHistoryClick = (release) => {
     logUserClick('release_history_item_clicked', 'User clicked release history item');
     logInfo('app.frontend.interactions', 'release_history_clicked', 'Release history item clicked', {
@@ -1054,12 +1083,69 @@ const ReleaseSection = ({ projectId, datasetId }) => {
       function: 'handleReleaseHistoryClick'
     });
 
+    // Set the selected release for details view
+    setSelectedRelease(release);
+    
+    // Show release details view instead of download modal
+    setShowReleaseDetails(true);
+  };
+
+  // Handle back button from release details view
+  const handleBackFromDetails = () => {
+    logUserClick('back_from_release_details_clicked', 'User clicked back from release details');
+    logInfo('app.frontend.navigation', 'back_from_release_details', 'Back from release details view', {
+      timestamp: new Date().toISOString(),
+      releaseId: selectedRelease?.id,
+      releaseName: selectedRelease?.name,
+      function: 'handleBackFromDetails'
+    });
+
+    setShowReleaseDetails(false);
+    setSelectedRelease(null);
+  };
+
+  // Handle download from release details view
+  const handleDownloadFromDetails = (release) => {
+    logUserClick('download_from_details_clicked', 'User clicked download from release details');
+    logInfo('app.frontend.interactions', 'download_from_details', 'Download from release details view', {
+      timestamp: new Date().toISOString(),
+      releaseId: release.id,
+      releaseName: release.name,
+      function: 'handleDownloadFromDetails'
+    });
+
     setDownloadModal({
       isOpen: true,
       release: release,
       isExporting: false,
       exportProgress: null
     });
+  };
+
+  // Handle rename from release details view
+  const handleRenameFromDetails = (releaseId, newName) => {
+    logInfo('app.frontend.interactions', 'rename_from_details', 'Release renamed from details view', {
+      timestamp: new Date().toISOString(),
+      releaseId: releaseId,
+      newName: newName,
+      function: 'handleRenameFromDetails'
+    });
+
+    // Update the selected release name
+    setSelectedRelease(prev => prev ? { ...prev, name: newName } : null);
+  };
+
+  // Handle create new release from details view
+  const handleCreateNewFromDetails = () => {
+    logUserClick('create_new_from_details_clicked', 'User clicked create new from release details');
+    logInfo('app.frontend.navigation', 'create_new_from_details', 'Create new release from details view', {
+      timestamp: new Date().toISOString(),
+      function: 'handleCreateNewFromDetails'
+    });
+
+    setShowReleaseDetails(false);
+    setSelectedRelease(null);
+    // Reset to main view for creating new release
   };
 
   // Close download modal and refresh the Release Section state
@@ -1081,27 +1167,81 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     
     // ✅ COMPLETE REFRESH OF RELEASE SECTION STATE
     // Use setTimeout to ensure state updates happen in correct order
-    setTimeout(() => {
-      // Clear transformations to show fresh state
-      setTransformations([]);
-      
-      // Hide release config panel to go back to transformation step
-      setShowReleaseConfig(false);
-      
-      // Clear current release version to force new session
-      setCurrentReleaseVersion(null);
-      sessionStorage.removeItem('currentReleaseVersion');
-      
-      // Force refresh of transformation section by updating key
-      setTransformationKey(prev => prev + 1);
-      
-      logInfo('app.frontend.ui', 'release_section_state_refreshed', 'Release Section state completely refreshed', {
-        timestamp: new Date().toISOString(),
-        function: 'closeDownloadModal'
-      });
-      
-      console.log('✅ Release Section state completely refreshed after modal close');
-      message.info('Ready to create a new release!');
+    setTimeout(async () => {
+      try {
+        // ✅ STEP 1: Clear transformations to show fresh state FIRST
+        setTransformations([]);
+        
+        // ✅ STEP 2: Hide release config panel to go back to transformation step
+        setShowReleaseConfig(false);
+        
+        // ✅ STEP 3: Clear current release version to force new session
+        setCurrentReleaseVersion(null);
+        sessionStorage.removeItem('currentReleaseVersion');
+        
+        // ✅ STEP 4: Force refresh of transformation section by updating key
+        setTransformationKey(prev => prev + 1);
+        
+        // ✅ STEP 5: REFRESH RELEASE HISTORY
+        if (window.releaseHistoryRefreshKey) {
+          window.releaseHistoryRefreshKey = window.releaseHistoryRefreshKey + 1;
+        } else {
+          window.releaseHistoryRefreshKey = 1;
+        }
+        
+        // ✅ STEP 6: Update transformation status in backend AFTER cleanup (pending → completed)
+        if (downloadModal.release?.id) {
+          logInfo('app.frontend.ui', 'transformation_status_update_started', 'Updating transformation status to completed AFTER cleanup', {
+            timestamp: new Date().toISOString(),
+            releaseId: downloadModal.release.id,
+            function: 'closeDownloadModal'
+          });
+          
+          // Call backend to update transformation status
+          const response = await fetch(`${API_BASE_URL}/api/v1/releases/${downloadModal.release.id}/complete-transformations`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          });
+          
+          if (response.ok) {
+            logInfo('app.frontend.ui', 'transformation_status_updated', 'Transformation status updated to completed', {
+              timestamp: new Date().toISOString(),
+              releaseId: downloadModal.release.id,
+              function: 'closeDownloadModal'
+            });
+          } else {
+            logError('app.frontend.ui', 'transformation_status_update_failed', 'Failed to update transformation status', {
+              timestamp: new Date().toISOString(),
+              releaseId: downloadModal.release.id,
+              status: response.status,
+              function: 'closeDownloadModal'
+            });
+          }
+        }
+        
+        logInfo('app.frontend.ui', 'release_section_state_refreshed', 'Release Section state completely refreshed', {
+          timestamp: new Date().toISOString(),
+          function: 'closeDownloadModal',
+          releaseHistoryRefreshKey: window.releaseHistoryRefreshKey,
+          transformationKey: transformationKey + 1
+        });
+        
+        console.log('✅ Release Section state completely refreshed after modal close');
+        console.log('✅ Transformation tools cleared from UI');
+        console.log('✅ Transformation status updated to completed');
+        console.log('✅ Release History refresh triggered');
+        message.info('Ready to create a new release!');
+        
+      } catch (error) {
+        logError('app.frontend.ui', 'release_section_refresh_error', 'Error during release section refresh', {
+          timestamp: new Date().toISOString(),
+          error: error.message,
+          function: 'closeDownloadModal'
+        });
+        console.error('Error refreshing release section:', error);
+      }
     }, 100); // Small delay to ensure modal closes first
     
     // Keep selected datasets as they are still valid for next release
@@ -1146,12 +1286,25 @@ const ReleaseSection = ({ projectId, datasetId }) => {
             </Row>
           </div>
 
-          {/* NEW LAYOUT: Release History on LEFT, Main Content on RIGHT */}
-          <Row gutter={24}>
+          {/* Conditional Rendering: Show Release Details View or Main Content */}
+          {showReleaseDetails ? (
+            <ReleaseDetailsView
+              release={selectedRelease}
+              onBack={handleBackFromDetails}
+              onDownload={handleDownloadFromDetails}
+              onRename={handleRenameFromDetails}
+              onCreateNew={handleCreateNewFromDetails}
+              projectId={projectId}
+            />
+          ) : (
+            <>
+              {/* NEW LAYOUT: Release History on LEFT, Main Content on RIGHT */}
+              <Row gutter={24}>
             {/* LEFT SIDEBAR: Release History */}
             <Col xs={24} lg={8} xl={6}>
               <div style={{ position: 'sticky', top: 24 }}>
                 <ReleaseHistoryList 
+                  projectId={projectId}
                   datasetId={datasetId} 
                   onReleaseClick={handleReleaseHistoryClick}
                 />
@@ -1638,6 +1791,8 @@ const ReleaseSection = ({ projectId, datasetId }) => {
             isExporting={downloadModal.isExporting}
             exportProgress={downloadModal.exportProgress}
           />
+            </>
+          )}
         </Content>
       </Layout>
     </div>

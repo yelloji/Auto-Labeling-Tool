@@ -58,7 +58,7 @@ class ProfessionalFrontendLogger {
     
     async sendToBackend(logData) {
         try {
-            // Send to actual logging endpoint
+            // Send to main batch endpoint (now fixed)
             const response = await fetch(`${this.apiBaseUrl}/api/v1/logs/frontend/batch`, {
                 method: 'POST',
                 headers: {
@@ -143,28 +143,28 @@ class ProfessionalFrontendLogger {
         }
     }
     
-    async flushBuffer() {
-        if (this.logBuffer.length === 0) return;
-        
-        try {
-            // Send to actual logging endpoint
-            const response = await fetch(`${this.apiBaseUrl}/api/v1/logs/frontend/batch`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(this.logBuffer)
-            });
-            
-            if (response.ok) {
-                this.logBuffer = [];
-            } else {
-                console.error('Failed to flush log buffer:', response.status);
+            async flushBuffer() {
+            if (this.logBuffer.length === 0) return;
+
+            try {
+                // Send to main batch endpoint (now fixed)
+                const response = await fetch(`${this.apiBaseUrl}/api/v1/logs/frontend/batch`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(this.logBuffer)
+                });
+
+                if (response.ok) {
+                    this.logBuffer = [];
+                } else {
+                    console.error('Failed to flush log buffer:', response.status);
+                }
+            } catch (error) {
+                console.error('Error flushing log buffer:', error);
             }
-        } catch (error) {
-            console.error('Error flushing log buffer:', error);
         }
-    }
     
     startAutoFlush() {
         setInterval(() => {
