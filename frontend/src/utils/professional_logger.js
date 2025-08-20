@@ -71,6 +71,8 @@ class ProfessionalFrontendLogger {
                 return false;
             }
             
+            const result = await response.json();
+            console.log('Raw endpoint response:', result);
             return true;
         } catch (error) {
             console.error('Error sending log to backend:', error);
