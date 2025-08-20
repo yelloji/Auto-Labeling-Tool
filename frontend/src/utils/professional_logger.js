@@ -52,7 +52,8 @@ class ProfessionalFrontendLogger {
     
     // Get current timestamp consistently
     getCurrentTimestamp() {
-        return new Date().toISOString();
+        const now = new Date();
+        return now.toISOString();
     }
     
     async sendToBackend(logData) {
