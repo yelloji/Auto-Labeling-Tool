@@ -27,12 +27,14 @@ class ProfessionalFrontendLogger {
         // Start auto-flush
         this.startAutoFlush();
         
-        // Log session start
+        // Log session start with consistent timestamp
+        const sessionStartTime = new Date().toISOString();
         this.info('app.frontend.ui', 'session_start', 'Frontend session started', {
             sessionId: this.sessionId,
             userAgent: navigator.userAgent,
             url: window.location.href,
-            timestamp: new Date().toISOString()
+            timestamp: sessionStartTime,
+            session_start_time: sessionStartTime
         });
     }
     
@@ -46,6 +48,11 @@ class ProfessionalFrontendLogger {
     
     setRequestId(requestId) {
         this.requestId = requestId;
+    }
+    
+    // Get current timestamp consistently
+    getCurrentTimestamp() {
+        return new Date().toISOString();
     }
     
     async sendToBackend(logData) {
@@ -72,8 +79,9 @@ class ProfessionalFrontendLogger {
     }
     
     createLogData(level, category, operation, message, details = null) {
+        const currentTime = new Date().toISOString();
         return {
-            timestamp: new Date().toISOString(),
+            timestamp: currentTime,
             level: level,
             category: category,
             operation: operation,
@@ -83,7 +91,8 @@ class ProfessionalFrontendLogger {
             user_id: this.userId,
             session_id: this.sessionId,
             details: details || {},
-            source: 'frontend'
+            source: 'frontend',
+            created_at: currentTime // Ensure consistent timestamp
         };
     }
     
@@ -91,6 +100,7 @@ class ProfessionalFrontendLogger {
         // Create unique key for deduplication
         const logKey = `${category}:${operation}:${message}`;
         const now = Date.now();
+        const currentTimestamp = this.getCurrentTimestamp();
         
         // Check if this log was recently sent
         const lastLogTime = this.recentLogs.get(logKey);
@@ -109,7 +119,14 @@ class ProfessionalFrontendLogger {
             }
         }
         
-        const logData = this.createLogData(level, category, operation, message, details);
+        // Add current timestamp to details if not provided
+        const enhancedDetails = {
+            ...details,
+            log_timestamp: currentTimestamp,
+            log_created_at: currentTimestamp
+        };
+        
+        const logData = this.createLogData(level, category, operation, message, enhancedDetails);
         
         // Add to buffer
         this.logBuffer.push(logData);
