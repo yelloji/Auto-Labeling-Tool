@@ -23,7 +23,7 @@ const AnnotationCanvas = ({
   const [startPoint, setStartPoint] = useState(null);
   const [currentShape, setCurrentShape] = useState(null);
   const [polygonPoints, setPolygonPoints] = useState([]);
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 }); // Used for canvas dimensions
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
 
@@ -47,7 +47,7 @@ const AnnotationCanvas = ({
       annotationCount: annotations.length,
       hasImageUrl: !!imageUrl
     });
-  }, []);
+  }, [imageId, activeTool, zoomLevel, annotations.length, imageUrl]);
 
   // Initialize canvas and load image - supports all formats and sizes with retry logic
   useEffect(() => {
@@ -257,7 +257,7 @@ const AnnotationCanvas = ({
 
     // Redraw everything
     redrawCanvas();
-  }, [zoomLevel, imageId, imageSize, onImagePositionChange]);
+  }, [zoomLevel, imageId, imageSize, onImagePositionChange, redrawCanvas]);
 
   // Redraw canvas with image and annotations
   const redrawCanvas = useCallback(() => {
@@ -796,7 +796,7 @@ const AnnotationCanvas = ({
       redrawCanvas();
       console.log('✅ Polygon points cleared immediately - popup should appear');
     }
-  }, [activeTool, polygonPoints, onShapeComplete, screenToImageCoords, imageId, redrawCanvas]);
+  }, [activeTool, polygonPoints, onShapeComplete, screenToImageCoords, imageId, redrawCanvas, zoomLevel]);
 
   const handleCanvasClick = useCallback((e) => {
     if (activeTool === 'select') {
@@ -852,7 +852,7 @@ const AnnotationCanvas = ({
         onAnnotationSelect?.(null);
       }
     }
-  }, [activeTool, annotations, onAnnotationSelect, zoomLevel, imagePosition, imageId]);
+  }, [activeTool, annotations, onAnnotationSelect, zoomLevel, imagePosition, imageId, screenToImageCoords]);
 
   // Handle right-click for smart polygon tool
   const handleRightClick = useCallback((e) => {
@@ -863,7 +863,7 @@ const AnnotationCanvas = ({
       });
       smartPolygonTool.handleRightClick(e);
     }
-  }, [activeTool, smartPolygonTool, imageId]);
+  }, [activeTool, smartPolygonTool, imageId, zoomLevel]);
 
   // Setup event listeners
   useEffect(() => {

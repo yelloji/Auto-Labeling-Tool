@@ -6,11 +6,11 @@ import { API_BASE_URL } from '../../../config';
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 import React, { useState, useEffect } from 'react';
-import { Layout, Button, Space, Divider, Row, Col, Card, message, Modal, Image, Tag, Spin, Alert, InputNumber, Progress } from 'antd';
-import { PlusOutlined, RocketOutlined, EyeOutlined, SyncOutlined } from '@ant-design/icons';
+import { Layout, Button, Space, Row, Col, Card, message, Modal, Tag, Spin, Alert, InputNumber, Progress } from 'antd';
+import { RocketOutlined, EyeOutlined, SyncOutlined } from '@ant-design/icons';
 
 // Import all the components we've built
-import { DatasetStats, TransformationCard, TransformationModal, ReleaseConfigPanel, ReleaseHistoryList, DownloadModal } from './';
+import { DatasetStats, ReleaseConfigPanel, ReleaseHistoryList, DownloadModal } from './';
 
 // Import the new TransformationSection component
 import TransformationSection from './TransformationSection';
@@ -72,7 +72,7 @@ const AnnotatedImageCard = ({ image }) => {
     };
 
     loadAnnotations();
-  }, [image.id]);
+  }, [image.id, image]);
 
   const imageUrl = `http://localhost:12000/api/images/${image.id}`;
 
@@ -476,7 +476,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
         function: 'useEffect'
       });
     }
-  }, [projectId]);
+  }, [projectId, datasetId, fetchDatasets]);
 
   // Monitor transformationKey changes to ensure proper refresh
   useEffect(() => {
