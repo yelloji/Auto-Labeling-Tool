@@ -1054,10 +1054,9 @@ def delete_release(release_id: str, db: Session = Depends(get_db)):
         # ✅ STEP 2: Clean up related transformations
         transformations_deleted = 0
         try:
-            # Delete transformations with status 'completed' and matching release_id
+            # Delete ALL transformations for this release (matching release_id)
             transformations = db.query(ImageTransformation).filter(
-                ImageTransformation.release_id == release_id,
-                ImageTransformation.status == 'completed'
+                ImageTransformation.release_id == release_id
             ).all()
             
             for transformation in transformations:
