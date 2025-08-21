@@ -18,6 +18,7 @@ import {
   Avatar,
   Divider
 } from 'antd';
+import { logInfo, logError, logUserClick, logPageView } from '../utils/professional_logger';
 import {
   ProjectOutlined,
   DeleteOutlined,
@@ -58,10 +59,14 @@ const Projects = () => {
   const loadProjects = async () => {
     setLoading(true);
     try {
+      logInfo('app.frontend.interactions', 'Loading projects', 'load_projects');
       const projectsData = await projectsAPI.getProjects();
       setProjects(projectsData);
+      logInfo('app.frontend.interactions', `Projects loaded successfully: ${projectsData.length} projects`, 'load_projects');
+      logInfo('app.frontend.ui', 'Projects state updated', 'state_change', { component: 'Projects', newState: 'projects_loaded', projectCount: projectsData.length });
     } catch (error) {
       const errorInfo = handleAPIError(error);
+      logError('app.frontend.interactions', 'Failed to load projects', error, { errorInfo });
       message.error(`Failed to load projects: ${errorInfo.message}`);
     } finally {
       setLoading(false);
@@ -69,17 +74,27 @@ const Projects = () => {
   };
 
   useEffect(() => {
+    logInfo('app.frontend.navigation', 'Projects page loaded', 'page_view', { component: 'Projects' });
+    logInfo('app.frontend.ui', 'Projects component mounted', 'component_mount', { component: 'Projects' });
     loadProjects();
+    
+    // Cleanup function for component unmount
+    return () => {
+      logInfo('app.frontend.ui', 'Projects component unmounted', 'component_unmount', { component: 'Projects' });
+    };
   }, []);
 
   // Delete project
   const handleDeleteProject = async (projectId) => {
     try {
+      logUserClick('Projects', 'delete_project', { projectId });
       await projectsAPI.deleteProject(projectId);
+      logInfo('app.frontend.interactions', 'Project deleted successfully', 'delete_project', { projectId });
       message.success('Project deleted successfully');
       loadProjects(); // Reload projects
     } catch (error) {
       const errorInfo = handleAPIError(error);
+      logError('app.frontend.interactions', 'Failed to delete project', error, { projectId, errorInfo });
       message.error(`Failed to delete project: ${errorInfo.message}`);
     }
   };
@@ -88,15 +103,19 @@ const Projects = () => {
   const handleCreateProject = async (values) => {
     setCreating(true);
     try {
+      logUserClick('Projects', 'create_project', { projectName: values.name });
       const newProject = await projectsAPI.createProject(values);
+      logInfo('app.frontend.interactions', 'Project created successfully', 'create_project', { projectId: newProject.id, projectName: values.name });
       message.success('Project created successfully!');
       setCreateModalVisible(false);
       form.resetFields();
       loadProjects(); // Reload projects
       // Navigate to the new project workspace
+      logInfo('app.frontend.navigation', 'Navigating to project workspace', 'navigate_to_workspace', { projectId: newProject.id });
       navigate(`/projects/${newProject.id}/workspace`);
     } catch (error) {
       const errorInfo = handleAPIError(error);
+      logError('app.frontend.interactions', 'Failed to create project', error, { projectName: values.name, errorInfo });
       message.error(`Failed to create project: ${errorInfo.message}`);
     } finally {
       setCreating(false);
@@ -162,6 +181,7 @@ const Projects = () => {
           icon={<EditOutlined />}
           onClick={() => {
             setOpenDropdownId(null); // Close dropdown
+            logUserClick('Projects', 'rename_project', { projectId: project.id, projectName: project.name });
             Modal.confirm({
               title: 'Rename Project',
               content: (
@@ -181,13 +201,18 @@ const Projects = () => {
                 const newName = document.getElementById('rename-input').value;
                 if (newName && newName.trim() !== project.name) {
                   try {
+                    logInfo('app.frontend.interactions', 'Renaming project', 'rename_project', { projectId: project.id, oldName: project.name, newName: newName.trim() });
                     await projectsAPI.updateProject(project.id, { name: newName.trim() });
+                    logInfo('app.frontend.interactions', 'Project renamed successfully', 'rename_project', { projectId: project.id, newName: newName.trim() });
                     message.success(`Project renamed to "${newName.trim()}"`);
                     loadProjects(); // Refresh the projects list
                   } catch (error) {
                     const errorInfo = handleAPIError(error);
+                    logError('app.frontend.interactions', 'Failed to rename project', error, { projectId: project.id, newName: newName.trim(), errorInfo });
                     message.error(`Failed to rename project: ${errorInfo.message}`);
                   }
+                } else {
+                  logInfo('app.frontend.validation', 'Rename validation failed - same name or empty', 'rename_validation', { projectId: project.id, newName: newName });
                 }
               },
             });
@@ -200,6 +225,7 @@ const Projects = () => {
           icon={<CopyOutlined />}
           onClick={() => {
             setOpenDropdownId(null); // Close dropdown
+            logUserClick('Projects', 'duplicate_project', { projectId: project.id, projectName: project.name });
             Modal.confirm({
               title: 'Duplicate Project',
               content: `Create a copy of "${project.name}" with all its datasets and configurations?`,
@@ -207,11 +233,14 @@ const Projects = () => {
               cancelText: 'Cancel',
               onOk: async () => {
                 try {
+                  logInfo('app.frontend.interactions', 'Duplicating project', 'duplicate_project', { projectId: project.id, projectName: project.name });
                   await projectsAPI.duplicateProject(project.id);
+                  logInfo('app.frontend.interactions', 'Project duplicated successfully', 'duplicate_project', { projectId: project.id, projectName: project.name });
                   message.success(`Project "${project.name}" duplicated successfully with all datasets, images, and annotations`);
                   loadProjects(); // Refresh the projects list
                 } catch (error) {
                   const errorInfo = handleAPIError(error);
+                  logError('app.frontend.interactions', 'Failed to duplicate project', error, { projectId: project.id, projectName: project.name, errorInfo });
                   message.error(`Failed to duplicate project: ${errorInfo.message}`);
                 }
               },

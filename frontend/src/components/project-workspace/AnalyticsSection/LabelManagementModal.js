@@ -32,6 +32,7 @@ import {
   ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { projectsAPI, analyticsAPI } from '../../../services/api';
+import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 const { Title, Text } = Typography;
 
@@ -52,11 +53,20 @@ const LabelManagementModal = ({
 
   useEffect(() => {
     if (visible && projectId) {
+      logInfo('app.frontend.ui', 'label_management_modal_opened', 'LabelManagementModal opened', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId
+      });
       loadLabels();
     }
   }, [visible, projectId]);
 
   const loadLabels = async () => {
+    logInfo('app.frontend.interactions', 'labels_loading_started', 'Started loading project labels', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
+
     setLoading(true);
     try {
       // Load both labels and their usage distribution
@@ -70,7 +80,19 @@ const LabelManagementModal = ({
 
       setLabels(labelsData);
       setLabelDistribution(distributionData);
+
+      logInfo('app.frontend.interactions', 'labels_loading_success', 'Successfully loaded project labels', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        labelsCount: labelsData.length
+      });
     } catch (error) {
+      logError('app.frontend.validation', 'labels_loading_failed', 'Failed to load project labels', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        error: error.message,
+        errorDetails: error.response?.data
+      });
       console.error('Error loading labels:', error);
       message.error('Failed to load labels');
     } finally {
@@ -79,6 +101,12 @@ const LabelManagementModal = ({
   };
 
   const handleCreateLabel = () => {
+    logUserClick('create_label_button_clicked', 'User clicked create label button');
+    logInfo('app.frontend.ui', 'create_label_mode_activated', 'Entered create label mode', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
+
     setIsCreating(true);
     setEditingLabel(null);
     form.resetFields();
@@ -98,6 +126,14 @@ const LabelManagementModal = ({
   };
 
   const handleEditLabel = (label) => {
+    logUserClick('edit_label_button_clicked', `User clicked edit label button for label: ${label.name}`);
+    logInfo('app.frontend.ui', 'edit_label_mode_activated', 'Entered edit label mode', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      labelId: label.id,
+      labelName: label.name
+    });
+
     setEditingLabel(label);
     setIsCreating(false);
     form.setFieldsValue({
@@ -115,12 +151,25 @@ const LabelManagementModal = ({
       const colorValue = typeof values.color === 'string' ? values.color : values.color.toHexString();
 
       if (isCreating) {
+        logInfo('app.frontend.interactions', 'label_creation_started', 'Started creating new label', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          labelName: values.name,
+          labelColor: colorValue
+        });
+
         // Check if label name already exists
         const existingLabel = labels.find(label => 
           label.name.toLowerCase() === values.name.toLowerCase()
         );
         
         if (existingLabel) {
+          logError('app.frontend.validation', 'label_name_duplicate', 'Attempted to create label with duplicate name', {
+            timestamp: new Date().toISOString(),
+            projectId: projectId,
+            labelName: values.name,
+            existingLabelId: existingLabel.id
+          });
           message.error(`Label "${values.name}" already exists. Please choose a different name.`);
           return;
         }
@@ -130,8 +179,25 @@ const LabelManagementModal = ({
           name: values.name,
           color: colorValue
         });
+
+        logInfo('app.frontend.interactions', 'label_creation_success', 'Successfully created new label', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          labelName: values.name,
+          labelColor: colorValue
+        });
         message.success('Label created successfully');
       } else if (editingLabel) {
+        logInfo('app.frontend.interactions', 'label_update_started', 'Started updating existing label', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          labelId: editingLabel.id,
+          oldName: editingLabel.name,
+          newName: values.name,
+          oldColor: editingLabel.color,
+          newColor: colorValue
+        });
+
         // Check if the new name conflicts with existing labels (excluding current label)
         const existingLabel = labels.find(label => 
           label.id !== editingLabel.id && 
@@ -139,6 +205,13 @@ const LabelManagementModal = ({
         );
         
         if (existingLabel) {
+          logError('app.frontend.validation', 'label_name_duplicate_update', 'Attempted to update label with duplicate name', {
+            timestamp: new Date().toISOString(),
+            projectId: projectId,
+            labelId: editingLabel.id,
+            newLabelName: values.name,
+            conflictingLabelId: existingLabel.id
+          });
           message.error(`Label "${values.name}" already exists. Please choose a different name.`);
           return;
         }
@@ -148,6 +221,14 @@ const LabelManagementModal = ({
         await projectsAPI.updateProjectLabel(projectId, editingLabel.id, {
           name: values.name,
           color: colorValue
+        });
+
+        logInfo('app.frontend.interactions', 'label_update_success', 'Successfully updated existing label', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          labelId: editingLabel.id,
+          oldName: editingLabel.name,
+          newName: values.name
         });
         message.success('Label updated successfully');
       }
@@ -163,6 +244,14 @@ const LabelManagementModal = ({
         onLabelsUpdated();
       }
     } catch (error) {
+      logError('app.frontend.validation', 'label_save_failed', 'Failed to save label', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        isCreating: isCreating,
+        editingLabelId: editingLabel?.id,
+        error: error.message,
+        errorDetails: error.response?.data
+      });
       console.error('Error saving label:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to save label';
       message.error(errorMessage);
@@ -172,6 +261,14 @@ const LabelManagementModal = ({
   };
 
   const handleDeleteClick = (label) => {
+    logUserClick('delete_label_button_clicked', `User clicked delete label button for label: ${label.name}`);
+    logInfo('app.frontend.ui', 'delete_label_modal_opened', 'Delete label confirmation modal opened', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      labelId: label.id,
+      labelName: label.name
+    });
+
     setLabelToDelete(label);
     setDeleteModalVisible(true);
   };
@@ -185,9 +282,25 @@ const LabelManagementModal = ({
       const usage = labelDistribution[labelToDelete.name];
       const count = usage?.count || 0;
       
+      logInfo('app.frontend.interactions', 'label_deletion_started', 'Started deleting label', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        labelId: labelToDelete.id,
+        labelName: labelToDelete.name,
+        annotationsCount: count
+      });
+      
       console.log(`Deleting label "${labelToDelete.name}" (ID: ${labelToDelete.id}) with ${count} annotations`);
       
       await projectsAPI.deleteProjectLabel(projectId, labelToDelete.id);
+      
+      logInfo('app.frontend.interactions', 'label_deletion_success', 'Successfully deleted label', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        labelId: labelToDelete.id,
+        labelName: labelToDelete.name,
+        annotationsRemoved: count
+      });
       
       if (count > 0) {
         message.success(`Label "${labelToDelete.name}" deleted successfully. ${count} annotations were removed.`);
@@ -204,6 +317,14 @@ const LabelManagementModal = ({
         onLabelsUpdated();
       }
     } catch (error) {
+      logError('app.frontend.validation', 'label_deletion_failed', 'Failed to delete label', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        labelId: labelToDelete?.id,
+        labelName: labelToDelete?.name,
+        error: error.message,
+        errorDetails: error.response?.data
+      });
       console.error('Error deleting label:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to delete label';
       message.error(`Failed to delete label: ${errorMessage}`);
@@ -213,11 +334,23 @@ const LabelManagementModal = ({
   };
 
   const handleDeleteCancel = () => {
+    logInfo('app.frontend.ui', 'delete_label_modal_cancelled', 'Delete label confirmation modal cancelled', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      labelId: labelToDelete?.id,
+      labelName: labelToDelete?.name
+    });
+
     setDeleteModalVisible(false);
     setLabelToDelete(null);
   };
 
   const handleCancel = () => {
+    logInfo('app.frontend.ui', 'label_management_modal_closed', 'LabelManagementModal closed', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
+
     form.resetFields();
     setIsCreating(false);
     setEditingLabel(null);
@@ -225,6 +358,13 @@ const LabelManagementModal = ({
   };
 
   const handleCancelEdit = () => {
+    logInfo('app.frontend.ui', 'label_edit_cancelled', 'Label edit mode cancelled', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      wasCreating: isCreating,
+      editingLabelId: editingLabel?.id
+    });
+
     form.resetFields();
     setIsCreating(false);
     setEditingLabel(null);
@@ -236,7 +376,15 @@ const LabelManagementModal = ({
       '#722ed1', '#eb2f96', '#52c41a', '#13c2c2', '#1890ff',
       '#fa541c', '#faad14', '#a0d911', '#36cfc9', '#40a9ff'
     ];
-    return colors[Math.floor(Math.random() * colors.length)];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    
+    logInfo('app.frontend.ui', 'random_color_generated', 'Random color generated for label', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      generatedColor: randomColor
+    });
+    
+    return randomColor;
   };
 
   const columns = [
@@ -349,6 +497,19 @@ const LabelManagementModal = ({
       footer={null}
       destroyOnClose
     >
+      {(() => {
+        if (visible) {
+          logInfo('app.frontend.ui', 'label_management_modal_rendered', 'LabelManagementModal rendered', {
+            timestamp: new Date().toISOString(),
+            projectId: projectId,
+            labelsCount: labels.length,
+            isCreating: isCreating,
+            editingLabelId: editingLabel?.id,
+            deleteModalVisible: deleteModalVisible
+          });
+        }
+        return null;
+      })()}
       <div style={{ marginBottom: 16 }}>
         <Alert
           message="Label Management"
@@ -387,6 +548,15 @@ const LabelManagementModal = ({
             form={form}
             layout="vertical"
             onFinish={handleSaveLabel}
+            onFinishFailed={(errorInfo) => {
+              logError('app.frontend.validation', 'label_form_validation_failed', 'Label form validation failed', {
+                timestamp: new Date().toISOString(),
+                projectId: projectId,
+                isCreating: isCreating,
+                editingLabelId: editingLabel?.id,
+                errorInfo: errorInfo
+              });
+            }}
           >
             <Row gutter={16}>
               <Col span={12}>
@@ -451,7 +621,11 @@ const LabelManagementModal = ({
                     <Button
                       type="link"
                       size="small"
-                      onClick={() => form.setFieldsValue({ color: generateRandomColor() })}
+                      onClick={() => {
+                        const randomColor = generateRandomColor();
+                        form.setFieldsValue({ color: randomColor });
+                        logUserClick('random_color_button_clicked', 'User clicked random color button');
+                      }}
                     >
                       Random
                     </Button>
@@ -495,6 +669,15 @@ const LabelManagementModal = ({
           )
         }
       >
+        {(() => {
+          logInfo('app.frontend.ui', 'labels_table_rendered', 'Labels table rendered', {
+            timestamp: new Date().toISOString(),
+            projectId: projectId,
+            labelsCount: labels.length,
+            loading: loading
+          });
+          return null;
+        })()}
         <Table
           dataSource={labels}
           columns={columns}
@@ -505,6 +688,16 @@ const LabelManagementModal = ({
           locale={{
             emptyText: 'No labels found. Create your first label to get started.'
           }}
+          onRow={(record) => ({
+            onClick: () => {
+              logInfo('app.frontend.ui', 'label_row_clicked', 'Label row clicked in table', {
+                timestamp: new Date().toISOString(),
+                projectId: projectId,
+                labelId: record.id,
+                labelName: record.name
+              });
+            }
+          })}
         />
       </Card>
 
@@ -530,6 +723,21 @@ const LabelManagementModal = ({
         width={500}
         destroyOnClose
       >
+        {(() => {
+          if (deleteModalVisible && labelToDelete) {
+            const usage = labelDistribution[labelToDelete.name];
+            const count = usage?.count || 0;
+            logInfo('app.frontend.ui', 'delete_confirmation_modal_rendered', 'Delete confirmation modal rendered', {
+              timestamp: new Date().toISOString(),
+              projectId: projectId,
+              labelId: labelToDelete.id,
+              labelName: labelToDelete.name,
+              annotationsCount: count,
+              isUsed: count > 0
+            });
+          }
+          return null;
+        })()}
         {labelToDelete && (
           <div>
             <div style={{ marginBottom: 16 }}>

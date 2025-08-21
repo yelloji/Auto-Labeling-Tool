@@ -25,6 +25,7 @@ import {
   Menu,
   Divider
 } from 'antd';
+import { logInfo, logError, logUserClick } from '../utils/professional_logger';
 import {
   UploadOutlined,
   RobotOutlined,
@@ -66,7 +67,14 @@ const ModelsModern = () => {
   const [form] = Form.useForm();
 
   useEffect(() => {
+    logInfo('app.frontend.navigation', 'ModelsModern page loaded', 'page_view', { component: 'ModelsModern' });
+    logInfo('app.frontend.ui', 'ModelsModern component mounted', 'component_mount', { component: 'ModelsModern' });
     loadModels();
+    
+    // Cleanup function for component unmount
+    return () => {
+      logInfo('app.frontend.ui', 'ModelsModern component unmounted', 'component_unmount', { component: 'ModelsModern' });
+    };
   }, []);
 
   useEffect(() => {
@@ -90,53 +98,81 @@ const ModelsModern = () => {
   // Load models and supported types
   const loadModels = async () => {
     setLoading(true);
+    logInfo('app.frontend.ui', 'ModelsModern loading state changed', 'state_change', { component: 'ModelsModern', newState: 'loading_started' });
+    
     try {
+      logInfo('app.frontend.interactions', 'Loading AI models', 'load_models', { component: 'ModelsModern' });
       const modelsData = await modelsAPI.getModels();
       setModels(modelsData || []);
       
+      logInfo('app.frontend.interactions', 'AI models loaded successfully', 'load_models', { component: 'ModelsModern', modelCount: modelsData?.length || 0 });
+      logInfo('app.frontend.ui', 'ModelsModern state updated', 'state_change', { component: 'ModelsModern', newState: 'models_loaded', modelCount: modelsData?.length || 0 });
+      
       // Try to get supported types, but don't fail if it doesn't work
       try {
+        logInfo('app.frontend.interactions', 'Loading supported model types', 'load_supported_types', { component: 'ModelsModern' });
         const typesData = await modelsAPI.getSupportedTypes();
         if (Array.isArray(typesData)) {
           setSupportedTypes(typesData);
+          logInfo('app.frontend.interactions', 'Supported model types loaded', 'load_supported_types', { component: 'ModelsModern', typeCount: typesData.length });
         }
       } catch (typesError) {
+        logError('app.frontend.validation', 'Could not load supported types, using defaults', typesError, { component: 'ModelsModern' });
         console.warn('Could not load supported types, using defaults');
       }
     } catch (error) {
       const errorInfo = handleAPIError(error);
+      logError('app.frontend.validation', 'Failed to load AI models', error, { component: 'ModelsModern', errorInfo });
       message.error(`Failed to load models: ${errorInfo.message}`);
       setModels([]);
     } finally {
       setLoading(false);
+      logInfo('app.frontend.ui', 'ModelsModern loading state changed', 'state_change', { component: 'ModelsModern', newState: 'loading_finished' });
     }
   };
 
   // Upload model
   const handleUpload = async (values) => {
     setUploading(true);
+    logInfo('app.frontend.ui', 'ModelsModern upload state changed', 'state_change', { component: 'ModelsModern', newState: 'uploading_started' });
+    
     try {
+      logUserClick('ModelsModern', 'upload_model');
+      logInfo('app.frontend.interactions', 'Uploading AI model', 'upload_model', { component: 'ModelsModern', modelName: values.name, modelType: values.type });
+      
       await modelsAPI.uploadModel(values);
+      
+      logInfo('app.frontend.interactions', 'AI model uploaded successfully', 'upload_model', { component: 'ModelsModern', modelName: values.name, modelType: values.type });
+      logInfo('app.frontend.ui', 'Upload modal closed', 'modal_close', { component: 'ModelsModern', modal: 'upload_model' });
+      
       message.success('Model uploaded successfully!');
       setUploadModalVisible(false);
       form.resetFields();
       loadModels();
     } catch (error) {
       const errorInfo = handleAPIError(error);
+      logError('app.frontend.validation', 'Failed to upload AI model', error, { component: 'ModelsModern', modelName: values.name, modelType: values.type, errorInfo });
       message.error(`Failed to upload model: ${errorInfo.message}`);
     } finally {
       setUploading(false);
+      logInfo('app.frontend.ui', 'ModelsModern upload state changed', 'state_change', { component: 'ModelsModern', newState: 'uploading_finished' });
     }
   };
 
   // Delete model
   const handleDelete = async (modelId) => {
     try {
+      logUserClick('ModelsModern', 'delete_model');
+      logInfo('app.frontend.interactions', 'Deleting AI model', 'delete_model', { component: 'ModelsModern', modelId });
+      
       await modelsAPI.deleteModel(modelId);
+      
+      logInfo('app.frontend.interactions', 'AI model deleted successfully', 'delete_model', { component: 'ModelsModern', modelId });
       message.success('Model deleted successfully');
       loadModels();
     } catch (error) {
       const errorInfo = handleAPIError(error);
+      logError('app.frontend.validation', 'Failed to delete AI model', error, { component: 'ModelsModern', modelId, errorInfo });
       message.error(`Failed to delete model: ${errorInfo.message}`);
     }
   };
@@ -203,6 +239,9 @@ const ModelsModern = () => {
           key="view" 
           icon={<EyeOutlined />}
           onClick={() => {
+            logUserClick('ModelsModern', 'view_model_details');
+            logInfo('app.frontend.interactions', 'Viewing model details', 'view_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name, modelType: model.type });
+            logInfo('app.frontend.ui', 'View modal opened', 'modal_open', { component: 'ModelsModern', modal: 'view_model', modelId: model.id });
             setSelectedModel(model);
             setViewModalVisible(true);
           }}
@@ -212,14 +251,22 @@ const ModelsModern = () => {
         <Menu.Item 
           key="download" 
           icon={<DownloadOutlined />}
-          onClick={() => message.info('Download feature coming soon')}
+          onClick={() => {
+            logUserClick('ModelsModern', 'download_model');
+            logInfo('app.frontend.interactions', 'Download model requested', 'download_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
+            message.info('Download feature coming soon');
+          }}
         >
           Download Model
         </Menu.Item>
         <Menu.Item 
           key="duplicate" 
           icon={<PlusOutlined />}
-          onClick={() => message.info('Duplicate feature coming soon')}
+          onClick={() => {
+            logUserClick('ModelsModern', 'duplicate_model');
+            logInfo('app.frontend.interactions', 'Duplicate model requested', 'duplicate_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
+            message.info('Duplicate feature coming soon');
+          }}
         >
           Duplicate Model
         </Menu.Item>
@@ -229,6 +276,8 @@ const ModelsModern = () => {
           icon={<DeleteOutlined />}
           danger
           onClick={() => {
+            logUserClick('ModelsModern', 'confirm_delete_model');
+            logInfo('app.frontend.interactions', 'Delete model confirmation dialog opened', 'confirm_delete', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
             Modal.confirm({
               title: 'Delete Model',
               content: `Are you sure you want to delete "${model.name}"? This action cannot be undone.`,
@@ -407,7 +456,11 @@ const ModelsModern = () => {
         <Space size="middle">
           <Button 
             icon={<ReloadOutlined />}
-            onClick={loadModels}
+            onClick={() => {
+              logUserClick('ModelsModern', 'refresh_models');
+              logInfo('app.frontend.interactions', 'Refreshing AI models', 'refresh_models', { component: 'ModelsModern' });
+              loadModels();
+            }}
             style={{ 
               borderRadius: '6px',
               height: '36px'
@@ -418,7 +471,11 @@ const ModelsModern = () => {
           <Button 
             type="primary" 
             icon={<CloudUploadOutlined />}
-            onClick={() => setUploadModalVisible(true)}
+            onClick={() => {
+              logUserClick('ModelsModern', 'open_upload_modal');
+              logInfo('app.frontend.ui', 'Upload modal opened', 'modal_open', { component: 'ModelsModern', modal: 'upload_model' });
+              setUploadModalVisible(true);
+            }}
             style={{ 
               borderRadius: '6px',
               height: '36px',
@@ -483,14 +540,20 @@ const ModelsModern = () => {
           <Search
             placeholder="Search models..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              logInfo('app.frontend.ui', 'Model search term changed', 'search_input', { component: 'ModelsModern', searchTerm: e.target.value });
+              setSearchTerm(e.target.value);
+            }}
             style={{ width: 250 }}
             allowClear
           />
           
           <Select
             value={filterType}
-            onChange={setFilterType}
+            onChange={(value) => {
+              logInfo('app.frontend.ui', 'Model filter type changed', 'filter_change', { component: 'ModelsModern', filterType: value });
+              setFilterType(value);
+            }}
             style={{ width: 150 }}
           >
             <Option value="all">All Types</Option>
@@ -522,7 +585,11 @@ const ModelsModern = () => {
               <Button 
                 type="primary" 
                 icon={<CloudUploadOutlined />}
-                onClick={() => setUploadModalVisible(true)}
+                onClick={() => {
+                  logUserClick('ModelsModern', 'upload_first_model');
+                  logInfo('app.frontend.ui', 'Upload modal opened from empty state', 'modal_open', { component: 'ModelsModern', modal: 'upload_model', trigger: 'empty_state' });
+                  setUploadModalVisible(true);
+                }}
               >
                 Upload Your First Model
               </Button>
@@ -539,7 +606,11 @@ const ModelsModern = () => {
       <Modal
         title="Upload Model"
         open={uploadModalVisible}
-        onCancel={() => setUploadModalVisible(false)}
+        onCancel={() => {
+          logUserClick('ModelsModern', 'cancel_upload_modal');
+          logInfo('app.frontend.ui', 'Upload modal closed', 'modal_close', { component: 'ModelsModern', modal: 'upload_model' });
+          setUploadModalVisible(false);
+        }}
         footer={null}
         width={600}
       >
@@ -547,6 +618,9 @@ const ModelsModern = () => {
           form={form}
           layout="vertical"
           onFinish={handleUpload}
+          onFinishFailed={(errorInfo) => {
+            logError('app.frontend.validation', 'Model upload form validation failed', null, { component: 'ModelsModern', errorInfo });
+          }}
         >
           <Form.Item
             name="name"
@@ -586,7 +660,36 @@ const ModelsModern = () => {
             <Dragger
               name="file"
               multiple={false}
-              beforeUpload={() => false}
+              beforeUpload={(file) => {
+                // Validate file type
+                const validTypes = ['.pt', '.onnx', '.pb'];
+                const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+                if (!validTypes.includes(fileExtension)) {
+                  logError('app.frontend.validation', 'Invalid model file type uploaded', null, { 
+                    component: 'ModelsModern', 
+                    fileName: file.name, 
+                    fileType: fileExtension,
+                    validTypes 
+                  });
+                  message.error('Invalid file type. Please upload .pt, .onnx, or .pb files only.');
+                  return false;
+                }
+                
+                // Validate file size (max 500MB)
+                const maxSize = 500 * 1024 * 1024; // 500MB
+                if (file.size > maxSize) {
+                  logError('app.frontend.validation', 'Model file too large', null, { 
+                    component: 'ModelsModern', 
+                    fileName: file.name, 
+                    fileSize: file.size,
+                    maxSize 
+                  });
+                  message.error('File too large. Maximum size is 500MB.');
+                  return false;
+                }
+                
+                return false; // Prevent auto upload
+              }}
               accept=".pt,.onnx,.pb"
             >
               <p className="ant-upload-drag-icon">
@@ -609,7 +712,11 @@ const ModelsModern = () => {
               >
                 Upload Model
               </Button>
-              <Button onClick={() => setUploadModalVisible(false)}>
+              <Button onClick={() => {
+                logUserClick('ModelsModern', 'cancel_upload_form');
+                logInfo('app.frontend.ui', 'Upload modal closed from form', 'modal_close', { component: 'ModelsModern', modal: 'upload_model' });
+                setUploadModalVisible(false);
+              }}>
                 Cancel
               </Button>
             </Space>
@@ -621,9 +728,17 @@ const ModelsModern = () => {
       <Modal
         title="Model Details"
         open={viewModalVisible}
-        onCancel={() => setViewModalVisible(false)}
+        onCancel={() => {
+          logUserClick('ModelsModern', 'close_view_modal');
+          logInfo('app.frontend.ui', 'View modal closed', 'modal_close', { component: 'ModelsModern', modal: 'view_model' });
+          setViewModalVisible(false);
+        }}
         footer={[
-          <Button key="close" onClick={() => setViewModalVisible(false)}>
+          <Button key="close" onClick={() => {
+            logUserClick('ModelsModern', 'close_view_modal_button');
+            logInfo('app.frontend.ui', 'View modal closed from button', 'modal_close', { component: 'ModelsModern', modal: 'view_model' });
+            setViewModalVisible(false);
+          }}>
             Close
           </Button>
         ]}

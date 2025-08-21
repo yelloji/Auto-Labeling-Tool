@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Typography,
   Alert
@@ -6,14 +6,29 @@ import {
 import {
   DeploymentUnitOutlined
 } from '@ant-design/icons';
+import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 const { Title } = Typography;
 
 // This component is extracted from ProjectWorkspace.js
 // The main structure comes from the renderDeploymentsContent function (lines 1604-1617)
 const DeploymentsSection = () => {
+  useEffect(() => {
+    logInfo('app.frontend.ui', 'deployments_section_initialized', 'DeploymentsSection component initialized', {
+      timestamp: new Date().toISOString(),
+      component: 'DeploymentsSection'
+    });
+  }, []);
+
   return (
     <div style={{ padding: '24px' }}>
+      {(() => {
+        logInfo('app.frontend.ui', 'deployments_section_rendered', 'DeploymentsSection component rendered', {
+          timestamp: new Date().toISOString(),
+          component: 'DeploymentsSection'
+        });
+        return null;
+      })()}
       <Title level={2}>
         <DeploymentUnitOutlined style={{ marginRight: '8px' }} />
         Deployments

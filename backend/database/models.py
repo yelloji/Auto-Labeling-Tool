@@ -10,6 +10,10 @@ from datetime import datetime
 from typing import List, Optional
 import uuid
 from .base import Base
+from logging_system.professional_logger import get_professional_logger
+
+# Initialize professional logger
+logger = get_professional_logger()
 
 
 class Project(Base):
@@ -35,6 +39,11 @@ class Project(Base):
     datasets = relationship("Dataset", back_populates="project", cascade="all, delete-orphan")
     
     def __repr__(self):
+        logger.debug("app.database", "Project model representation", "project_repr", {
+            "project_id": self.id,
+            "project_name": self.name,
+            "project_type": self.project_type
+        })
         return f"<Project(id='{self.id}', name='{self.name}')>"
 
 
@@ -63,6 +72,11 @@ class Dataset(Base):
     images = relationship("Image", back_populates="dataset", cascade="all, delete-orphan")
     
     def __repr__(self):
+        logger.debug("app.database", "Dataset model representation", "dataset_repr", {
+            "dataset_id": self.id,
+            "dataset_name": self.name,
+            "project_id": self.project_id
+        })
         return f"<Dataset(id='{self.id}', name='{self.name}', project='{self.project_id}')>"
 
 
@@ -142,6 +156,11 @@ class Image(Base):
         return '/' + path if not path.startswith('/') else path
     
     def __repr__(self):
+        logger.debug("app.database", "Image model representation", "image_repr", {
+            "image_id": self.id,
+            "image_filename": self.filename,
+            "dataset_id": self.dataset_id
+        })
         return f"<Image(id='{self.id}', filename='{self.filename}')>"
 
 
@@ -179,6 +198,12 @@ class Annotation(Base):
     image = relationship("Image", back_populates="annotations")
     
     def __repr__(self):
+        logger.debug("app.database", "Annotation model representation", "annotation_repr", {
+            "annotation_id": self.id,
+            "image_id": self.image_id,
+            "class_name": self.class_name,
+            "confidence": self.confidence
+        })
         return f"<Annotation(id='{self.id}', class='{self.class_name}', confidence={self.confidence})>"
 
 
@@ -201,6 +226,11 @@ class ModelUsage(Base):
     created_at = Column(DateTime, default=func.now())
     
     def __repr__(self):
+        logger.debug("app.database", "ModelUsage model representation", "model_usage_repr", {
+            "model_usage_id": self.id,
+            "model_id": self.model_id,
+            "total_inferences": self.total_inferences
+        })
         return f"<ModelUsage(model_id='{self.model_id}', inferences={self.total_inferences})>"
 
 class Release(Base):
@@ -263,6 +293,13 @@ class ImageTransformation(Base):
     release = relationship("Release", back_populates="transformations")
     
     def __repr__(self):
+        logger.debug("app.database", "ImageTransformation model representation", "image_transformation_repr", {
+            "image_transformation_id": self.id,
+            "transformation_type": self.transformation_type,
+            "release_version": self.release_version,
+            "status": self.status,
+            "dual_value": self.is_dual_value
+        })
         return f"<ImageTransformation(id='{self.id}', type='{self.transformation_type}', version='{self.release_version}', status='{self.status}', dual_value='{self.is_dual_value}')>"
 
 
@@ -302,6 +339,11 @@ class AutoLabelJob(Base):
     completed_at = Column(DateTime, nullable=True)
     
     def __repr__(self):
+        logger.debug("app.database", "AutoLabelJob model representation", "auto_label_job_repr", {
+            "auto_label_job_id": self.id,
+            "dataset_id": self.dataset_id,
+            "status": self.status
+        })
         return f"<AutoLabelJob(id='{self.id}', dataset='{self.dataset_id}', status='{self.status}')>"
 
 
@@ -337,6 +379,13 @@ class DatasetSplit(Base):
     last_split_at = Column(DateTime, nullable=True)
     
     def __repr__(self):
+        logger.debug("app.database", "DatasetSplit model representation", "dataset_split_repr", {
+            "dataset_split_id": self.id,
+            "dataset_id": self.dataset_id,
+            "train_percentage": self.train_percentage,
+            "val_percentage": self.val_percentage,
+            "test_percentage": self.test_percentage
+        })
         return f"<DatasetSplit(dataset='{self.dataset_id}', train={self.train_percentage}%, val={self.val_percentage}%, test={self.test_percentage}%)>"
 
 
@@ -379,6 +428,12 @@ class LabelAnalytics(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     def __repr__(self):
+        logger.debug("app.database", "LabelAnalytics model representation", "label_analytics_repr", {
+            "label_analytics_id": self.id,
+            "dataset_id": self.dataset_id,
+            "num_classes": self.num_classes,
+            "is_balanced": self.is_balanced
+        })
         return f"<LabelAnalytics(dataset='{self.dataset_id}', classes={self.num_classes}, balanced={self.is_balanced})>"
     
     
@@ -394,3 +449,11 @@ class Label(Base):
     
     # Relationship back to project
     project = relationship("Project", back_populates="labels")
+    
+    def __repr__(self):
+        logger.debug("app.database", "Label model representation", "label_repr", {
+            "label_id": self.id,
+            "label_name": self.name,
+            "project_id": self.project_id
+        })
+        return f"<Label(id='{self.id}', name='{self.name}', project='{self.project_id}')>"

@@ -21,6 +21,7 @@ import {
   ExportOutlined 
 } from '@ant-design/icons';
 import { projectsAPI } from '../../../services/api';
+import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 import './DatasetSection.css';
 
 const { Title, Text } = Typography;
@@ -42,14 +43,37 @@ const DatasetSection = ({ projectId }) => {
   const [pageSize] = useState(50); // Show 50 images per page for optimal performance
   const navigate = useNavigate();
 
+  useEffect(() => {
+    logInfo('app.frontend.ui', 'dataset_section_initialized', 'DatasetSection component initialized', {
+      timestamp: new Date().toISOString(),
+      component: 'DatasetSection',
+      projectId: projectId
+    });
+
+    if (projectId) {
+      fetchDatasetImages();
+    }
+  }, [projectId]);
+
   // Navigate to Release section
   const handleCreateRelease = () => {
+    logUserClick('create_release_button_clicked', 'User clicked create release button');
+    logInfo('app.frontend.navigation', 'navigate_to_release_section', 'Navigating to release section', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      destination: 'release_section'
+    });
     navigate(`/projects/${projectId}/workspace`, { 
       state: { selectedSection: 'versions', openCreateModal: true } 
     });
   };
 
   const fetchDatasetImages = async () => {
+    logInfo('app.frontend.interactions', 'dataset_images_loading_started', 'Started loading dataset images', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
+
     setLoading(true);
     try {
       // Fetch all images with split_type=dataset filter (client-side pagination)
@@ -68,7 +92,20 @@ const DatasetSection = ({ projectId }) => {
       
       console.log('Dataset images loaded:', datasetImages.length);
       console.log('Available datasets:', uniqueDatasets);
+
+      logInfo('app.frontend.interactions', 'dataset_images_loading_success', 'Successfully loaded dataset images', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        imagesCount: datasetImages.length,
+        datasetsCount: uniqueDatasets.length
+      });
     } catch (error) {
+      logError('app.frontend.validation', 'dataset_images_loading_failed', 'Failed to load dataset images', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        error: error.message,
+        errorDetails: error.response?.data
+      });
       message.error('Failed to load dataset images');
       console.error('Error fetching dataset images:', error);
     } finally {
@@ -78,12 +115,32 @@ const DatasetSection = ({ projectId }) => {
 
   // Handle pagination change
   const handlePageChange = (page) => {
+    logUserClick('pagination_page_changed', `User changed to page ${page}`);
+    logInfo('app.frontend.ui', 'pagination_changed', 'Pagination page changed', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      oldPage: currentPage,
+      newPage: page,
+      totalImages: totalImages,
+      pageSize: pageSize
+    });
     setCurrentPage(page);
   };
 
   // Reset page when filters change
   useEffect(() => {
-    setCurrentPage(1);
+    if (currentPage !== 1) {
+      logInfo('app.frontend.ui', 'filters_changed_reset_page', 'Filters changed, resetting to page 1', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        search: search,
+        filterSplitSection: filterSplitSection,
+        filterDataset: filterDataset,
+        filterClass: filterClass,
+        sortBy: sortBy
+      });
+      setCurrentPage(1);
+    }
   }, [search, filterSplitSection, filterDataset, filterClass, sortBy]);
 
   // Update available classes based on currently filtered images (excluding class filter)
@@ -131,6 +188,12 @@ const DatasetSection = ({ projectId }) => {
     
     // Reset class filter if current selection is no longer available
     if (filterClass !== 'all' && !uniqueClasses.includes(filterClass)) {
+      logInfo('app.frontend.ui', 'class_filter_reset', 'Class filter reset due to unavailable class', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        oldFilterClass: filterClass,
+        availableClasses: uniqueClasses
+      });
       setFilterClass('all');
     }
   }, [allImages, search, filterSplitSection, filterDataset]);
@@ -196,15 +259,34 @@ const DatasetSection = ({ projectId }) => {
     
     setImages(paginatedImages);
     setTotalImages(filteredImages.length);
+
+    logInfo('app.frontend.ui', 'images_filtered_and_paginated', 'Images filtered and paginated', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      totalImages: allImages.length,
+      filteredImages: filteredImages.length,
+      paginatedImages: paginatedImages.length,
+      currentPage: currentPage,
+      pageSize: pageSize,
+      filters: {
+        search: search,
+        splitSection: filterSplitSection,
+        dataset: filterDataset,
+        class: filterClass,
+        sortBy: sortBy
+      }
+    });
   }, [allImages, search, filterSplitSection, filterDataset, filterClass, sortBy, currentPage, pageSize]);
 
-  useEffect(() => {
-    if (projectId) {
-      fetchDatasetImages();
-    }
-  }, [projectId]);
-
   const handleImageClick = (image) => {
+    logUserClick('dataset_image_clicked', `User clicked on dataset image: ${image.filename || image.name}`);
+    logInfo('app.frontend.navigation', 'navigate_to_manual_labeling', 'Navigating to manual labeling page', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      imageId: image.id,
+      datasetId: image.dataset_id,
+      imageName: image.filename || image.name
+    });
     // Navigate to manual labeling page
     navigate(`/annotate/${image.dataset_id}/manual`, {
       state: { 
@@ -214,7 +296,71 @@ const DatasetSection = ({ projectId }) => {
     });
   };
 
+  const handleSearchChange = (e) => {
+    const newSearch = e.target.value;
+    logInfo('app.frontend.ui', 'search_filter_changed', 'Search filter changed', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      oldSearch: search,
+      newSearch: newSearch
+    });
+    setSearch(newSearch);
+  };
+
+  const handleSplitSectionFilterChange = (value) => {
+    logInfo('app.frontend.ui', 'split_section_filter_changed', 'Split section filter changed', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      oldFilter: filterSplitSection,
+      newFilter: value
+    });
+    setFilterSplitSection(value);
+  };
+
+  const handleDatasetFilterChange = (value) => {
+    logInfo('app.frontend.ui', 'dataset_filter_changed', 'Dataset filter changed', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      oldFilter: filterDataset,
+      newFilter: value
+    });
+    setFilterDataset(value);
+  };
+
+  const handleClassFilterChange = (value) => {
+    logInfo('app.frontend.ui', 'class_filter_changed', 'Class filter changed', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      oldFilter: filterClass,
+      newFilter: value
+    });
+    setFilterClass(value);
+  };
+
+  const handleSortByChange = (value) => {
+    logInfo('app.frontend.ui', 'sort_by_changed', 'Sort by changed', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      oldSortBy: sortBy,
+      newSortBy: value
+    });
+    setSortBy(value);
+  };
+
+  const handleRefreshClick = () => {
+    logUserClick('refresh_dataset_button_clicked', 'User clicked refresh dataset button');
+    logInfo('app.frontend.interactions', 'dataset_refresh_triggered', 'Dataset refresh triggered', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
+    fetchDatasetImages();
+  };
+
   if (loading) {
+    logInfo('app.frontend.ui', 'dataset_loading_state', 'Dataset section showing loading state', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
     return (
       <div className="dataset-container">
         <div style={{ 
@@ -235,6 +381,18 @@ const DatasetSection = ({ projectId }) => {
 
   return (
     <div className="dataset-container">
+      {(() => {
+        logInfo('app.frontend.ui', 'dataset_section_rendered', 'Dataset section fully rendered', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          totalImages: totalImages,
+          displayedImages: images.length,
+          hasImages: allImages.length > 0,
+          currentPage: currentPage,
+          totalPages: Math.ceil(totalImages / pageSize)
+        });
+        return null;
+      })()}
       {/* Header */}
       <div className="dataset-header">
         <div>
@@ -260,7 +418,7 @@ const DatasetSection = ({ projectId }) => {
           </Button>
           <Button 
             icon={<ReloadOutlined />}
-            onClick={fetchDatasetImages}
+            onClick={handleRefreshClick}
             loading={loading}
           >
             Refresh
@@ -282,14 +440,14 @@ const DatasetSection = ({ projectId }) => {
               placeholder="Search dataset images by name..."
               prefix={<SearchOutlined />}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={handleSearchChange}
               allowClear
             />
           </Col>
           <Col xs={8} sm={6} md={4}>
             <Select
               value={filterSplitSection}
-              onChange={setFilterSplitSection}
+              onChange={handleSplitSectionFilterChange}
               style={{ width: '100%' }}
               placeholder="Split Section"
             >
@@ -302,7 +460,7 @@ const DatasetSection = ({ projectId }) => {
           <Col xs={8} sm={6} md={4}>
             <Select
               value={filterDataset}
-              onChange={setFilterDataset}
+              onChange={handleDatasetFilterChange}
               style={{ width: '100%' }}
               placeholder="Dataset"
             >
@@ -315,7 +473,7 @@ const DatasetSection = ({ projectId }) => {
           <Col xs={8} sm={6} md={4}>
             <Select
               value={filterClass}
-              onChange={setFilterClass}
+              onChange={handleClassFilterChange}
               style={{ width: '100%' }}
               placeholder="Class"
             >
@@ -328,7 +486,7 @@ const DatasetSection = ({ projectId }) => {
           <Col xs={8} sm={6} md={4}>
             <Select
               value={sortBy}
-              onChange={setSortBy}
+              onChange={handleSortByChange}
               style={{ width: '100%' }}
               placeholder="Sort by"
             >
@@ -413,11 +571,31 @@ const DatasetImageCard = ({ image, onClick }) => {
   useEffect(() => {
     const loadAnnotations = async () => {
       if (image.id) {
+        logInfo('app.frontend.interactions', 'image_annotations_loading_started', 'Started loading image annotations', {
+          timestamp: new Date().toISOString(),
+          imageId: image.id,
+          imageName: image.filename || image.name
+        });
+
         try {
           const annotationData = await projectsAPI.getImageAnnotations(image.id);
           console.log(`Annotations for image ${image.filename}:`, annotationData);
           setAnnotations(annotationData || []);
+
+          logInfo('app.frontend.interactions', 'image_annotations_loading_success', 'Successfully loaded image annotations', {
+            timestamp: new Date().toISOString(),
+            imageId: image.id,
+            imageName: image.filename || image.name,
+            annotationsCount: annotationData?.length || 0
+          });
         } catch (error) {
+          logError('app.frontend.validation', 'image_annotations_loading_failed', 'Failed to load image annotations', {
+            timestamp: new Date().toISOString(),
+            imageId: image.id,
+            imageName: image.filename || image.name,
+            error: error.message,
+            errorDetails: error.response?.data
+          });
           console.error('Error loading annotations:', error);
           setAnnotations([]);
         }
@@ -466,11 +644,28 @@ const DatasetImageCard = ({ image, onClick }) => {
               width: e.target.clientWidth,
               height: e.target.clientHeight
             });
+
+            logInfo('app.frontend.ui', 'image_loaded', 'Image loaded successfully', {
+              timestamp: new Date().toISOString(),
+              imageId: image.id,
+              imageName: image.filename || image.name,
+              dimensions: {
+                width: e.target.clientWidth,
+                height: e.target.clientHeight
+              }
+            });
           }}
           onError={(e) => {
             e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgZmlsbD0iI2VlZSIvPjx0ZXh0IHg9IjEwMCIgeT0iNzUiIGZvbnQtc2l6ZT0iMTQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
             setImageLoaded(true);
             setImageDimensions({ width: 200, height: 150 });
+
+            logError('app.frontend.validation', 'image_load_failed', 'Image failed to load', {
+              timestamp: new Date().toISOString(),
+              imageId: image.id,
+              imageName: image.filename || image.name,
+              imageUrl: imageUrl
+            });
           }}
         />
         

@@ -3,8 +3,9 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Layout } from 'antd';
 import 'antd/dist/reset.css';
 
-// Initialize frontend logging
-import './utils/logger';
+// Initialize professional frontend logging
+import './utils/professional_logger';
+import { logInfo, logError, logUserClick } from './utils/professional_logger';
 
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
@@ -21,8 +22,68 @@ import ManualLabeling from './pages/annotation/ManualLabeling';
 const { Header, Content } = Layout;
 
 function App() {
+  // Log app initialization
+  logInfo('app.frontend.ui', 'app_initialized', 'React App initialized', {
+    timestamp: new Date().toISOString(),
+    component: 'App',
+    userAgent: navigator.userAgent,
+    windowSize: {
+      width: window.innerWidth,
+      height: window.innerHeight
+    },
+    function: 'app_initialization'
+  });
+
+  // Add error boundary logging
+  React.useEffect(() => {
+    const handleError = (error, errorInfo) => {
+      logError('app.frontend.ui', 'app_error_boundary', 'Unhandled error caught by app error boundary', {
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        errorStack: error.stack,
+        errorInfo: errorInfo,
+        component: 'App',
+        function: 'error_boundary'
+      });
+    };
+
+    const handleUnhandledRejection = (event) => {
+      logError('app.frontend.ui', 'app_unhandled_rejection', 'Unhandled promise rejection', {
+        timestamp: new Date().toISOString(),
+        reason: event.reason,
+        component: 'App',
+        function: 'unhandled_rejection_handler'
+      });
+    };
+
+    // Add global error handlers
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    // Log successful app mount
+    logInfo('app.frontend.ui', 'app_mounted', 'React App successfully mounted', {
+      timestamp: new Date().toISOString(),
+      component: 'App',
+      function: 'app_mount'
+    });
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   return (
     <Router>
+      {(() => {
+        logInfo('app.frontend.ui', 'app_rendered', 'React App rendered', {
+          timestamp: new Date().toISOString(),
+          component: 'App',
+          currentPath: window.location.pathname,
+          function: 'app_render'
+        });
+        return null;
+      })()}
       <Routes>
         {/* Project Workspace - Full screen layout without navbar */}
         <Route path="/projects/:projectId/workspace" element={<ProjectWorkspace />} />

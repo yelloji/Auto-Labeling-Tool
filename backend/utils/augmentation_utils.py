@@ -20,6 +20,12 @@ backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if backend_dir not in sys.path:
     sys.path.append(backend_dir)
 
+# Import professional logging system
+from logging_system.professional_logger import get_professional_logger
+
+# Initialize professional logger
+logger = get_professional_logger()
+
 # Import central configuration
 from core.transformation_config import (
     get_shear_parameters, get_rotation_parameters,
@@ -36,6 +42,9 @@ class AdvancedDataAugmentation:
     """
     
     def __init__(self):
+        logger.info("operations.transformations", "Initializing AdvancedDataAugmentation", "augmentation_init", {
+            'class': 'AdvancedDataAugmentation'
+        })
         self.augmentation_pipeline = None
         self.config = {}
         
@@ -49,6 +58,11 @@ class AdvancedDataAugmentation:
         Returns:
             Albumentations compose pipeline
         """
+        logger.info("operations.transformations", "Creating augmentation pipeline", "create_pipeline_start", {
+            'config_keys': list(config.keys()) if config else [],
+            'config_size': len(config) if config else 0
+        })
+        
         transforms = []
         
         # 1. GEOMETRIC TRANSFORMATIONS
@@ -60,12 +74,22 @@ class AdvancedDataAugmentation:
                 border_mode=cv2.BORDER_REFLECT_101,
                 p=config["rotation"].get("probability", 0.5)
             ))
+            logger.info("operations.transformations", "Added rotation transform", "rotation_added", {
+                'range': rotation_range,
+                'probability': config["rotation"].get("probability", 0.5)
+            })
             
         if config.get("flip", {}).get("horizontal", False):
             transforms.append(A.HorizontalFlip(p=config["flip"].get("h_probability", 0.5)))
+            logger.info("operations.transformations", "Added horizontal flip transform", "hflip_added", {
+                'probability': config["flip"].get("h_probability", 0.5)
+            })
             
         if config.get("flip", {}).get("vertical", False):
             transforms.append(A.VerticalFlip(p=config["flip"].get("v_probability", 0.5)))
+            logger.info("operations.transformations", "Added vertical flip transform", "vflip_added", {
+                'probability': config["flip"].get("v_probability", 0.5)
+            })
             
         if config.get("shear", {}).get("enabled", False):
             shear_range = config["shear"].get("range", [-5, 5])
@@ -73,6 +97,10 @@ class AdvancedDataAugmentation:
                 shear=shear_range,
                 p=config["shear"].get("probability", 0.3)
             ))
+            logger.info("operations.transformations", "Added shear transform", "shear_added", {
+                'range': shear_range,
+                'probability': config["shear"].get("probability", 0.3)
+            })
             
         if config.get("perspective", {}).get("enabled", False):
             distortion = config["perspective"].get("distortion", 0.1)
@@ -80,6 +108,10 @@ class AdvancedDataAugmentation:
                 scale=(0.05, distortion),
                 p=config["perspective"].get("probability", 0.3)
             ))
+            logger.info("operations.transformations", "Added perspective transform", "perspective_added", {
+                'distortion': distortion,
+                'probability': config["perspective"].get("probability", 0.3)
+            })
             
         if config.get("elastic_transform", {}).get("enabled", False):
             alpha = config["elastic_transform"].get("alpha", 1)
@@ -90,6 +122,11 @@ class AdvancedDataAugmentation:
                 alpha_affine=50,
                 p=config["elastic_transform"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added elastic transform", "elastic_added", {
+                'alpha': alpha,
+                'sigma': sigma,
+                'probability': config["elastic_transform"].get("probability", 0.2)
+            })
             
         # 2. SCALING AND CROPPING
         if config.get("crop", {}).get("enabled", False):
@@ -101,6 +138,10 @@ class AdvancedDataAugmentation:
                 ratio=(0.75, 1.33),
                 p=config["crop"].get("probability", 0.5)
             ))
+            logger.info("operations.transformations", "Added crop transform", "crop_added", {
+                'scale_range': scale_range,
+                'probability': config["crop"].get("probability", 0.5)
+            })
             
         if config.get("zoom", {}).get("enabled", False):
             zoom_range = config["zoom"].get("range", [0.9, 1.1])
@@ -108,6 +149,10 @@ class AdvancedDataAugmentation:
                 scale_limit=(zoom_range[0] - 1, zoom_range[1] - 1),
                 p=config["zoom"].get("probability", 0.3)
             ))
+            logger.info("operations.transformations", "Added zoom transform", "zoom_added", {
+                'zoom_range': zoom_range,
+                'probability': config["zoom"].get("probability", 0.3)
+            })
             
         # 3. COLOR TRANSFORMATIONS
         if config.get("brightness", {}).get("enabled", False):
@@ -117,6 +162,10 @@ class AdvancedDataAugmentation:
                 contrast_limit=0,
                 p=config["brightness"].get("probability", 0.5)
             ))
+            logger.info("operations.transformations", "Added brightness transform", "brightness_added", {
+                'range': brightness_range,
+                'probability': config["brightness"].get("probability", 0.5)
+            })
             
         if config.get("contrast", {}).get("enabled", False):
             contrast_range = config["contrast"].get("range", [0.8, 1.2])
@@ -125,6 +174,10 @@ class AdvancedDataAugmentation:
                 contrast_limit=(contrast_range[0] - 1, contrast_range[1] - 1),
                 p=config["contrast"].get("probability", 0.5)
             ))
+            logger.info("operations.transformations", "Added contrast transform", "contrast_added", {
+                'range': contrast_range,
+                'probability': config["contrast"].get("probability", 0.5)
+            })
             
         if config.get("saturation", {}).get("enabled", False):
             saturation_range = config["saturation"].get("range", [0.8, 1.2])
@@ -134,6 +187,10 @@ class AdvancedDataAugmentation:
                 val_shift_limit=0,
                 p=config["saturation"].get("probability", 0.5)
             ))
+            logger.info("operations.transformations", "Added saturation transform", "saturation_added", {
+                'range': saturation_range,
+                'probability': config["saturation"].get("probability", 0.5)
+            })
             
         if config.get("hue", {}).get("enabled", False):
             hue_range = config["hue"].get("range", [-0.1, 0.1])
@@ -143,6 +200,10 @@ class AdvancedDataAugmentation:
                 val_shift_limit=0,
                 p=config["hue"].get("probability", 0.5)
             ))
+            logger.info("operations.transformations", "Added hue transform", "hue_added", {
+                'range': hue_range,
+                'probability': config["hue"].get("probability", 0.5)
+            })
             
         if config.get("gamma", {}).get("enabled", False):
             gamma_range = config["gamma"].get("range", [0.8, 1.2])
@@ -150,9 +211,16 @@ class AdvancedDataAugmentation:
                 gamma_limit=(gamma_range[0] * 100, gamma_range[1] * 100),
                 p=config["gamma"].get("probability", 0.3)
             ))
+            logger.info("operations.transformations", "Added gamma transform", "gamma_added", {
+                'range': gamma_range,
+                'probability': config["gamma"].get("probability", 0.3)
+            })
             
         if config.get("channel_shuffle", {}).get("enabled", False):
             transforms.append(A.ChannelShuffle(p=config["channel_shuffle"].get("probability", 0.2)))
+            logger.info("operations.transformations", "Added channel shuffle transform", "channel_shuffle_added", {
+                'probability': config["channel_shuffle"].get("probability", 0.2)
+            })
             
         if config.get("color_jitter", {}).get("enabled", False):
             transforms.append(A.ColorJitter(
@@ -162,6 +230,9 @@ class AdvancedDataAugmentation:
                 hue=0.1,
                 p=config["color_jitter"].get("probability", 0.3)
             ))
+            logger.info("operations.transformations", "Added color jitter transform", "color_jitter_added", {
+                'probability': config["color_jitter"].get("probability", 0.3)
+            })
             
         # 4. NOISE AND BLUR
         if config.get("gaussian_blur", {}).get("enabled", False):
@@ -170,6 +241,10 @@ class AdvancedDataAugmentation:
                 blur_limit=kernel_size,
                 p=config["gaussian_blur"].get("probability", 0.3)
             ))
+            logger.info("operations.transformations", "Added gaussian blur transform", "gaussian_blur_added", {
+                'kernel_size': kernel_size,
+                'probability': config["gaussian_blur"].get("probability", 0.3)
+            })
             
         if config.get("motion_blur", {}).get("enabled", False):
             blur_limit = config["motion_blur"].get("blur_limit", 7)
@@ -177,6 +252,10 @@ class AdvancedDataAugmentation:
                 blur_limit=blur_limit,
                 p=config["motion_blur"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added motion blur transform", "motion_blur_added", {
+                'blur_limit': blur_limit,
+                'probability': config["motion_blur"].get("probability", 0.2)
+            })
             
         if config.get("median_blur", {}).get("enabled", False):
             blur_limit = config["median_blur"].get("blur_limit", 7)
@@ -184,6 +263,10 @@ class AdvancedDataAugmentation:
                 blur_limit=blur_limit,
                 p=config["median_blur"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added median blur transform", "median_blur_added", {
+                'blur_limit': blur_limit,
+                'probability': config["median_blur"].get("probability", 0.2)
+            })
             
         if config.get("gaussian_noise", {}).get("enabled", False):
             noise_std = config["gaussian_noise"].get("std", [0.01, 0.05])
@@ -191,6 +274,10 @@ class AdvancedDataAugmentation:
                 var_limit=(noise_std[0] * 255, noise_std[1] * 255),
                 p=config["gaussian_noise"].get("probability", 0.3)
             ))
+            logger.info("operations.transformations", "Added gaussian noise transform", "gaussian_noise_added", {
+                'std': noise_std,
+                'probability': config["gaussian_noise"].get("probability", 0.3)
+            })
             
         if config.get("iso_noise", {}).get("enabled", False):
             transforms.append(A.ISONoise(
@@ -198,12 +285,18 @@ class AdvancedDataAugmentation:
                 intensity=(0.1, 0.5),
                 p=config["iso_noise"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added ISO noise transform", "iso_noise_added", {
+                'probability': config["iso_noise"].get("probability", 0.2)
+            })
             
         if config.get("multiplicative_noise", {}).get("enabled", False):
             transforms.append(A.MultiplicativeNoise(
                 multiplier=(0.9, 1.1),
                 p=config["multiplicative_noise"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added multiplicative noise transform", "multiplicative_noise_added", {
+                'probability': config["multiplicative_noise"].get("probability", 0.2)
+            })
             
         # 5. WEATHER AND ENVIRONMENTAL EFFECTS
         if config.get("rain", {}).get("enabled", False):
@@ -218,6 +311,9 @@ class AdvancedDataAugmentation:
                 rain_type=None,
                 p=config["rain"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added rain effect transform", "rain_added", {
+                'probability': config["rain"].get("probability", 0.2)
+            })
             
         if config.get("snow", {}).get("enabled", False):
             transforms.append(A.RandomSnow(
@@ -226,6 +322,9 @@ class AdvancedDataAugmentation:
                 brightness_coeff=2.5,
                 p=config["snow"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added snow effect transform", "snow_added", {
+                'probability': config["snow"].get("probability", 0.2)
+            })
             
         if config.get("fog", {}).get("enabled", False):
             transforms.append(A.RandomFog(
@@ -234,6 +333,9 @@ class AdvancedDataAugmentation:
                 alpha_coef=0.08,
                 p=config["fog"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added fog effect transform", "fog_added", {
+                'probability': config["fog"].get("probability", 0.2)
+            })
             
         if config.get("sun_flare", {}).get("enabled", False):
             transforms.append(A.RandomSunFlare(
@@ -246,6 +348,9 @@ class AdvancedDataAugmentation:
                 src_color=(255, 255, 255),
                 p=config["sun_flare"].get("probability", 0.1)
             ))
+            logger.info("operations.transformations", "Added sun flare effect transform", "sun_flare_added", {
+                'probability': config["sun_flare"].get("probability", 0.1)
+            })
             
         if config.get("shadow", {}).get("enabled", False):
             transforms.append(A.RandomShadow(
@@ -255,6 +360,9 @@ class AdvancedDataAugmentation:
                 shadow_dimension=5,
                 p=config["shadow"].get("probability", 0.3)
             ))
+            logger.info("operations.transformations", "Added shadow effect transform", "shadow_added", {
+                'probability': config["shadow"].get("probability", 0.3)
+            })
             
         # 6. ADVANCED CUTOUT TECHNIQUES
         if config.get("cutout", {}).get("enabled", False):
@@ -270,6 +378,11 @@ class AdvancedDataAugmentation:
                 fill_value=0,
                 p=config["cutout"].get("probability", 0.3)
             ))
+            logger.info("operations.transformations", "Added cutout transform", "cutout_added", {
+                'num_holes': num_holes,
+                'hole_size': hole_size,
+                'probability': config["cutout"].get("probability", 0.3)
+            })
             
         if config.get("grid_dropout", {}).get("enabled", False):
             transforms.append(A.GridDropout(
@@ -284,6 +397,9 @@ class AdvancedDataAugmentation:
                 fill_value=0,
                 p=config["grid_dropout"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added grid dropout transform", "grid_dropout_added", {
+                'probability': config["grid_dropout"].get("probability", 0.2)
+            })
             
         if config.get("channel_dropout", {}).get("enabled", False):
             transforms.append(A.ChannelDropout(
@@ -291,6 +407,9 @@ class AdvancedDataAugmentation:
                 fill_value=0,
                 p=config["channel_dropout"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added channel dropout transform", "channel_dropout_added", {
+                'probability': config["channel_dropout"].get("probability", 0.2)
+            })
             
         # 7. ADVANCED DISTORTIONS
         if config.get("optical_distortion", {}).get("enabled", False):
@@ -299,6 +418,9 @@ class AdvancedDataAugmentation:
                 shift_limit=0.05,
                 p=config["optical_distortion"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added optical distortion transform", "optical_distortion_added", {
+                'probability': config["optical_distortion"].get("probability", 0.2)
+            })
             
         if config.get("grid_distortion", {}).get("enabled", False):
             transforms.append(A.GridDistortion(
@@ -306,6 +428,9 @@ class AdvancedDataAugmentation:
                 distort_limit=0.3,
                 p=config["grid_distortion"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added grid distortion transform", "grid_distortion_added", {
+                'probability': config["grid_distortion"].get("probability", 0.2)
+            })
             
         if config.get("piecewise_affine", {}).get("enabled", False):
             transforms.append(A.PiecewiseAffine(
@@ -314,6 +439,9 @@ class AdvancedDataAugmentation:
                 nb_cols=4,
                 p=config["piecewise_affine"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added piecewise affine transform", "piecewise_affine_added", {
+                'probability': config["piecewise_affine"].get("probability", 0.2)
+            })
             
         # 8. QUALITY DEGRADATION
         if config.get("jpeg_compression", {}).get("enabled", False):
@@ -323,6 +451,10 @@ class AdvancedDataAugmentation:
                 quality_upper=quality_range[1],
                 p=config["jpeg_compression"].get("probability", 0.3)
             ))
+            logger.info("operations.transformations", "Added JPEG compression transform", "jpeg_compression_added", {
+                'quality_range': quality_range,
+                'probability': config["jpeg_compression"].get("probability", 0.3)
+            })
             
         if config.get("downscale", {}).get("enabled", False):
             scale_range = config["downscale"].get("scale_range", [0.5, 0.9])
@@ -332,12 +464,20 @@ class AdvancedDataAugmentation:
                 interpolation=cv2.INTER_LINEAR,
                 p=config["downscale"].get("probability", 0.2)
             ))
+            logger.info("operations.transformations", "Added downscale transform", "downscale_added", {
+                'scale_range': scale_range,
+                'probability': config["downscale"].get("probability", 0.2)
+            })
             
         # 9. NORMALIZATION AND FINAL PROCESSING
         if config.get("normalize", {}).get("enabled", True):
             mean = config["normalize"].get("mean", [0.485, 0.456, 0.406])
             std = config["normalize"].get("std", [0.229, 0.224, 0.225])
             transforms.append(A.Normalize(mean=mean, std=std))
+            logger.info("operations.transformations", "Added normalization transform", "normalize_added", {
+                'mean': mean,
+                'std': std
+            })
             
         # Create the pipeline
         self.augmentation_pipeline = A.Compose(
@@ -349,6 +489,11 @@ class AdvancedDataAugmentation:
                 min_visibility=0.1
             )
         )
+        
+        logger.info("operations.transformations", "Augmentation pipeline created successfully", "pipeline_created", {
+            'total_transforms': len(transforms),
+            'pipeline_type': 'albumentations'
+        })
         
         return self.augmentation_pipeline
     
@@ -365,7 +510,16 @@ class AdvancedDataAugmentation:
         Returns:
             Tuple of (augmented_image, augmented_bboxes, augmented_labels)
         """
+        logger.info("operations.transformations", "Applying augmentation to image", "apply_augmentation_start", {
+            'image_shape': image.shape if image is not None else None,
+            'num_bboxes': len(bboxes) if bboxes else 0,
+            'num_labels': len(class_labels) if class_labels else 0
+        })
+        
         if self.augmentation_pipeline is None:
+            logger.error("errors.validation", "Augmentation pipeline not created", "pipeline_not_created", {
+                'error': 'Call create_augmentation_pipeline first'
+            })
             raise ValueError("Augmentation pipeline not created. Call create_augmentation_pipeline first.")
             
         try:
@@ -375,8 +529,19 @@ class AdvancedDataAugmentation:
                 class_labels=class_labels
             )
             
+            logger.info("operations.transformations", "Augmentation applied successfully", "augmentation_success", {
+                'output_image_shape': augmented['image'].shape if 'image' in augmented else None,
+                'output_bboxes_count': len(augmented['bboxes']) if 'bboxes' in augmented else 0,
+                'output_labels_count': len(augmented['class_labels']) if 'class_labels' in augmented else 0
+            })
+            
             return augmented['image'], augmented['bboxes'], augmented['class_labels']
         except Exception as e:
+            logger.error("errors.system", f"Augmentation failed: {str(e)}", "augmentation_failed", {
+                'error': str(e),
+                'error_type': type(e).__name__,
+                'fallback_to_original': True
+            })
             # Return original if augmentation fails
             return image, bboxes, class_labels
     
@@ -385,6 +550,11 @@ class AdvancedDataAugmentation:
         Get comprehensive default augmentation configuration
         Better than any commercial tool
         """
+        logger.info("operations.transformations", "Generating default augmentation configuration", "default_config_generated", {
+            'config_type': 'default',
+            'comprehensive': True
+        })
+        
         return {
             # Geometric transformations
             "rotation": {
@@ -568,6 +738,11 @@ class AdvancedDataAugmentation:
         """
         Get preset configurations for different use cases
         """
+        logger.info("operations.transformations", "Generating preset augmentation configurations", "preset_configs_generated", {
+            'preset_count': 6,
+            'presets': ['light', 'medium', 'heavy', 'geometric_only', 'color_only', 'noise_blur']
+        })
+        
         return {
             "light": {
                 "rotation": {"enabled": True, "range": [-5, 5], "probability": 0.3},
@@ -636,28 +811,59 @@ class DatasetSplitter:
         Returns:
             Dictionary with image IDs for each split
         """
+        logger.info("operations.datasets", "Starting dataset splitting", "split_dataset_start", {
+            'total_images': len(images),
+            'total_annotations': len(annotations),
+            'train_ratio': train_ratio,
+            'val_ratio': val_ratio,
+            'test_ratio': test_ratio,
+            'stratify': stratify,
+            'random_seed': random_seed
+        })
+        
         random.seed(random_seed)
         np.random.seed(random_seed)
         
         if abs(train_ratio + val_ratio + test_ratio - 1.0) > 1e-6:
+            logger.error("errors.validation", "Split ratios must sum to 1.0", "invalid_split_ratios", {
+                'train_ratio': train_ratio,
+                'val_ratio': val_ratio,
+                'test_ratio': test_ratio,
+                'sum': train_ratio + val_ratio + test_ratio
+            })
             raise ValueError("Split ratios must sum to 1.0")
         
         image_ids = [img['id'] for img in images]
         
         if not stratify or not annotations:
+            logger.info("operations.datasets", "Performing simple random split", "simple_split", {
+                'reason': 'stratify=False or no annotations'
+            })
             # Simple random split
             random.shuffle(image_ids)
             n_total = len(image_ids)
             n_train = int(n_total * train_ratio)
             n_val = int(n_total * val_ratio)
             
-            return {
+            result = {
                 'train': image_ids[:n_train],
                 'val': image_ids[n_train:n_train + n_val],
                 'test': image_ids[n_train + n_val:]
             }
+            
+            logger.info("operations.datasets", "Simple random split completed", "simple_split_complete", {
+                'train_count': len(result['train']),
+                'val_count': len(result['val']),
+                'test_count': len(result['test'])
+            })
+            
+            return result
         
         # Stratified split by class distribution
+        logger.info("operations.datasets", "Performing stratified split", "stratified_split", {
+            'annotation_count': len(annotations)
+        })
+        
         from collections import defaultdict
         
         # Group images by their class distribution
@@ -670,6 +876,11 @@ class DatasetSplitter:
         for img_id in image_ids:
             classes = tuple(sorted(image_classes.get(img_id, set())))
             class_groups[classes].append(img_id)
+        
+        logger.info("operations.datasets", "Class groups created for stratification", "class_groups_created", {
+            'num_class_groups': len(class_groups),
+            'group_sizes': [len(group) for group in class_groups.values()]
+        })
         
         # Split each group proportionally
         train_ids, val_ids, test_ids = [], [], []
@@ -684,11 +895,20 @@ class DatasetSplitter:
             val_ids.extend(img_list[n_train:n_train + n_val])
             test_ids.extend(img_list[n_train + n_val:])
         
-        return {
+        result = {
             'train': train_ids,
             'val': val_ids,
             'test': test_ids
         }
+        
+        logger.info("operations.datasets", "Stratified split completed", "stratified_split_complete", {
+            'train_count': len(result['train']),
+            'val_count': len(result['val']),
+            'test_count': len(result['test']),
+            'class_groups_processed': len(class_groups)
+        })
+        
+        return result
 
 
 class LabelAnalyzer:
@@ -707,10 +927,17 @@ class LabelAnalyzer:
         Returns:
             Comprehensive analytics dictionary
         """
+        logger.info("operations.annotations", "Starting class distribution analysis", "analyze_class_distribution_start", {
+            'annotation_count': len(annotations)
+        })
+        
         from collections import Counter
         import math
         
         if not annotations:
+            logger.info("operations.annotations", "No annotations provided for analysis", "no_annotations", {
+                'result': 'empty_analysis'
+            })
             return {
                 'total_annotations': 0,
                 'num_classes': 0,
@@ -726,6 +953,12 @@ class LabelAnalyzer:
         class_counts = Counter(ann['class_name'] for ann in annotations)
         total_annotations = len(annotations)
         num_classes = len(class_counts)
+        
+        logger.info("operations.annotations", "Class counts calculated", "class_counts_calculated", {
+            'total_annotations': total_annotations,
+            'num_classes': num_classes,
+            'class_names': list(class_counts.keys())
+        })
         
         # Calculate statistics
         counts = list(class_counts.values())
@@ -753,6 +986,14 @@ class LabelAnalyzer:
         # Determine if balanced
         is_balanced = imbalance_ratio <= 3.0 and gini <= 0.3
         
+        logger.info("operations.annotations", "Distribution statistics calculated", "distribution_stats", {
+            'imbalance_ratio': imbalance_ratio,
+            'gini_coefficient': gini,
+            'entropy': entropy,
+            'normalized_entropy': normalized_entropy,
+            'is_balanced': is_balanced
+        })
+        
         # Generate recommendations
         recommendations = []
         if imbalance_ratio > 5.0:
@@ -770,7 +1011,7 @@ class LabelAnalyzer:
                 "Consider synthetic data generation techniques"
             ])
         
-        return {
+        result = {
             'total_annotations': total_annotations,
             'num_classes': num_classes,
             'class_distribution': dict(class_counts),
@@ -786,6 +1027,14 @@ class LabelAnalyzer:
             'needs_augmentation': imbalance_ratio > 3.0,
             'recommendations': recommendations
         }
+        
+        logger.info("operations.annotations", "Class distribution analysis completed", "analyze_class_distribution_complete", {
+            'is_balanced': is_balanced,
+            'needs_augmentation': imbalance_ratio > 3.0,
+            'recommendation_count': len(recommendations)
+        })
+        
+        return result
     
     @staticmethod
     def analyze_split_distribution(annotations: List[Dict], split_assignments: Dict[str, List[str]]) -> Dict[str, Any]:
@@ -799,6 +1048,12 @@ class LabelAnalyzer:
         Returns:
             Split-wise distribution analysis
         """
+        logger.info("operations.annotations", "Starting split distribution analysis", "analyze_split_distribution_start", {
+            'annotation_count': len(annotations),
+            'split_names': list(split_assignments.keys()),
+            'total_images': sum(len(ids) for ids in split_assignments.values())
+        })
+        
         from collections import defaultdict, Counter
         
         # Group annotations by split
@@ -813,9 +1068,18 @@ class LabelAnalyzer:
             split_name = image_to_split.get(ann['image_id'], 'unassigned')
             split_annotations[split_name].append(ann)
         
+        logger.info("operations.annotations", "Annotations grouped by split", "annotations_grouped", {
+            'split_counts': {split: len(anns) for split, anns in split_annotations.items()},
+            'unassigned_count': len(split_annotations.get('unassigned', []))
+        })
+        
         # Analyze each split
         split_analysis = {}
         for split_name, split_anns in split_annotations.items():
+            logger.info("operations.annotations", f"Analyzing split: {split_name}", "analyzing_split", {
+                'split_name': split_name,
+                'annotation_count': len(split_anns)
+            })
             split_analysis[split_name] = LabelAnalyzer.analyze_class_distribution(split_anns)
         
         # Check consistency across splits
@@ -828,9 +1092,25 @@ class LabelAnalyzer:
             split_classes = set(ann['class_name'] for ann in split_anns)
             missing_classes[split_name] = list(all_classes - split_classes)
         
-        return {
+        consistent_splits = all(not missing for missing in missing_classes.values())
+        
+        logger.info("operations.annotations", "Split consistency analysis completed", "split_consistency_analysis", {
+            'all_classes': list(all_classes),
+            'missing_classes_per_split': missing_classes,
+            'consistent_splits': consistent_splits
+        })
+        
+        result = {
             'split_analysis': split_analysis,
             'all_classes': list(all_classes),
             'missing_classes_per_split': missing_classes,
-            'consistent_splits': all(not missing for missing in missing_classes.values())
+            'consistent_splits': consistent_splits
         }
+        
+        logger.info("operations.annotations", "Split distribution analysis completed", "analyze_split_distribution_complete", {
+            'splits_analyzed': len(split_analysis),
+            'consistent_splits': consistent_splits,
+            'total_classes': len(all_classes)
+        })
+        
+        return result

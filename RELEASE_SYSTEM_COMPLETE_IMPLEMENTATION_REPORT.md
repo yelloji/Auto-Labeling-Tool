@@ -442,6 +442,70 @@ The system successfully processes image augmentation, transforms annotation coor
 
 ---
 
+---
+
+## 🆕 Latest Updates (January 2025)
+
+### **Issue 11: Download Image Format Conversion**
+**Problem**: Images remained in original format (BMP) instead of converting to user-selected format (PNG/JPG).
+
+**Solution**:
+- **Files Modified**: `backend/api/routes/releases.py`
+- **Code Changes**:
+  ```python
+  # Added output_format support to ReleaseCreate model
+  class ReleaseCreate(BaseModel):
+      # ... existing fields ...
+      output_format: Optional[str] = "original"  # jpg, png, webp, bmp, original
+  
+  # Enhanced image processing with format conversion
+  output_format = getattr(config, 'output_format', 'original').lower()
+  if output_format in ['jpg', 'jpeg', 'png', 'webp', 'bmp']:
+      # Change file extension to match output format
+      if output_format in ['jpg', 'jpeg']:
+          new_filename = f"{name_without_ext}.jpg"
+          format_for_save = 'JPEG'
+      elif output_format == 'png':
+          new_filename = f"{name_without_ext}.png" 
+          format_for_save = 'PNG'
+      # ... other formats ...
+      
+      # Save in selected format with quality optimization
+      pil_img.save(dest_path, format=format_for_save, 
+                   quality=95 if format_for_save == 'JPEG' else None)
+  ```
+- **Result**: Both original and augmented images now convert to user-selected format with proper file extensions and label matching.
+
+### **Issue 12: Improved Image Count Calculation**
+**Problem**: "Images per Original Max" calculation didn't properly account for single-value tools when dual-value tools were present.
+
+**Example**: 
+- **User Selection**: Resize + Rotate + Flip Vertical
+- **Old Calculation**: 1 + 2^1 = 3 (ignored flip vertical)
+- **New Calculation**: 1 + 2^1 + 1 = 4 (includes flip vertical effect)
+
+**Solution**:
+- **File Modified**: `backend/core/transformation_schema.py`
+- **Code Changes**:
+  ```python
+  def get_combination_count_estimate(self) -> int:
+      # ... existing dual-value logic ...
+      if dual_value_transformations:
+          dual_count = len(dual_value_transformations)
+          base_combinations = 2 ** dual_count  # Combinations from dual-value tools
+          
+          # Add single-value tool effect
+          if regular_transformations:
+              single_value_count = len(regular_transformations)
+              # Each single-value tool adds one additional combination
+              return 1 + base_combinations + single_value_count
+          else:
+              return 1 + base_combinations
+  ```
+- **Result**: More accurate count display that reflects actual generated image variants including single-value tool effects.
+
+---
+
 **Document Generated**: January 2025  
 **Project**: Stage-1 Labeling App - Release System Implementation  
-**Status**: Complete Implementation ✅
+**Status**: Complete Implementation ✅ + Latest Enhancements ⚡

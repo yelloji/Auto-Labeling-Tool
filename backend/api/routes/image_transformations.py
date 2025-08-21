@@ -1,6 +1,6 @@
 import uuid
 import json
-import logging
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
@@ -17,8 +17,15 @@ from core.transformation_config import (
     calculate_max_images_per_original
 )
 
+# Import professional logging system
+from logging_system.professional_logger import get_professional_logger
+
+# Initialize professional logger
+logger = get_professional_logger()
+
 router = APIRouter(prefix="/image-transformations", tags=["transformations"])
-logger = logging.getLogger(__name__)
+# Old logger replaced with professional logger
+# logger = logging.getLogger(__name__)
 
 def generate_transformation_version():
     """Generate a unique version identifier for transformations"""
@@ -57,10 +64,16 @@ def update_transformation_combination_count(db: Session, release_version: str):
         })
         
         db.commit()
-        logger.info(f"Updated combination count for release {release_version}: {max_images}")
+        logger.info("operations.transformations", f"Updated combination count for release {release_version}: {max_images}", "combination_count_updated", {
+            'release_version': release_version,
+            'max_images': max_images
+        })
         
     except Exception as e:
-        logger.error(f"Error updating combination count for {release_version}: {str(e)}")
+        logger.error("errors.system", f"Error updating combination count for {release_version}: {str(e)}", "combination_count_error", {
+            'release_version': release_version,
+            'error': str(e)
+        })
         db.rollback()
 
 
@@ -150,7 +163,11 @@ def process_dual_value_parameters(transformation: TransformationCreate) -> Dict[
                     "user_value": user_value,
                     "auto_value": auto_value
                 }
-                logger.info(f"Generated dual-value for {param_name}: user={user_value}, auto={auto_value}")
+                logger.info("operations.transformations", f"Generated dual-value for {param_name}: user={user_value}, auto={auto_value}", "dual_value_generated", {
+            'param_name': param_name,
+            'user_value': user_value,
+            'auto_value': auto_value
+        })
     
     return dual_value_params
 
@@ -176,11 +193,15 @@ def create_transformation(
             if existing_pending:
                 # Use the same release version as existing PENDING transformations
                 transformation.release_version = existing_pending.release_version
-                logger.info(f"Using existing PENDING release version: {transformation.release_version}")
+                logger.info("operations.releases", f"Using existing PENDING release version: {transformation.release_version}", "existing_pending_version", {
+            'release_version': transformation.release_version
+        })
             else:
                 # No PENDING transformations exist, create new version
                 transformation.release_version = generate_transformation_version()
-                logger.info(f"Created new release version: {transformation.release_version}")
+                logger.info("operations.releases", f"Created new release version: {transformation.release_version}", "new_release_version", {
+            'release_version': transformation.release_version
+        })
 
         # Process dual-value parameters
         dual_value_params = process_dual_value_parameters(transformation)
@@ -211,12 +232,19 @@ def create_transformation(
         # Calculate and update combination count for this release version
         update_transformation_combination_count(db, transformation.release_version)
 
-        logger.info(f"Created transformation: {db_transformation.id} of type {db_transformation.transformation_type}")
+        logger.info("operations.transformations", f"Created transformation: {db_transformation.id} of type {db_transformation.transformation_type}", "transformation_created", {
+            'transformation_id': db_transformation.id,
+            'transformation_type': db_transformation.transformation_type,
+            'release_version': db_transformation.release_version
+        })
         return db_transformation
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creating transformation: {str(e)}")
+        logger.error("errors.system", f"Error creating transformation: {str(e)}", "transformation_creation_error", {
+            'error': str(e),
+            'transformation_type': transformation.transformation_type
+        })
         raise HTTPException(status_code=500, detail=f"Failed to create transformation: {str(e)}")
 
 
@@ -245,7 +273,9 @@ def get_transformations(
         return transformations
 
     except Exception as e:
-        logger.error(f"Error fetching transformations: {str(e)}")
+        logger.error("errors.system", f"Error fetching transformations: {str(e)}", "transformations_fetch_error", {
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to fetch transformations: {str(e)}")
 
 
@@ -260,7 +290,9 @@ def get_pending_transformations(db: Session = Depends(get_db)):
         ).all()
         return transformations
     except Exception as e:
-        logger.error(f"Error getting pending transformations: {str(e)}")
+        logger.error("errors.system", f"Error getting pending transformations: {str(e)}", "pending_transformations_error", {
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to get pending transformations: {str(e)}")
 
 
@@ -283,7 +315,9 @@ def get_release_versions(
         return sorted(versions, reverse=True)  # Most recent first
         
     except Exception as e:
-        logger.error(f"Error fetching release versions: {str(e)}")
+        logger.error("errors.system", f"Error fetching release versions: {str(e)}", "release_versions_fetch_error", {
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to fetch release versions: {str(e)}")
 
 
@@ -315,7 +349,11 @@ def update_release_version(
         
         db.commit()
         
-        logger.info(f"Updated {updated_count} transformations from version {update_data.old_release_version} to {update_data.new_release_version}")
+        logger.info("operations.releases", f"Updated {updated_count} transformations from version {update_data.old_release_version} to {update_data.new_release_version}", "transformations_version_updated", {
+            'updated_count': updated_count,
+            'old_release_version': update_data.old_release_version,
+            'new_release_version': update_data.new_release_version
+        })
         
         return {
             "message": f"Successfully updated release version",
@@ -328,7 +366,11 @@ def update_release_version(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error updating release version: {str(e)}")
+        logger.error("errors.system", f"Error updating release version: {str(e)}", "release_version_update_error", {
+            'error': str(e),
+            'old_release_version': update_data.old_release_version,
+            'new_release_version': update_data.new_release_version
+        })
         raise HTTPException(status_code=500, detail=f"Failed to update release version: {str(e)}")
 
 
@@ -351,7 +393,10 @@ def get_transformation(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching transformation {transformation_id}: {str(e)}")
+        logger.error("errors.system", f"Error fetching transformation {transformation_id}: {str(e)}", "transformation_fetch_error", {
+            'transformation_id': transformation_id,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to fetch transformation: {str(e)}")
 
 
@@ -404,14 +449,20 @@ def update_transformation(
         db.commit()
         db.refresh(db_transformation)
 
-        logger.info(f"Updated transformation: {db_transformation.id}")
+        logger.info("operations.transformations", f"Updated transformation: {db_transformation.id}", "transformation_updated", {
+            'transformation_id': db_transformation.id,
+            'transformation_type': db_transformation.transformation_type
+        })
         return db_transformation
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error updating transformation {transformation_id}: {str(e)}")
+        logger.error("errors.system", f"Error updating transformation {transformation_id}: {str(e)}", "transformation_update_error", {
+            'transformation_id': transformation_id,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to update transformation: {str(e)}")
 
 
@@ -432,14 +483,19 @@ def delete_transformation(
         db.delete(transformation)
         db.commit()
 
-        logger.info(f"Deleted transformation: {transformation_id}")
+        logger.info("operations.transformations", f"Deleted transformation: {transformation_id}", "transformation_deleted", {
+            'transformation_id': transformation_id
+        })
         return {"message": f"Transformation {transformation_id} deleted successfully"}
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error deleting transformation {transformation_id}: {str(e)}")
+        logger.error("errors.system", f"Error deleting transformation {transformation_id}: {str(e)}", "transformation_delete_error", {
+            'transformation_id': transformation_id,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to delete transformation: {str(e)}")
 
 
@@ -465,7 +521,10 @@ def get_transformations_by_version(
         return transformations
 
     except Exception as e:
-        logger.error(f"Error fetching transformations for version {release_version}: {str(e)}")
+        logger.error("errors.system", f"Error fetching transformations for version {release_version}: {str(e)}", "transformations_version_fetch_error", {
+            'release_version': release_version,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to fetch transformations: {str(e)}")
 
 
@@ -517,12 +576,18 @@ def create_transformations_batch(
         if db_transformations and db_transformations[0].release_version:
             update_transformation_combination_count(db, db_transformations[0].release_version)
 
-        logger.info(f"Created {len(db_transformations)} transformations in batch")
+        logger.info("operations.transformations", f"Created {len(db_transformations)} transformations in batch", "transformations_batch_created", {
+            'batch_size': len(db_transformations),
+            'release_version': transformations[0].release_version if transformations else None
+        })
         return db_transformations
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Error creating transformations batch: {str(e)}")
+        logger.error("errors.system", f"Error creating transformations batch: {str(e)}", "transformations_batch_error", {
+            'error': str(e),
+            'batch_size': len(transformations) if 'transformations' in locals() else 0
+        })
         raise HTTPException(status_code=500, detail=f"Failed to create transformations: {str(e)}")
 
 
@@ -556,7 +621,9 @@ def reorder_transformations(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error reordering transformations: {str(e)}")
+        logger.error("errors.system", f"Error reordering transformations: {str(e)}", "transformations_reorder_error", {
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to reorder transformations: {str(e)}")
 
 
@@ -567,7 +634,9 @@ def generate_version():
     """
     try:
         version = generate_transformation_version()
-        logger.info(f"Generated new transformation version: {version}")
+        logger.info("operations.transformations", f"Generated new transformation version: {version}", "transformation_version_generated", {
+            'version': version
+        })
         
         return {
             "success": True,
@@ -576,7 +645,9 @@ def generate_version():
         }
         
     except Exception as e:
-        logger.error(f"Error generating version: {str(e)}")
+        logger.error("errors.system", f"Error generating version: {str(e)}", "version_generation_error", {
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to generate version: {str(e)}")
 
 
@@ -616,11 +687,17 @@ def calculate_max_images_endpoint(
             "calculation_timestamp": datetime.now().isoformat()
         })
 
-        logger.info(f"Calculated max images for version {release_version}: {result}")
+        logger.info("operations.transformations", f"Calculated max images for version {release_version}: {result}", "max_images_calculated", {
+            'release_version': release_version,
+            'result': result
+        })
         return result
 
     except Exception as e:
-        logger.error(f"Error calculating max images for version {release_version}: {str(e)}")
+        logger.error("errors.system", f"Error calculating max images for version {release_version}: {str(e)}", "max_images_calculation_error", {
+            'release_version': release_version,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to calculate max images: {str(e)}")
 
 
@@ -690,11 +767,16 @@ def get_priority_preview(
             preview["priority_order"] = priority_order
             preview["total_guaranteed_images"] = len(priority_order)
 
-        logger.info(f"Generated priority preview for version {release_version}")
+        logger.info("operations.transformations", f"Generated priority preview for version {release_version}", "priority_preview_generated", {
+            'release_version': release_version
+        })
         return preview
 
     except Exception as e:
-        logger.error(f"Error generating priority preview for version {release_version}: {str(e)}")
+        logger.error("errors.system", f"Error generating priority preview for version {release_version}: {str(e)}", "priority_preview_error", {
+            'release_version': release_version,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to generate priority preview: {str(e)}")
 
 
@@ -715,7 +797,9 @@ def update_combination_count_endpoint(
         return {"success": True, "updated_count": result, "release_version": release_version}
         
     except Exception as e:
-        logger.error(f"Error updating combination count: {str(e)}")
+        logger.error("errors.system", f"Error updating combination count: {str(e)}", "combination_count_update_error", {
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to update combination count: {str(e)}")
 
 
@@ -797,7 +881,11 @@ def update_user_selected_images(
         
         db.commit()
         
-        logger.info(f"Updated user selected images for release {release_version}: {user_selected_count} (max: {max_allowed})")
+        logger.info("operations.transformations", f"Updated user selected images for release {release_version}: {user_selected_count} (max: {max_allowed})", "user_selected_images_updated", {
+            'release_version': release_version,
+            'user_selected_count': user_selected_count,
+            'max_allowed': max_allowed
+        })
         
         return {
             "success": True,
@@ -811,7 +899,10 @@ def update_user_selected_images(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error updating user selected images: {str(e)}")
+        logger.error("errors.system", f"Error updating user selected images: {str(e)}", "user_selected_images_error", {
+            'error': str(e),
+            'release_version': release_version
+        })
         raise HTTPException(status_code=500, detail=f"Failed to update user selected images: {str(e)}")
 
 
@@ -877,5 +968,8 @@ def get_release_config(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting release config for version {release_version}: {str(e)}")
+        logger.error("errors.system", f"Error getting release config for version {release_version}: {str(e)}", "release_config_error", {
+            'release_version': release_version,
+            'error': str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to get release config: {str(e)}")

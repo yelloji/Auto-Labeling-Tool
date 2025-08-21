@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './DownloadModal.css';
 import { API_BASE_URL } from '../../../config';
+import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 const DownloadModal = ({ 
   isOpen, 
@@ -17,21 +18,72 @@ const DownloadModal = ({
   console.log('DownloadModal props:', { isOpen, release, isExporting, exportProgress });
 
   useEffect(() => {
+    logInfo('app.frontend.ui', 'download_modal_initialized', 'DownloadModal component initialized', {
+      timestamp: new Date().toISOString(),
+      component: 'DownloadModal',
+      isOpen: isOpen,
+      isExporting: isExporting,
+      releaseId: release?.id,
+      releaseName: release?.name
+    });
+
+    if (!release) {
+      logError('app.frontend.validation', 'download_modal_no_release', 'DownloadModal initialized without release object', {
+        timestamp: new Date().toISOString(),
+        function: 'useEffect'
+      });
+      return;
+    }
+
+    if (!release.id) {
+      logError('app.frontend.validation', 'download_modal_no_release_id', 'DownloadModal initialized without release ID', {
+        timestamp: new Date().toISOString(),
+        release: release,
+        function: 'useEffect'
+      });
+      return;
+    }
+
     if (release) {
+      logInfo('app.frontend.ui', 'download_url_setup_started', 'Setting up download URL', {
+        timestamp: new Date().toISOString(),
+        releaseId: release.id,
+        releaseName: release.name,
+        modelPath: release.model_path,
+        function: 'useEffect'
+      });
+
       if (release.model_path && release.model_path.startsWith('/api/')) {
         // If model_path is a relative API path, use API_BASE_URL
         const url = `${API_BASE_URL}${release.model_path}`;
         console.log('Setting download URL from model_path (relative):', url);
         setDownloadUrl(url);
+        logInfo('app.frontend.ui', 'download_url_set_relative', 'Download URL set from relative model path', {
+          timestamp: new Date().toISOString(),
+          originalPath: release.model_path,
+          finalUrl: url,
+          function: 'useEffect'
+        });
       } else if (release.model_path && (release.model_path.startsWith('http://') || release.model_path.startsWith('https://'))) {
         // If model_path is an absolute URL, use it directly
         console.log('Setting download URL from model_path (absolute):', release.model_path);
         setDownloadUrl(release.model_path);
+        logInfo('app.frontend.ui', 'download_url_set_absolute', 'Download URL set from absolute model path', {
+          timestamp: new Date().toISOString(),
+          modelPath: release.model_path,
+          function: 'useEffect'
+        });
       } else if (release.id) {
         // Fallback to constructing URL from release ID
         const url = `${API_BASE_URL}/api/v1/releases/${release.id}/download`;
         console.log('Setting download URL from release ID:', url);
         setDownloadUrl(url);
+        logInfo('app.frontend.ui', 'download_url_set_fallback', 'Download URL set from release ID fallback', {
+          timestamp: new Date().toISOString(),
+          releaseId: release.id,
+          finalUrl: url,
+          function: 'useEffect'
+        });
       }
     }
   }, [release]);
@@ -39,15 +91,42 @@ const DownloadModal = ({
   // After export completes, fetch package-info to show accurate counts
   useEffect(() => {
     const fetchPackageInfo = async () => {
+      logInfo('app.frontend.interactions', 'fetch_package_info_started', 'Fetching package information', {
+        timestamp: new Date().toISOString(),
+        isExporting: isExporting,
+        releaseId: release?.id,
+        function: 'fetchPackageInfo'
+      });
+
       try {
         if (!isExporting && release?.id) {
           const resp = await fetch(`${API_BASE_URL}/api/v1/releases/${release.id}/package-info`);
           if (resp.ok) {
             const data = await resp.json();
             setPackageInfo(data);
+            logInfo('app.frontend.interactions', 'fetch_package_info_success', 'Package information fetched successfully', {
+              timestamp: new Date().toISOString(),
+              releaseId: release.id,
+              packageInfo: data,
+              function: 'fetchPackageInfo'
+            });
+          } else {
+            logError('app.frontend.interactions', 'fetch_package_info_failed', 'Failed to fetch package information', {
+              timestamp: new Date().toISOString(),
+              releaseId: release.id,
+              status: resp.status,
+              statusText: resp.statusText,
+              function: 'fetchPackageInfo'
+            });
           }
         }
       } catch (e) {
+        logError('app.frontend.interactions', 'fetch_package_info_error', 'Error fetching package information', {
+          timestamp: new Date().toISOString(),
+          releaseId: release?.id,
+          error: e.message,
+          function: 'fetchPackageInfo'
+        });
         // Non-blocking
       }
     };
@@ -55,16 +134,49 @@ const DownloadModal = ({
   }, [isExporting, release]);
 
   const copyToClipboard = async (text) => {
+    if (!text) {
+      logError('app.frontend.validation', 'copy_to_clipboard_no_text', 'Copy to clipboard failed - no text provided', {
+        timestamp: new Date().toISOString(),
+        function: 'copyToClipboard'
+      });
+      return;
+    }
+
+    logInfo('app.frontend.interactions', 'copy_to_clipboard_started', 'Copy to clipboard started', {
+      timestamp: new Date().toISOString(),
+      textLength: text?.length || 0,
+      textPreview: text?.substring(0, 50) + (text?.length > 50 ? '...' : ''),
+      function: 'copyToClipboard'
+    });
+
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+      logInfo('app.frontend.interactions', 'copy_to_clipboard_success', 'Text copied to clipboard successfully', {
+        timestamp: new Date().toISOString(),
+        textLength: text?.length || 0,
+        function: 'copyToClipboard'
+      });
     } catch (err) {
+      logError('app.frontend.interactions', 'copy_to_clipboard_failed', 'Failed to copy to clipboard', {
+        timestamp: new Date().toISOString(),
+        error: err.message,
+        function: 'copyToClipboard'
+      });
       console.error('Failed to copy to clipboard:', err);
     }
   };
 
   const handleDirectDownload = () => {
+    logUserClick('direct_download_button_clicked', 'User clicked direct download button');
+    logInfo('app.frontend.interactions', 'direct_download_started', 'Direct download started', {
+      timestamp: new Date().toISOString(),
+      downloadUrl: downloadUrl,
+      releaseName: release?.name,
+      function: 'handleDirectDownload'
+    });
+
     if (downloadUrl) {
       // Create a temporary link element and trigger download
       const link = document.createElement('a');
@@ -73,15 +185,41 @@ const DownloadModal = ({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      
+      logInfo('app.frontend.interactions', 'direct_download_triggered', 'Direct download triggered', {
+        timestamp: new Date().toISOString(),
+        downloadUrl: downloadUrl,
+        fileName: `${release.name}.zip`,
+        function: 'handleDirectDownload'
+      });
+    } else {
+      logError('app.frontend.validation', 'direct_download_no_url', 'Direct download failed - no download URL available', {
+        timestamp: new Date().toISOString(),
+        releaseName: release?.name,
+        releaseId: release?.id,
+        function: 'handleDirectDownload'
+      });
     }
   };
 
   const getCurlCommand = () => {
-    return `curl -O "${downloadUrl}"`;
+    const command = `curl -O "${downloadUrl}"`;
+    logInfo('app.frontend.ui', 'curl_command_generated', 'cURL command generated', {
+      timestamp: new Date().toISOString(),
+      command: command,
+      function: 'getCurlCommand'
+    });
+    return command;
   };
 
   const getWgetCommand = () => {
-    return `wget "${downloadUrl}"`;
+    const command = `wget "${downloadUrl}"`;
+    logInfo('app.frontend.ui', 'wget_command_generated', 'wget command generated', {
+      timestamp: new Date().toISOString(),
+      command: command,
+      function: 'getWgetCommand'
+    });
+    return command;
   };
 
   // Check if the modal should be open
@@ -91,8 +229,26 @@ const DownloadModal = ({
     return null;
   }
 
+  // Log when main component is rendered
+  logInfo('app.frontend.ui', 'download_modal_rendered', 'DownloadModal component rendered', {
+    timestamp: new Date().toISOString(),
+    component: 'DownloadModal',
+    isOpen: isOpen,
+    isExporting: isExporting,
+    exportProgress: exportProgress,
+    hasDownloadUrl: !!downloadUrl,
+    hasPackageInfo: !!packageInfo,
+    copied: copied
+  });
+
   return (
-    <div className="download-modal-overlay" onClick={onClose}>
+    <div className="download-modal-overlay" onClick={() => {
+      logUserClick('download_modal_overlay_clicked', 'User clicked download modal overlay');
+      logInfo('app.frontend.ui', 'download_modal_closing', 'Download modal closing via overlay click', {
+        timestamp: new Date().toISOString()
+      });
+      onClose();
+    }}>
       <div className="download-modal" onClick={(e) => e.stopPropagation()}>
         <div className="download-modal-header">
           <h2>
@@ -108,7 +264,13 @@ const DownloadModal = ({
               </>
             )}
           </h2>
-          <button className="close-button" onClick={onClose}>×</button>
+          <button className="close-button" onClick={() => {
+            logUserClick('download_modal_close_button_clicked', 'User clicked download modal close button');
+            logInfo('app.frontend.ui', 'download_modal_closing', 'Download modal closing via close button', {
+              timestamp: new Date().toISOString()
+            });
+            onClose();
+          }}>×</button>
         </div>
 
         <div className="download-modal-content">
@@ -236,7 +398,10 @@ const DownloadModal = ({
                     />
                     <button 
                       className="copy-button"
-                      onClick={() => copyToClipboard(downloadUrl)}
+                      onClick={() => {
+                        logUserClick('copy_download_link_button_clicked', 'User clicked copy download link button');
+                        copyToClipboard(downloadUrl);
+                      }}
                     >
                       {copied ? '✅ Copied!' : '📋 Copy'}
                     </button>
@@ -259,7 +424,10 @@ const DownloadModal = ({
                       <code className="command-text">{getCurlCommand()}</code>
                       <button 
                         className="copy-button small"
-                        onClick={() => copyToClipboard(getCurlCommand())}
+                        onClick={() => {
+                          logUserClick('copy_curl_command_button_clicked', 'User clicked copy curl command button');
+                          copyToClipboard(getCurlCommand());
+                        }}
                       >
                         📋
                       </button>
@@ -272,7 +440,10 @@ const DownloadModal = ({
                       <code className="command-text">{getWgetCommand()}</code>
                       <button 
                         className="copy-button small"
-                        onClick={() => copyToClipboard(getWgetCommand())}
+                        onClick={() => {
+                          logUserClick('copy_wget_command_button_clicked', 'User clicked copy wget command button');
+                          copyToClipboard(getWgetCommand());
+                        }}
                       >
                         📋
                       </button>
@@ -286,11 +457,24 @@ const DownloadModal = ({
 
         <div className="download-modal-footer">
           {isExporting ? (
-            <button className="cancel-button" onClick={onClose}>
+            <button className="cancel-button" onClick={() => {
+              logUserClick('run_in_background_button_clicked', 'User clicked run in background button');
+              logInfo('app.frontend.ui', 'export_background_mode', 'Export set to run in background', {
+                timestamp: new Date().toISOString(),
+                releaseName: release?.name
+              });
+              onClose();
+            }}>
               Run in Background
             </button>
           ) : (
-            <button className="close-button-footer" onClick={onClose}>
+            <button className="close-button-footer" onClick={() => {
+              logUserClick('download_modal_footer_close_button_clicked', 'User clicked download modal footer close button');
+              logInfo('app.frontend.ui', 'download_modal_closing', 'Download modal closing via footer close button', {
+                timestamp: new Date().toISOString()
+              });
+              onClose();
+            }}>
               Close
             </button>
           )}

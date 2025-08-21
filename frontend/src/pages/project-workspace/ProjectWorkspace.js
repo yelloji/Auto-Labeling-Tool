@@ -28,6 +28,7 @@ import {
   PieChartOutlined
 } from '@ant-design/icons';
 import { projectsAPI, handleAPIError } from '../../services/api';
+import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 // Import components (these will be created later)
 import {
@@ -58,12 +59,24 @@ const ProjectWorkspace = () => {
     location.state?.selectedSection || 'upload'
   );
   
+  // Log initial state
+  useEffect(() => {
+    logInfo('app.frontend.ui', 'ProjectWorkspace initial state set', { 
+      projectId, 
+      initialSection: location.state?.selectedSection || 'upload' 
+    });
+  }, []);
+  
   // Update selectedKey when location state changes
   useEffect(() => {
     // Check for state first
     if (location.state?.selectedSection) {
       console.log('Updating selectedKey from location state:', location.state.selectedSection);
       setSelectedKey(location.state.selectedSection);
+      logInfo('app.frontend.navigation', 'Workspace section changed from location state', { 
+        projectId, 
+        section: location.state.selectedSection 
+      });
     } 
     // Then check URL search params
     else {
@@ -72,6 +85,10 @@ const ProjectWorkspace = () => {
       if (section) {
         console.log('Updating selectedKey from URL parameter:', section);
         setSelectedKey(section);
+        logInfo('app.frontend.navigation', 'Workspace section changed from URL parameter', { 
+          projectId, 
+          section 
+        });
       }
     }
   }, [location.state, location.search]);
@@ -79,12 +96,28 @@ const ProjectWorkspace = () => {
   // Load project details
   const loadProject = async () => {
     setLoading(true);
+    logInfo('app.frontend.interactions', 'Loading project details', { projectId });
     try {
       const projectData = await projectsAPI.getProject(projectId);
       setProject(projectData);
+      logInfo('app.frontend.interactions', 'Project details loaded successfully', { 
+        projectId, 
+        projectName: projectData.name,
+        projectType: projectData.project_type,
+        totalImages: projectData.total_images,
+        totalDatasets: projectData.total_datasets,
+        labeledImages: projectData.labeled_images,
+        progressPercentage: projectData.total_images > 0 
+          ? Math.round((projectData.labeled_images / projectData.total_images) * 100) 
+          : 0
+      });
     } catch (error) {
       const errorInfo = handleAPIError(error);
       message.error(`Failed to load project: ${errorInfo.message}`);
+      logError('app.frontend.validation', 'Failed to load project details', { 
+        projectId, 
+        error: errorInfo.message 
+      });
       console.error('Load project error:', error);
     } finally {
       setLoading(false);
@@ -95,9 +128,41 @@ const ProjectWorkspace = () => {
     if (projectId) {
       // Clear any existing notifications when component loads
       message.destroy();
+      logInfo('app.frontend.navigation', 'ProjectWorkspace page loaded', { projectId });
       loadProject();
     }
+    
+    // Cleanup function for component unmount
+    return () => {
+      if (projectId) {
+        logInfo('app.frontend.ui', 'ProjectWorkspace component unmounting', { projectId });
+      }
+    };
   }, [projectId]);
+  
+  // Log project type validation when project loads
+  useEffect(() => {
+    if (project && project.project_type) {
+      const validTypes = ['object_detection', 'classification', 'segmentation'];
+      if (!validTypes.includes(project.project_type)) {
+        logInfo('app.frontend.validation', 'Unknown project type encountered', { 
+          projectId, 
+          unknownType: project.project_type,
+          validTypes 
+        });
+      }
+      
+      // Log progress validation
+      if (project.total_images === 0) {
+        logInfo('app.frontend.validation', 'Project has no images for progress calculation', { 
+          projectId, 
+          projectName: project.name,
+          totalImages: project.total_images,
+          labeledImages: project.labeled_images 
+        });
+      }
+    }
+  }, [project, projectId]);
   
   // Get project type info for styling
   const getProjectTypeInfo = (type) => {
@@ -181,6 +246,12 @@ const ProjectWorkspace = () => {
   
   // Render content based on selected menu item
   const renderContent = () => {
+    logInfo('app.frontend.ui', 'Rendering workspace section', { 
+      projectId, 
+      projectName: project.name,
+      section: selectedKey 
+    });
+    
     switch (selectedKey) {
       case 'upload':
         return (
@@ -278,6 +349,7 @@ const ProjectWorkspace = () => {
   };
 
   if (loading) {
+    logInfo('app.frontend.ui', 'ProjectWorkspace loading state', { projectId });
     return (
       <div style={{ textAlign: 'center', padding: '50px' }}>
         <Spin size="large" />
@@ -289,6 +361,7 @@ const ProjectWorkspace = () => {
   }
 
   if (!project) {
+    logError('app.frontend.validation', 'Project not found in workspace', { projectId });
     return (
       <Alert
         message="Project Not Found"
@@ -323,7 +396,10 @@ const ProjectWorkspace = () => {
           <Button 
             type="text" 
             icon={<ArrowLeftOutlined />}
-            onClick={() => navigate('/projects')}
+            onClick={() => {
+              logUserClick('ProjectWorkspace', 'back_to_projects_button', { projectId, projectName: project.name });
+              navigate('/projects');
+            }}
             style={{ marginBottom: '16px' }}
           >
             Back to Projects
@@ -396,6 +472,7 @@ const ProjectWorkspace = () => {
               size="small" 
               style={{ marginTop: '4px' }}
             />
+
           </div>
         </div>
 
@@ -405,7 +482,15 @@ const ProjectWorkspace = () => {
           selectedKeys={[selectedKey]}
           style={{ border: 'none', background: 'transparent' }}
           items={menuItems}
-          onClick={({ key }) => setSelectedKey(key)}
+          onClick={({ key }) => {
+            logUserClick('ProjectWorkspace', 'workspace_menu_item', { 
+              projectId, 
+              projectName: project.name,
+              previousSection: selectedKey,
+              newSection: key 
+            });
+            setSelectedKey(key);
+          }}
         />
       </Sider>
 

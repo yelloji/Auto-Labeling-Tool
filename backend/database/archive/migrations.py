@@ -13,11 +13,9 @@ sys.path.insert(0, str(backend_dir))
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from core.config import settings
-import logging
+from logging_system.professional_logger import get_professional_logger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+professional_logger = get_professional_logger()
 
 def run_migrations():
     """Run all pending migrations"""
@@ -31,11 +29,19 @@ def run_migrations():
             columns = [row[1] for row in result.fetchall()]
             
             if 'split_section' not in columns:
-                logger.info("Adding split_section column to images table")
+                professional_logger.info("operations", "Adding split_section column to images table", "migration_split_section_add", {
+                    'table': 'images',
+                    'column': 'split_section',
+                    'type': 'VARCHAR(10)',
+                    'default': 'train'
+                })
                 session.execute(text("ALTER TABLE images ADD COLUMN split_section VARCHAR(10) DEFAULT 'train'"))
                 
                 # Update existing records: copy train/val/test values from split_type to split_section
-                logger.info("Updating split_section values based on existing split_type values")
+                professional_logger.info("operations", "Updating split_section values based on existing split_type values", "migration_split_section_update", {
+                    'operation': 'copy_split_type_to_split_section',
+                    'affected_values': ['train', 'val', 'test']
+                })
                 session.execute(text("""
                     UPDATE images 
                     SET split_section = split_type 
@@ -43,16 +49,27 @@ def run_migrations():
                 """))
                 
                 # Update split_type for records that have train/val/test to 'dataset'
-                logger.info("Updating split_type values for train/val/test records")
+                professional_logger.info("operations", "Updating split_type values for train/val/test records", "migration_split_type_update", {
+                    'operation': 'update_split_type_to_dataset',
+                    'old_values': ['train', 'val', 'test'],
+                    'new_value': 'dataset'
+                })
                 session.execute(text("""
                     UPDATE images 
                     SET split_type = 'dataset' 
                     WHERE split_type IN ('train', 'val', 'test')
                 """))
                 
-                logger.info("Images table migration completed successfully")
+                professional_logger.info("operations", "Images table migration completed successfully", "migration_images_complete", {
+                    'table': 'images',
+                    'migration_type': 'split_section_column'
+                })
             else:
-                logger.info("split_section column already exists, skipping images migration")
+                professional_logger.info("operations", "split_section column already exists, skipping images migration", "migration_skip", {
+                    'table': 'images',
+                    'column': 'split_section',
+                    'reason': 'already_exists'
+                })
             
             # Migration 2: Create image_transformations table
             result = session.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='image_transformations'"))

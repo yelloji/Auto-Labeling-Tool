@@ -20,6 +20,10 @@ from database.operations import (
 )
 from core.file_handler import file_handler
 from core.config import settings
+from logging_system.professional_logger import get_professional_logger
+
+# Initialize professional logger
+logger = get_professional_logger()
 
 router = APIRouter()
 
@@ -48,33 +52,54 @@ async def assign_images_to_splits(
     request: AssignImagesRequest,
     db: Session = Depends(get_db)
 ):
-    # Debug: Log received request
-    print(f"\n\n================ SPLIT REQUEST ================")
-    print(f"Dataset ID: {dataset_id}")
-    print(f"Method: {request.method}")
-    print(f"Train percent: {request.train_percent}")
-    print(f"Val percent: {request.val_percent}")
-    print(f"Test percent: {request.test_percent}")
-    print(f"===============================================\n\n")
+    """Assign images to train/val/test splits"""
+    logger.info("app.backend", f"Assigning images to splits", "split_assignment", {
+        "dataset_id": dataset_id,
+        "method": request.method,
+        "train_percent": request.train_percent,
+        "val_percent": request.val_percent,
+        "test_percent": request.test_percent,
+        "endpoint": "/datasets/{dataset_id}/splits"
+    })
+    
     try:
         import random, math  # for shuffling and ceil
 
         # Verify dataset & project
+        logger.debug("app.database", f"Fetching dataset {dataset_id}", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
+            logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
+                "dataset_id": dataset_id
+            })
             raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        logger.debug("app.database", f"Fetching project for dataset {dataset_id}", "database_query")
         project = ProjectOperations.get_project(db, dataset.project_id)
         if not project:
+            logger.warning("errors.validation", f"Project not found for dataset {dataset_id}", "project_not_found", {
+                "dataset_id": dataset_id,
+                "project_id": dataset.project_id
+            })
             raise HTTPException(status_code=404, detail="Project not found")
 
         # Fetch all labeled images
+        logger.debug("app.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
         labeled_images = ImageOperations.get_images_by_dataset(db, dataset_id, labeled_only=True)
         if not labeled_images:
+            logger.warning("errors.validation", f"No labeled images found in dataset {dataset_id}", "no_labeled_images", {
+                "dataset_id": dataset_id
+            })
             raise HTTPException(status_code=400, detail="No labeled images found in dataset")
 
         # Validate method
         valid_methods = ["use_existing", "assign_random", "all_train", "all_val", "all_test"]
         if request.method not in valid_methods:
+            logger.warning("errors.validation", f"Invalid split method {request.method}", "invalid_method", {
+                "dataset_id": dataset_id,
+                "method": request.method,
+                "valid_methods": valid_methods
+            })
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid method: {request.method}. Must be one of: {', '.join(valid_methods)}"
@@ -93,6 +118,10 @@ async def assign_images_to_splits(
 
         # 1) KEEP EXISTING
         if request.method == "use_existing":
+            logger.info("operations.operations", f"Using existing split assignments", "existing_split_usage", {
+                "dataset_id": dataset_id,
+                "image_count": len(labeled_images)
+            })
             for image in labeled_images:
                 sec = getattr(image, "split_section", "train")
                 if sec == "train":
@@ -105,6 +134,13 @@ async def assign_images_to_splits(
         # 2) RANDOM SPLIT
                 # 2) RANDOM SPLIT
         elif request.method == "assign_random":
+            logger.info("operations.operations", f"Performing random split assignment", "random_split_assignment", {
+                "dataset_id": dataset_id,
+                "total_images": len(labeled_images),
+                "train_percent": request.train_percent,
+                "val_percent": request.val_percent,
+                "test_percent": request.test_percent
+            })
             import math  # ensure math is in scope
             random.shuffle(labeled_images)
             total_images = len(labeled_images)
@@ -158,6 +194,11 @@ async def assign_images_to_splits(
 
         # 3) ALL_TRAIN / ALL_VAL / ALL_TEST
         elif request.method in ["all_train", "all_val", "all_test"]:
+            logger.info("operations.operations", f"Assigning all images to {request.method}", "all_split_assignment", {
+                "dataset_id": dataset_id,
+                "method": request.method,
+                "image_count": len(labeled_images)
+            })
             if request.method == "all_train":
                 split_section = "train"
             elif request.method == "all_val":
@@ -178,12 +219,23 @@ async def assign_images_to_splits(
             raise HTTPException(status_code=400, detail="Unsupported split method")
 
         # Commit once after handling whichever branch
+        logger.info("app.database", f"Committing split assignments to database", "database_commit")
         db.commit()
           
 
         # Recalculate stats and refresh
+        logger.debug("app.database", f"Updating dataset stats for {dataset_id}", "database_update")
         DatasetOperations.update_dataset_stats(db, dataset_id)
         db.refresh(dataset)
+
+        logger.info("operations.operations", f"Split assignment completed successfully", "split_assignment_success", {
+            "dataset_id": dataset_id,
+            "method": request.method,
+            "total_images": len(labeled_images),
+            "train_count": train_count,
+            "val_count": val_count,
+            "test_count": test_count
+        })
 
         return {
             "message": f"{len(labeled_images)} images {request.method.replace('_',' ')} successfully",
@@ -194,9 +246,15 @@ async def assign_images_to_splits(
         }
 
     except HTTPException:
+        logger.debug("app.database", f"Rolling back split assignment due to HTTPException", "database_rollback")
         db.rollback()
         raise
     except Exception as e:
+        logger.error("errors.system", f"Error during split assignment", "split_assignment_error", {
+            "dataset_id": dataset_id,
+            "method": request.method,
+            "error": str(e)
+        })
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to assign images: {str(e)}")
 
@@ -212,13 +270,23 @@ async def get_dataset_split_stats(
     
     Returns counts of images in each split section
     """
+    logger.info("app.backend", f"Getting dataset split statistics", "split_stats_retrieval", {
+        "dataset_id": dataset_id,
+        "endpoint": "/datasets/{dataset_id}/split-stats"
+    })
+    
     try:
         # Verify dataset exists
+        logger.debug("app.database", f"Fetching dataset {dataset_id}", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
+            logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
+                "dataset_id": dataset_id
+            })
             raise HTTPException(status_code=404, detail="Dataset not found")
             
         # Get all labeled images for this dataset
+        logger.debug("app.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
         labeled_images = ImageOperations.get_images_by_dataset(
             db, dataset_id, labeled_only=True
         )
@@ -249,6 +317,14 @@ async def get_dataset_split_stats(
         val_percent = round(val_count / total_images * 100) if total_images > 0 else 0
         test_percent = round(test_count / total_images * 100) if total_images > 0 else 0
         
+        logger.info("operations.operations", f"Split statistics retrieved successfully", "split_stats_success", {
+            "dataset_id": dataset_id,
+            "total_images": total_images,
+            "train_count": train_count,
+            "val_count": val_count,
+            "test_count": test_count
+        })
+        
         # Return statistics
         return {
             "total_images": total_images,
@@ -261,8 +337,13 @@ async def get_dataset_split_stats(
         }
         
     except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
         raise
     except Exception as e:
+        logger.error("errors.system", f"Error getting split statistics", "split_stats_error", {
+            "dataset_id": dataset_id,
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to get split statistics: {str(e)}")
 
 
@@ -281,13 +362,24 @@ async def get_images_by_split(
     
     Returns a list of images with their split section information
     """
+    logger.info("app.backend", f"Getting images by split", "images_by_split_retrieval", {
+        "dataset_id": dataset_id,
+        "split_section": split_section,
+        "endpoint": "/datasets/{dataset_id}/images-by-split"
+    })
+    
     try:
         # Verify dataset exists
+        logger.debug("app.database", f"Fetching dataset {dataset_id}", "database_query")
         dataset = DatasetOperations.get_dataset(db, dataset_id)
         if not dataset:
+            logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
+                "dataset_id": dataset_id
+            })
             raise HTTPException(status_code=404, detail="Dataset not found")
             
         # Get all labeled images for this dataset
+        logger.debug("app.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
         labeled_images = ImageOperations.get_images_by_dataset(
             db, dataset_id, labeled_only=True
         )
@@ -295,6 +387,11 @@ async def get_images_by_split(
         # Filter by split section if provided
         if split_section:
             if split_section not in ["train", "val", "test"]:
+                logger.warning("errors.validation", f"Invalid split section {split_section}", "invalid_split_section", {
+                    "dataset_id": dataset_id,
+                    "split_section": split_section,
+                    "valid_sections": ["train", "val", "test"]
+                })
                 raise HTTPException(status_code=400, detail="Invalid split section. Must be train, val, or test")
             
             # Filter images safely, handling the case where split_section column doesn't exist
@@ -324,12 +421,24 @@ async def get_images_by_split(
                 "is_verified": image.is_verified
             })
         
+        logger.info("operations.operations", f"Images by split retrieved successfully", "images_by_split_success", {
+            "dataset_id": dataset_id,
+            "split_section": split_section,
+            "total_images": len(result)
+        })
+        
         return {
             "total": len(result),
             "images": result
         }
         
     except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
         raise
     except Exception as e:
+        logger.error("errors.system", f"Error getting images by split", "images_by_split_error", {
+            "dataset_id": dataset_id,
+            "split_section": split_section,
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Failed to get images by split: {str(e)}")

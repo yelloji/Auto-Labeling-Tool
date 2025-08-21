@@ -4,29 +4,83 @@ import React, { useState, useEffect } from 'react';
 import { List, Button, Tag, Card, Space, Tooltip, Modal, Input, message, Empty, Spin, Row, Col, Statistic } from 'antd';
 import { DownloadOutlined, EditOutlined, DeleteOutlined, LinkOutlined, HistoryOutlined, ExclamationCircleOutlined, CalendarOutlined } from '@ant-design/icons';
 import { API_BASE_URL } from '../../../config';
+import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 const { confirm } = Modal;
 
-const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
+const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseClick }) => {
   const [releases, setReleases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingRelease, setEditingRelease] = useState(null);
   const [newName, setNewName] = useState('');
 
   useEffect(() => {
-    if (datasetId) {
+    logInfo('app.frontend.ui', 'release_history_list_initialized', 'ReleaseHistoryList component initialized', {
+      timestamp: new Date().toISOString(),
+      component: 'ReleaseHistoryList',
+      projectId: projectId,
+      datasetId: datasetId
+    });
+
+    // Load releases for the project (not just one dataset)
+    if (projectId) {
+      logInfo('app.frontend.ui', 'release_history_load_triggered', 'Release history load triggered by projectId', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId
+      });
+      loadReleases();
+    } else {
+      logError('app.frontend.validation', 'release_history_no_project_id', 'ReleaseHistoryList initialized without projectId', {
+        timestamp: new Date().toISOString(),
+        function: 'useEffect'
+      });
+    }
+  }, [projectId]);
+
+  // ✅ FIXED: Listen for release history refresh trigger (NO CONSTANT POLLING)
+  useEffect(() => {
+    // Only refresh when explicitly triggered, not constantly
+    if (window.releaseHistoryRefreshKey && projectId) {
+      logInfo('app.frontend.ui', 'release_history_refresh_triggered', 'Release history refresh triggered', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        refreshKey: window.releaseHistoryRefreshKey,
+        function: 'useEffect_refresh_trigger'
+      });
+      
+      console.log('🔄 Release History refresh triggered by key:', window.releaseHistoryRefreshKey);
       loadReleases();
     }
-  }, [datasetId]);
+  }, [projectId, window.releaseHistoryRefreshKey]); // Only depend on projectId and refreshKey
 
   const loadReleases = async () => {
+    logInfo('app.frontend.interactions', 'load_releases_started', 'Loading release history started', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      function: 'loadReleases'
+    });
+
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/v1/releases/${datasetId}/history`);
+      // Get all releases for the project
+      const response = await fetch(`${API_BASE_URL}/api/v1/projects/${projectId}/releases`);
       if (response.ok) {
         const data = await response.json();
         setReleases(data);
+        logInfo('app.frontend.interactions', 'load_releases_success', 'Release history loaded successfully', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          releaseCount: data.length,
+          function: 'loadReleases'
+        });
       } else {
+        logError('app.frontend.interactions', 'load_releases_failed', 'Failed to load release history from API', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          status: response.status,
+          statusText: response.statusText,
+          function: 'loadReleases'
+        });
         // Mock data for demonstration
         const mockReleases = [
           {
@@ -64,38 +118,129 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
           }
         ];
         setReleases(mockReleases);
+        logInfo('app.frontend.ui', 'load_releases_mock_data', 'Using mock release data due to API failure', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          mockReleaseCount: mockReleases.length,
+          function: 'loadReleases'
+        });
       }
     } catch (error) {
+      logError('app.frontend.interactions', 'load_releases_error', 'Error loading release history', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        error: error.message,
+        function: 'loadReleases'
+      });
       console.error('Failed to load releases:', error);
       message.error('Failed to load release history');
     } finally {
       setLoading(false);
+      logInfo('app.frontend.ui', 'load_releases_completed', 'Release history loading completed', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        finalReleaseCount: releases.length,
+        function: 'loadReleases'
+      });
     }
   };
 
   const handleDownload = (release) => {
+    logUserClick('release_download_button_clicked', 'User clicked release download button');
+    logInfo('app.frontend.interactions', 'release_download_started', 'Release download started', {
+      timestamp: new Date().toISOString(),
+      releaseId: release.id,
+      releaseName: release.name,
+      downloadUrl: release.download_url,
+      function: 'handleDownload'
+    });
+
     if (release.download_url) {
       window.open(release.download_url, '_blank');
       message.success(`Downloading ${release.name}...`);
+      logInfo('app.frontend.interactions', 'release_download_triggered', 'Release download triggered', {
+        timestamp: new Date().toISOString(),
+        releaseId: release.id,
+        releaseName: release.name,
+        downloadUrl: release.download_url,
+        function: 'handleDownload'
+      });
     } else {
+      logError('app.frontend.validation', 'release_download_no_url', 'Release download failed - no download URL', {
+        timestamp: new Date().toISOString(),
+        releaseId: release.id,
+        releaseName: release.name,
+        function: 'handleDownload'
+      });
       message.warning('Download not available for this release');
     }
   };
 
   const handleCopyLink = (release) => {
+    logUserClick('release_copy_link_button_clicked', 'User clicked release copy link button');
+    logInfo('app.frontend.interactions', 'release_copy_link_started', 'Release copy link started', {
+      timestamp: new Date().toISOString(),
+      releaseId: release.id,
+      releaseName: release.name,
+      downloadUrl: release.download_url,
+      function: 'handleCopyLink'
+    });
+
     if (release.download_url) {
       const fullUrl = window.location.origin + release.download_url;
       navigator.clipboard.writeText(fullUrl);
       message.success('Download link copied to clipboard!');
+      logInfo('app.frontend.interactions', 'release_copy_link_success', 'Release download link copied successfully', {
+        timestamp: new Date().toISOString(),
+        releaseId: release.id,
+        releaseName: release.name,
+        fullUrl: fullUrl,
+        function: 'handleCopyLink'
+      });
+    } else {
+      logError('app.frontend.validation', 'release_copy_link_no_url', 'Release copy link failed - no download URL', {
+        timestamp: new Date().toISOString(),
+        releaseId: release.id,
+        releaseName: release.name,
+        function: 'handleCopyLink'
+      });
     }
   };
 
   const handleEdit = (release) => {
+    logUserClick('release_edit_button_clicked', 'User clicked release edit button');
+    logInfo('app.frontend.ui', 'release_edit_modal_opened', 'Release edit modal opened', {
+      timestamp: new Date().toISOString(),
+      releaseId: release.id,
+      releaseName: release.name,
+      currentName: release.name,
+      function: 'handleEdit'
+    });
+
     setEditingRelease(release);
     setNewName(release.name);
   };
 
   const handleSaveEdit = async () => {
+    logUserClick('release_save_edit_button_clicked', 'User clicked release save edit button');
+    logInfo('app.frontend.interactions', 'release_rename_started', 'Release rename started', {
+      timestamp: new Date().toISOString(),
+      releaseId: editingRelease.id,
+      oldName: editingRelease.name,
+      newName: newName,
+      function: 'handleSaveEdit'
+    });
+
+    if (!newName || newName.trim() === '') {
+      logError('app.frontend.validation', 'release_rename_empty_name', 'Release rename failed - empty name', {
+        timestamp: new Date().toISOString(),
+        releaseId: editingRelease.id,
+        newName: newName,
+        function: 'handleSaveEdit'
+      });
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/releases/${editingRelease.id}/rename`, {
         method: 'PUT',
@@ -106,23 +251,80 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
       });
 
       if (response.ok) {
+        const result = await response.json();
+        
         setReleases(releases.map(r => 
           r.id === editingRelease.id ? { ...r, name: newName } : r
         ));
-        message.success('Release renamed successfully');
+        
+        // ✅ ENHANCED: Handle ZIP file rename information
+        if (result.zip_renamed) {
+          message.success(`Release renamed successfully! ZIP file also renamed to: ${result.new_zip_path?.split('/').pop() || 'new_name.zip'}`);
+          
+          logInfo('app.frontend.interactions', 'release_rename_success_with_zip', 'Release and ZIP file renamed successfully', {
+            timestamp: new Date().toISOString(),
+            releaseId: editingRelease.id,
+            oldName: editingRelease.name,
+            newName: newName,
+            zipRenamed: result.zip_renamed,
+            oldZipPath: result.old_zip_path,
+            newZipPath: result.new_zip_path,
+            function: 'handleSaveEdit'
+          });
+        } else {
+          message.success('Release renamed successfully');
+          
+          logInfo('app.frontend.interactions', 'release_rename_success', 'Release renamed successfully (no ZIP file)', {
+            timestamp: new Date().toISOString(),
+            releaseId: editingRelease.id,
+            oldName: editingRelease.name,
+            newName: newName,
+            zipRenamed: result.zip_renamed,
+            function: 'handleSaveEdit'
+          });
+        }
       } else {
+        logError('app.frontend.interactions', 'release_rename_failed', 'Failed to rename release', {
+          timestamp: new Date().toISOString(),
+          releaseId: editingRelease.id,
+          oldName: editingRelease.name,
+          newName: newName,
+          status: response.status,
+          statusText: response.statusText,
+          function: 'handleSaveEdit'
+        });
         message.error('Failed to rename release');
       }
     } catch (error) {
+      logError('app.frontend.interactions', 'release_rename_error', 'Error renaming release', {
+        timestamp: new Date().toISOString(),
+        releaseId: editingRelease.id,
+        oldName: editingRelease.name,
+        newName: newName,
+        error: error.message,
+        function: 'handleSaveEdit'
+      });
       console.error('Failed to rename release:', error);
       message.error('Failed to rename release');
     } finally {
       setEditingRelease(null);
       setNewName('');
+      logInfo('app.frontend.ui', 'release_edit_modal_closed', 'Release edit modal closed', {
+        timestamp: new Date().toISOString(),
+        function: 'handleSaveEdit'
+      });
     }
   };
 
   const handleDelete = (release) => {
+    logUserClick('release_delete_button_clicked', 'User clicked release delete button');
+    logInfo('app.frontend.ui', 'release_delete_confirmation_opened', 'Release delete confirmation opened', {
+      timestamp: new Date().toISOString(),
+      releaseId: release.id,
+      releaseName: release.name,
+      function: 'handleDelete'
+    });
+
     confirm({
       title: 'Delete Release',
       icon: <ExclamationCircleOutlined />,
@@ -131,6 +333,14 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
       okType: 'danger',
       cancelText: 'Cancel',
       onOk: async () => {
+        logUserClick('release_delete_confirmed', 'User confirmed release deletion');
+        logInfo('app.frontend.interactions', 'release_delete_started', 'Release deletion started', {
+          timestamp: new Date().toISOString(),
+          releaseId: release.id,
+          releaseName: release.name,
+          function: 'handleDelete'
+        });
+
         try {
           const response = await fetch(`${API_BASE_URL}/api/v1/releases/${release.id}`, {
             method: 'DELETE',
@@ -139,14 +349,45 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
           if (response.ok) {
             setReleases(releases.filter(r => r.id !== release.id));
             message.success('Release deleted successfully');
+            logInfo('app.frontend.interactions', 'release_delete_success', 'Release deleted successfully', {
+              timestamp: new Date().toISOString(),
+              releaseId: release.id,
+              releaseName: release.name,
+              remainingReleases: releases.length - 1,
+              function: 'handleDelete'
+            });
           } else {
+            logError('app.frontend.interactions', 'release_delete_failed', 'Failed to delete release', {
+              timestamp: new Date().toISOString(),
+              releaseId: release.id,
+              releaseName: release.name,
+              status: response.status,
+              statusText: response.statusText,
+              function: 'handleDelete'
+            });
             message.error('Failed to delete release');
           }
         } catch (error) {
+          logError('app.frontend.interactions', 'release_delete_error', 'Error deleting release', {
+            timestamp: new Date().toISOString(),
+            releaseId: release.id,
+            releaseName: release.name,
+            error: error.message,
+            function: 'handleDelete'
+          });
           console.error('Failed to delete release:', error);
           message.error('Failed to delete release');
         }
       },
+      onCancel: () => {
+        logUserClick('release_delete_cancelled', 'User cancelled release deletion');
+        logInfo('app.frontend.ui', 'release_delete_confirmation_cancelled', 'Release delete confirmation cancelled', {
+          timestamp: new Date().toISOString(),
+          releaseId: release.id,
+          releaseName: release.name,
+          function: 'handleDelete'
+        });
+      }
     });
   };
 
@@ -181,6 +422,11 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
   };
 
   if (loading) {
+    logInfo('app.frontend.ui', 'release_history_loading_rendered', 'ReleaseHistoryList loading state rendered', {
+      timestamp: new Date().toISOString(),
+      datasetId: datasetId
+    });
+
     return (
       <Card 
         title={
@@ -197,6 +443,16 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
       </Card>
     );
   }
+
+  // Log when main component is rendered
+  logInfo('app.frontend.ui', 'release_history_list_rendered', 'ReleaseHistoryList component rendered', {
+    timestamp: new Date().toISOString(),
+    component: 'ReleaseHistoryList',
+    datasetId: datasetId,
+    releaseCount: releases.length,
+    loading: loading,
+    editingRelease: !!editingRelease
+  });
 
   return (
     <Card 
@@ -232,7 +488,15 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
                 cursor: 'pointer'
               }}
               className="release-history-item"
-              onClick={() => onReleaseClick && onReleaseClick(release)}
+              onClick={() => {
+                logUserClick('release_card_clicked', 'User clicked release card');
+                logInfo('app.frontend.navigation', 'release_selected', 'Release selected from history', {
+                  timestamp: new Date().toISOString(),
+                  releaseId: release.id,
+                  releaseName: release.name
+                });
+                onReleaseClick && onReleaseClick(release);
+              }}
               hoverable
             >
               {/* Release Header */}
@@ -296,7 +560,7 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
                     icon={<DownloadOutlined />} 
                     onClick={(e) => {
                       e.stopPropagation(); // Prevent card click
-                      onReleaseClick && onReleaseClick(release);
+                      handleDownload(release);
                     }}
                     type="primary"
                     size="small"
@@ -306,21 +570,30 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
                 <Tooltip title="Copy link">
                   <Button 
                     icon={<LinkOutlined />} 
-                    onClick={() => handleCopyLink(release)}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent card click
+                      handleCopyLink(release);
+                    }}
                     size="small"
                   />
                 </Tooltip>
                 <Tooltip title="Rename">
                   <Button 
                     icon={<EditOutlined />} 
-                    onClick={() => handleEdit(release)}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent card click
+                      handleEdit(release);
+                    }}
                     size="small"
                   />
                 </Tooltip>
                 <Tooltip title="Delete">
                   <Button 
                     icon={<DeleteOutlined />} 
-                    onClick={() => handleDelete(release)}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent card click
+                      handleDelete(release);
+                    }}
                     danger
                     size="small"
                   />
@@ -336,6 +609,12 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
         visible={!!editingRelease}
         onOk={handleSaveEdit}
         onCancel={() => {
+          logUserClick('release_edit_modal_cancel_button_clicked', 'User clicked release edit modal cancel button');
+          logInfo('app.frontend.ui', 'release_edit_modal_cancelled', 'Release edit modal cancelled', {
+            timestamp: new Date().toISOString(),
+            releaseId: editingRelease?.id,
+            releaseName: editingRelease?.name
+          });
           setEditingRelease(null);
           setNewName('');
         }}
@@ -344,7 +623,15 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
       >
         <Input
           value={newName}
-          onChange={(e) => setNewName(e.target.value)}
+          onChange={(e) => {
+            logInfo('app.frontend.ui', 'release_edit_name_changed', 'Release edit name changed', {
+              timestamp: new Date().toISOString(),
+              oldValue: newName,
+              newValue: e.target.value,
+              releaseId: editingRelease?.id
+            });
+            setNewName(e.target.value);
+          }}
           placeholder="Enter new release name"
           onPressEnter={handleSaveEdit}
         />

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Statistic, Progress, List, Button, Typography, Alert, Spin } from 'antd';
+import { logInfo, logError, logUserClick } from '../utils/professional_logger';
 import { 
   ProjectOutlined, 
   PictureOutlined, 
@@ -32,13 +33,17 @@ const Dashboard = () => {
   // Check backend health and load data
   const loadDashboardData = async () => {
     setLoading(true);
+    logInfo('app.frontend.ui', 'Dashboard loading state changed', 'state_change', { component: 'Dashboard', newState: 'loading_started' });
     
     try {
+      logInfo('app.frontend.interactions', 'Loading dashboard data', 'load_dashboard');
+      
       // Check backend health first
       const healthStatus = await checkBackendHealth();
       setBackendStatus(healthStatus);
       
       if (!healthStatus.available) {
+        logError('app.frontend.validation', 'Backend not available', null, { healthStatus });
         setLoading(false);
         return;
       }
@@ -63,20 +68,42 @@ const Dashboard = () => {
         modelsAvailable: modelsData.length,
         activeJobs: 0 // TODO: Implement jobs tracking
       });
+      
+      logInfo('app.frontend.ui', 'Dashboard state updated', 'state_change', { 
+        component: 'Dashboard', 
+        newState: 'data_loaded',
+        stats: { totalProjects, totalImages, labeledImages, modelsAvailable: modelsData.length }
+      });
+
+      logInfo('app.frontend.interactions', 'Dashboard data loaded successfully', 'load_dashboard', { 
+        totalProjects, 
+        totalImages, 
+        labeledImages, 
+        modelsAvailable: modelsData.length 
+      });
 
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
+      logError('app.frontend.interactions', 'Failed to load dashboard data', error);
       setBackendStatus({ 
         available: false, 
         error: { message: 'Failed to connect to backend' }
       });
     } finally {
       setLoading(false);
+      logInfo('app.frontend.ui', 'Dashboard loading state changed', 'state_change', { component: 'Dashboard', newState: 'loading_finished' });
     }
   };
 
   useEffect(() => {
+    logInfo('app.frontend.navigation', 'Dashboard page loaded', 'page_view', { component: 'Dashboard' });
+    logInfo('app.frontend.ui', 'Dashboard component mounted', 'component_mount', { component: 'Dashboard' });
     loadDashboardData();
+    
+    // Cleanup function for component unmount
+    return () => {
+      logInfo('app.frontend.ui', 'Dashboard component unmounted', 'component_unmount', { component: 'Dashboard' });
+    };
   }, []);
 
   const labelingProgress = stats.totalImages > 0 
@@ -97,7 +124,10 @@ const Dashboard = () => {
               <Button 
                 type="primary" 
                 icon={<ReloadOutlined />} 
-                onClick={loadDashboardData}
+                onClick={() => {
+                  logUserClick('Dashboard', 'retry_connection', { action: 'retry_backend_connection' });
+                  loadDashboardData();
+                }}
                 style={{ marginTop: '8px' }}
               >
                 Retry Connection
@@ -133,7 +163,10 @@ const Dashboard = () => {
         </div>
         <Button 
           icon={<ReloadOutlined />} 
-          onClick={loadDashboardData}
+          onClick={() => {
+            logUserClick('Dashboard', 'refresh_data', { action: 'refresh_dashboard_data' });
+            loadDashboardData();
+          }}
           loading={loading}
         >
           Refresh
@@ -246,7 +279,10 @@ const Dashboard = () => {
         <Col xs={24} lg={12}>
           <Card 
             title="Recent Projects" 
-            extra={<Button type="link" onClick={() => navigate('/projects')}>View All</Button>}
+            extra={<Button type="link" onClick={() => {
+              logInfo('app.frontend.navigation', 'Navigating to projects page', 'navigate_to_projects', { from: 'Dashboard' });
+              navigate('/projects');
+            }}>View All</Button>}
           >
             {recentProjects.length > 0 ? (
               <List
@@ -259,7 +295,10 @@ const Dashboard = () => {
                   return (
                     <List.Item
                       actions={[
-                        <Button type="link" icon={<PlayCircleOutlined />} onClick={() => navigate(`/projects/${project.id}`)}>
+                        <Button type="link" icon={<PlayCircleOutlined />} onClick={() => {
+                          logInfo('app.frontend.navigation', 'Opening project workspace from dashboard', 'open_project_workspace', { projectId: project.id, projectName: project.name });
+                          navigate(`/projects/${project.id}/workspace`);
+                        }}>
                           Open
                         </Button>
                       ]}
@@ -297,14 +336,20 @@ const Dashboard = () => {
               <Button 
                 type="primary" 
                 icon={<ProjectOutlined />}
-                onClick={() => navigate('/projects')}
+                onClick={() => {
+                  logInfo('app.frontend.navigation', 'Navigating to create project', 'navigate_to_create_project', { from: 'Dashboard' });
+                  navigate('/projects');
+                }}
                 block
               >
                 Create New Project
               </Button>
               <Button 
                 icon={<RobotOutlined />}
-                onClick={() => navigate('/models')}
+                onClick={() => {
+                  logInfo('app.frontend.navigation', 'Navigating to models page', 'navigate_to_models', { from: 'Dashboard' });
+                  navigate('/models');
+                }}
                 block
               >
                 Manage Models

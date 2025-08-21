@@ -13,6 +13,10 @@ from database.operations import DatasetOperations, ImageOperations
 from database.models import Dataset, Image, Annotation, LabelAnalytics, DatasetSplit
 from utils.augmentation_utils import LabelAnalyzer
 from core.config import settings
+from logging_system.professional_logger import get_professional_logger
+
+# Initialize professional logger
+logger = get_professional_logger()
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -23,14 +27,29 @@ async def get_class_distribution(
     db: Session = Depends(get_db)
 ):
     """Get class distribution analysis for a dataset"""
+    logger.info("app.backend", f"Starting class distribution analysis for dataset {dataset_id}", "analytics_class_distribution", {
+        "dataset_id": dataset_id,
+        "endpoint": "/api/analytics/dataset/{dataset_id}/class-distribution"
+    })
+    
     try:
         # Get dataset
+        logger.debug("app.database", f"Fetching dataset {dataset_id} from database", "database_query")
         dataset = crud.get_dataset(db, dataset_id)
         if not dataset:
+            logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
+                "dataset_id": dataset_id
+            })
             raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        logger.info("app.database", f"Dataset {dataset_id} found, fetching annotations", "database_query")
         
         # Get all annotations for this dataset
         annotations = crud.get_annotations_by_dataset(db, dataset_id)
+        logger.info("app.backend", f"Retrieved {len(annotations)} annotations for dataset {dataset_id}", "data_retrieval", {
+            "dataset_id": dataset_id,
+            "annotation_count": len(annotations)
+        })
         
         # Convert to format expected by analyzer
         annotation_dicts = [
@@ -44,18 +63,43 @@ async def get_class_distribution(
         ]
         
         # Analyze distribution
+        logger.info("operations.operations", f"Starting class distribution analysis for dataset {dataset_id}", "analysis_start", {
+            "dataset_id": dataset_id,
+            "annotation_count": len(annotation_dicts)
+        })
         analysis = LabelAnalyzer.analyze_class_distribution(annotation_dicts)
+        logger.info("operations.operations", f"Class distribution analysis completed for dataset {dataset_id}", "analysis_complete", {
+            "dataset_id": dataset_id,
+            "analysis_result": analysis
+        })
         
         # Store/update analytics in database
         existing_analytics = crud.get_label_analytics_by_dataset(db, dataset_id)
         if existing_analytics:
+            logger.info("app.database", f"Updating existing analytics for dataset {dataset_id}", "database_update", {
+                "dataset_id": dataset_id,
+                "analytics_id": existing_analytics.id
+            })
             crud.update_label_analytics(db, existing_analytics.id, analysis)
         else:
+            logger.info("app.database", f"Creating new analytics for dataset {dataset_id}", "database_create", {
+                "dataset_id": dataset_id
+            })
             crud.create_label_analytics(db, dataset_id, analysis)
         
+        logger.info("app.backend", f"Class distribution analysis completed successfully for dataset {dataset_id}", "api_success", {
+            "dataset_id": dataset_id
+        })
         return analysis
         
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
+        raise
     except Exception as e:
+        logger.error("errors.system", f"Error analyzing class distribution for dataset {dataset_id}", "analysis_error", {
+            "dataset_id": dataset_id,
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Error analyzing class distribution: {str(e)}")
 
 
@@ -65,15 +109,32 @@ async def get_split_analysis(
     db: Session = Depends(get_db)
 ):
     """Get analysis of train/val/test split distribution"""
+    logger.info("app.backend", f"Starting split analysis for dataset {dataset_id}", "analytics_split_analysis", {
+        "dataset_id": dataset_id,
+        "endpoint": "/api/analytics/dataset/{dataset_id}/split-analysis"
+    })
+    
     try:
         # Get dataset
+        logger.debug("app.backend", f"Fetching dataset {dataset_id} from database", "database_query")
         dataset = crud.get_dataset(db, dataset_id)
         if not dataset:
+            logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
+                "dataset_id": dataset_id
+            })
             raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        logger.info("app.backend", f"Dataset {dataset_id} found, fetching images and annotations", "database_query")
         
         # Get images with their split assignments
         images = crud.get_images_by_dataset(db, dataset_id)
         annotations = crud.get_annotations_by_dataset(db, dataset_id)
+        
+        logger.info("app.backend", f"Retrieved {len(images)} images and {len(annotations)} annotations for dataset {dataset_id}", "data_retrieval", {
+            "dataset_id": dataset_id,
+            "image_count": len(images),
+            "annotation_count": len(annotations)
+        })
         
         # Group images by split
         split_assignments = {
@@ -82,6 +143,14 @@ async def get_split_analysis(
             'test': [img.id for img in images if img.split_type == 'test'],
             'unassigned': [img.id for img in images if img.split_type == 'unassigned']
         }
+        
+        logger.info("operations.operations", f"Split assignments calculated for dataset {dataset_id}", "split_calculation", {
+            "dataset_id": dataset_id,
+            "train_count": len(split_assignments['train']),
+            "val_count": len(split_assignments['val']),
+            "test_count": len(split_assignments['test']),
+            "unassigned_count": len(split_assignments['unassigned'])
+        })
         
         # Convert annotations to format expected by analyzer
         annotation_dicts = [
@@ -95,16 +164,35 @@ async def get_split_analysis(
         ]
         
         # Analyze split distribution
+        logger.info("operations.operations", f"Starting split distribution analysis for dataset {dataset_id}", "analysis_start", {
+            "dataset_id": dataset_id,
+            "annotation_count": len(annotation_dicts)
+        })
         analysis = LabelAnalyzer.analyze_split_distribution(annotation_dicts, split_assignments)
+        logger.info("operations.operations", f"Split distribution analysis completed for dataset {dataset_id}", "analysis_complete", {
+            "dataset_id": dataset_id,
+            "analysis_result": analysis
+        })
         
         # Add split counts
         analysis['split_counts'] = {
             split: len(img_ids) for split, img_ids in split_assignments.items()
         }
         
+        logger.info("app.backend", f"Split analysis completed successfully for dataset {dataset_id}", "api_success", {
+            "dataset_id": dataset_id,
+            "split_counts": analysis['split_counts']
+        })
         return analysis
         
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
+        raise
     except Exception as e:
+        logger.error("errors.system", f"Error analyzing split distribution for dataset {dataset_id}", "analysis_error", {
+            "dataset_id": dataset_id,
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Error analyzing split distribution: {str(e)}")
 
 
@@ -114,14 +202,25 @@ async def get_imbalance_report(
     db: Session = Depends(get_db)
 ):
     """Get comprehensive imbalance report with recommendations"""
+    logger.info("app.backend", f"Starting imbalance report generation for dataset {dataset_id}", "analytics_imbalance_report", {
+        "dataset_id": dataset_id,
+        "endpoint": "/api/analytics/dataset/{dataset_id}/imbalance-report"
+    })
+    
     try:
         # Get class distribution
+        logger.info("operations.operations", f"Fetching class distribution for dataset {dataset_id}", "analysis_request")
         class_analysis = await get_class_distribution(dataset_id, db)
         
         # Get split analysis
+        logger.info("operations.operations", f"Fetching split analysis for dataset {dataset_id}", "analysis_request")
         split_analysis = await get_split_analysis(dataset_id, db)
         
         # Generate comprehensive recommendations
+        logger.info("operations.operations", f"Generating recommendations for dataset {dataset_id}", "recommendations_start", {
+            "dataset_id": dataset_id,
+            "imbalance_ratio": class_analysis.get('imbalance_ratio', 0)
+        })
         recommendations = []
         
         # Class imbalance recommendations
@@ -177,16 +276,38 @@ async def get_imbalance_report(
                 ]
             })
         
-        return {
+        # Calculate health score
+        health_score = calculate_dataset_health_score(class_analysis, split_analysis)
+        logger.info("operations.operations", f"Dataset health score calculated for dataset {dataset_id}", "health_score", {
+            "dataset_id": dataset_id,
+            "health_score": health_score,
+            "recommendation_count": len(recommendations)
+        })
+        
+        result = {
             "dataset_id": dataset_id,
             "class_analysis": class_analysis,
             "split_analysis": split_analysis,
             "recommendations": recommendations,
-            "overall_health_score": calculate_dataset_health_score(class_analysis, split_analysis),
+            "overall_health_score": health_score,
             "generated_at": datetime.utcnow().isoformat()
         }
         
+        logger.info("app.backend", f"Imbalance report completed successfully for dataset {dataset_id}", "api_success", {
+            "dataset_id": dataset_id,
+            "health_score": health_score,
+            "recommendation_count": len(recommendations)
+        })
+        return result
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
+        raise
     except Exception as e:
+        logger.error("errors.system", f"Error generating imbalance report for dataset {dataset_id}", "report_error", {
+            "dataset_id": dataset_id,
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Error generating imbalance report: {str(e)}")
 
 
@@ -196,16 +317,31 @@ async def get_labeling_progress(
     db: Session = Depends(get_db)
 ):
     """Get detailed labeling progress statistics"""
+    logger.info("app.backend", f"Starting labeling progress analysis for dataset {dataset_id}", "analytics_labeling_progress", {
+        "dataset_id": dataset_id,
+        "endpoint": "/api/analytics/dataset/{dataset_id}/labeling-progress"
+    })
+    
     try:
         # Get dataset
+        logger.debug("app.backend", f"Fetching dataset {dataset_id} from database", "database_query")
         dataset = crud.get_dataset(db, dataset_id)
         if not dataset:
+            logger.warning("errors.validation", f"Dataset {dataset_id} not found", "dataset_not_found", {
+                "dataset_id": dataset_id
+            })
             raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Get all images
+        logger.info("app.backend", f"Fetching images for dataset {dataset_id}", "database_query")
         images = crud.get_images_by_dataset(db, dataset_id)
+        logger.info("app.backend", f"Retrieved {len(images)} images for dataset {dataset_id}", "data_retrieval", {
+            "dataset_id": dataset_id,
+            "image_count": len(images)
+        })
         
         # Calculate statistics
+        logger.info("operations.operations", f"Calculating labeling statistics for dataset {dataset_id}", "statistics_calculation")
         total_images = len(images)
         labeled_images = len([img for img in images if img.is_labeled])
         auto_labeled_images = len([img for img in images if img.is_auto_labeled])
@@ -213,6 +349,7 @@ async def get_labeling_progress(
         unlabeled_images = total_images - labeled_images
         
         # Split-wise progress
+        logger.info("operations.operations", f"Calculating split-wise progress for dataset {dataset_id}", "split_progress_calculation")
         split_progress = {}
         for split_type in ['train', 'val', 'test', 'unassigned']:
             split_images = [img for img in images if img.split_type == split_type]
@@ -225,6 +362,7 @@ async def get_labeling_progress(
             }
         
         # Recent activity
+        logger.info("operations.operations", f"Calculating recent activity for dataset {dataset_id}", "recent_activity_calculation")
         recent_images = sorted(images, key=lambda x: x.updated_at, reverse=True)[:10]
         recent_activity = [
             {
@@ -237,19 +375,42 @@ async def get_labeling_progress(
             for img in recent_images
         ]
         
-        return {
+        progress_percentage = (labeled_images / total_images * 100) if total_images > 0 else 0
+        
+        logger.info("operations.operations", f"Labeling progress calculated for dataset {dataset_id}", "progress_summary", {
+            "dataset_id": dataset_id,
+            "total_images": total_images,
+            "labeled_images": labeled_images,
+            "unlabeled_images": unlabeled_images,
+            "progress_percentage": progress_percentage
+        })
+        
+        result = {
             "dataset_id": dataset_id,
             "total_images": total_images,
             "labeled_images": labeled_images,
             "unlabeled_images": unlabeled_images,
             "auto_labeled_images": auto_labeled_images,
             "verified_images": verified_images,
-            "progress_percentage": (labeled_images / total_images * 100) if total_images > 0 else 0,
+            "progress_percentage": progress_percentage,
             "split_progress": split_progress,
             "recent_activity": recent_activity
         }
         
+        logger.info("app.backend", f"Labeling progress analysis completed successfully for dataset {dataset_id}", "api_success", {
+            "dataset_id": dataset_id,
+            "progress_percentage": progress_percentage
+        })
+        return result
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
+        raise
     except Exception as e:
+        logger.error("errors.system", f"Error getting labeling progress for dataset {dataset_id}", "progress_error", {
+            "dataset_id": dataset_id,
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Error getting labeling progress: {str(e)}")
 
 

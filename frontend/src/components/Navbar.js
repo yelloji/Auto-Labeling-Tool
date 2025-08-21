@@ -6,10 +6,19 @@ import {
   RobotOutlined,
   ProjectOutlined
 } from '@ant-design/icons';
+import { logInfo, logError, logUserClick } from '../utils/professional_logger';
 
 const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Log component initialization
+  logInfo('app.frontend.ui', 'navbar_initialized', 'Navbar component initialized', {
+    timestamp: new Date().toISOString(),
+    component: 'Navbar',
+    currentLocation: location.pathname,
+    function: 'component_initialization'
+  });
 
   const menuItems = [
     {
@@ -30,11 +39,27 @@ const Navbar = () => {
   ];
 
   const handleMenuClick = ({ key }) => {
+    logUserClick('navbar_menu_clicked', `User clicked navbar menu item: ${key}`);
+    logInfo('app.frontend.navigation', 'navbar_navigation', 'Navigation triggered from navbar', {
+      timestamp: new Date().toISOString(),
+      fromPath: location.pathname,
+      toPath: key,
+      function: 'handleMenuClick'
+    });
     navigate(key);
   };
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+      {(() => {
+        logInfo('app.frontend.ui', 'navbar_rendered', 'Navbar component rendered', {
+          timestamp: new Date().toISOString(),
+          component: 'Navbar',
+          currentLocation: location.pathname,
+          function: 'component_render'
+        });
+        return null;
+      })()}
       <div style={{ 
         color: 'white', 
         fontSize: '20px', 

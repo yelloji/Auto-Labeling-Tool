@@ -19,6 +19,7 @@ import {
   SaveOutlined,
   ThunderboltOutlined
 } from '@ant-design/icons';
+import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 const { Text } = Typography;
 
@@ -43,18 +44,103 @@ const AnnotationToolbox = ({
 
   const handleZoomIn = () => {
     const newZoom = Math.min(zoomLevel + 25, 500);
+    logInfo('app.frontend.ui', 'zoom_in_operation', 'Zoom in operation performed', {
+      oldZoom: zoomLevel,
+      newZoom: newZoom,
+      zoomChange: 25
+    });
     onZoomChange(newZoom);
   };
 
   const handleZoomOut = () => {
     const newZoom = Math.max(zoomLevel - 25, 25);
+    logInfo('app.frontend.ui', 'zoom_out_operation', 'Zoom out operation performed', {
+      oldZoom: zoomLevel,
+      newZoom: newZoom,
+      zoomChange: -25
+    });
     onZoomChange(newZoom);
   };
 
   const handleZoomChange = (value) => {
     if (value && value >= 25 && value <= 500) {
+      logInfo('app.frontend.ui', 'zoom_level_changed', 'Zoom level changed via input', {
+        oldZoom: zoomLevel,
+        newZoom: value,
+        zoomChange: value - zoomLevel
+      });
       onZoomChange(value);
+    } else {
+      logError('app.frontend.validation', 'zoom_level_invalid', 'Invalid zoom level attempted', {
+        attemptedValue: value,
+        minZoom: 25,
+        maxZoom: 500,
+        currentZoom: zoomLevel
+      });
     }
+  };
+
+  const handleToolChange = (toolKey) => {
+    logInfo('app.frontend.interactions', 'annotation_tool_changed', 'Annotation tool changed', {
+      previousTool: activeTool,
+      newTool: toolKey,
+      toolLabel: tools.find(t => t.key === toolKey)?.label
+    });
+    onToolChange(toolKey);
+  };
+
+  const handleUndo = () => {
+    if (canUndo) {
+      logInfo('app.frontend.interactions', 'undo_operation', 'Undo operation performed', {
+        canUndo: canUndo,
+        canRedo: canRedo
+      });
+      onUndo();
+    } else {
+      logError('app.frontend.validation', 'undo_disabled', 'Undo operation attempted when disabled', {
+        canUndo: canUndo,
+        canRedo: canRedo
+      });
+    }
+  };
+
+  const handleRedo = () => {
+    if (canRedo) {
+      logInfo('app.frontend.interactions', 'redo_operation', 'Redo operation performed', {
+        canUndo: canUndo,
+        canRedo: canRedo
+      });
+      onRedo();
+    } else {
+      logError('app.frontend.validation', 'redo_disabled', 'Redo operation attempted when disabled', {
+        canUndo: canUndo,
+        canRedo: canRedo
+      });
+    }
+  };
+
+  const handleClear = () => {
+    logInfo('app.frontend.interactions', 'clear_all_operation', 'Clear all operation initiated', {
+      activeTool: activeTool,
+      zoomLevel: zoomLevel
+    });
+    onClear();
+  };
+
+  const handleSave = () => {
+    logInfo('app.frontend.interactions', 'save_all_operation', 'Save all operation initiated', {
+      activeTool: activeTool,
+      zoomLevel: zoomLevel
+    });
+    onSave();
+  };
+
+  const handleDelete = () => {
+    logInfo('app.frontend.interactions', 'delete_selected_operation', 'Delete selected operation initiated', {
+      activeTool: activeTool,
+      zoomLevel: zoomLevel
+    });
+    console.log('Delete');
   };
 
   const ToolButton = ({ tool, isActive, onClick }) => (
@@ -62,7 +148,15 @@ const AnnotationToolbox = ({
       <Button
         type={isActive ? 'primary' : 'default'}
         icon={<tool.icon style={{ fontSize: '14px' }} />}
-        onClick={onClick}
+        onClick={() => {
+          logUserClick('AnnotationToolbox', `${tool.key}_tool_button`, {
+            toolKey: tool.key,
+            toolLabel: tool.label,
+            isActive: isActive,
+            tooltip: tool.tooltip
+          });
+          onClick();
+        }}
         style={{
           width: '40px',
           height: '40px',
@@ -109,7 +203,14 @@ const AnnotationToolbox = ({
     <Tooltip title={tooltip} placement="left">
       <Button
         icon={React.cloneElement(icon, { style: { fontSize: '12px' } })}
-        onClick={onClick}
+        onClick={() => {
+          logUserClick('AnnotationToolbox', `${tooltip.toLowerCase().replace(/\s+/g, '_')}_button`, {
+            tooltip: tooltip,
+            disabled: disabled,
+            color: color
+          });
+          onClick();
+        }}
         disabled={disabled}
         style={{
           width: '40px',
@@ -171,7 +272,7 @@ const AnnotationToolbox = ({
               key={tool.key}
               tool={tool}
               isActive={activeTool === tool.key}
-              onClick={() => onToolChange(tool.key)}
+              onClick={() => handleToolChange(tool.key)}
             />
           ))}
         </div>
@@ -264,13 +365,13 @@ const AnnotationToolbox = ({
           <ActionButton
             icon={<UndoOutlined />}
             tooltip="Undo"
-            onClick={onUndo}
+            onClick={handleUndo}
             disabled={!canUndo}
           />
           <ActionButton
             icon={<RedoOutlined />}
             tooltip="Redo"
-            onClick={onRedo}
+            onClick={handleRedo}
             disabled={!canRedo}
           />
         </div>
@@ -297,19 +398,19 @@ const AnnotationToolbox = ({
           <ActionButton
             icon={<DeleteOutlined />}
             tooltip="Delete Selected"
-            onClick={() => console.log('Delete')}
+            onClick={handleDelete}
             color="#ff4d4f"
           />
           <ActionButton
             icon={<ClearOutlined />}
             tooltip="Clear All"
-            onClick={onClear}
+            onClick={handleClear}
             color="#ff7875"
           />
           <ActionButton
             icon={<SaveOutlined />}
             tooltip="Save All"
-            onClick={onSave}
+            onClick={handleSave}
             color="#52c41a"
           />
         </div>

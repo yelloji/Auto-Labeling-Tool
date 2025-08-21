@@ -38,6 +38,7 @@ import {
   PlusOutlined
 } from '@ant-design/icons';
 import { datasetsAPI, projectsAPI } from '../../services/api';
+import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 const { Title, Paragraph, Text } = Typography;
 const { Sider, Content } = Layout;
@@ -66,22 +67,51 @@ const AnnotateProgress = () => {
 
   const imagesPerPage = 50;
 
+  // Log component mount
+  useEffect(() => {
+    logInfo('app.frontend.navigation', 'annotate_progress_page_loaded', 'AnnotateProgress page loaded', {
+      datasetId,
+      timestamp: new Date().toISOString()
+    });
+  }, [datasetId]);
+
   // Load dataset information
   useEffect(() => {
     const loadDataset = async () => {
       if (!datasetId) {
+        logError('app.frontend.validation', 'dataset_id_missing', 'Dataset ID is required', null, {
+          datasetId,
+          timestamp: new Date().toISOString()
+        });
         message.error('Dataset ID is required');
         navigate('/projects');
         return;
       }
 
       setLoading(true);
+      logInfo('app.frontend.interactions', 'loading_dataset_info', 'Loading dataset information', {
+        datasetId,
+        timestamp: new Date().toISOString()
+      });
+
       try {
         const response = await datasetsAPI.getDataset(datasetId);
         setDataset(response);
         setInstructions(response.description || 'Click edit to add annotation instructions...');
         setTempInstructions(response.description || '');
+        logInfo('app.frontend.interactions', 'dataset_info_loaded_success', 'Dataset information loaded successfully', {
+          datasetId,
+          datasetName: response.name,
+          totalImages: response.total_images,
+          labeledImages: response.labeled_images,
+          timestamp: new Date().toISOString()
+        });
       } catch (error) {
+        logError('app.frontend.validation', 'dataset_info_load_failed', 'Failed to load dataset information', error, {
+          datasetId,
+          errorMessage: error.message,
+          timestamp: new Date().toISOString()
+        });
         console.error('Error loading dataset:', error);
         message.error('Failed to load dataset information');
         // Fallback dataset info
@@ -93,6 +123,11 @@ const AnnotateProgress = () => {
           labeled_images: 0,
           unlabeled_images: 0,
           created_at: new Date().toISOString()
+        });
+        logInfo('app.frontend.ui', 'fallback_dataset_created', 'Created fallback dataset info', {
+          datasetId,
+          fallbackName: `Dataset ${datasetId}`,
+          timestamp: new Date().toISOString()
         });
       } finally {
         setLoading(false);
@@ -108,12 +143,27 @@ const AnnotateProgress = () => {
       if (!datasetId) return;
 
       setImagesLoading(true);
+      logInfo('app.frontend.interactions', 'loading_dataset_images', 'Loading dataset images', {
+        datasetId,
+        timestamp: new Date().toISOString()
+      });
+
       try {
         // Load more images to handle filtering on client side
         const response = await datasetsAPI.getDatasetImages(datasetId, 0, 1000);
         setImages(response.images || []);
+        logInfo('app.frontend.interactions', 'dataset_images_loaded_success', 'Dataset images loaded successfully', {
+          datasetId,
+          imageCount: response.images?.length || 0,
+          timestamp: new Date().toISOString()
+        });
 
       } catch (error) {
+        logError('app.frontend.validation', 'dataset_images_load_failed', 'Failed to load dataset images', error, {
+          datasetId,
+          errorMessage: error.message,
+          timestamp: new Date().toISOString()
+        });
         console.error('Error loading images:', error);
         message.error('Failed to load images');
         setImages([]);
@@ -128,7 +178,12 @@ const AnnotateProgress = () => {
   // Reset to page 1 when tab changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab]);
+    logInfo('app.frontend.ui', 'tab_changed_reset_pagination', 'Tab changed, resetting pagination', {
+      datasetId,
+      activeTab,
+      timestamp: new Date().toISOString()
+    });
+  }, [activeTab, datasetId]);
 
   // Filter images based on active tab
   const allFilteredImages = images.filter(image => {
@@ -150,11 +205,33 @@ const AnnotateProgress = () => {
 
   // Handle image click
   const handleImageClick = (imageId) => {
+    logUserClick('AnnotateProgress', 'image_click', {
+      datasetId,
+      imageId,
+      timestamp: new Date().toISOString()
+    });
+    logInfo('app.frontend.navigation', 'navigate_to_manual_annotation', 'Navigating to manual annotation', {
+      datasetId,
+      imageId,
+      targetUrl: `/annotate/${datasetId}/manual?imageId=${imageId}`,
+      timestamp: new Date().toISOString()
+    });
     navigate(`/annotate/${datasetId}/manual?imageId=${imageId}`);
   };
   
   // Handle split method change
   const handleSplitMethodChange = (value) => {
+    logUserClick('AnnotateProgress', 'split_method_change', {
+      datasetId,
+      splitMethod: value,
+      timestamp: new Date().toISOString()
+    });
+    logInfo('app.frontend.ui', 'split_method_updated', 'Dataset split method updated', {
+      datasetId,
+      oldMethod: splitMethod,
+      newMethod: value,
+      timestamp: new Date().toISOString()
+    });
     setSplitMethod(value);
   };
   
@@ -177,6 +254,14 @@ const AnnotateProgress = () => {
     
     // Update the splitPercentages state
     setSplitPercentages([trainPercent, valPercent]);
+    
+    logInfo('app.frontend.ui', 'split_percentages_updated', 'Dataset split percentages updated', {
+      datasetId,
+      trainPercent,
+      valPercent,
+      testPercent,
+      timestamp: new Date().toISOString()
+    });
     
     // Log the percentages for debugging
     console.log(`Train: ${trainPercent}%, Val: ${valPercent}%, Test: ${testPercent}%`);
@@ -242,7 +327,22 @@ const AnnotateProgress = () => {
   
   // Handle assigning images to dataset splits
   const handleAssignImages = async () => {
+    logUserClick('AnnotateProgress', 'assign_images_button', {
+      datasetId,
+      splitMethod,
+      splitPercentages,
+      totalLabeledImages,
+      timestamp: new Date().toISOString()
+    });
+    
     setAssignLoading(true);
+    logInfo('app.frontend.interactions', 'assigning_images_to_splits', 'Assigning images to dataset splits', {
+      datasetId,
+      splitMethod,
+      splitPercentages,
+      totalLabeledImages,
+      timestamp: new Date().toISOString()
+    });
     
     try {
       // Prepare request data based on the selected method
@@ -271,15 +371,44 @@ const AnnotateProgress = () => {
       console.log('Assigning images with data:', requestData);
       const response = await datasetsAPI.assignImagesToSplits(datasetId, requestData);
       
+      logInfo('app.frontend.interactions', 'images_assigned_success', 'Images assigned to splits successfully', {
+        datasetId,
+        splitMethod,
+        response: response.message,
+        timestamp: new Date().toISOString()
+      });
+      
       message.success(response.message || 'Images assigned successfully');
       
       // Move dataset to completed section
+      logInfo('app.frontend.interactions', 'moving_dataset_to_completed', 'Moving dataset to completed section', {
+        datasetId,
+        projectId: dataset.project_id,
+        timestamp: new Date().toISOString()
+      });
+      
       await projectsAPI.moveDatasetToCompleted(dataset.project_id, datasetId);
       
       // Navigate to main project workspace
+      logInfo('app.frontend.navigation', 'navigate_to_project_workspace', 'Navigating to project workspace', {
+        datasetId,
+        projectId: dataset.project_id,
+        targetUrl: `/projects/${dataset.project_id}/workspace`,
+        timestamp: new Date().toISOString()
+      });
+      
       navigate(`/projects/${dataset.project_id}/workspace`);
       
     } catch (error) {
+      logError('app.frontend.validation', 'assign_images_failed', 'Failed to assign images to splits', error, {
+        datasetId,
+        splitMethod,
+        splitPercentages,
+        errorMessage: error.message,
+        errorDetail: error.response?.data?.detail,
+        timestamp: new Date().toISOString()
+      });
+      
       console.error('Error assigning images:', error);
       message.error('Failed to assign images to dataset splits');
       
@@ -295,31 +424,86 @@ const AnnotateProgress = () => {
   
   // Handle instructions edit
   const handleEditInstructions = () => {
+    logUserClick('AnnotateProgress', 'edit_instructions_button', {
+      datasetId,
+      currentInstructions: instructions,
+      timestamp: new Date().toISOString()
+    });
+    logInfo('app.frontend.ui', 'instructions_edit_mode_enabled', 'Instructions edit mode enabled', {
+      datasetId,
+      timestamp: new Date().toISOString()
+    });
     setEditingInstructions(true);
     setTempInstructions(instructions);
   };
 
   const handleSaveInstructions = async () => {
+    logUserClick('AnnotateProgress', 'save_instructions_button', {
+      datasetId,
+      newInstructions: tempInstructions,
+      timestamp: new Date().toISOString()
+    });
+    
+    logInfo('app.frontend.interactions', 'saving_instructions', 'Saving annotation instructions', {
+      datasetId,
+      newInstructions: tempInstructions,
+      timestamp: new Date().toISOString()
+    });
+    
     try {
       await datasetsAPI.updateDataset(datasetId, { description: tempInstructions });
       setInstructions(tempInstructions);
       setEditingInstructions(false);
+      
+      logInfo('app.frontend.interactions', 'instructions_saved_success', 'Instructions saved successfully', {
+        datasetId,
+        newInstructions: tempInstructions,
+        timestamp: new Date().toISOString()
+      });
+      
       message.success('Instructions updated successfully');
     } catch (error) {
+      logError('app.frontend.validation', 'save_instructions_failed', 'Failed to save instructions', error, {
+        datasetId,
+        newInstructions: tempInstructions,
+        errorMessage: error.message,
+        timestamp: new Date().toISOString()
+      });
       console.error('Error updating instructions:', error);
       message.error('Failed to update instructions');
     }
   };
 
   const handleCancelEdit = () => {
+    logUserClick('AnnotateProgress', 'cancel_edit_instructions_button', {
+      datasetId,
+      timestamp: new Date().toISOString()
+    });
+    logInfo('app.frontend.ui', 'instructions_edit_cancelled', 'Instructions edit cancelled', {
+      datasetId,
+      timestamp: new Date().toISOString()
+    });
     setEditingInstructions(false);
     setTempInstructions(instructions);
   };
 
   const handleGoBack = () => {
+    logUserClick('AnnotateProgress', 'go_back_button', {
+      datasetId,
+      timestamp: new Date().toISOString()
+    });
+    
     // Navigate back to the annotate launcher instead of browser history
+    logInfo('app.frontend.navigation', 'navigate_back_to_launcher', 'Navigating back to annotate launcher', {
+      datasetId,
+      targetUrl: `/annotate-launcher/${datasetId}`,
+      timestamp: new Date().toISOString()
+    });
+    
     navigate(`/annotate-launcher/${datasetId}`);
   };
+
+
 
   // Format date
   const formatDate = (dateString) => {
@@ -353,6 +537,10 @@ const AnnotateProgress = () => {
   };
 
   if (loading) {
+    logInfo('app.frontend.ui', 'annotate_progress_loading', 'AnnotateProgress loading state', {
+      datasetId,
+      timestamp: new Date().toISOString()
+    });
     return (
       <div style={{ 
         display: 'flex', 
@@ -559,7 +747,17 @@ const AnnotateProgress = () => {
               type="primary" 
               size="large"
               icon={<PlusOutlined />}
-              onClick={() => setSplitDrawerVisible(true)}
+              onClick={() => {
+                logUserClick('AnnotateProgress', 'open_split_drawer', {
+                  datasetId,
+                  timestamp: new Date().toISOString()
+                });
+                logInfo('app.frontend.ui', 'split_drawer_opened', 'Dataset split drawer opened', {
+                  datasetId,
+                  timestamp: new Date().toISOString()
+                });
+                setSplitDrawerVisible(true);
+              }}
               style={{
                 background: '#52c41a',
                 borderColor: '#52c41a',
@@ -612,7 +810,21 @@ const AnnotateProgress = () => {
         <Card>
           <Tabs 
             activeKey={activeTab}
-            onChange={setActiveTab}
+            onChange={(key) => {
+              logUserClick('AnnotateProgress', 'tab_change', {
+                datasetId,
+                oldTab: activeTab,
+                newTab: key,
+                timestamp: new Date().toISOString()
+              });
+              logInfo('app.frontend.navigation', 'annotation_tab_changed', 'Annotation tab changed', {
+                datasetId,
+                oldTab: activeTab,
+                newTab: key,
+                timestamp: new Date().toISOString()
+              });
+              setActiveTab(key);
+            }}
             items={tabItems}
             size="large"
           />
@@ -754,7 +966,23 @@ const AnnotateProgress = () => {
                   <Space size="large">
                     <Button 
                       disabled={currentPage === 1}
-                      onClick={() => setCurrentPage(currentPage - 1)}
+                      onClick={() => {
+                        logUserClick('AnnotateProgress', 'pagination_change', {
+                          datasetId,
+                          oldPage: currentPage,
+                          newPage: currentPage - 1,
+                          activeTab,
+                          timestamp: new Date().toISOString()
+                        });
+                        logInfo('app.frontend.navigation', 'annotation_page_changed', 'Annotation page changed', {
+                          datasetId,
+                          oldPage: currentPage,
+                          newPage: currentPage - 1,
+                          activeTab,
+                          timestamp: new Date().toISOString()
+                        });
+                        setCurrentPage(currentPage - 1);
+                      }}
                       size="large"
                     >
                       ← Previous
@@ -766,7 +994,23 @@ const AnnotateProgress = () => {
                     
                     <Button 
                       disabled={currentPage >= Math.ceil(totalFilteredImages / imagesPerPage)}
-                      onClick={() => setCurrentPage(currentPage + 1)}
+                      onClick={() => {
+                        logUserClick('AnnotateProgress', 'pagination_change', {
+                          datasetId,
+                          oldPage: currentPage,
+                          newPage: currentPage + 1,
+                          activeTab,
+                          timestamp: new Date().toISOString()
+                        });
+                        logInfo('app.frontend.navigation', 'annotation_page_changed', 'Annotation page changed', {
+                          datasetId,
+                          oldPage: currentPage,
+                          newPage: currentPage + 1,
+                          activeTab,
+                          timestamp: new Date().toISOString()
+                        });
+                        setCurrentPage(currentPage + 1);
+                      }}
                       size="large"
                     >
                       Next →
@@ -790,11 +1034,31 @@ const AnnotateProgress = () => {
         title="Add Images to Dataset Splits"
         width={520}
         open={splitDrawerVisible}
-        onClose={() => setSplitDrawerVisible(false)}
+        onClose={() => {
+          logUserClick('AnnotateProgress', 'close_split_drawer', {
+            datasetId,
+            timestamp: new Date().toISOString()
+          });
+          logInfo('app.frontend.ui', 'split_drawer_closed', 'Dataset split drawer closed', {
+            datasetId,
+            timestamp: new Date().toISOString()
+          });
+          setSplitDrawerVisible(false);
+        }}
         footer={
           <div style={{ textAlign: 'right' }}>
             <Button 
-              onClick={() => setSplitDrawerVisible(false)} 
+              onClick={() => {
+                logUserClick('AnnotateProgress', 'close_split_drawer', {
+                  datasetId,
+                  timestamp: new Date().toISOString()
+                });
+                logInfo('app.frontend.ui', 'split_drawer_closed', 'Dataset split drawer closed', {
+                  datasetId,
+                  timestamp: new Date().toISOString()
+                });
+                setSplitDrawerVisible(false);
+              }} 
               style={{ marginRight: 8 }}
             >
               Cancel

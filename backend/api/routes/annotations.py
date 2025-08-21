@@ -10,6 +10,10 @@ from pydantic import BaseModel
 from database.database import get_db
 from database.operations import AnnotationOperations, ImageOperations
 from database.models import Annotation
+from logging_system.professional_logger import get_professional_logger
+
+# Initialize professional logger
+logger = get_professional_logger()
 
 router = APIRouter()
 
@@ -44,30 +48,71 @@ class AnnotationUpdate(BaseModel):
 @router.get("/{annotation_id}")
 async def get_annotation(annotation_id: str):
     """Get annotation by ID"""
-    # TODO: Implement annotation retrieval
-    return {"annotation_id": annotation_id}
+    logger.info("app.backend", f"Getting annotation by ID: {annotation_id}", "annotation_retrieval", {
+        "annotation_id": annotation_id,
+        "endpoint": "/api/annotations/{annotation_id}"
+    })
+    
+    try:
+        # TODO: Implement annotation retrieval
+        logger.info("operations.annotations", f"Annotation retrieval completed for ID: {annotation_id}", "annotation_found", {
+            "annotation_id": annotation_id
+        })
+        return {"annotation_id": annotation_id}
+        
+    except Exception as e:
+        logger.error("errors.system", f"Error retrieving annotation {annotation_id}", "annotation_retrieval_error", {
+            "annotation_id": annotation_id,
+            "error": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Error retrieving annotation: {str(e)}")
 
 @router.put("/{annotation_id}")
 async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db: Session = Depends(get_db)):
     """Update annotation"""
+    logger.info("app.backend", f"Updating annotation: {annotation_id}", "annotation_update", {
+        "annotation_id": annotation_id,
+        "endpoint": "/api/annotations/{annotation_id}",
+        "update_data": annotation.dict(exclude_none=True)
+    })
+    
     try:
         # Check if annotation exists
+        logger.debug("app.database", f"Checking if annotation {annotation_id} exists", "database_query")
         existing = db.query(Annotation).filter(Annotation.id == annotation_id).first()
         if not existing:
+            logger.warning("errors.validation", f"Annotation {annotation_id} not found", "annotation_not_found", {
+                "annotation_id": annotation_id
+            })
             raise HTTPException(status_code=404, detail=f"Annotation with ID {annotation_id} not found")
         
         # Get image and dataset info to find project
+        logger.debug("app.database", f"Fetching image and dataset info for annotation {annotation_id}", "database_query")
         from database.models import Image, Dataset, Label
         image = db.query(Image).filter(Image.id == existing.image_id).first()
         if not image:
+            logger.warning("errors.validation", f"Image {existing.image_id} not found", "image_not_found", {
+                "image_id": existing.image_id,
+                "annotation_id": annotation_id
+            })
             raise HTTPException(status_code=404, detail=f"Image with ID {existing.image_id} not found")
             
         dataset = db.query(Dataset).filter(Dataset.id == image.dataset_id).first()
         if not dataset:
+            logger.warning("errors.validation", f"Dataset {image.dataset_id} not found", "dataset_not_found", {
+                "dataset_id": image.dataset_id,
+                "image_id": existing.image_id,
+                "annotation_id": annotation_id
+            })
             raise HTTPException(status_code=404, detail=f"Dataset with ID {image.dataset_id} not found")
             
         project_id = dataset.project_id
-        print(f"Annotation {annotation_id} is on image {existing.image_id} in dataset {image.dataset_id}, project {project_id}")
+        logger.info("operations.annotations", f"Annotation context retrieved", "annotation_context", {
+            "annotation_id": annotation_id,
+            "image_id": existing.image_id,
+            "dataset_id": image.dataset_id,
+            "project_id": project_id
+        })
         
         # Prepare the update data
         update_data = {}
@@ -85,6 +130,11 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
             
         # If we have a new class name, ensure it exists in the labels table
         if new_class_name:
+            logger.info("operations.annotations", f"Processing new class name: {new_class_name}", "class_name_processing", {
+                "new_class_name": new_class_name,
+                "project_id": project_id
+            })
+            
             # Check if label already exists for this project
             existing_label = db.query(Label).filter(
                 Label.name == new_class_name,
@@ -93,6 +143,11 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
             
             if not existing_label:
                 # Label doesn't exist, create it
+                logger.info("operations.annotations", f"Creating new label: {new_class_name}", "label_creation", {
+                    "label_name": new_class_name,
+                    "project_id": project_id
+                })
+                
                 import random
                 
                 # Generate a random color
@@ -101,7 +156,6 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
                 b = random.randint(0, 255)
                 color = f"#{r:02x}{g:02x}{b:02x}"
                 
-                print(f"Creating new label '{new_class_name}' with color {color} for project {project_id}")
                 new_label = Label(
                     name=new_class_name,
                     color=color,
@@ -110,7 +164,17 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
                 
                 db.add(new_label)
                 db.commit()
-                print(f"Created new label with ID {new_label.id}")
+                logger.info("operations.annotations", f"New label created successfully", "label_created", {
+                    "label_name": new_class_name,
+                    "label_id": new_label.id,
+                    "color": color,
+                    "project_id": project_id
+                })
+            else:
+                logger.debug("operations.annotations", f"Label already exists: {new_class_name}", "label_exists", {
+                    "label_name": new_class_name,
+                    "label_id": existing_label.id
+                })
         
         # Add other fields to update_data
         if annotation.class_id is not None:
@@ -135,6 +199,11 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
             update_data["segmentation"] = annotation.segmentation
             
         # Update the annotation
+        logger.info("operations.annotations", f"Updating annotation in database", "annotation_update_operation", {
+            "annotation_id": annotation_id,
+            "update_fields": list(update_data.keys())
+        })
+        
         updated = AnnotationOperations.update_annotation(
             db, 
             annotation_id,
@@ -142,23 +211,53 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
         )
         
         if not updated:
+            logger.error("errors.system", f"Failed to update annotation {annotation_id}", "annotation_update_failed", {
+                "annotation_id": annotation_id,
+                "update_data": update_data
+            })
             raise HTTPException(status_code=500, detail="Failed to update annotation")
+        
+        logger.info("operations.annotations", f"Annotation updated successfully", "annotation_update_success", {
+            "annotation_id": annotation_id,
+            "updated_fields": list(update_data.keys())
+        })
             
         return {"message": "Annotation updated", "annotation": updated}
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
+        raise
     except Exception as e:
+        logger.error("errors.system", f"Error updating annotation {annotation_id}", "annotation_update_error", {
+            "annotation_id": annotation_id,
+            "error": str(e)
+        })
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update annotation: {str(e)}")
 
 @router.delete("/{annotation_id}")
 async def delete_annotation(annotation_id: str, db: Session = Depends(get_db)):
     """Delete annotation"""
+    logger.info("app.backend", f"Deleting annotation: {annotation_id}", "annotation_deletion", {
+        "annotation_id": annotation_id,
+        "endpoint": "/api/annotations/{annotation_id}"
+    })
+    
     try:
         # Get the annotation first to make sure it exists
+        logger.debug("app.database", f"Checking if annotation {annotation_id} exists for deletion", "database_query")
         annotation = db.query(Annotation).filter(Annotation.id == annotation_id).first()
         if not annotation:
+            logger.warning("errors.validation", f"Annotation {annotation_id} not found for deletion", "annotation_not_found", {
+                "annotation_id": annotation_id
+            })
             raise HTTPException(status_code=404, detail=f"Annotation with ID {annotation_id} not found")
         
         # Delete the annotation
+        logger.info("operations.annotations", f"Deleting annotation from database", "annotation_delete_operation", {
+            "annotation_id": annotation_id,
+            "image_id": annotation.image_id
+        })
         db.query(Annotation).filter(Annotation.id == annotation_id).delete()
         db.commit()
         
@@ -166,12 +265,35 @@ async def delete_annotation(annotation_id: str, db: Session = Depends(get_db)):
         image_id = annotation.image_id
         remaining_annotations = db.query(Annotation).filter(Annotation.image_id == image_id).count()
         
+        logger.info("operations.annotations", f"Annotation deleted, checking remaining annotations", "remaining_annotations_check", {
+            "annotation_id": annotation_id,
+            "image_id": image_id,
+            "remaining_count": remaining_annotations
+        })
+        
         # Update image status if needed
         if remaining_annotations == 0:
+            logger.info("operations.images", f"Updating image status to unlabeled", "image_status_update", {
+                "image_id": image_id,
+                "reason": "no_annotations_remaining"
+            })
             ImageOperations.update_image_status(db, image_id, is_labeled=False)
+        
+        logger.info("operations.annotations", f"Annotation deleted successfully", "annotation_delete_success", {
+            "annotation_id": annotation_id,
+            "image_id": image_id
+        })
             
         return {"message": "Annotation deleted successfully", "annotation_id": annotation_id}
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
+        raise
     except Exception as e:
+        logger.error("errors.system", f"Error deleting annotation {annotation_id}", "annotation_delete_error", {
+            "annotation_id": annotation_id,
+            "error": str(e)
+        })
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete annotation: {str(e)}")
 
@@ -183,8 +305,19 @@ class AnnotationData(BaseModel):
 @router.get("/{image_id}/annotations")
 async def get_image_annotations(image_id: str, db: Session = Depends(get_db)):
     """Get all annotations for a specific image"""
+    logger.info("app.backend", f"Getting annotations for image: {image_id}", "image_annotations_retrieval", {
+        "image_id": image_id,
+        "endpoint": "/api/annotations/{image_id}/annotations"
+    })
+    
     try:
+        logger.debug("app.database", f"Fetching annotations for image {image_id}", "database_query")
         annotations = AnnotationOperations.get_annotations_by_image(db, image_id)
+        
+        logger.info("operations.annotations", f"Retrieved {len(annotations)} annotations for image {image_id}", "annotations_retrieved", {
+            "image_id": image_id,
+            "annotation_count": len(annotations)
+        })
         
         # Convert to frontend format (x, y, width, height)
         annotation_list = []
@@ -207,8 +340,22 @@ async def get_image_annotations(image_id: str, db: Session = Depends(get_db)):
                 "segmentation": ann.segmentation
             })
         
+        logger.info("operations.annotations", f"Image annotations processed successfully", "annotations_processed", {
+            "image_id": image_id,
+            "annotation_count": len(annotation_list),
+            "annotation_types": list(set([ann["type"] for ann in annotation_list]))
+        })
+        
         return annotation_list
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are already handled
+        raise
     except Exception as e:
+        logger.error("errors.system", f"Error retrieving annotations for image {image_id}", "image_annotations_error", {
+            "image_id": image_id,
+            "error": str(e)
+        })
         raise HTTPException(status_code=500, detail=f"Error retrieving annotations: {str(e)}")
 
 @router.post("/{image_id}/annotations")

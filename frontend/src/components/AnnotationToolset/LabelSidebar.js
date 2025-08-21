@@ -11,6 +11,7 @@ import {
   EyeInvisibleOutlined,
   PlusOutlined
 } from '@ant-design/icons';
+import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 const { Text, Title } = Typography;
 
@@ -43,6 +44,16 @@ const LabelSidebar = ({
       count: imageCount
     };
   });
+
+  // Log sidebar initialization
+  React.useEffect(() => {
+    logInfo('app.frontend.ui', 'label_sidebar_initialized', 'Label sidebar initialized', {
+      projectLabelsCount: projectLabels.length,
+      imageAnnotationsCount: imageAnnotations.length,
+      selectedLabel,
+      hiddenLabelsCount: hiddenLabels.length
+    });
+  }, [projectLabels.length, imageAnnotations.length, selectedLabel, hiddenLabels.length]);
 
   const renderEmptyState = () => (
     <div style={{
@@ -83,7 +94,16 @@ const LabelSidebar = ({
           transition: 'all 0.2s ease',
           boxShadow: isSelected ? '0 2px 8px rgba(52, 152, 219, 0.15)' : '0 1px 2px rgba(0,0,0,0.05)'
         }}
-        onClick={() => onLabelSelect?.(label.id)}
+        onClick={() => {
+          onLabelSelect?.(label.id);
+          logUserClick('LabelSidebar', 'SelectLabel', label.name);
+          logInfo('app.frontend.interactions', 'label_selected', 'Label selected in sidebar', {
+            labelId: label.id,
+            labelName: label.name,
+            imageCount: label.imageCount,
+            projectCount: label.projectCount
+          });
+        }}
         onMouseEnter={(e) => {
           if (!isSelected) {
             e.target.style.backgroundColor = '#002140';
@@ -168,6 +188,12 @@ const LabelSidebar = ({
                 onClick={(e) => {
                   e.stopPropagation();
                   onLabelVisibilityToggle?.(label.id);
+                  logUserClick('LabelSidebar', 'ToggleVisibility', label.name);
+                  logInfo('app.frontend.interactions', 'label_visibility_toggled', 'Label visibility toggled', {
+                    labelId: label.id,
+                    labelName: label.name,
+                    isHidden: !isHidden // Log the new state
+                  });
                 }}
                 style={{
                   width: '24px',
@@ -239,7 +265,13 @@ const LabelSidebar = ({
                 type="primary"
                 size="small"
                 icon={<PlusOutlined />}
-                onClick={onAddLabel}
+                onClick={() => {
+                  onAddLabel();
+                  logUserClick('LabelSidebar', 'AddLabel', 'Add new label button clicked');
+                  logInfo('app.frontend.interactions', 'add_label_triggered', 'Add new label triggered from sidebar', {
+                    currentLabelsCount: projectLabels.length
+                  });
+                }}
                 style={{
                   borderRadius: '6px',
                   height: '28px'

@@ -33,6 +33,7 @@ import {
 import { Pie, Bar, Column } from '@ant-design/plots';
 import { projectsAPI, datasetsAPI, analyticsAPI } from '../../../services/api';
 import LabelManagementModal from './LabelManagementModal';
+import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -47,12 +48,23 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
   const [labelModalVisible, setLabelModalVisible] = useState(false);
 
   useEffect(() => {
+    logInfo('app.frontend.ui', 'analytics_section_initialized', 'AnalyticsSection component initialized', {
+      timestamp: new Date().toISOString(),
+      component: 'AnalyticsSection',
+      projectId: projectId
+    });
+
     if (projectId) {
       loadProjectAnalytics();
     }
   }, [projectId]);
 
   const loadProjectAnalytics = async () => {
+    logInfo('app.frontend.interactions', 'analytics_data_loading_started', 'Started loading project analytics data', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
+
     setLoading(true);
     try {
       // Load project data
@@ -73,7 +85,23 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
       // Calculate project statistics
       const stats = calculateProjectStats(datasetsData, labelsData);
       setProjectStats(stats);
+
+      logInfo('app.frontend.interactions', 'analytics_data_loading_success', 'Successfully loaded project analytics data', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        datasetsCount: datasetsData.length,
+        labelsCount: labelsData.length,
+        totalImages: stats.totalImages,
+        labeledImages: stats.labeledImages,
+        labelingProgress: stats.labelingProgress
+      });
     } catch (error) {
+      logError('app.frontend.validation', 'analytics_data_loading_failed', 'Failed to load project analytics data', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId,
+        error: error.message,
+        errorDetails: error.response?.data
+      });
       console.error('Error loading project analytics:', error);
     } finally {
       setLoading(false);
@@ -97,20 +125,48 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
   };
 
   const handleOpenLabelModal = () => {
+    logUserClick('label_management_modal_opened', 'User clicked to open label management modal');
+    logInfo('app.frontend.ui', 'label_modal_opened', 'Label management modal opened', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
     setLabelModalVisible(true);
   };
 
   const handleCloseLabelModal = () => {
+    logInfo('app.frontend.ui', 'label_modal_closed', 'Label management modal closed', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
     setLabelModalVisible(false);
   };
 
   const handleLabelsUpdated = () => {
+    logInfo('app.frontend.interactions', 'labels_updated_reload_triggered', 'Reloading analytics after labels update', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
     // Reload project analytics when labels are updated
     loadProjectAnalytics();
   };
 
   const renderProjectOverview = () => {
-    if (!projectStats) return null;
+    if (!projectStats) {
+      logInfo('app.frontend.ui', 'project_overview_no_data', 'Project overview rendered with no stats data', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId
+      });
+      return null;
+    }
+
+    logInfo('app.frontend.ui', 'project_overview_rendered', 'Project overview section rendered', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      totalDatasets: projectStats.totalDatasets,
+      totalImages: projectStats.totalImages,
+      totalLabels: projectStats.totalLabels,
+      labelingProgress: projectStats.labelingProgress
+    });
 
     const getProgressColor = (progress) => {
       if (progress >= 90) return '#52c41a';
@@ -183,7 +239,19 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
   };
 
   const renderLabelsOverview = () => {
-    if (!labels || labels.length === 0) return null;
+    if (!labels || labels.length === 0) {
+      logInfo('app.frontend.ui', 'labels_overview_no_data', 'Labels overview rendered with no labels data', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId
+      });
+      return null;
+    }
+
+    logInfo('app.frontend.ui', 'labels_overview_rendered', 'Labels overview section rendered', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      labelsCount: labels.length
+    });
 
     // Use real label distribution data if available
     const labelData = labels.map(label => {
@@ -306,7 +374,19 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
   };
 
   const renderDatasetsOverview = () => {
-    if (!datasets || datasets.length === 0) return null;
+    if (!datasets || datasets.length === 0) {
+      logInfo('app.frontend.ui', 'datasets_overview_no_data', 'Datasets overview rendered with no datasets data', {
+        timestamp: new Date().toISOString(),
+        projectId: projectId
+      });
+      return null;
+    }
+
+    logInfo('app.frontend.ui', 'datasets_overview_rendered', 'Datasets overview section rendered', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId,
+      datasetsCount: datasets.length
+    });
 
     const columns = [
       {
@@ -369,6 +449,10 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
   };
 
   if (loading) {
+    logInfo('app.frontend.ui', 'analytics_loading_state', 'Analytics section showing loading state', {
+      timestamp: new Date().toISOString(),
+      projectId: projectId
+    });
     return (
       <div style={{ padding: '24px' }}>
         <div style={{ textAlign: 'center', padding: '50px' }}>
@@ -381,6 +465,16 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
 
   return (
     <div style={{ padding: '24px' }}>
+      {(() => {
+        logInfo('app.frontend.ui', 'analytics_section_rendered', 'Analytics section fully rendered', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          hasProjectStats: !!projectStats,
+          hasLabels: !!(labels && labels.length > 0),
+          hasDatasets: !!(datasets && datasets.length > 0)
+        });
+        return null;
+      })()}
       <div style={{ marginBottom: 24 }}>
         <Title level={2}>Project Analytics</Title>
         <Text type="secondary">

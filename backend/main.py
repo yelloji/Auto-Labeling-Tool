@@ -22,11 +22,15 @@ from api.routes import labels
 
 from api.routes import projects, datasets, annotations, models, enhanced_export, releases
 from api.routes import analytics, augmentation, dataset_management
-from api.routes import image_transformations, logs
+from api.routes import image_transformations, logs, frontend_logs
 from api import active_learning
 from core.config import settings
 from database.database import init_db
-from utils.logger import sya_logger, log_info, log_error
+# Import professional logging system
+from logging_system.professional_logger import get_professional_logger
+
+# Initialize professional logger
+logger = get_professional_logger()
 import time
 
 # Initialize FastAPI app
@@ -62,43 +66,40 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
         
-        # Log request
-        sya_logger.log_api_request(
-            request.method,
-            str(request.url.path),
-            dict(request.query_params) if request.query_params else None
-        )
+        # Log request with professional logger
+        logger.info("app.api", f"API Request: {request.method} {request.url.path}", "api_request", {
+            "endpoint": str(request.url.path),
+            "method": request.method,
+            "query_params": dict(request.query_params) if request.query_params else None,
+            "client_ip": request.client.host if request.client else None
+        })
         
         try:
             response = await call_next(request)
             duration = time.time() - start_time
             
-            # Log successful response
-            sya_logger.log_api_response(
-                request.method,
-                str(request.url.path),
-                response.status_code,
-                None,  # Don't log response body for performance
-                duration
-            )
+            # Log successful response with professional logger
+            logger.info("app.api", f"API Response: {request.method} {request.url.path} - {response.status_code}", "api_response", {
+                "endpoint": str(request.url.path),
+                "method": request.method,
+                "response_time": duration,
+                "status_code": response.status_code,
+                "response_size": len(response.body) if hasattr(response, 'body') else None,
+                "content_type": response.headers.get("content-type", None)
+            })
             
             return response
             
         except Exception as e:
             duration = time.time() - start_time
             
-            # Log error response
-            sya_logger.log_api_response(
-                request.method,
-                str(request.url.path),
-                500,
-                str(e),
-                duration
-            )
-            
-            sya_logger.log_error(e, {
+            # Log error response with professional logger
+            logger.error("errors.system", f"API error: {str(e)}", "api_error", {
                 'method': request.method,
                 'path': str(request.url.path),
+                'status_code': 500,
+                'duration': duration,
+                'error': str(e),
                 'query_params': dict(request.query_params)
             })
             
@@ -143,6 +144,7 @@ app.include_router(image_transformations.router, prefix="/api", tags=["image-tra
 
 # Include logs routes
 app.include_router(logs.router, prefix="/api/v1", tags=["logs"])
+app.include_router(frontend_logs.router, tags=["frontend-logs"])
 
 # Include dataset splits feature
 from api.routes import dataset_splits
@@ -166,8 +168,9 @@ async def fix_orphaned_labels():
         existing_projects = db.query(Project).all()
         existing_project_ids = [p.id for p in existing_projects]
         
-        print(f"\n\n================ EMERGENCY LABEL CLEANUP ================")
-        print(f"Valid projects: {existing_project_ids}")
+        logger.info("app.backend", "Starting emergency label cleanup", "emergency_cleanup_start", {
+            "valid_projects": existing_project_ids
+        })
         
         # Find orphaned labels (null project_id or non-existent project)
         orphaned_labels = db.query(Label).filter(
@@ -176,14 +179,23 @@ async def fix_orphaned_labels():
         ).all()
         
         orphaned_count = len(orphaned_labels)
-        print(f"Found {orphaned_count} orphaned labels")
+        logger.info("operations.operations", f"Found {orphaned_count} orphaned labels", "orphaned_labels_found", {
+            "count": orphaned_count
+        })
         
         for label in orphaned_labels:
-            print(f"Deleting orphaned label: ID {label.id}, Name: {label.name}, Project ID: {label.project_id}")
+            logger.info("operations.operations", f"Deleting orphaned label", "orphaned_label_deletion", {
+                "label_id": label.id,
+                "label_name": label.name,
+                "project_id": label.project_id
+            })
             db.delete(label)
         
         # Commit all changes
         db.commit()
+        logger.info("app.database", "Database changes committed", "cleanup_commit", {
+            "deleted_count": orphaned_count
+        })
         
         # Verify that all orphaned labels are gone
         remaining = db.query(Label).filter(
@@ -192,24 +204,30 @@ async def fix_orphaned_labels():
         ).all()
         
         if remaining:
-            print(f"WARNING: {len(remaining)} orphaned labels still remain!")
+            logger.warning("errors.validation", f"{len(remaining)} orphaned labels still remain", "cleanup_incomplete", {
+                "remaining_count": len(remaining)
+            })
             return {
                 "success": False,
                 "message": f"Failed to delete all orphaned labels - {len(remaining)} remain"
             }
         else:
-            print("SUCCESS: All orphaned labels have been removed")
+            logger.info("operations.operations", "All orphaned labels successfully removed", "cleanup_complete", {
+                "deleted_count": orphaned_count
+            })
             return {
                 "success": True,
                 "message": f"Successfully deleted {orphaned_count} orphaned labels"
             }
     except Exception as e:
-        print(f"ERROR: {str(e)}")
+        logger.error("errors.system", f"Emergency cleanup failed: {str(e)}", "cleanup_error", {
+            "error": str(e)
+        })
         db.rollback()
         return {"success": False, "error": str(e)}
     finally:
         db.close()
-        print("================ CLEANUP COMPLETE ================\n\n")
+        logger.info("app.backend", "Emergency cleanup completed", "cleanup_finished")
 
 @app.get("/api/v1/list-labels")
 async def list_all_labels():
@@ -250,9 +268,13 @@ async def list_all_labels():
         
         return result
     except Exception as e:
+        logger.error("errors.system", f"Failed to list labels: {str(e)}", "list_labels_error", {
+            "error": str(e)
+        })
         return {"error": str(e)}
     finally:
         db.close()
+        logger.info("app.database", "Database connection closed", "db_connection_closed")
 
 # Include Smart Segmentation routes
 from api import smart_segmentation
@@ -311,18 +333,18 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and create tables"""
-    log_info("🚀 SYA Backend starting up", {
+    logger.info("app.startup", "🚀 SYA Backend starting up", "startup", {
         'version': '1.0.0',
         'environment': 'development',
         'port': 12000
     })
     await init_db()
-    log_info("✅ Database initialized successfully")
+    logger.info("app.database", "✅ Database initialized successfully", "database_initialized")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    log_info("🛑 SYA Backend shutting down")
+    logger.info("app.startup", "🛑 SYA Backend shutting down", "shutdown")
 
 if __name__ == "__main__":
     # Run the application

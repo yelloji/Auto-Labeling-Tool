@@ -15,6 +15,9 @@ import json
 import math
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+from logging_system.professional_logger import get_professional_logger
+
+logger = get_professional_logger()
 
 
 @dataclass
@@ -118,59 +121,101 @@ def transform_detection_annotations_to_yolo(
     img_w: int,
     img_h: int,
     transform_config: Dict[str, Dict[str, Any]],
+    class_index_resolver=None,
 ) -> List[str]:
     """Convert annotations to YOLO detection lines after applying transforms.
 
     transform_config is a mapping like { "rotate": {"angle": 15, "enabled": True }, ... }
     Only rotate, flip, resize are considered here.
     """
-    # Extract effective parameters
-    angle = float(transform_config.get("rotate", {}).get("angle", 0) or 0)
-    flip_h = bool(transform_config.get("flip", {}).get("horizontal", False))
-    flip_v = bool(transform_config.get("flip", {}).get("vertical", False))
+    logger.info("operations.transformations", f"Starting detection annotations transformation to YOLO", "detection_transform_start", {
+        "image_width": img_w,
+        "image_height": img_h,
+        "transform_config": transform_config
+    })
+    
+    try:
+        # Extract effective parameters
+        angle = float(transform_config.get("rotate", {}).get("angle", 0) or 0)
+        flip_h = bool(transform_config.get("flip", {}).get("horizontal", False))
+        flip_v = bool(transform_config.get("flip", {}).get("vertical", False))
 
-    # Optional resize: if present, use target dims for scaling during transform
-    resize_params = transform_config.get("resize", {}) if transform_config.get("resize", {}).get("enabled", False) else {}
-    target_w = int(resize_params.get("width", img_w) or img_w)
-    target_h = int(resize_params.get("height", img_h) or img_h)
+        # Optional resize: if present, use target dims for scaling during transform
+        resize_params = transform_config.get("resize", {}) if transform_config.get("resize", {}).get("enabled", False) else {}
+        target_w = int(resize_params.get("width", img_w) or img_w)
+        target_h = int(resize_params.get("height", img_h) or img_h)
 
-    lines: List[str] = []
-    for ann in annotations:
-        bbox = _extract_bbox_pixels(ann, img_w, img_h)
-        if not bbox:
-            continue
+        logger.debug("operations.transformations", f"Transform parameters extracted", "transform_params_extracted", {
+            "angle": angle,
+            "flip_horizontal": flip_h,
+            "flip_vertical": flip_v,
+            "original_size": (img_w, img_h),
+            "target_size": (target_w, target_h)
+        })
 
-        xmin, ymin, xmax, ymax = bbox.x_min, bbox.y_min, bbox.x_max, bbox.y_max
-
-        # Apply flip first in original space
-        if flip_h or flip_v:
-            xmin, ymin, xmax, ymax = _apply_flip_box(xmin, ymin, xmax, ymax, img_w, img_h, flip_h, flip_v)
-
-        # Apply resize (scale box into new size)
-        rxmin, rymin, rxmax, rymax = _apply_resize_box(xmin, ymin, xmax, ymax, img_w, img_h, target_w, target_h)
-
-        # Apply rotation about center of final image if angle != 0
-        if angle != 0:
-            yolo = _rotate_bbox_axis_aligned(rxmin, rymin, rxmax, rymax, target_w, target_h, angle)
-            if not yolo:
+        lines: List[str] = []
+        processed_count = 0
+        skipped_count = 0
+        
+        for ann in annotations:
+            bbox = _extract_bbox_pixels(ann, img_w, img_h)
+            if not bbox:
+                skipped_count += 1
                 continue
-            cxn, cyn, wn, hn = yolo
-        else:
-            bw, bh = rxmax - rxmin, rymax - rymin
-            cxn = ((rxmin + rxmax) / 2.0) / float(target_w)
-            cyn = ((rymin + rymax) / 2.0) / float(target_h)
-            wn = bw / float(target_w)
-            hn = bh / float(target_h)
 
-        # Clamp
-        cxn = max(0.0, min(1.0, cxn))
-        cyn = max(0.0, min(1.0, cyn))
-        wn = max(0.0, min(1.0, wn))
-        hn = max(0.0, min(1.0, hn))
+            xmin, ymin, xmax, ymax = bbox.x_min, bbox.y_min, bbox.x_max, bbox.y_max
 
-        lines.append(f"{bbox.class_id} {cxn:.6f} {cyn:.6f} {wn:.6f} {hn:.6f}")
+            # Apply flip first in original space
+            if flip_h or flip_v:
+                xmin, ymin, xmax, ymax = _apply_flip_box(xmin, ymin, xmax, ymax, img_w, img_h, flip_h, flip_v)
 
-    return lines
+            # Apply resize (scale box into new size)
+            rxmin, rymin, rxmax, rymax = _apply_resize_box(xmin, ymin, xmax, ymax, img_w, img_h, target_w, target_h)
+
+            # Apply rotation about center of final image if angle != 0
+            if angle != 0:
+                yolo = _rotate_bbox_axis_aligned(rxmin, rymin, rxmax, rymax, target_w, target_h, angle)
+                if not yolo:
+                    skipped_count += 1
+                    continue
+                cxn, cyn, wn, hn = yolo
+            else:
+                bw, bh = rxmax - rxmin, rymax - rymin
+                cxn = ((rxmin + rxmax) / 2.0) / float(target_w)
+                cyn = ((rymin + rymax) / 2.0) / float(target_h)
+                wn = bw / float(target_w)
+                hn = bh / float(target_h)
+
+            # Clamp
+            cxn = max(0.0, min(1.0, cxn))
+            cyn = max(0.0, min(1.0, cyn))
+            wn = max(0.0, min(1.0, wn))
+            hn = max(0.0, min(1.0, hn))
+
+            # Resolve class index
+            class_idx = int(class_index_resolver(bbox) if callable(class_index_resolver) else bbox.class_id)
+            lines.append(f"{class_idx} {cxn:.6f} {cyn:.6f} {wn:.6f} {hn:.6f}")
+            processed_count += 1
+
+        logger.info("operations.transformations", f"Detection annotations transformation completed", "detection_transform_success", {
+            "processed_annotations": processed_count,
+            "skipped_annotations": skipped_count,
+            "total_output_lines": len(lines),
+            "image_width": img_w,
+            "image_height": img_h
+        })
+
+        return lines
+        
+    except Exception as e:
+        logger.error("errors.system", f"Detection annotations transformation failed", "detection_transform_failure", {
+            "image_width": img_w,
+            "image_height": img_h,
+            "transform_config": transform_config,
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
+        raise
 
 
 def transform_polygon_points(
@@ -180,36 +225,89 @@ def transform_polygon_points(
     transform_config: Dict[str, Dict[str, Any]],
 ) -> List[Tuple[float, float]]:
     """Apply flip/resize/rotate to polygon points in pixels and return pixel points."""
-    angle = float(transform_config.get("rotate", {}).get("angle", 0) or 0)
-    flip_h = bool(transform_config.get("flip", {}).get("horizontal", False))
-    flip_v = bool(transform_config.get("flip", {}).get("vertical", False))
-    resize_params = transform_config.get("resize", {}) if transform_config.get("resize", {}).get("enabled", False) else {}
-    target_w = int(resize_params.get("width", img_w) or img_w)
-    target_h = int(resize_params.get("height", img_h) or img_h)
+    logger.debug("operations.transformations", f"Starting polygon points transformation", "polygon_transform_start", {
+        "points_count": len(points),
+        "image_width": img_w,
+        "image_height": img_h,
+        "transform_config": transform_config
+    })
+    
+    try:
+        angle = float(transform_config.get("rotate", {}).get("angle", 0) or 0)
+        flip_h = bool(transform_config.get("flip", {}).get("horizontal", False))
+        flip_v = bool(transform_config.get("flip", {}).get("vertical", False))
+        resize_params = transform_config.get("resize", {}) if transform_config.get("resize", {}).get("enabled", False) else {}
+        target_w = int(resize_params.get("width", img_w) or img_w)
+        target_h = int(resize_params.get("height", img_h) or img_h)
 
-    # Flip
-    fpoints = []
-    for x, y in points:
-        px, py = x, y
-        if 0.0 <= px <= 1.0 and 0.0 <= py <= 1.0:
-            px, py = px * img_w, py * img_h
-        if flip_h:
-            px = img_w - px
-        if flip_v:
-            py = img_h - py
-        fpoints.append((px, py))
+        logger.debug("operations.transformations", f"Polygon transform parameters extracted", "polygon_params_extracted", {
+            "angle": angle,
+            "flip_horizontal": flip_h,
+            "flip_vertical": flip_v,
+            "original_size": (img_w, img_h),
+            "target_size": (target_w, target_h)
+        })
 
-    # Resize
-    sx, sy = target_w / float(img_w), target_h / float(img_h)
-    rpoints = [(px * sx, py * sy) for px, py in fpoints]
+        # Flip
+        fpoints = []
+        for x, y in points:
+            px, py = x, y
+            if 0.0 <= px <= 1.0 and 0.0 <= py <= 1.0:
+                px, py = px * img_w, py * img_h
+            if flip_h:
+                px = img_w - px
+            if flip_v:
+                py = img_h - py
+            fpoints.append((px, py))
 
-    # Rotate around center
-    if angle != 0:
-        cx, cy = target_w / 2.0, target_h / 2.0
-        rad = math.radians(angle)
-        rpoints = [_rotate_point_cxcy(px, py, cx, cy, rad) for px, py in rpoints]
+        logger.debug("operations.transformations", f"Flip transformation applied", "polygon_flip_applied", {
+            "points_count": len(points),
+            "flip_horizontal": flip_h,
+            "flip_vertical": flip_v
+        })
 
-    return rpoints
+        # Resize
+        sx, sy = target_w / float(img_w), target_h / float(img_h)
+        rpoints = [(px * sx, py * sy) for px, py in fpoints]
+
+        logger.debug("operations.transformations", f"Resize transformation applied", "polygon_resize_applied", {
+            "scale_x": sx,
+            "scale_y": sy,
+            "points_count": len(rpoints)
+        })
+
+        # Rotate around center
+        if angle != 0:
+            cx, cy = target_w / 2.0, target_h / 2.0
+            rad = math.radians(angle)
+            rpoints = [_rotate_point_cxcy(px, py, cx, cy, rad) for px, py in rpoints]
+            
+            logger.debug("operations.transformations", f"Rotation transformation applied", "polygon_rotation_applied", {
+                "angle_degrees": angle,
+                "center_x": cx,
+                "center_y": cy,
+                "points_count": len(rpoints)
+            })
+
+        logger.info("operations.transformations", f"Polygon points transformation completed", "polygon_transform_success", {
+            "input_points": len(points),
+            "output_points": len(rpoints),
+            "image_width": img_w,
+            "image_height": img_h
+        })
+
+        return rpoints
+        
+    except Exception as e:
+        logger.error("errors.system", f"Polygon points transformation failed", "polygon_transform_failure", {
+            "points_count": len(points),
+            "image_width": img_w,
+            "image_height": img_h,
+            "transform_config": transform_config,
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
+        raise
 
 
 def transform_segmentation_annotations_to_yolo(
@@ -217,43 +315,95 @@ def transform_segmentation_annotations_to_yolo(
     img_w: int,
     img_h: int,
     transform_config: Dict[str, Dict[str, Any]],
+    class_index_resolver=None,
 ) -> List[str]:
     """Convert polygon annotations to YOLO segmentation lines after transforms."""
-    lines: List[str] = []
-    for ann in annotations:
-        class_id = int(getattr(ann, "class_id", 0) or 0)
-        seg = getattr(ann, "segmentation", None)
-        if not seg:
-            continue
-        # seg may be list or JSON string; expected flat list [x1,y1,x2,y2,...] normalized or pixels
-        try:
-            pts = seg
-            if isinstance(seg, str):
-                pts = json.loads(seg)
-            if isinstance(pts, dict) and "points" in pts:
-                pts = pts["points"]
-            # Normalize list to pairs
-            pairs: List[Tuple[float, float]] = []
-            if isinstance(pts, list):
-                if len(pts) >= 2 and all(isinstance(v, (int, float)) for v in pts):
-                    it = iter(pts)
-                    pairs = [(float(x), float(next(it))) for x in it]
-                elif len(pts) >= 1 and isinstance(pts[0], (list, tuple)):
-                    pairs = [(float(x), float(y)) for x, y in pts]
-            if not pairs:
+    logger.info("operations.transformations", f"Starting segmentation annotations transformation to YOLO", "segmentation_transform_start", {
+        "image_width": img_w,
+        "image_height": img_h,
+        "transform_config": transform_config
+    })
+    
+    try:
+        lines: List[str] = []
+        processed_count = 0
+        skipped_count = 0
+        
+        for ann in annotations:
+            class_id = int(class_index_resolver(ann) if callable(class_index_resolver) else getattr(ann, "class_id", 0) or 0)
+            seg = getattr(ann, "segmentation", None)
+            if not seg:
+                skipped_count += 1
                 continue
-            tpoints = transform_polygon_points(pairs, img_w, img_h, transform_config)
-            # Clamp and normalize
-            norm = []
-            for x, y in tpoints:
-                nx = max(0.0, min(1.0, x / img_w))
-                ny = max(0.0, min(1.0, y / img_h))
-                norm.extend([f"{nx:.6f}", f"{ny:.6f}"])
-            if len(norm) >= 6:
-                lines.append(" ".join([str(class_id)] + norm))
-        except Exception:
-            continue
+                
+            # seg may be list or JSON string; expected flat list [x1,y1,x2,y2,...] normalized or pixels
+            try:
+                pts = seg
+                if isinstance(seg, str):
+                    pts = json.loads(seg)
+                if isinstance(pts, dict) and "points" in pts:
+                    pts = pts["points"]
+                    
+                # Normalize list to pairs
+                pairs: List[Tuple[float, float]] = []
+                if isinstance(pts, list):
+                    if len(pts) >= 2 and all(isinstance(v, (int, float)) for v in pts):
+                        it = iter(pts)
+                        pairs = [(float(x), float(next(it))) for x in it]
+                    elif len(pts) >= 1 and isinstance(pts[0], (list, tuple)):
+                        pairs = [(float(x), float(y)) for x, y in pts]
+                        
+                if not pairs:
+                    skipped_count += 1
+                    continue
+                    
+                logger.debug("operations.transformations", f"Processing segmentation annotation", "segmentation_processing", {
+                    "class_id": class_id,
+                    "points_count": len(pairs)
+                })
+                
+                tpoints = transform_polygon_points(pairs, img_w, img_h, transform_config)
+                
+                # Clamp and normalize
+                norm = []
+                for x, y in tpoints:
+                    nx = max(0.0, min(1.0, x / img_w))
+                    ny = max(0.0, min(1.0, y / img_h))
+                    norm.extend([f"{nx:.6f}", f"{ny:.6f}"])
+                    
+                if len(norm) >= 6:
+                    lines.append(" ".join([str(class_id)] + norm))
+                    processed_count += 1
+                else:
+                    skipped_count += 1
+                    
+            except Exception as e:
+                logger.warning("errors.validation", f"Failed to process segmentation annotation", "segmentation_processing_failure", {
+                    "class_id": class_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                })
+                skipped_count += 1
+                continue
 
-    return lines
+        logger.info("operations.transformations", f"Segmentation annotations transformation completed", "segmentation_transform_success", {
+            "processed_annotations": processed_count,
+            "skipped_annotations": skipped_count,
+            "total_output_lines": len(lines),
+            "image_width": img_w,
+            "image_height": img_h
+        })
+
+        return lines
+        
+    except Exception as e:
+        logger.error("errors.system", f"Segmentation annotations transformation failed", "segmentation_transform_failure", {
+            "image_width": img_w,
+            "image_height": img_h,
+            "transform_config": transform_config,
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
+        raise
 
 

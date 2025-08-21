@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:12000/api/v1';
 
@@ -15,9 +16,25 @@ class AnnotationAPI {
    */
   static async getImageAnnotations(imageId) {
     try {
+      logInfo('app.frontend.interactions', 'get_image_annotations_started', 'Fetching image annotations started', {
+        imageId,
+        endpoint: `${API_BASE}/images/${imageId}/annotations`
+      });
+
       const response = await axios.get(`${API_BASE}/images/${imageId}/annotations`);
+      
+      logInfo('app.frontend.interactions', 'get_image_annotations_success', 'Image annotations fetched successfully', {
+        imageId,
+        annotationCount: response.data?.length || 0
+      });
+
       return response.data || [];
     } catch (error) {
+      logError('app.frontend.validation', 'get_image_annotations_failed', 'Failed to fetch image annotations', {
+        imageId,
+        error: error.message,
+        status: error.response?.status
+      });
       console.error('Failed to fetch image annotations:', error);
       return [];
     }
@@ -30,9 +47,18 @@ class AnnotationAPI {
    */
   static async createAnnotation(annotation) {
     try {
+      logInfo('app.frontend.interactions', 'create_annotation_started', 'Creating new annotation started', {
+        annotationType: annotation.type,
+        imageId: annotation.image_id,
+        label: annotation.class_name || annotation.label
+      });
+
       // Use the correct endpoint for saving image annotations
       const imageId = annotation.image_id;
       if (!imageId) {
+        logError('app.frontend.validation', 'create_annotation_missing_image_id', 'Missing image_id for annotation creation', {
+          annotation: annotation
+        });
         throw new Error('image_id is required for creating annotations');
       }
       
@@ -49,6 +75,11 @@ class AnnotationAPI {
       
       // CRITICAL FIX: Handle each type separately and explicitly
       if (annotation.type === 'polygon' && Array.isArray(annotation.segmentation)) {
+        logInfo('app.frontend.ui', 'polygon_annotation_processing', 'Processing polygon annotation', {
+          segmentationPoints: annotation.segmentation.length,
+          imageId: annotation.image_id
+        });
+
         console.log('SAVING POLYGON WITH POINTS:', annotation.segmentation.length);
         
         // CRITICAL: Set the type explicitly for the backend
@@ -84,6 +115,11 @@ class AnnotationAPI {
       } 
       // CRITICAL FIX: Only handle box type in the else if, not in a generic else
       else if (annotation.type === 'box') {
+        logInfo('app.frontend.ui', 'box_annotation_processing', 'Processing box annotation', {
+          imageId: annotation.image_id,
+          coordinates: { x: annotation.x, y: annotation.y, width: annotation.width, height: annotation.height }
+        });
+
         // CRITICAL: Set the type explicitly for the backend
         annotationData.type = 'box';
         
@@ -108,6 +144,10 @@ class AnnotationAPI {
       }
       // CRITICAL FIX: Handle unknown types explicitly
       else {
+        logError('app.frontend.validation', 'create_annotation_unknown_type', 'Unknown annotation type encountered', {
+          annotationType: annotation.type,
+          imageId: annotation.image_id
+        });
         console.error('Unknown annotation type:', annotation.type);
         throw new Error(`Unknown annotation type: ${annotation.type}`);
       }
@@ -117,9 +157,21 @@ class AnnotationAPI {
         annotations: [annotationData]
       });
       
+      logInfo('app.frontend.interactions', 'create_annotation_success', 'Annotation created successfully', {
+        annotationType: annotation.type,
+        imageId: annotation.image_id,
+        responseData: response.data
+      });
+
       console.log('✅ Annotation saved to database:', response.data);
       return response.data;
     } catch (error) {
+      logError('app.frontend.validation', 'create_annotation_failed', 'Failed to create annotation', {
+        annotationType: annotation.type,
+        imageId: annotation.image_id,
+        error: error.message,
+        status: error.response?.status
+      });
       console.error('❌ Failed to create annotation:', error);
       throw error;
     }
@@ -133,12 +185,28 @@ class AnnotationAPI {
    */
   static async updateAnnotation(annotationId, updates) {
     try {
+      logInfo('app.frontend.interactions', 'update_annotation_started', 'Updating annotation started', {
+        annotationId,
+        updateFields: Object.keys(updates)
+      });
+
       console.log('Updating annotation:', annotationId, updates);
       // The annotations router is mounted at /api/v1/images
       const response = await axios.put(`${API_BASE}/images/${annotationId}`, updates);
+      
+      logInfo('app.frontend.interactions', 'update_annotation_success', 'Annotation updated successfully', {
+        annotationId,
+        responseData: response.data
+      });
+
       console.log('Update response:', response);
       return response.data;
     } catch (error) {
+      logError('app.frontend.validation', 'update_annotation_failed', 'Failed to update annotation', {
+        annotationId,
+        error: error.message,
+        status: error.response?.status
+      });
       console.error('Failed to update annotation:', error);
       throw error;
     }
@@ -151,11 +219,16 @@ class AnnotationAPI {
    */
   static async deleteAnnotation(annotationId) {
     if (!annotationId) {
+      logError('app.frontend.validation', 'delete_annotation_missing_id', 'No annotation ID provided for deletion');
       console.error('No annotation ID provided for deletion');
       throw new Error('Annotation ID is required for deletion');
     }
     
     try {
+      logInfo('app.frontend.interactions', 'delete_annotation_started', 'Deleting annotation started', {
+        annotationId
+      });
+
       console.log('AnnotationAPI: Sending DELETE request for annotation:', annotationId);
       
       // The annotations router is mounted at /api/v1/images
@@ -165,10 +238,22 @@ class AnnotationAPI {
       console.log('DELETE URL:', deleteUrl);
       
       const response = await axios.delete(deleteUrl);
+      
+      logInfo('app.frontend.interactions', 'delete_annotation_success', 'Annotation deleted successfully', {
+        annotationId,
+        responseStatus: response.status
+      });
+
       console.log('Delete annotation response:', response);
       
       return true;
     } catch (error) {
+      logError('app.frontend.validation', 'delete_annotation_failed', 'Failed to delete annotation', {
+        annotationId,
+        error: error.message,
+        status: error.response?.status,
+        responseData: error.response?.data
+      });
       console.error('Failed to delete annotation:', error);
       console.error('Error details:', error.message);
       console.error('Error response:', error.response?.data);
@@ -182,6 +267,10 @@ class AnnotationAPI {
    * @returns {Array} Unique labels used in this image
    */
   static getImageLabels(annotations) {
+    logInfo('app.frontend.ui', 'get_image_labels_processing', 'Processing image labels from annotations', {
+      annotationCount: annotations?.length || 0
+    });
+
     const labelMap = new Map();
     
     annotations.forEach(annotation => {
@@ -195,7 +284,14 @@ class AnnotationAPI {
       }
     });
 
-    return Array.from(labelMap.values());
+    const labels = Array.from(labelMap.values());
+    
+    logInfo('app.frontend.ui', 'get_image_labels_completed', 'Image labels processed successfully', {
+      uniqueLabelCount: labels.length,
+      totalAnnotationCount: annotations?.length || 0
+    });
+
+    return labels;
   }
 
   /**
@@ -206,6 +302,10 @@ class AnnotationAPI {
   static generateLabelColor(labelId) {
     // Default color if labelId is invalid
     if (!labelId || typeof labelId !== 'string') {
+      logError('app.frontend.validation', 'generate_label_color_invalid_id', 'Invalid label ID provided to generateLabelColor', {
+        labelId,
+        type: typeof labelId
+      });
       console.warn('Invalid label ID provided to generateLabelColor:', labelId);
       return '#CCCCCC'; // Default gray color
     }
@@ -220,7 +320,14 @@ class AnnotationAPI {
       hash = labelId.charCodeAt(i) + ((hash << 5) - hash);
     }
     
-    return colors[Math.abs(hash) % colors.length];
+    const color = colors[Math.abs(hash) % colors.length];
+    
+    logInfo('app.frontend.ui', 'label_color_generated', 'Label color generated successfully', {
+      labelId,
+      generatedColor: color
+    });
+    
+    return color;
   }
 
   /**
@@ -229,19 +336,52 @@ class AnnotationAPI {
    * @returns {boolean} Is valid
    */
   static validateAnnotation(annotation) {
+    logInfo('app.frontend.validation', 'annotation_validation_started', 'Validating annotation data', {
+      annotationType: annotation.type,
+      hasImageId: !!annotation.image_id,
+      hasLabelId: !!annotation.label_id
+    });
+
     if (!annotation.image_id || !annotation.label_id) {
+      logError('app.frontend.validation', 'annotation_validation_failed_missing_fields', 'Annotation validation failed - missing required fields', {
+        hasImageId: !!annotation.image_id,
+        hasLabelId: !!annotation.label_id
+      });
       return false;
     }
 
     if (annotation.type === 'box') {
-      return annotation.x !== undefined && annotation.y !== undefined && 
+      const isValid = annotation.x !== undefined && annotation.y !== undefined && 
              annotation.width !== undefined && annotation.height !== undefined;
+      
+      if (!isValid) {
+        logError('app.frontend.validation', 'annotation_validation_failed_box', 'Box annotation validation failed - missing coordinates', {
+          hasX: annotation.x !== undefined,
+          hasY: annotation.y !== undefined,
+          hasWidth: annotation.width !== undefined,
+          hasHeight: annotation.height !== undefined
+        });
+      }
+      
+      return isValid;
     }
 
     if (annotation.type === 'polygon') {
-      return Array.isArray(annotation.coordinates) && annotation.coordinates.length >= 3;
+      const isValid = Array.isArray(annotation.coordinates) && annotation.coordinates.length >= 3;
+      
+      if (!isValid) {
+        logError('app.frontend.validation', 'annotation_validation_failed_polygon', 'Polygon annotation validation failed - insufficient coordinates', {
+          coordinatesType: typeof annotation.coordinates,
+          coordinatesLength: annotation.coordinates?.length || 0
+        });
+      }
+      
+      return isValid;
     }
 
+    logError('app.frontend.validation', 'annotation_validation_failed_unknown_type', 'Annotation validation failed - unknown type', {
+      annotationType: annotation.type
+    });
     return false;
   }
 
@@ -252,6 +392,10 @@ class AnnotationAPI {
    */
   static async getDatasetImages(datasetId) {
     try {
+      logInfo('app.frontend.interactions', 'get_dataset_images_started', 'Fetching dataset images started', {
+        datasetId
+      });
+
       console.log(`Fetching images for dataset ID: ${datasetId}`);
       
       // First, get the dataset information to determine which project it belongs to
@@ -259,15 +403,32 @@ class AnnotationAPI {
       const dataset = datasetResponse.data;
       const projectId = dataset.project_id;
       
+      logInfo('app.frontend.ui', 'dataset_project_mapping', 'Dataset project mapping found', {
+        datasetId,
+        projectId
+      });
+
       console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
       
       // Now fetch images for this specific dataset
       const response = await axios.get(`${API_BASE}/datasets/${datasetId}/images`);
       
-      console.log(`Found ${response.data.images?.length || 0} images for dataset ${datasetId}`);
+      const imageCount = response.data.images?.length || 0;
+      logInfo('app.frontend.interactions', 'get_dataset_images_success', 'Dataset images fetched successfully', {
+        datasetId,
+        projectId,
+        imageCount
+      });
+
+      console.log(`Found ${imageCount} images for dataset ${datasetId}`);
       
       return response.data;
     } catch (error) {
+      logError('app.frontend.validation', 'get_dataset_images_failed', 'Failed to fetch dataset images', {
+        datasetId,
+        error: error.message,
+        status: error.response?.status
+      });
       console.error('Failed to fetch dataset images:', error);
       throw error;
     }
@@ -280,6 +441,10 @@ class AnnotationAPI {
    */
   static async getProjectLabels(datasetId) {
     try {
+      logInfo('app.frontend.interactions', 'get_project_labels_started', 'Fetching project labels started', {
+        datasetId
+      });
+
       // First get the project ID from the dataset ID
       let projectId;
       
@@ -288,9 +453,18 @@ class AnnotationAPI {
         console.log(`Getting dataset info for ID: ${datasetId}`);
         const datasetResponse = await axios.get(`${API_BASE}/datasets/${datasetId}`);
         projectId = datasetResponse.data.project_id;
+        
+        logInfo('app.frontend.ui', 'project_id_resolved', 'Project ID resolved from dataset', {
+          datasetId,
+          projectId
+        });
+
         console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
       } catch (e) {
         // If dataset lookup fails, try using the datasetId as projectId directly
+        logInfo('app.frontend.ui', 'project_id_fallback', 'Using datasetId as projectId fallback', {
+          datasetId
+        });
         console.log('Could not get dataset info, using datasetId as projectId');
         projectId = parseInt(datasetId);
       }
@@ -366,6 +540,11 @@ class AnnotationAPI {
         projectCount: label.count || 0 // Store project-wide count
       }));
       
+      logInfo('app.frontend.interactions', 'get_project_labels_success', 'Project labels fetched and formatted successfully', {
+        projectId,
+        labelCount: formattedLabels.length
+      });
+
       console.log('Formatted labels:', formattedLabels);
       
       // Store in local storage as backup
@@ -373,6 +552,11 @@ class AnnotationAPI {
       
       return formattedLabels;
     } catch (error) {
+      logError('app.frontend.validation', 'get_project_labels_failed', 'Failed to fetch project labels', {
+        datasetId,
+        error: error.message,
+        status: error.response?.status
+      });
       console.error('Failed to fetch project labels:', error);
       console.error('Error details:', error.response?.data || error.message);
       
@@ -399,14 +583,22 @@ class AnnotationAPI {
    */
   static async saveProjectLabel(datasetId, label) {
     try {
+      logInfo('app.frontend.interactions', 'save_project_label_started', 'Saving project label started', {
+        datasetId,
+        labelName: label.name,
+        labelColor: label.color
+      });
+
       console.log('Saving project label:', label, 'for dataset:', datasetId);
       
       // Validate inputs
       if (!datasetId) {
+        logError('app.frontend.validation', 'save_project_label_missing_dataset', 'Dataset ID is required for saving project label');
         throw new Error('Dataset ID is required');
       }
       
       if (!label || !label.name) {
+        logError('app.frontend.validation', 'save_project_label_missing_name', 'Label name is required for saving project label');
         throw new Error('Label name is required');
       }
       
@@ -597,6 +789,10 @@ class AnnotationAPI {
    */
   static async getImageUrl(imageId) {
     try {
+      logInfo('app.frontend.interactions', 'get_image_url_started', 'Getting image URL started', {
+        imageId
+      });
+
       // Get the image details directly by image ID
       const response = await axios.get(`${API_BASE}/datasets/images/${imageId}`);
       const image = response.data;
@@ -608,15 +804,31 @@ class AnnotationAPI {
         const baseUrl = API_BASE.replace('/api/v1', '');
         const imageUrl = `${baseUrl}${image.file_path}`;
         
+        logInfo('app.frontend.interactions', 'get_image_url_success', 'Image URL generated successfully', {
+          imageId,
+          imageUrl,
+          filePath: image.file_path
+        });
+
         console.log('AnnotationAPI.getImageUrl - Generated URL:', imageUrl);
         console.log('AnnotationAPI.getImageUrl - Backend file_path:', image.file_path);
         
         return imageUrl;
       }
       
+      logError('app.frontend.validation', 'get_image_url_no_file_path', 'No image or file_path found', {
+        imageId,
+        hasImage: !!image,
+        hasFilePath: !!(image && image.file_path)
+      });
       console.log('AnnotationAPI.getImageUrl - No image or file_path found');
       return '';
     } catch (error) {
+      logError('app.frontend.validation', 'get_image_url_failed', 'Failed to get image URL', {
+        imageId,
+        error: error.message,
+        status: error.response?.status
+      });
       console.error('Failed to get image URL:', error);
       return '';
     }
@@ -629,12 +841,31 @@ class AnnotationAPI {
    */
   static async saveAnnotation(annotation) {
     try {
+      logInfo('app.frontend.interactions', 'save_annotation_started', 'Saving annotation started', {
+        annotationId: annotation.id,
+        annotationType: annotation.type,
+        isUpdate: !!annotation.id
+      });
+
       if (annotation.id) {
-        return await this.updateAnnotation(annotation.id, annotation);
+        const result = await this.updateAnnotation(annotation.id, annotation);
+        logInfo('app.frontend.interactions', 'save_annotation_update_success', 'Annotation updated successfully', {
+          annotationId: annotation.id
+        });
+        return result;
       } else {
-        return await this.createAnnotation(annotation);
+        const result = await this.createAnnotation(annotation);
+        logInfo('app.frontend.interactions', 'save_annotation_create_success', 'Annotation created successfully', {
+          annotationType: annotation.type
+        });
+        return result;
       }
     } catch (error) {
+      logError('app.frontend.validation', 'save_annotation_failed', 'Failed to save annotation', {
+        annotationId: annotation.id,
+        annotationType: annotation.type,
+        error: error.message
+      });
       console.error('Failed to save annotation:', error);
       throw error;
     }
@@ -648,9 +879,26 @@ class AnnotationAPI {
    */
   static async updateImageSplit(imageId, split) {
     try {
+      logInfo('app.frontend.interactions', 'update_image_split_started', 'Updating image split started', {
+        imageId,
+        split
+      });
+
       await axios.patch(`${API_BASE}/images/${imageId}`, { split });
+      
+      logInfo('app.frontend.interactions', 'update_image_split_success', 'Image split updated successfully', {
+        imageId,
+        split
+      });
+
       return true;
     } catch (error) {
+      logError('app.frontend.validation', 'update_image_split_failed', 'Failed to update image split', {
+        imageId,
+        split,
+        error: error.message,
+        status: error.response?.status
+      });
       console.error('Failed to update image split:', error);
       return false;
     }
@@ -664,11 +912,29 @@ class AnnotationAPI {
    */
   static async updateImageSplitSection(imageId, splitSection) {
     try {
+      logInfo('app.frontend.interactions', 'update_image_split_section_started', 'Updating image split section started', {
+        imageId,
+        splitSection
+      });
+
       // Use the correct endpoint for updating split_section
       // The endpoint is under the datasets router, not images
       await axios.put(`${API_BASE}/datasets/images/${imageId}/split-section`, { split_section: splitSection });
+      
+      logInfo('app.frontend.interactions', 'update_image_split_section_success', 'Image split section updated successfully', {
+        imageId,
+        splitSection
+      });
+
       return true;
     } catch (error) {
+      logError('app.frontend.validation', 'update_image_split_section_failed', 'Failed to update image split section', {
+        imageId,
+        splitSection,
+        error: error.message,
+        status: error.response?.status,
+        responseData: error.response?.data
+      });
       console.error('Failed to update image split section:', error);
       console.error('Error details:', error.response?.data || error.message);
       return false;

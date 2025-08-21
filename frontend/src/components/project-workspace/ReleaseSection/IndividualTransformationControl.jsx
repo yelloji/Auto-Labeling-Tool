@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Slider, InputNumber, Switch, Space, Tooltip, Button, Divider, Typography, Select } from 'antd';
 import { InfoCircleOutlined, SettingOutlined } from '@ant-design/icons';
 import { formatValue, getUnitLabel } from './transformationUtils';
+import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 const { Option } = Select;
 const { Text } = Typography;
@@ -23,31 +24,77 @@ const IndividualTransformationControl = ({
   // Special parameters that show relative values (e.g., +20% instead of 1.2)
   const isSpecialParameter = paramKey === 'brightness' || paramKey === 'contrast';
   
+  useEffect(() => {
+    logInfo('app.frontend.ui', 'individual_transformation_control_initialized', 'IndividualTransformationControl component initialized', {
+      timestamp: new Date().toISOString(),
+      component: 'IndividualTransformationControl',
+      paramKey: paramKey,
+      paramDef: paramDef,
+      value: value,
+      enabled: enabled,
+      isRangeMode: isRangeMode,
+      isSpecialParameter: isSpecialParameter
+    });
+  }, [paramKey, paramDef, value, enabled, isRangeMode, isSpecialParameter]);
+  
   // Get default range for a parameter based on its current value
   const getDefaultRange = (paramKey, value, paramDef) => {
+    logInfo('app.frontend.ui', 'get_default_range_called', 'getDefaultRange function called', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      value: value,
+      paramDef: paramDef,
+      function: 'getDefaultRange'
+    });
+
+    let result;
     if (paramKey === 'brightness' || paramKey === 'contrast') {
       // For brightness/contrast, create a range of ±X% around 1.0 (normal)
       // If value is 1.1 (+10%), range will be [0.9, 1.1] (±10%)
       const deviation = Math.abs(value - 1.0);
-      return [Math.max(1.0 - deviation, paramDef.min), Math.min(1.0 + deviation, paramDef.max)];
+      result = [Math.max(1.0 - deviation, paramDef.min), Math.min(1.0 + deviation, paramDef.max)];
     } else if (paramKey === 'rotation') {
       // For rotation, create a symmetric range around 0
       // If value is 30, range will be [-30, 30]
-      return [-Math.abs(value), Math.abs(value)];
+      result = [-Math.abs(value), Math.abs(value)];
     } else {
       // For other parameters, create a range of ±20% around the value
       const range = value * 0.2; // 20% of the value
-      return [
+      result = [
         Math.max(value - range, paramDef.min), 
         Math.min(value + range, paramDef.max)
       ];
     }
+
+    logInfo('app.frontend.ui', 'get_default_range_result', 'getDefaultRange result calculated', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      value: value,
+      result: result,
+      function: 'getDefaultRange'
+    });
+
+    return result;
   };
 
   // Handle changes to a single parameter value
   const handleParameterChange = (paramKey, newValue) => {
+    logInfo('app.frontend.interactions', 'parameter_change_started', 'Parameter change started', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      oldValue: value,
+      newValue: newValue,
+      function: 'handleParameterChange'
+    });
+
     // Ensure newValue is a valid number
     if (newValue === null || isNaN(newValue)) {
+      logError('app.frontend.validation', 'invalid_parameter_value', 'Invalid parameter value provided', {
+        timestamp: new Date().toISOString(),
+        paramKey: paramKey,
+        newValue: newValue,
+        function: 'handleParameterChange'
+      });
       console.warn(`Invalid value for ${paramKey}:`, newValue);
       return;
     }
@@ -61,20 +108,67 @@ const IndividualTransformationControl = ({
       ...parameterRanges,
       [paramKey]: [min, max]
     });
+
+    logInfo('app.frontend.interactions', 'parameter_change_completed', 'Parameter change completed', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      newValue: newValue,
+      calculatedRange: [min, max],
+      function: 'handleParameterChange'
+    });
   };
 
   // Handle changes to a range (min/max values)
   const handleRangeChange = (paramKey, [newMin, newMax]) => {
+    logInfo('app.frontend.interactions', 'range_change_started', 'Range change started', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      oldRange: [minValue, maxValue],
+      newRange: [newMin, newMax],
+      function: 'handleRangeChange'
+    });
+
     onRangeChange(paramKey, newMin, newMax);
+
+    logInfo('app.frontend.interactions', 'range_change_completed', 'Range change completed', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      newRange: [newMin, newMax],
+      function: 'handleRangeChange'
+    });
   };
 
   // Toggle between single value and range mode
   const toggleRangeMode = () => {
+    logUserClick('range_mode_toggle_clicked', 'User toggled range mode');
+    logInfo('app.frontend.ui', 'range_mode_toggle_started', 'Range mode toggle started', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      currentMode: isRangeMode,
+      newMode: !isRangeMode,
+      function: 'toggleRangeMode'
+    });
+
     onToggleRangeMode(paramKey, !isRangeMode);
+
+    logInfo('app.frontend.ui', 'range_mode_toggle_completed', 'Range mode toggle completed', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      newMode: !isRangeMode,
+      function: 'toggleRangeMode'
+    });
   };
 
   // This function renders a single slider that generates ranges behind the scenes
   const renderEnhancedSingleSlider = (paramKey, paramDef, value, isSpecialParameter) => {
+    logInfo('app.frontend.ui', 'enhanced_single_slider_rendered', 'Enhanced single slider rendered', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      value: value,
+      isSpecialParameter: isSpecialParameter,
+      function: 'renderEnhancedSingleSlider'
+    });
+
     // Get appropriate unit label
     const unitLabel = getUnitLabel(paramKey, paramDef);
     
@@ -133,6 +227,13 @@ const IndividualTransformationControl = ({
                 max={isSpecialParameter ? 100 : paramDef.max}
                 step={isSpecialParameter ? 1 : (paramDef.step || 0.01)}
                 onChange={(val) => {
+                  logInfo('app.frontend.interactions', 'input_number_change', 'InputNumber value changed', {
+                    timestamp: new Date().toISOString(),
+                    paramKey: paramKey,
+                    newValue: val,
+                    isSpecialParameter: isSpecialParameter,
+                    function: 'renderEnhancedSingleSlider'
+                  });
                   console.log(`InputNumber change: ${paramKey} = ${val}`);
                   // For brightness/contrast, convert from percentage to factor
                   if (isSpecialParameter && val !== null) {
@@ -144,6 +245,12 @@ const IndividualTransformationControl = ({
                   }
                 }}
                 onBlur={() => {
+                  logInfo('app.frontend.ui', 'input_number_blur', 'InputNumber blur event', {
+                    timestamp: new Date().toISOString(),
+                    paramKey: paramKey,
+                    value: value,
+                    function: 'renderEnhancedSingleSlider'
+                  });
                   // Force update on blur to ensure value is committed
                   console.log(`InputNumber blur: ${paramKey} = ${value}`);
                   handleParameterChange(paramKey, value);
@@ -165,12 +272,25 @@ const IndividualTransformationControl = ({
             max={100}
             step={1}
             onChange={(val) => {
+              logInfo('app.frontend.interactions', 'special_slider_change', 'Special parameter slider changed', {
+                timestamp: new Date().toISOString(),
+                paramKey: paramKey,
+                uiValue: val,
+                function: 'renderEnhancedSingleSlider'
+              });
               // Convert back from 0-100% UI range to actual parameter range (0.5-1.5)
               const actualValue = 0.5 + (val / 100);
               console.log(`Slider change: ${paramKey} UI=${val}%, actual=${actualValue}`);
               handleParameterChange(paramKey, actualValue);
             }}
             onAfterChange={(val) => {
+              logInfo('app.frontend.interactions', 'special_slider_after_change', 'Special parameter slider after change', {
+                timestamp: new Date().toISOString(),
+                paramKey: paramKey,
+                uiValue: val,
+                actualValue: 0.5 + (val / 100),
+                function: 'renderEnhancedSingleSlider'
+              });
               // Convert back from 0-100% UI range to actual parameter range (0.5-1.5)
               const actualValue = 0.5 + (val / 100);
               console.log(`Slider after change: ${paramKey} UI=${val}%, actual=${actualValue}`);
@@ -201,8 +321,22 @@ const IndividualTransformationControl = ({
             min={paramDef.min}
             max={paramDef.max}
             step={paramDef.step || 0.01}
-            onChange={(val) => handleParameterChange(paramKey, val)}
+            onChange={(val) => {
+              logInfo('app.frontend.interactions', 'normal_slider_change', 'Normal parameter slider changed', {
+                timestamp: new Date().toISOString(),
+                paramKey: paramKey,
+                newValue: val,
+                function: 'renderEnhancedSingleSlider'
+              });
+              handleParameterChange(paramKey, val);
+            }}
             onAfterChange={(val) => {
+              logInfo('app.frontend.interactions', 'normal_slider_after_change', 'Normal parameter slider after change', {
+                timestamp: new Date().toISOString(),
+                paramKey: paramKey,
+                finalValue: val,
+                function: 'renderEnhancedSingleSlider'
+              });
               // Force update after slider interaction ends
               console.log(`Slider after change: ${paramKey} = ${val}`);
               handleParameterChange(paramKey, val);
@@ -222,6 +356,14 @@ const IndividualTransformationControl = ({
   
   // This function renders a range slider with two handles
   const renderRangeSlider = (paramKey, paramDef, minValue, maxValue) => {
+    logInfo('app.frontend.ui', 'range_slider_rendered', 'Range slider rendered', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      minValue: minValue,
+      maxValue: maxValue,
+      function: 'renderRangeSlider'
+    });
+
     // Get appropriate unit label
     const unitLabel = getUnitLabel(paramKey, paramDef);
     
@@ -247,10 +389,23 @@ const IndividualTransformationControl = ({
               max={maxValue}
               step={paramDef.step || 0.1}
               onChange={(val) => {
+                logInfo('app.frontend.interactions', 'range_min_input_change', 'Range min input changed', {
+                  timestamp: new Date().toISOString(),
+                  paramKey: paramKey,
+                  newMinValue: val,
+                  currentMaxValue: maxValue,
+                  function: 'renderRangeSlider'
+                });
                 console.log(`Min InputNumber change: ${paramKey} = ${val}`);
                 handleRangeChange(paramKey, [val, maxValue]);
               }}
               onBlur={() => {
+                logInfo('app.frontend.ui', 'range_min_input_blur', 'Range min input blur event', {
+                  timestamp: new Date().toISOString(),
+                  paramKey: paramKey,
+                  minValue: minValue,
+                  function: 'renderRangeSlider'
+                });
                 // Force update on blur to ensure value is committed
                 console.log(`Min InputNumber blur: ${paramKey} = ${minValue}`);
                 handleRangeChange(paramKey, [minValue, maxValue]);
@@ -266,10 +421,23 @@ const IndividualTransformationControl = ({
               max={paramDef.max}
               step={paramDef.step || 0.1}
               onChange={(val) => {
+                logInfo('app.frontend.interactions', 'range_max_input_change', 'Range max input changed', {
+                  timestamp: new Date().toISOString(),
+                  paramKey: paramKey,
+                  newMaxValue: val,
+                  currentMinValue: minValue,
+                  function: 'renderRangeSlider'
+                });
                 console.log(`Max InputNumber change: ${paramKey} = ${val}`);
                 handleRangeChange(paramKey, [minValue, val]);
               }}
               onBlur={() => {
+                logInfo('app.frontend.ui', 'range_max_input_blur', 'Range max input blur event', {
+                  timestamp: new Date().toISOString(),
+                  paramKey: paramKey,
+                  maxValue: maxValue,
+                  function: 'renderRangeSlider'
+                });
                 // Force update on blur to ensure value is committed
                 console.log(`Max InputNumber blur: ${paramKey} = ${maxValue}`);
                 handleRangeChange(paramKey, [minValue, maxValue]);
@@ -286,8 +454,22 @@ const IndividualTransformationControl = ({
           min={paramDef.min}
           max={paramDef.max}
           step={paramDef.step || 0.1}
-          onChange={(val) => handleRangeChange(paramKey, val)}
+          onChange={(val) => {
+            logInfo('app.frontend.interactions', 'range_slider_change', 'Range slider changed', {
+              timestamp: new Date().toISOString(),
+              paramKey: paramKey,
+              newRange: val,
+              function: 'renderRangeSlider'
+            });
+            handleRangeChange(paramKey, val);
+          }}
           onAfterChange={(val) => {
+            logInfo('app.frontend.interactions', 'range_slider_after_change', 'Range slider after change', {
+              timestamp: new Date().toISOString(),
+              paramKey: paramKey,
+              finalRange: val,
+              function: 'renderRangeSlider'
+            });
             // Force update after slider interaction ends
             console.log(`Range slider after change: ${paramKey} = [${val[0]}, ${val[1]}]`);
             handleRangeChange(paramKey, val);
@@ -305,6 +487,14 @@ const IndividualTransformationControl = ({
 
   // Render the appropriate control based on parameter type
   const renderParameterControl = () => {
+    logInfo('app.frontend.ui', 'parameter_control_rendered', 'Parameter control rendered', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      paramType: paramDef.type,
+      value: value,
+      function: 'renderParameterControl'
+    });
+
     if (paramDef.type === 'number') {
       // For numeric parameters, render the enhanced single slider
       return renderEnhancedSingleSlider(paramKey, paramDef, value, isSpecialParameter);
@@ -320,7 +510,16 @@ const IndividualTransformationControl = ({
           <Select
             style={{ width: '100%' }}
             value={value}
-            onChange={(val) => onChange(paramKey, val)}
+            onChange={(val) => {
+              logInfo('app.frontend.interactions', 'select_option_changed', 'Select option changed', {
+                timestamp: new Date().toISOString(),
+                paramKey: paramKey,
+                oldValue: value,
+                newValue: val,
+                function: 'renderParameterControl'
+              });
+              onChange(paramKey, val);
+            }}
             disabled={!enabled}
           >
             {paramDef.options.map(option => (
@@ -345,7 +544,16 @@ const IndividualTransformationControl = ({
             </span>
             <Switch
               checked={value}
-              onChange={(checked) => onChange(paramKey, checked)}
+              onChange={(checked) => {
+                logInfo('app.frontend.interactions', 'boolean_switch_changed', 'Boolean switch changed', {
+                  timestamp: new Date().toISOString(),
+                  paramKey: paramKey,
+                  oldValue: value,
+                  newValue: checked,
+                  function: 'renderParameterControl'
+                });
+                onChange(paramKey, checked);
+              }}
               disabled={!enabled}
             />
           </div>
@@ -353,8 +561,27 @@ const IndividualTransformationControl = ({
       );
     }
     
+    logInfo('app.frontend.ui', 'parameter_control_no_type', 'No parameter type matched', {
+      timestamp: new Date().toISOString(),
+      paramKey: paramKey,
+      paramType: paramDef.type,
+      function: 'renderParameterControl'
+    });
+    
     return null;
   };
+
+  // Log when main component is rendered
+  logInfo('app.frontend.ui', 'individual_transformation_control_rendered', 'IndividualTransformationControl component rendered', {
+    timestamp: new Date().toISOString(),
+    component: 'IndividualTransformationControl',
+    paramKey: paramKey,
+    paramType: paramDef.type,
+    value: value,
+    enabled: enabled,
+    isRangeMode: isRangeMode,
+    isSpecialParameter: isSpecialParameter
+  });
 
   return renderParameterControl();
 };
