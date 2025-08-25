@@ -177,7 +177,7 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
                 })
         
         # Handle class_name change - update class_id accordingly
-        if annotation.class_name is not None and annotation.class_name != existing_annotation.class_name:
+        if annotation.class_name is not None and annotation.class_name != existing.class_name:
             update_data["class_name"] = annotation.class_name
             
             # Get the correct class_id from labels table for the new class_name

@@ -16,7 +16,6 @@ import {
   RedoOutlined,
   DeleteOutlined,
   ClearOutlined,
-  SaveOutlined,
   ThunderboltOutlined
 } from '@ant-design/icons';
 import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
@@ -165,13 +164,14 @@ const AnnotationToolbox = ({
     }).catch(err => console.error('Logging error:', err));
   };
 
-  const handleSave = () => {
-    onSave();
-    logInfo('app.frontend.interactions', 'save_all_operation', 'Save all operation initiated', {
-      activeTool: activeTool,
-      zoomLevel: zoomLevel
-    }).catch(err => console.error('Logging error:', err));
-  };
+  // Remove Save All: redundant due to auto-save behavior
+  // const handleSave = () => {
+  //   onSave();
+  //   logInfo('app.frontend.interactions', 'save_all_operation', 'Save all operation initiated', {
+  //     activeTool: activeTool,
+  //     zoomLevel: zoomLevel
+  //   }).catch(err => console.error('Logging error:', err));
+  // };
 
   const handleDelete = () => {
     console.log('Delete');
@@ -509,12 +509,7 @@ const AnnotationToolbox = ({
             onClick={handleClear}
             color="#ff7875"
           />
-          <ActionButton
-            icon={<SaveOutlined />}
-            tooltip="Save All"
-            onClick={handleSave}
-            color="#52c41a"
-          />
+          {/* Save All removed due to auto-save */}
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 
 // Log proxy setup
 console.log('🔧 Setting up development proxy middleware...');
-console.log('📡 API requests will be proxied to: https://venkat-label-backend.loca.lt');
+console.log('📡 API requests will be proxied to: http://localhost:12000');
 
 module.exports = function(app) {
   // Log proxy middleware initialization
@@ -11,7 +11,7 @@ module.exports = function(app) {
   app.use(
     '/api',
     createProxyMiddleware({
-      target: 'https://venkat-label-backend.loca.lt',
+      target: 'http://localhost:12000',
       changeOrigin: true,
       // Don't rewrite the path - keep the /api prefix
       onProxyReq: (proxyReq, req, res) => {

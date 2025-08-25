@@ -26,82 +26,86 @@ const LabelSelectionPopup = React.memo(({
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Handle popup visibility changes and logging
   useEffect(() => {
-    console.log('🏷️ LabelSelectionPopup visibility changed:', visible);
-    console.log('🏷️ Default label:', defaultLabel);
-    console.log('🏷️ Existing labels:', existingLabels);
-    console.log('🏷️ Shape type:', shapeType);
-    console.log('🏷️ Is editing:', isEditing);
-    
-    // Log popup visibility changes
     if (visible) {
+      console.log('🏷️ LabelSelectionPopup visibility changed:', visible);
+      console.log('🏷️ Default label:', defaultLabel);
+      console.log('🏷️ Existing labels:', existingLabels);
+      console.log('🏷️ Shape type:', shapeType);
+      console.log('🏷️ Is editing:', isEditing);
+      
       logInfo('app.frontend.ui', 'label_popup_opened', 'Label selection popup opened', {
         shapeType,
         isEditing,
         existingLabelsCount: existingLabels.length,
         defaultLabel
       });
-    }
-    
-    // Clear the flag when the popup closes
-    if (!visible) {
+    } else {
+      // Clear the flag when the popup closes
       try {
         document.getElementById('root').removeAttribute('data-label-popup-initialized');
       } catch (e) {
         // Ignore errors
       }
-      return;
     }
+  }, [visible, shapeType, isEditing, existingLabels.length, defaultLabel]);
+  
+  // Handle label refresh when popup opens
+  useEffect(() => {
+    if (!visible) return;
     
     // Refresh project labels when popup opens to ensure we see all labels
-    if (visible) {
-      // Use API endpoint directly if we need to
-      try {
-        const apiBase = process.env.REACT_APP_API_BASE || '/api/v1';
+    try {
+      const apiBase = process.env.REACT_APP_API_BASE || '/api/v1';
+      
+      // Get current dataset ID from URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const datasetId = urlParams.get('dataset');
+      
+      if (datasetId) {
+        console.log('Popup refreshing labels for dataset:', datasetId);
         
-        // Get current dataset ID from URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const datasetId = urlParams.get('dataset');
+        logInfo('app.frontend.interactions', 'popup_refresh_labels_started', 'Popup started refreshing labels', {
+          datasetId
+        });
         
-        if (datasetId) {
-          console.log('Popup refreshing labels for dataset:', datasetId);
-          
-          logInfo('app.frontend.interactions', 'popup_refresh_labels_started', 'Popup started refreshing labels', {
-            datasetId
-          });
-          
-          // Force refresh labels from API
-          fetch(`${apiBase}/datasets/${datasetId}`)
-            .then(r => r.json())
-            .then(data => {
-              const projectId = data.project_id;
-              return fetch(`${apiBase}/projects/${projectId}/labels`);
-            })
-            .then(r => r.json())
-            .then(labels => {
-              console.log('Popup refreshed labels:', labels);
-              logInfo('app.frontend.interactions', 'popup_refresh_labels_success', 'Popup successfully refreshed labels', {
-                datasetId,
-                labelsCount: labels.length
-              });
-              // We don't need to update state here as the parent component 
-              // will receive these labels on next render
-            })
-            .catch(err => {
-              console.error('Error refreshing labels in popup:', err);
-              logError('app.frontend.validation', 'popup_refresh_labels_failed', 'Failed to refresh labels in popup', {
-                datasetId,
-                error: err.message
-              });
+        // Force refresh labels from API
+        fetch(`${apiBase}/datasets/${datasetId}`)
+          .then(r => r.json())
+          .then(data => {
+            const projectId = data.project_id;
+            return fetch(`${apiBase}/projects/${projectId}/labels`);
+          })
+          .then(r => r.json())
+          .then(labels => {
+            console.log('Popup refreshed labels:', labels);
+            logInfo('app.frontend.interactions', 'popup_refresh_labels_success', 'Popup successfully refreshed labels', {
+              datasetId,
+              labelsCount: labels.length
             });
-        }
-      } catch (e) {
-        console.error('Error in popup label refresh:', e);
+            // We don't need to update state here as the parent component 
+            // will receive these labels on next render
+          })
+          .catch(err => {
+            console.error('Error refreshing labels in popup:', err);
+            logError('app.frontend.validation', 'popup_refresh_labels_failed', 'Failed to refresh labels in popup', {
+              datasetId,
+              error: err.message
+            });
+          });
       }
+    } catch (e) {
+      console.error('Error in popup label refresh:', e);
     }
+  }, [visible]); // Only run when visibility changes
+  
+  // Handle state initialization when popup opens
+  useEffect(() => {
+    if (!visible) return;
     
     // Only initialize state when first opening the popup
-    if (visible && !document.getElementById('root').hasAttribute('data-label-popup-initialized')) {
+    if (!document.getElementById('root').hasAttribute('data-label-popup-initialized')) {
       // Set a flag on the document to prevent state reset during typing
       document.getElementById('root').setAttribute('data-label-popup-initialized', 'true');
       
@@ -143,7 +147,7 @@ const LabelSelectionPopup = React.memo(({
       
       console.log('🏷️ Popup opened and state reset');
     }
-  }, [visible]); // Only depend on visibility changes to prevent excessive re-renders
+  }, [visible, defaultLabel, existingLabels, isCreatingNew]); // Include all dependencies
 
   const handleConfirm = async () => {
     if (!selectedLabel && !newLabelName.trim()) {
@@ -302,11 +306,7 @@ const LabelSelectionPopup = React.memo(({
       );
     }
 
-    // Only log when popup is actually visible to reduce console spam
-    if (visible) {
-      console.log('Rendering existing labels in popup:', existingLabels);
-      console.log('IMPORTANT: Showing ALL labels from all datasets in project');
-    }
+    // Labels are already logged in useEffect to prevent render loop spam
 
     // Sort labels by name for better organization
     const sortedLabels = [...existingLabels].sort((a, b) => {

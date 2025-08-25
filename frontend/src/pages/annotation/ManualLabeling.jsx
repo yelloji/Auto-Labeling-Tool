@@ -54,6 +54,16 @@ const ManualLabeling = () => {
   const [pendingShape, setPendingShape] = useState(null);
   const [activeTool, setActiveTool] = useState('box');
   const [zoomLevel, setZoomLevel] = useState(100);
+
+  // History stacks for Undo/Redo (local only)
+  const [historyPast, setHistoryPast] = useState([]);
+  const [historyFuture, setHistoryFuture] = useState([]);
+  const pushHistory = useCallback((prevSnapshot) => {
+    setHistoryPast((p) => [...p, prevSnapshot]);
+    setHistoryFuture([]);
+  }, []);
+  const canUndo = historyPast.length > 0;
+  const canRedo = historyFuture.length > 0;
   
   // Label management
   const [projectLabels, setProjectLabels] = useState([]);
@@ -165,6 +175,72 @@ const ManualLabeling = () => {
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [pendingShape, showLabelPopup]);
+
+  // Undo handler
+  const handleUndo = useCallback(() => {
+    if (!canUndo) return;
+    setHistoryPast((prevPast) => {
+      const past = [...prevPast];
+      const last = past.pop();
+      setHistoryFuture((f) => [annotations, ...f]);
+      setAnnotations(last || []);
+      setSelectedAnnotation(null);
+      return past;
+    });
+  }, [canUndo, annotations]);
+
+  // Redo handler
+  const handleRedo = useCallback(() => {
+    if (!canRedo) return;
+    setHistoryFuture((prevFuture) => {
+      const future = [...prevFuture];
+      const next = future.shift();
+      if (next) {
+        setHistoryPast((p) => [...p, annotations]);
+        setAnnotations(next);
+        setSelectedAnnotation(null);
+      }
+      return future;
+    });
+  }, [canRedo, annotations]);
+
+  // Clear all annotations for current image
+  const handleClearAll = useCallback(async () => {
+    if (!annotations || annotations.length === 0) {
+      message.info('No annotations to clear');
+      return;
+    }
+    const confirmed = window.confirm('Clear all annotations on this image? This cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      const snapshot = JSON.parse(JSON.stringify(annotations));
+      pushHistory(snapshot);
+      setAnnotations([]);
+      setSelectedAnnotation(null);
+      setEditingAnnotation(null);
+
+      for (const ann of snapshot) {
+        try { await AnnotationAPI.deleteAnnotation(ann.id); } catch (e) { console.error('Failed to delete', ann.id, e); }
+      }
+
+      setImageLabels([]);
+
+      if (imageData?.is_labeled) {
+        setDatasetProgress(prev => ({
+          ...prev,
+          labeled: Math.max(0, prev.labeled - 1),
+          percentage: prev.total > 0 ? Math.round(((Math.max(0, prev.labeled - 1)) / prev.total) * 100) : 0
+        }));
+        setImageData(prev => ({ ...prev, is_labeled: false }));
+      }
+
+      message.success('Cleared all annotations');
+    } catch (e) {
+      console.error('Clear all failed', e);
+      message.error('Failed to clear all annotations');
+    }
+  }, [annotations, imageData]);
 
   const loadDatasetImages = async () => {
     try {
@@ -706,9 +782,7 @@ const ManualLabeling = () => {
           timestamp: new Date().toISOString()
         });
         await AnnotationAPI.updateAnnotation(editingAnnotation.id, {
-          class_name: labelName,
-          label: labelName,
-          image_id: editingAnnotation.image_id || imageData.id
+          class_name: labelName
         });
         
         message.success(`Annotation updated to "${labelName}"`);
@@ -1540,15 +1614,14 @@ const ManualLabeling = () => {
         >
           <AnnotationToolbox
             activeTool={activeTool}
-            onToolChange={handleToolChange}
+            onToolChange={setActiveTool}
             zoomLevel={zoomLevel}
             onZoomChange={setZoomLevel}
-            onUndo={() => console.log('Undo')}
-            onRedo={() => console.log('Redo')}
-            onClear={() => console.log('Clear')}
-            onSave={() => console.log('Save')}
-            canUndo={false}
-            canRedo={false}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onClear={handleClearAll}
+            canUndo={canUndo}
+            canRedo={canRedo}
           />
         </Sider>
       </Layout>

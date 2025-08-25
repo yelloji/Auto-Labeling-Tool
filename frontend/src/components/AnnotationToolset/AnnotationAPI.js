@@ -195,7 +195,7 @@ class AnnotationAPI {
       });
 
       console.log('Updating annotation:', annotationId, updates);
-      // The annotations router is mounted at /api/v1/images
+      // Correct endpoint: annotations router mounted under /api/v1/images
       const response = await axios.put(`${API_BASE}/images/${annotationId}`, updates);
       
       logInfo('app.frontend.interactions', 'update_annotation_success', 'Annotation updated successfully', {
