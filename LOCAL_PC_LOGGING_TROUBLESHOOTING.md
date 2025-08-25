@@ -1,4 +1,29 @@
-# 🔍 Local PC Logging Troubleshooting Guide
+# 🔍# Local PC Logging Troubleshooting
+
+## 2025-08-25 - Canvas logging and listener stabilization
+
+Summary of changes applied to reduce console noise, throttle redraw logs, and stabilize canvas listeners.
+
+- Removed verbose console.log calls from hot paths in the canvas drawing lifecycle.
+  - Removed logs inside drawAnnotation, mousemove (box drawing), mouseup completion, and polygon completion paths.
+  - Rationale: these run on every redraw/mouse move and created duplicate-looking messages, obscuring real issues.
+- Added throttled logging for redraw events.
+  - Introduced a small 300ms throttle around canvas_redraw_started/completed logs to reduce spam while retaining visibility.
+- Stabilized canvas event listeners (bind once, delegate to refs).
+  - Event listeners are now attached once and call the latest handler functions via refs. This avoids frequent bind/unbind cycles on state changes and reduces log churn.
+
+File references updated:
+- <mcfile name="AnnotationCanvas.js" path="v:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\frontend\\src\\components\\AnnotationToolset\\AnnotationCanvas.js"></mcfile>
+
+Impact:
+- Mouse interactions (drawing/selecting) are unchanged functionally but console noise is significantly reduced.
+- Logging remains via the professional logger, now with lower frequency for redraw events while preserving critical interaction logs.
+- Fewer effect-triggered listener rebindings during development, improving debuggability, especially under React StrictMode.
+
+Testing recommendations:
+- Hard refresh, draw a box, resize window, zoom; confirm that redraw logs appear at a sane rate and no duplicated annotation messages flood the console.
+- Ensure onShapeComplete still fires and annotations render as expected.
+ Guide
 
 ## ❓ **Why Logs Might Not Appear on Your Local PC**
 
