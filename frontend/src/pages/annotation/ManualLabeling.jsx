@@ -485,21 +485,29 @@ const ManualLabeling = () => {
   };
 
   const handleToolChange = useCallback((tool) => {
-    logUserClick('ManualLabeling', 'tool_change', {
-      datasetId,
-      oldTool: activeTool,
-      newTool: tool,
-      timestamp: new Date().toISOString()
-    });
-    logInfo('app.frontend.interactions', 'annotation_tool_changed', 'Annotation tool changed', {
-      datasetId,
-      oldTool: activeTool,
-      newTool: tool,
-      timestamp: new Date().toISOString()
-    });
+    console.log('🎯 TOOL CHANGE REQUESTED:', tool);
+    console.log('🎯 Current activeTool:', activeTool);
+    console.log('🎯 handleToolChange function called with tool:', tool);
+    
+    console.log('🎯 About to call setActiveTool with:', tool);
+    // Set the tool immediately for UI responsiveness
     setActiveTool(tool);
     setSelectedAnnotation(null);
-  }, [activeTool, datasetId]);
+    console.log('🎯 Tool change completed. New activeTool will be:', tool);
+    
+    // Log asynchronously without blocking UI
+    logUserClick('ManualLabeling', 'tool_change', {
+      datasetId,
+      newTool: tool,
+      timestamp: new Date().toISOString()
+    }).catch(err => console.error('Logging error:', err));
+    
+    logInfo('app.frontend.interactions', 'annotation_tool_changed', 'Annotation tool changed', {
+      datasetId,
+      newTool: tool,
+      timestamp: new Date().toISOString()
+    }).catch(err => console.error('Logging error:', err));
+  }, [datasetId, activeTool]);
 
   const handleShapeComplete = useCallback(async (shape) => {
     console.log('🎯 handleShapeComplete called with shape:', shape);
@@ -1524,7 +1532,10 @@ const ManualLabeling = () => {
             background: '#001529',
             borderLeft: '1px solid #002140',
             padding: '8px 0',
-            height: '100%'
+            height: '100%',
+            position: 'relative',
+            zIndex: 2000,
+            pointerEvents: 'auto'
           }}
         >
           <AnnotationToolbox

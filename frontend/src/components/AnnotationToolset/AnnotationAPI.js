@@ -68,10 +68,14 @@ class AnnotationAPI {
       // Convert annotation to the format expected by the backend
       const annotationData = {
         class_name: annotation.class_name || annotation.label,
-        class_id: 0, // Default class ID
         confidence: annotation.confidence || 1.0,
         image_id: annotation.image_id
       };
+      
+      // Only include class_id if it's explicitly provided (should be rare)
+      if (annotation.class_id !== undefined && annotation.class_id !== null) {
+        annotationData.class_id = annotation.class_id;
+      }
       
       // CRITICAL FIX: Handle each type separately and explicitly
       if (annotation.type === 'polygon' && Array.isArray(annotation.segmentation)) {

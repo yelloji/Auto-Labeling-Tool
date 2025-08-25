@@ -2019,6 +2019,7 @@ def create_complete_release_zip(
         # Step 1: Aggregate images by split across all datasets
         all_images_by_split = {"train": [], "val": [], "test": []}
         class_names = set()
+        class_id_to_name = {}
         
         for dataset_id in dataset_ids:
             dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
@@ -2068,12 +2069,16 @@ def create_complete_release_zip(
                                 Annotation.image_id == db_image.id
                             ).all()
                             
-                            # Collect class names from annotations
+                            # Collect class names and build class_id_to_name mapping
                             for ann in annotations:
-                                if hasattr(ann, 'class_name') and ann.class_name:
-                                    class_names.add(ann.class_name)
-                                elif hasattr(ann, 'class_id'):
-                                    class_names.add(f"class_{ann.class_id}")
+                                cid = getattr(ann, 'class_id', None)
+                                cname = getattr(ann, 'class_name', None)
+                                if cid is not None:
+                                    if not cname or not isinstance(cname, str) or not cname.strip():
+                                        cname = f"class_{cid}"
+                                    class_id_to_name[int(cid)] = cname
+                                if cname:
+                                    class_names.add(cname)
                         
                         # Add image to processing list regardless of annotation status
                         all_images_by_split[split].append({
@@ -2090,40 +2095,43 @@ def create_complete_release_zip(
             'test_count': len(all_images_by_split['test'])
         })
 
-        # Build consistent class index mapping for YOLO labels
-        # Prefer mapping by class_id → index to avoid missing class_name on transformed objects
-        class_id_to_name: Dict[int, str] = {}
-        for split_imgs in all_images_by_split.values():
-            for imgd in split_imgs:
-                for ann in imgd.get("annotations", []) or []:
-                    try:
-                        cid = getattr(ann, 'class_id', None)
-                        if cid is None:
-                            continue
-                        cname = getattr(ann, 'class_name', None)
-                        if not cname or not isinstance(cname, str) or not cname.strip():
-                            cname = f"class_{cid}"
-                        class_id_to_name[int(cid)] = cname
-                    except Exception:
-                        continue
-        if not class_id_to_name:
-            class_id_to_name = {0: "class_0"}
-        # Stable order by class_id
-        ordered_class_ids = sorted(class_id_to_name.keys())
-        class_list_sorted = [class_id_to_name[cid] for cid in ordered_class_ids]
-        id_to_idx = {cid: idx for idx, cid in enumerate(ordered_class_ids)}
-        name_to_idx = {class_id_to_name[cid]: idx for cid, idx in id_to_idx.items()}
+        # Build consistent class index mapping for YOLO labels based on unique class names
+        # Collect all unique class names from annotations across all datasets for the project
+        all_unique_class_names = set()
+        try:
+            for split_name in ['train', 'val', 'test']:
+                for image_data in all_images_by_split[split_name]:
+                    for ann in image_data.get('annotations', []):
+                        cname = ann.class_name
+                        if cname and isinstance(cname, str) and cname.strip():
+                            all_unique_class_names.add(cname.strip())
+        except Exception as e:
+            logger.error("errors.system", f"Error collecting unique class names: {str(e)}", "class_name_collection_error", {
+                'release_id': release_id,
+                'error': str(e)
+            })
+            raise
+
+        # Ensure a stable order for class names and assign YOLO IDs
+        sorted_unique_class_names = sorted(list(all_unique_class_names))
+        if not sorted_unique_class_names:
+            sorted_unique_class_names = ["class_0"] # Default if no classes found
+
+        class_name_to_yolo_id = {name: idx for idx, name in enumerate(sorted_unique_class_names)}
+        yolo_id_to_class_name = {idx: name for name, idx in class_name_to_yolo_id.items()}
+        class_list_for_yaml = sorted_unique_class_names
+
+        # The original class_id_to_name and related mappings are no longer directly used for YOLO indexing
+        # but might be needed for other internal logic. We will keep it populated from the initial loop.
+        # However, for YOLO labels and data.yaml, we will use the new class_name_to_yolo_id mapping.
         def resolve_class_index(ann) -> int:
-            try:
-                cid = getattr(ann, 'class_id', None)
-                if cid is not None and int(cid) in id_to_idx:
-                    return id_to_idx[int(cid)]
-                cname = getattr(ann, 'class_name', None)
-                if cname and cname in name_to_idx:
-                    return name_to_idx[cname]
-            except Exception:
-                pass
-            return 0
+             try:
+                 cname = getattr(ann, 'class_name', None)
+                 if cname and cname in class_name_to_yolo_id:
+                     return class_name_to_yolo_id[cname]
+             except Exception:
+                 pass
+             return 0
 
         # Prepare central schema once for priority-order generation
         schema = None
@@ -2542,14 +2550,14 @@ def create_complete_release_zip(
         
         # Step 3: Create data.yaml
         # Use the exact ordered class list used by the resolver
-        class_list = class_list_sorted
+        class_list = class_list_for_yaml
         data_yaml = {
             "path": ".",
             "train": "images/train" if all_images_by_split["train"] else None,
             "val": "images/val" if all_images_by_split["val"] else None,
             "test": "images/test" if all_images_by_split["test"] else None,
-            "nc": len(class_list),
-            "names": class_list
+            "nc": len(class_list_for_yaml),
+            "names": class_list_for_yaml
         }
         
         # Remove None values
@@ -2574,7 +2582,15 @@ def create_complete_release_zip(
                 for file in files:
                     file_path = os.path.join(root, file)
                     arc_path = os.path.relpath(file_path, staging_dir)
-                    zipf.write(file_path, arc_path)
+                    try:
+                        zipf.write(file_path, arc_path)
+                    except Exception as e:
+                        logger.error("errors.system", f"Error writing file to zip: {file_path} - {str(e)}", "zip_file_write_error", {
+                            'release_id': release_id,
+                            'file_path': file_path,
+                            'error': str(e)
+                        })
+                        raise
         
         logger.info("operations.releases", f"Successfully created ZIP file", "zip_creation_complete", {
             'zip_path': str(zip_path),

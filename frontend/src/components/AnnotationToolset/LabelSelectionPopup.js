@@ -11,7 +11,7 @@ import { logInfo, logError, logUserClick } from '../../utils/professional_logger
 
 const { Option } = Select;
 
-const LabelSelectionPopup = ({
+const LabelSelectionPopup = React.memo(({
   visible,
   onCancel,
   onConfirm,
@@ -143,7 +143,7 @@ const LabelSelectionPopup = ({
       
       console.log('🏷️ Popup opened and state reset');
     }
-  }, [visible]); // Only depend on visibility changes
+  }, [visible]); // Only depend on visibility changes to prevent excessive re-renders
 
   const handleConfirm = async () => {
     if (!selectedLabel && !newLabelName.trim()) {
@@ -302,11 +302,11 @@ const LabelSelectionPopup = ({
       );
     }
 
-    // Log the existing labels to help with debugging
-    console.log('Rendering existing labels in popup:', existingLabels);
-    
-    // Check if we have labels from other datasets
-    console.log('IMPORTANT: Showing ALL labels from all datasets in project');
+    // Only log when popup is actually visible to reduce console spam
+    if (visible) {
+      console.log('Rendering existing labels in popup:', existingLabels);
+      console.log('IMPORTANT: Showing ALL labels from all datasets in project');
+    }
 
     // Sort labels by name for better organization
     const sortedLabels = [...existingLabels].sort((a, b) => {
@@ -525,6 +525,6 @@ const LabelSelectionPopup = ({
       </div>
     </Modal>
   );
-};
+});
 
 export default LabelSelectionPopup;
