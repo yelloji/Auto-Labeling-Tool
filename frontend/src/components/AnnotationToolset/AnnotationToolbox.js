@@ -142,7 +142,9 @@ const AnnotationToolbox = ({
   };
 
   const handleUndo = () => {
+    console.log('🔄 Undo button clicked! canUndo:', canUndo, 'onUndo function:', typeof onUndo);
     if (canUndo) {
+      console.log('✅ Calling onUndo function...');
       onUndo();
       try {
         logInfo('app.frontend.interactions', 'undo_operation', 'Undo operation performed', {
@@ -153,6 +155,7 @@ const AnnotationToolbox = ({
         console.warn('Logging failed in handleUndo:', e);
       }
     } else {
+      console.log('❌ Undo disabled - canUndo is false');
       try {
         logError('app.frontend.validation', 'undo_disabled', 'Undo operation attempted when disabled', {
           canUndo: canUndo,
@@ -165,7 +168,9 @@ const AnnotationToolbox = ({
   };
 
   const handleRedo = () => {
+    console.log('🔄 Redo button clicked! canRedo:', canRedo, 'onRedo function:', typeof onRedo);
     if (canRedo) {
+      console.log('✅ Calling onRedo function...');
       onRedo();
       try {
         logInfo('app.frontend.interactions', 'redo_operation', 'Redo operation performed', {
@@ -176,6 +181,7 @@ const AnnotationToolbox = ({
         console.warn('Logging failed in handleRedo:', e);
       }
     } else {
+      console.log('❌ Redo disabled - canRedo is false');
       try {
         logError('app.frontend.validation', 'redo_disabled', 'Redo operation attempted when disabled', {
           canUndo: canUndo,
@@ -313,16 +319,23 @@ const AnnotationToolbox = ({
     const activatedRef = useRef(false);
 
     const activate = () => {
-      if (activatedRef.current || disabled) return;
+      console.log('🎯 ActionButton activate called:', { tooltip, disabled, activatedRef: activatedRef.current });
+      if (activatedRef.current || disabled) {
+        console.log('❌ ActionButton activation blocked:', { alreadyActivated: activatedRef.current, disabled });
+        return;
+      }
       activatedRef.current = true;
       try {
+        console.log('✅ ActionButton calling onClick for:', tooltip);
         onClick();
         logUserClick('AnnotationToolbox', `${tooltip.toLowerCase().replace(/\s+/g, '_')}_button`, {
           tooltip: tooltip,
           disabled: disabled,
           color: color
         }).catch(() => {});
-      } catch (_) {}
+      } catch (e) {
+        console.error('❌ ActionButton onClick error:', e);
+      }
       setTimeout(() => { activatedRef.current = false; }, 200);
     };
 
@@ -343,18 +356,22 @@ const AnnotationToolbox = ({
           style={{
             width: '40px',
             height: '32px',
-            background: '#34495e',
+            background: disabled ? '#2c3e50' : '#34495e',
             borderColor: '#001529',
             color: disabled ? '#7f8c8d' : '#bdc3c7',
             borderRadius: '4px',
             boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-            transition: 'all 0.2s ease'
+            transition: 'all 0.2s ease',
+            cursor: disabled ? 'not-allowed' : 'pointer'
           }}
           onMouseEnter={(e) => {
             const btn = e.currentTarget;
             if (!disabled) {
               btn.style.background = '#3498db';
               btn.style.borderColor = '#3498db';
+              btn.style.cursor = 'pointer';
+            } else {
+              btn.style.cursor = 'not-allowed';
             }
           }}
           onMouseLeave={(e) => {

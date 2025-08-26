@@ -93,11 +93,28 @@ const ManualLabeling = () => {
   const [historyPast, setHistoryPast] = useState([]);
   const [historyFuture, setHistoryFuture] = useState([]);
   const pushHistory = useCallback((prevSnapshot) => {
-    setHistoryPast((p) => [...p, prevSnapshot]);
+    console.log('📚 pushHistory called with snapshot:', prevSnapshot?.length || 0, 'annotations');
+    setHistoryPast((p) => {
+      const newPast = [...p, prevSnapshot];
+      console.log('📚 History past updated. New length:', newPast.length);
+      return newPast;
+    });
     setHistoryFuture([]);
+    console.log('📚 History future cleared');
   }, []);
   const canUndo = historyPast.length > 0;
   const canRedo = historyFuture.length > 0;
+  
+  // Debug: Log history state changes
+  useEffect(() => {
+    console.log('📊 History state updated:', {
+      canUndo,
+      canRedo,
+      historyPastLength: historyPast.length,
+      historyFutureLength: historyFuture.length,
+      annotationsLength: annotations.length
+    });
+  }, [canUndo, canRedo, historyPast.length, historyFuture.length, annotations.length]);
   
   // Label management
   const [projectLabels, setProjectLabels] = useState([]);
@@ -197,9 +214,160 @@ const ManualLabeling = () => {
     }
   }, [currentImageIndex, imageList]);
 
+  // Database synchronization function for undo/redo
+  const syncAnnotationsWithDatabase = useCallback(async (targetAnnotations, currentAnnotations) => {
+    try {
+      console.log('🔄 Syncing annotations with database...');
+      console.log('Current annotations:', currentAnnotations.length);
+      console.log('Target annotations:', targetAnnotations.length);
+      
+      // Create maps for easier comparison
+      const currentMap = new Map(currentAnnotations.map(ann => [ann.id, ann]));
+      const targetMap = new Map(targetAnnotations.map(ann => [ann.id, ann]));
+      
+      // Find annotations to delete (in current but not in target)
+      const toDelete = currentAnnotations.filter(ann => !targetMap.has(ann.id));
+      
+      // Find annotations to create (in target but not in current)
+      const toCreate = targetAnnotations.filter(ann => !currentMap.has(ann.id));
+      
+      // Find annotations to update (in both but different)
+      const toUpdate = targetAnnotations.filter(ann => {
+        const current = currentMap.get(ann.id);
+        return current && JSON.stringify(current) !== JSON.stringify(ann);
+      });
+      
+      console.log(`Database sync plan: Delete ${toDelete.length}, Create ${toCreate.length}, Update ${toUpdate.length}`);
+      
+      // Execute deletions
+      for (const annotation of toDelete) {
+        try {
+          await AnnotationAPI.deleteAnnotation(annotation.id);
+          console.log('✅ Deleted annotation:', annotation.id);
+        } catch (error) {
+          console.error('❌ Failed to delete annotation:', annotation.id, error);
+        }
+      }
+      
+      // Execute creations
+      for (const annotation of toCreate) {
+        try {
+          await AnnotationAPI.createAnnotation(imageData.id, annotation);
+          console.log('✅ Created annotation:', annotation.id);
+        } catch (error) {
+          console.error('❌ Failed to create annotation:', annotation.id, error);
+        }
+      }
+      
+      // Execute updates
+      for (const annotation of toUpdate) {
+        try {
+          await AnnotationAPI.updateAnnotation(annotation.id, annotation);
+          console.log('✅ Updated annotation:', annotation.id);
+        } catch (error) {
+          console.error('❌ Failed to update annotation:', annotation.id, error);
+        }
+      }
+      
+      console.log('✅ Database synchronization completed');
+    } catch (error) {
+      console.error('❌ Database synchronization failed:', error);
+      throw error;
+    }
+  }, [imageData]);
+
+  // Undo handler with database synchronization
+  const handleUndo = useCallback(async () => {
+    console.log('🔄 ManualLabeling handleUndo called! canUndo:', canUndo, 'historyPast length:', historyPast.length);
+    if (!canUndo) {
+      console.log('❌ Cannot undo - canUndo is false');
+      return;
+    }
+    
+    try {
+      setHistoryPast((prevPast) => {
+        const past = [...prevPast];
+        const last = past.pop();
+        console.log('✅ Undoing to previous state:', last);
+        
+        // Sync with database
+        syncAnnotationsWithDatabase(last || [], annotations).catch(error => {
+          console.error('❌ Failed to sync undo with database:', error);
+          message.error('Failed to sync undo operation with database');
+        });
+        
+        setHistoryFuture((f) => [annotations, ...f]);
+        setAnnotations(last || []);
+        setSelectedAnnotation(null);
+        return past;
+      });
+    } catch (error) {
+      console.error('❌ Undo operation failed:', error);
+      message.error('Undo operation failed');
+    }
+  }, [canUndo, annotations, historyPast, syncAnnotationsWithDatabase]);
+
+  // Redo handler with database synchronization
+  const handleRedo = useCallback(async () => {
+    console.log('🔄 ManualLabeling handleRedo called! canRedo:', canRedo, 'historyFuture length:', historyFuture.length);
+    if (!canRedo) {
+      console.log('❌ Cannot redo - canRedo is false');
+      return;
+    }
+    
+    try {
+      setHistoryFuture((prevFuture) => {
+        const future = [...prevFuture];
+        const next = future.shift();
+        if (next) {
+          console.log('✅ Redoing to next state:', next);
+          
+          // Sync with database
+          syncAnnotationsWithDatabase(next, annotations).catch(error => {
+            console.error('❌ Failed to sync redo with database:', error);
+            message.error('Failed to sync redo operation with database');
+          });
+          
+          setHistoryPast((p) => [...p, annotations]);
+          setAnnotations(next);
+          setSelectedAnnotation(null);
+        }
+        return future;
+      });
+    } catch (error) {
+      console.error('❌ Redo operation failed:', error);
+      message.error('Redo operation failed');
+    }
+  }, [canRedo, annotations, historyFuture, syncAnnotationsWithDatabase]);
+
+  // Handle polygon point removal (canvas-level undo)
+  const handlePolygonPointRemoval = useCallback(() => {
+    console.log('🔄 Canvas-level undo: removing last polygon point');
+    // This will be handled by the AnnotationCanvas component
+    // We'll pass this function to the canvas to trigger point removal
+    return true; // Indicate that canvas should handle this
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e) => {
+      // Ctrl+Z for undo
+      if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        console.log('🎹 Ctrl+Z pressed - triggering undo');
+        handleUndo();
+        return;
+      }
+      
+      // Ctrl+Y or Ctrl+Shift+Z for redo
+      if ((e.ctrlKey && e.key.toLowerCase() === 'y') || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z')) {
+        e.preventDefault();
+        console.log('🎹 Ctrl+Y/Ctrl+Shift+Z pressed - triggering redo');
+        handleRedo();
+        return;
+      }
+      
+      // L key for label popup
       if (e.key.toLowerCase() === 'l' && pendingShape && !showLabelPopup) {
         setShowLabelPopup(true);
       }
@@ -207,35 +375,7 @@ const ManualLabeling = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [pendingShape, showLabelPopup]);
-
-  // Undo handler
-  const handleUndo = useCallback(() => {
-    if (!canUndo) return;
-    setHistoryPast((prevPast) => {
-      const past = [...prevPast];
-      const last = past.pop();
-      setHistoryFuture((f) => [annotations, ...f]);
-      setAnnotations(last || []);
-      setSelectedAnnotation(null);
-      return past;
-    });
-  }, [canUndo, annotations]);
-
-  // Redo handler
-  const handleRedo = useCallback(() => {
-    if (!canRedo) return;
-    setHistoryFuture((prevFuture) => {
-      const future = [...prevFuture];
-      const next = future.shift();
-      if (next) {
-        setHistoryPast((p) => [...p, annotations]);
-        setAnnotations(next);
-        setSelectedAnnotation(null);
-      }
-      return future;
-    });
-  }, [canRedo, annotations]);
+  }, [pendingShape, showLabelPopup, handleUndo, handleRedo]);
 
   // Clear all annotations for current image
   const handleClearAll = useCallback(async () => {
@@ -795,6 +935,11 @@ const ManualLabeling = () => {
     if (isEditing) {
       console.log('Updating existing annotation:', editingAnnotation);
       
+      // Push current state to history before updating annotation
+      const currentSnapshot = JSON.parse(JSON.stringify(annotations));
+      pushHistory(currentSnapshot);
+      console.log('📚 History pushed before updating annotation. History length:', historyPast.length + 1);
+      
       // Update the annotation in the UI immediately
       setAnnotations(prev => prev.map(ann => 
         ann.id === editingAnnotation.id ? {
@@ -1047,6 +1192,12 @@ const ManualLabeling = () => {
     }
     
     console.log('Created UI annotation:', uiAnnotation);
+    
+    // Push current state to history before adding new annotation
+    const currentSnapshot = JSON.parse(JSON.stringify(annotations));
+    pushHistory(currentSnapshot);
+    console.log('📚 History pushed before adding annotation. History length:', historyPast.length + 1);
+    
     setAnnotations(prev => [...prev, uiAnnotation]);
     // Check if the label already exists in the project
     const existingProjectLabel = projectLabels.find(l => l.name === labelName);
@@ -1305,7 +1456,7 @@ const ManualLabeling = () => {
       setPendingShape(null);
     }, 100); // short delay is enough
   }
-}, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation]);
+}, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation, annotations, pushHistory, historyPast]);
 
   const handleAnnotationSelect = useCallback((annotation) => {
     logUserClick('ManualLabeling', 'annotation_select', {
@@ -1349,6 +1500,12 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
       console.log('Deleting annotation with ID:', annotationId);
+      
+      // Push current state to history before deleting annotation
+      const currentSnapshot = JSON.parse(JSON.stringify(annotations));
+      pushHistory(currentSnapshot);
+      console.log('📚 History pushed before deleting annotation. History length:', historyPast.length + 1);
+      
       await AnnotationAPI.deleteAnnotation(annotationId);
       
       // Update UI state
@@ -1383,7 +1540,7 @@ const ManualLabeling = () => {
       message.error('Failed to delete annotation');
       console.error('Delete annotation error:', error);
     }
-  }, [annotations, setAnnotations, setSelectedAnnotation, setEditingAnnotation, setShowLabelPopup, setImageLabels, datasetId, imageData]);
+  }, [annotations, setAnnotations, setSelectedAnnotation, setEditingAnnotation, setShowLabelPopup, setImageLabels, datasetId, imageData, pushHistory, historyPast]);
 
   // Handle delete selected annotation from toolbox
   const handleDeleteSelected = useCallback(() => {
@@ -1637,6 +1794,7 @@ const ManualLabeling = () => {
                 onAnnotationSelect={handleAnnotationSelect}
                 onAnnotationDelete={handleAnnotationDelete}
                 onImagePositionChange={setImagePosition}
+                onPolygonPointRemoval={handlePolygonPointRemoval}
                 style={{ 
                   maxWidth: '100%',
                   maxHeight: '100%',
