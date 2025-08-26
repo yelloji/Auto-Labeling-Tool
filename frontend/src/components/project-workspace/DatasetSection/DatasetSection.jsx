@@ -53,6 +53,24 @@ const DatasetSection = ({ projectId }) => {
     if (projectId) {
       fetchDatasetImages();
     }
+
+    // Listen for dataset changes from other components
+    const handleDatasetChange = (event) => {
+      if (event.detail.projectId === projectId) {
+        logInfo('app.frontend.interactions', 'dataset_auto_refresh_triggered', 'Dataset auto-refresh triggered by external change', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          action: event.detail.action
+        });
+        fetchDatasetImages();
+      }
+    };
+
+    window.addEventListener('datasetChanged', handleDatasetChange);
+
+    return () => {
+      window.removeEventListener('datasetChanged', handleDatasetChange);
+    };
   }, [projectId]);
 
   // Navigate to Release section

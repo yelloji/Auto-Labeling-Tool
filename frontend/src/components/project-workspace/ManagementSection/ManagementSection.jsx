@@ -312,6 +312,24 @@ const ManagementSection = ({
       });
       loadManagementData();
     }
+
+    // Listen for dataset changes from other components
+    const handleDatasetChange = (event) => {
+      if (event.detail.projectId === projectId) {
+        logInfo('app.frontend.interactions', 'management_auto_refresh_triggered', 'Management auto-refresh triggered by external change', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          action: event.detail.action
+        });
+        loadManagementData();
+      }
+    };
+
+    window.addEventListener('datasetChanged', handleDatasetChange);
+
+    return () => {
+      window.removeEventListener('datasetChanged', handleDatasetChange);
+    };
   }, [projectId]);
 
   // Handler functions

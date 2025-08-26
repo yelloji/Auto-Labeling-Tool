@@ -236,9 +236,9 @@ class AnnotationAPI {
       console.log('AnnotationAPI: Sending DELETE request for annotation:', annotationId);
       
       // The annotations router is mounted at /api/v1/images
-      // The delete endpoint is /{annotation_id}
-      // So the full path is /api/v1/images/{annotation_id}
-      const deleteUrl = `${API_BASE}/images/${annotationId}`;
+      // The delete endpoint is /annotations/{annotation_id}
+      // So the full path is /api/v1/images/annotations/{annotation_id}
+      const deleteUrl = `${API_BASE}/images/annotations/${annotationId}`;
       console.log('DELETE URL:', deleteUrl);
       
       const response = await axios.delete(deleteUrl);

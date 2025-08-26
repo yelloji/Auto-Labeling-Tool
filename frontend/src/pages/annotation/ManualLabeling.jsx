@@ -59,6 +59,12 @@ const ManualLabeling = () => {
       console.log('Deleting image with ID:', imageData.id);
       await AnnotationAPI.deleteImage(imageData.id);
       message.success('Image deleted successfully');
+      
+      // Trigger dataset refresh across all components
+      window.dispatchEvent(new CustomEvent('datasetChanged', {
+        detail: { projectId: datasetId, action: 'imageDeleted' }
+      }));
+      
       const newImageList = imageList.filter(img => img.id !== imageData.id);
       setImageList(newImageList);
       if (newImageList.length === 0) {
