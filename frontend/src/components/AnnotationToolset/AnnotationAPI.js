@@ -944,6 +944,32 @@ class AnnotationAPI {
       return false;
     }
   }
+  
+  /**
+   * Delete an image by ID
+   * @param {string} imageId - Image ID
+   * @returns {Promise<void>}
+   */
+  static async deleteImage(imageId) {
+    try {
+      logInfo('app.frontend.interactions', 'delete_image_started', 'Image deletion started', {
+        imageId,
+        endpoint: `${API_BASE}/images/${imageId}`
+      });
+      await axios.delete(`${API_BASE}/images/${imageId}`);
+      logInfo('app.frontend.interactions', 'delete_image_success', 'Image deleted successfully', {
+        imageId
+      });
+    } catch (error) {
+      logError('app.frontend.validation', 'delete_image_failed', 'Failed to delete image', {
+        imageId,
+        error: error.message,
+        status: error.response?.status
+      });
+      console.error('Failed to delete image:', error);
+      throw error;
+    }
+  }
 }
 
 export default AnnotationAPI;

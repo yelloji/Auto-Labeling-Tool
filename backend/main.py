@@ -127,6 +127,10 @@ app.include_router(datasets.router, prefix="/api/v1/datasets", tags=["datasets"]
 app.include_router(annotations.router, prefix="/api/v1/images", tags=["image-annotations"])
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 
+# Include the images router to handle image operations
+from api.routes.datasets import images_router
+app.include_router(images_router, prefix="/api/v1", tags=["images"])
+
 app.include_router(enhanced_export.router, prefix="/api/v1/enhanced-export", tags=["enhanced-export"])
 app.include_router(releases.router, prefix="/api/v1", tags=["releases"])
 

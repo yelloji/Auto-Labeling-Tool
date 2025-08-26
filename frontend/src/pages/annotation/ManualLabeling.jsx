@@ -47,6 +47,34 @@ const ManualLabeling = () => {
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(true);
   
+  // Image deletion handler
+  const handleDeleteImage = async () => {
+    if (!imageData || !imageData.id) {
+      console.error('No image data available for deletion');
+      return;
+    }
+    const confirmed = window.confirm('Are you sure you want to delete this image? This action cannot be undone.');
+    if (!confirmed) return;
+    try {
+      console.log('Deleting image with ID:', imageData.id);
+      await AnnotationAPI.deleteImage(imageData.id);
+      message.success('Image deleted successfully');
+      const newImageList = imageList.filter(img => img.id !== imageData.id);
+      setImageList(newImageList);
+      if (newImageList.length === 0) {
+        navigate(`/annotate/${datasetId}/manual`);
+        return;
+      }
+      const newIndex = Math.max(0, currentImageIndex - (currentImageIndex === newImageList.length ? 1 : 0));
+      setCurrentImageIndex(newIndex);
+      const newImage = newImageList[newIndex];
+      navigate(`/annotate/${datasetId}/manual?imageId=${newImage.id}`);
+    } catch (error) {
+      message.error('Failed to delete image');
+      console.error('Delete image error:', error);
+    }
+  };
+  
   // Annotation state
   const [annotations, setAnnotations] = useState([]);
   const [selectedAnnotation, setSelectedAnnotation] = useState(null);
@@ -92,7 +120,6 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
       console.log('Loading initial data for dataset:', datasetId);
-      
       // Clean up orphaned labels on app start using the direct endpoint
       const cleanupOrphanedLabels = async () => {
         try {
@@ -1352,6 +1379,23 @@ const ManualLabeling = () => {
     }
   }, [annotations, setAnnotations, setSelectedAnnotation, setEditingAnnotation, setShowLabelPopup, setImageLabels, datasetId, imageData]);
 
+  // Handle delete selected annotation from toolbox
+  const handleDeleteSelected = useCallback(() => {
+    if (!selectedAnnotation) {
+      message.info('No annotation selected');
+      return;
+    }
+    
+    logInfo('app.frontend.interactions', 'delete_selected_started', 'Delete selected annotation started', {
+      datasetId,
+      imageId: imageData?.id,
+      annotationId: selectedAnnotation.id,
+      timestamp: new Date().toISOString()
+    });
+    
+    handleAnnotationDelete(selectedAnnotation.id);
+  }, [selectedAnnotation, handleAnnotationDelete, datasetId, imageData]);
+
   const handleSplitChange = useCallback(async (newSplit) => {
     try {
       logInfo('app.frontend.interactions', 'split_change_started', 'Image split change started', {
@@ -1622,6 +1666,10 @@ const ManualLabeling = () => {
             onClear={handleClearAll}
             canUndo={canUndo}
             canRedo={canRedo}
+            onDeleteImage={handleDeleteImage}
+            onDeleteSelected={handleDeleteSelected}
+            selectedAnnotation={selectedAnnotation}
+            annotations={annotations}
           />
         </Sider>
       </Layout>
@@ -1663,7 +1711,7 @@ const ManualLabeling = () => {
             annotationLabel: editingAnnotation.label,
             timestamp: new Date().toISOString()
           });
-          console.log('Delete triggered for annotation:', editingAnnotation);
+          console.log('Delete Image triggered');
           console.log('Annotation ID:', editingAnnotation.id);
           return handleAnnotationDelete(editingAnnotation.id);
         } : null}

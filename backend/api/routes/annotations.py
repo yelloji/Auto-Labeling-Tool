@@ -264,7 +264,7 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update annotation: {str(e)}")
 
-@router.delete("/{annotation_id}")
+@router.delete("/annotations/{annotation_id}")
 async def delete_annotation(annotation_id: str, db: Session = Depends(get_db)):
     """Delete annotation"""
     logger.info("app.backend", f"Deleting annotation: {annotation_id}", "annotation_deletion", {

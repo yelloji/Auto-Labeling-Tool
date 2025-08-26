@@ -16,9 +16,12 @@ import {
   RedoOutlined,
   DeleteOutlined,
   ClearOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
+import { Modal } from 'antd';
+import AnnotationAPI from './AnnotationAPI';
 
 const { Text } = Typography;
 
@@ -32,7 +35,9 @@ const AnnotationToolbox = ({
   onClear,
   onSave,
   canUndo = false,
-  canRedo = false
+  canRedo = false,
+  onDeleteImage,
+  annotations = []
 }) => {
   // One-time mount log to verify component is rendering
   const hasLoggedMountRef = useRef(false);
@@ -59,7 +64,33 @@ const AnnotationToolbox = ({
       newZoom: newZoom,
       zoomChange: 25
     }).catch(err => console.error('Logging error:', err));
+    // Define handleDeleteImage inside the component
   };
+
+  function handleDeleteImage() {
+    if (onDeleteImage) {
+      onDeleteImage();
+      logInfo('app.frontend.interactions', 'delete_image_operation', 'Delete image operation initiated', {
+        activeTool: activeTool,
+        zoomLevel: zoomLevel
+      }).catch(err => console.error('Logging error:', err));
+    } else if (window.imageId) {
+      AnnotationAPI.deleteImage(window.imageId)
+        .then(() => {
+          console.log('Image deleted successfully');
+          window.location.reload();
+        })
+        .catch(err => {
+          console.error('Failed to delete image:', err);
+        });
+    } else {
+      logError('app.frontend.validation', 'delete_image_disabled', 'Delete image attempted when disabled', {
+        activeTool: activeTool,
+        zoomLevel: zoomLevel
+      });
+    }
+  }
+
 
   const handleZoomOut = () => {
     const newZoom = Math.max(zoomLevel - 25, 25);
@@ -157,11 +188,19 @@ const AnnotationToolbox = ({
   };
 
   const handleClear = () => {
-    onClear();
-    logInfo('app.frontend.interactions', 'clear_all_operation', 'Clear all operation initiated', {
-      activeTool: activeTool,
-      zoomLevel: zoomLevel
-    }).catch(err => console.error('Logging error:', err));
+    if (onClear) {
+      onClear();
+      logInfo('app.frontend.interactions', 'clear_all_operation', 'Clear all operation initiated', {
+        activeTool: activeTool,
+        zoomLevel: zoomLevel
+      }).catch(err => console.error('Logging error:', err));
+    } else {
+      console.warn('No onClear handler provided');
+      logError('app.frontend.validation', 'clear_all_disabled', 'Clear all operation attempted when handler not available', {
+        activeTool: activeTool,
+        zoomLevel: zoomLevel
+      }).catch(err => console.error('Logging error:', err));
+    }
   };
 
   // Remove Save All: redundant due to auto-save behavior
@@ -173,13 +212,7 @@ const AnnotationToolbox = ({
   //   }).catch(err => console.error('Logging error:', err));
   // };
 
-  const handleDelete = () => {
-    console.log('Delete');
-    logInfo('app.frontend.interactions', 'delete_selected_operation', 'Delete selected operation initiated', {
-      activeTool: activeTool,
-      zoomLevel: zoomLevel
-    }).catch(err => console.error('Logging error:', err));
-  };
+
 
   const ToolButton = ({ tool, isActive, onClick }) => {
     const activatedRef = useRef(false);
@@ -498,18 +531,20 @@ const AnnotationToolbox = ({
         </Text>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <ActionButton
-            icon={<DeleteOutlined />}
-            tooltip="Delete Selected"
-            onClick={handleDelete}
+            icon={<DeleteOutlined style={{ color: '#ff4d4f' }} />}
+            tooltip="Delete Image"
+            onClick={handleDeleteImage}
+            disabled={false}
             color="#ff4d4f"
           />
+
           <ActionButton
-            icon={<ClearOutlined />}
+            icon={<ClearOutlined style={{ color: '#faad14' }} />}
             tooltip="Clear All"
             onClick={handleClear}
-            color="#ff7875"
+            disabled={annotations.length === 0}
+            color="#faad14"
           />
-          {/* Save All removed due to auto-save */}
         </div>
       </div>
     </div>
