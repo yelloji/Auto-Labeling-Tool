@@ -3096,14 +3096,26 @@ def apply_transformations_to_image(image_path: str, transformations: List[dict])
             
             if transform_type == "rotate":
                 angle = transform_params.get("angle", 0)
+                fill_color = transform_params.get("fill_color", "white")
                 if angle != 0:
+                    # Convert fill_color to RGB tuple if it's a string
+                    if isinstance(fill_color, str):
+                        if fill_color.lower() == 'white':
+                            fill_color_rgb = 'white'
+                        elif fill_color.lower() == 'black':
+                            fill_color_rgb = 'black'
+                        else:
+                            fill_color_rgb = 'white'  # default to white
+                    else:
+                        fill_color_rgb = fill_color
+                    
                     logger.debug("operations.images", f"Applying rotation transformation", "rotation_application", {
                         'angle': angle,
                         'expand': False,
-                        'fillcolor': 'white'
+                        'fill_color': fill_color_rgb
                     })
-                    # ✅ DATA AUGMENTATION: Keep same dimensions, white background fill
-                    image = image.rotate(angle, expand=False, fillcolor='white')
+                    # ✅ DATA AUGMENTATION: Keep same dimensions, configurable background fill
+                    image = image.rotate(angle, expand=False, fillcolor=fill_color_rgb)
                     logger.debug("operations.images", f"Rotation applied successfully", "rotation_success", {
                         'angle': angle,
                         'new_size': image.size

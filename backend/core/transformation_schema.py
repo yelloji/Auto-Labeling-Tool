@@ -1,4 +1,4 @@
-﻿"""
+"""
 Transformation Schema System for Auto-Labeling Tool Release Pipeline
 Handles transformation tool combinations and sampling strategies
 """
@@ -255,12 +255,20 @@ class TransformationSchema:
                 if isinstance(param_value, dict) and 'user_value' in param_value:
                     # Already in dual-value format
                     user_value = param_value['user_value']
-                    auto_value = generate_auto_value(transformation.tool_type, user_value)
-                    auto_params[param_name] = auto_value
+                    if isinstance(user_value, (int, float)):
+                        auto_value = generate_auto_value(transformation.tool_type, user_value)
+                        auto_params[param_name] = auto_value
+                    else:
+                        # Non-numeric parameter, keep original value
+                        auto_params[param_name] = user_value
                 else:
-                    # Single value - generate auto value
-                    auto_value = generate_auto_value(transformation.tool_type, param_value)
-                    auto_params[param_name] = auto_value
+                    # Single value - generate auto value only for numeric parameters
+                    if isinstance(param_value, (int, float)):
+                        auto_value = generate_auto_value(transformation.tool_type, param_value)
+                        auto_params[param_name] = auto_value
+                    else:
+                        # Non-numeric parameter, keep original value
+                        auto_params[param_name] = param_value
             
             combination = {transformation.tool_type: auto_params}
             combinations.append(combination)
@@ -288,10 +296,19 @@ class TransformationSchema:
                 for param_name, param_value in transformation.parameters.items():
                     if isinstance(param_value, dict) and 'user_value' in param_value:
                         user_params[param_name] = param_value['user_value']
-                        auto_params[param_name] = param_value.get('auto_value', 
-                                                               generate_auto_value(transformation.tool_type, param_value['user_value']))
+                        user_value = param_value['user_value']
+                        if isinstance(user_value, (int, float)):
+                            auto_params[param_name] = param_value.get('auto_value', 
+                                                                   generate_auto_value(transformation.tool_type, user_value))
+                        else:
+                            # Non-numeric parameter, keep original value
+                            auto_params[param_name] = user_value
                     else:
-                        auto_params[param_name] = generate_auto_value(transformation.tool_type, param_value)
+                        if isinstance(param_value, (int, float)):
+                            auto_params[param_name] = generate_auto_value(transformation.tool_type, param_value)
+                        else:
+                            # Non-numeric parameter, keep original value
+                            auto_params[param_name] = param_value
                 
                 all_values.append((transformation.tool_type, user_params, auto_params))
             
@@ -336,12 +353,21 @@ class TransformationSchema:
                     for param_name, param_value in dual_transformation.parameters.items():
                         if isinstance(param_value, dict) and 'user_value' in param_value:
                             dual_user_params[param_name] = param_value['user_value']
-                            dual_auto_params[param_name] = param_value.get('auto_value', 
-                                                         generate_auto_value(dual_transformation.tool_type, param_value['user_value']))
+                            user_value = param_value['user_value']
+                            if isinstance(user_value, (int, float)):
+                                dual_auto_params[param_name] = param_value.get('auto_value', 
+                                                             generate_auto_value(dual_transformation.tool_type, user_value))
+                            else:
+                                # Non-numeric parameter, keep original value
+                                dual_auto_params[param_name] = user_value
                         else:
                             # For simple values like {"percentage": 50}, use as user value and generate auto
                             dual_user_params[param_name] = param_value
-                            dual_auto_params[param_name] = generate_auto_value(dual_transformation.tool_type, param_value)
+                            if isinstance(param_value, (int, float)):
+                                dual_auto_params[param_name] = generate_auto_value(dual_transformation.tool_type, param_value)
+                            else:
+                                # Non-numeric parameter, keep original value
+                                dual_auto_params[param_name] = param_value
                     
                     # Combine with each single-value tool
                     for single_transformation in regular_transformations:

@@ -852,6 +852,16 @@ DUAL_VALUE_RANGES = {
     'contrast': {'min': CONTRAST_MIN, 'max': CONTRAST_MAX, 'step': CONTRAST_STEP, 'default': CONTRAST_DEFAULT}
 }
 
+# Define which parameters support dual-value processing for each transformation
+# Only numeric parameters should be included here
+DUAL_VALUE_PARAMETERS = {
+    'rotate': ['angle'],  # exclude 'fill_color' - it's a string parameter
+    'hue': ['hue_shift', 'hue'],
+    'shear': ['shear_angle', 'angle'],
+    'brightness': ['percentage', 'factor'],
+    'contrast': ['percentage', 'factor']
+}
+
 def is_dual_value_transformation(transformation_type: str) -> bool:
     """Check if transformation supports dual-value system"""
     logger.info("operations.transformations", f"Checking dual-value support for: {transformation_type}", "dual_value_check", {
@@ -863,6 +873,23 @@ def is_dual_value_transformation(transformation_type: str) -> bool:
         'transformation_type': transformation_type,
         'is_supported': is_supported
     })
+    return is_supported
+
+def is_dual_value_parameter(transformation_type: str, parameter_name: str) -> bool:
+    """Check if a specific parameter supports dual-value processing"""
+    if not is_dual_value_transformation(transformation_type):
+        return False
+    
+    supported_params = DUAL_VALUE_PARAMETERS.get(transformation_type, [])
+    is_supported = parameter_name in supported_params
+    
+    logger.info("operations.transformations", f"Parameter dual-value check: {transformation_type}.{parameter_name} → {is_supported}", "parameter_dual_value_check", {
+        'transformation_type': transformation_type,
+        'parameter_name': parameter_name,
+        'is_supported': is_supported,
+        'supported_params': supported_params
+    })
+    
     return is_supported
 
 def generate_auto_value(transformation_type: str, user_value: float) -> float:

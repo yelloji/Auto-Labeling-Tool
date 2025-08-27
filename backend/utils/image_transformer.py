@@ -450,6 +450,7 @@ class ImageTransformer:
             angle_min = params.get('angle_min', -15)
             angle_max = params.get('angle_max', 15)
             probability = params.get('probability', 0.5)
+            fill_color = params.get('fill_color', 'white')
             
             # Check probability first
             if random.random() >= probability:
@@ -462,6 +463,15 @@ class ImageTransformer:
             # Generate random angle within range
             angle = random.uniform(angle_min, angle_max)
             
+            # Convert fill_color to RGB tuple if it's a string
+            if isinstance(fill_color, str):
+                if fill_color.lower() == 'white':
+                    fill_color = (255, 255, 255)
+                elif fill_color.lower() == 'black':
+                    fill_color = (0, 0, 0)
+                else:
+                    fill_color = (255, 255, 255)  # default to white
+            
             logger.info("operations.transformations", f"Applying rotate transformation", "rotate_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'angle_min': angle_min,
@@ -469,11 +479,11 @@ class ImageTransformer:
                 'generated_angle': angle,
                 'probability': probability,
                 'expand': True,
-                'fillcolor': '(255, 255, 255)',
+                'fill_color': fill_color,
                 'params': params
             })
             
-            result = image.rotate(angle, expand=True, fillcolor=(255, 255, 255))
+            result = image.rotate(angle, expand=True, fillcolor=fill_color)
             
             logger.info("operations.transformations", f"Rotate transformation completed", "rotate_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",

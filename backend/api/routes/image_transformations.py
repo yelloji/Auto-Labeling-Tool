@@ -12,6 +12,7 @@ from database.models import ImageTransformation
 from pydantic import BaseModel, validator
 from core.transformation_config import (
     is_dual_value_transformation, 
+    is_dual_value_parameter,
     generate_auto_value, 
     get_dual_value_range,
     calculate_max_images_per_original
@@ -157,17 +158,28 @@ def process_dual_value_parameters(transformation: TransformationCreate) -> Dict[
         
         # Process each parameter for dual-value generation
         for param_name, user_value in transformation.parameters.items():
-            if isinstance(user_value, (int, float)):
+            # Only process numeric parameters that support dual-value processing
+            if (isinstance(user_value, (int, float)) and 
+                is_dual_value_parameter(transformation.transformation_type, param_name)):
+                
                 auto_value = generate_auto_value(transformation.transformation_type, user_value)
                 dual_value_params[param_name] = {
                     "user_value": user_value,
                     "auto_value": auto_value
                 }
                 logger.info("operations.transformations", f"Generated dual-value for {param_name}: user={user_value}, auto={auto_value}", "dual_value_generated", {
-            'param_name': param_name,
-            'user_value': user_value,
-            'auto_value': auto_value
-        })
+                    'param_name': param_name,
+                    'user_value': user_value,
+                    'auto_value': auto_value
+                })
+            else:
+                # Skip non-numeric or non-dual-value parameters (like fill_color)
+                logger.info("operations.transformations", f"Skipping parameter {param_name} (not dual-value compatible): {user_value}", "dual_value_skipped", {
+                    'param_name': param_name,
+                    'user_value': user_value,
+                    'is_numeric': isinstance(user_value, (int, float)),
+                    'supports_dual_value': is_dual_value_parameter(transformation.transformation_type, param_name)
+                })
     
     return dual_value_params
 
