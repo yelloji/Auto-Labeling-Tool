@@ -509,8 +509,19 @@ class ImageTransformer:
             # Get parameters from central config (flip uses probability-based defaults)
             horizontal = params.get('horizontal', True)  # Match frontend default
             vertical = params.get('vertical', False)
-            h_probability = params.get('h_probability', 0.5)
-            v_probability = params.get('v_probability', 0.2)
+
+            # Determine probabilities: if UI toggles a flip without providing probability, default to 1.0
+            if horizontal:
+                h_probability = params.get('h_probability', None)
+                h_probability = 1.0 if h_probability is None else h_probability
+            else:
+                h_probability = params.get('h_probability', 0.5)
+
+            if vertical:
+                v_probability = params.get('v_probability', None)
+                v_probability = 1.0 if v_probability is None else v_probability
+            else:
+                v_probability = params.get('v_probability', 0.2)
             
             logger.info("operations.transformations", f"Applying flip transformation", "flip_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
