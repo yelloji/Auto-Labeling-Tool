@@ -874,7 +874,8 @@ const AnnotationCanvas = ({
 
       // Check if clicking on an annotation
       const mousePos = getMousePos(e);
-      const clickedAnnotation = annotations.find(ann => {
+      // Find all annotations that contain the click point
+      const matchingAnnotations = annotations.filter(ann => {
         const scale = zoomLevel / 100;
         
         // For box annotations
@@ -900,6 +901,9 @@ const AnnotationCanvas = ({
         
         return false;
       });
+      
+      // Select the topmost annotation (last in array = most recently drawn)
+      const clickedAnnotation = matchingAnnotations.length > 0 ? matchingAnnotations[matchingAnnotations.length - 1] : null;
 
       if (clickedAnnotation) {
         logInfo('app.frontend.interactions', 'annotation_selected', 'Annotation selected via click', {
