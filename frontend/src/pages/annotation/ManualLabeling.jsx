@@ -509,31 +509,98 @@ const ManualLabeling = () => {
     try {
       const snapshot = JSON.parse(JSON.stringify(annotations));
       pushHistory(snapshot);
-      setAnnotations([]);
-      setSelectedAnnotation(null);
-      setEditingAnnotation(null);
-
+      
+      // Delete all annotations from database first
+      let deletionErrors = 0;
       for (const ann of snapshot) {
-        try { await AnnotationAPI.deleteAnnotation(ann.id); } catch (e) { console.error('Failed to delete', ann.id, e); }
+        try { 
+          await AnnotationAPI.deleteAnnotation(ann.id); 
+          console.log('Successfully deleted annotation:', ann.id);
+        } catch (e) { 
+          console.error('Failed to delete', ann.id, e);
+          deletionErrors++;
+        }
       }
 
-      setImageLabels([]);
-
-      if (imageData?.is_labeled) {
-        setDatasetProgress(prev => ({
-          ...prev,
-          labeled: Math.max(0, prev.labeled - 1),
-          percentage: prev.total > 0 ? Math.round(((Math.max(0, prev.labeled - 1)) / prev.total) * 100) : 0
-        }));
-        setImageData(prev => ({ ...prev, is_labeled: false }));
+      // Refresh annotations from database to ensure UI reflects actual state
+      try {
+        const refreshedAnnotations = await AnnotationAPI.getImageAnnotations(imageData.id);
+        console.log('Refreshed annotations after clear all:', refreshedAnnotations);
+        
+        // Transform refreshed annotations for UI display
+        const transformedAnnotations = refreshedAnnotations.map(ann => {
+          let annotationType = ann.type || 'box';
+          if (ann.segmentation && Array.isArray(ann.segmentation) && ann.segmentation.length > 2) {
+            annotationType = 'polygon';
+          }
+          
+          return {
+            id: ann.id,
+            type: annotationType,
+            label: ann.class_name,
+            confidence: ann.confidence || 1.0,
+            x: ann.x_min,
+            y: ann.y_min,
+            width: ann.x_max - ann.x_min,
+            height: ann.y_max - ann.y_min,
+            points: ann.segmentation || ann.points || [],
+            segmentation: ann.segmentation || ann.points || []
+          };
+        });
+        
+        setAnnotations(transformedAnnotations);
+        setSelectedAnnotation(null);
+        setEditingAnnotation(null);
+        
+        // Update image labels based on remaining annotations
+        const labelCounts = {};
+        transformedAnnotations.forEach(ann => {
+          labelCounts[ann.label] = (labelCounts[ann.label] || 0) + 1;
+        });
+        
+        const updatedImageLabels = Object.entries(labelCounts).map(([name, count]) => {
+          const projectLabel = projectLabels.find(l => l.name === name);
+          return {
+            name,
+            count,
+            color: projectLabel?.color || AnnotationAPI.generateLabelColor(name)
+          };
+        });
+        
+        setImageLabels(updatedImageLabels);
+        
+        // Update dataset progress and image status
+        const hasAnnotations = transformedAnnotations.length > 0;
+        if (imageData?.is_labeled && !hasAnnotations) {
+          setDatasetProgress(prev => ({
+            ...prev,
+            labeled: Math.max(0, prev.labeled - 1),
+            percentage: prev.total > 0 ? Math.round(((Math.max(0, prev.labeled - 1)) / prev.total) * 100) : 0
+          }));
+          setImageData(prev => ({ ...prev, is_labeled: false }));
+        }
+        
+        if (deletionErrors > 0) {
+          message.warning(`Cleared annotations with ${deletionErrors} errors. Some annotations may still remain.`);
+        } else {
+          message.success('All annotations cleared successfully');
+        }
+        
+      } catch (refreshError) {
+        console.error('Failed to refresh annotations after clear:', refreshError);
+        // Fallback: clear UI state anyway
+        setAnnotations([]);
+        setSelectedAnnotation(null);
+        setEditingAnnotation(null);
+        setImageLabels([]);
+        message.warning('Annotations cleared but UI refresh failed. Please reload the page.');
       }
-
-      message.success('Cleared all annotations');
+      
     } catch (e) {
       console.error('Clear all failed', e);
       message.error('Failed to clear all annotations');
     }
-  }, [annotations, imageData]);
+  }, [annotations, imageData, projectLabels]);
 
   const loadDatasetImages = async () => {
     try {

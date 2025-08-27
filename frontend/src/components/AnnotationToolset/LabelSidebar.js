@@ -344,44 +344,26 @@ const LabelSidebar = ({
               </div>
             )}
 
-            {/* Project labels - available for use */}
-            <div>
-              <Text
-                style={{
-                  fontSize: '11px',
-                  color: '#8c8c8c',
-                  fontWeight: '600',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  marginBottom: '12px',
-                  display: 'block',
-                  paddingLeft: '8px'
-                }}
-              >
-                Other available labels ({labelsWithCounts.filter(l => l.imageCount === 0).length})
-              </Text>
-              {labelsWithCounts
-                .filter(l => l.imageCount === 0)
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map(renderLabelItem)
-              }
-            </div>
+            {/* Hidden: Other available labels section to save space */}
           </div>
         )}
       </div>
 
-      {/* Footer */}
+      {/* Footer - Keyboard Shortcuts */}
       <div style={{
-        padding: '12px 16px',
+        padding: '14px 16px',
         borderTop: '1px solid #002140',
         background: '#001529'
       }}>
-        <Text style={{ fontSize: '11px', color: '#95a5a6' }}>
-          💡 Click labels to select for new annotations
+        <Text style={{ fontSize: '12px', color: '#3498db', fontWeight: '600', marginBottom: '10px', display: 'block' }}>
+          ⌨️ Keyboard Shortcuts
         </Text>
-        <br />
-        <Text style={{ fontSize: '11px', color: '#95a5a6' }}>
-          🔍 Labels with green badges are used in this image
+        <Text style={{ fontSize: '11px', color: '#95a5a6', lineHeight: '1.5' }}>
+          <strong>Ctrl+Z:</strong> Undo | <strong>Ctrl+Y:</strong> Redo<br />
+          <strong>Shift+Z:</strong> Undo polygon point | <strong>Shift+Y:</strong> Redo polygon point<br />
+          <strong>Delete:</strong> Remove selected annotation<br />
+          <strong>Escape:</strong> Cancel current drawing<br />
+          <span style={{ color: '#ffa940', fontWeight: '500' }}>⚠️ Ctrl+Z works after polygon completion</span>
         </Text>
       </div>
     </div>
