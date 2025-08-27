@@ -2126,11 +2126,23 @@ def create_complete_release_zip(
         # However, for YOLO labels and data.yaml, we will use the new class_name_to_yolo_id mapping.
         def resolve_class_index(ann) -> int:
              try:
+                 # First try to resolve by class_name
                  cname = getattr(ann, 'class_name', None)
                  if cname and cname in class_name_to_yolo_id:
                      return class_name_to_yolo_id[cname]
-             except Exception:
-                 pass
+                 
+                 # Fallback to class_id if class_name fails
+                 class_id = getattr(ann, 'class_id', None)
+                 if class_id is not None and class_id in class_id_to_name:
+                     fallback_name = class_id_to_name[class_id]
+                     if fallback_name in class_name_to_yolo_id:
+                         return class_name_to_yolo_id[fallback_name]
+             except Exception as e:
+                 logger.warning("errors.system", f"Failed to resolve class index for annotation", "class_index_resolution_error", {
+                     'class_name': getattr(ann, 'class_name', None),
+                     'class_id': getattr(ann, 'class_id', None),
+                     'error': str(e)
+                 })
              return 0
 
         # Prepare central schema once for priority-order generation
