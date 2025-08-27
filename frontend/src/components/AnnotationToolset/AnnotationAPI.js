@@ -78,24 +78,27 @@ class AnnotationAPI {
       }
       
       // CRITICAL FIX: Handle each type separately and explicitly
-      if (annotation.type === 'polygon' && Array.isArray(annotation.segmentation)) {
+      if (annotation.type === 'polygon' && (Array.isArray(annotation.segmentation) || Array.isArray(annotation.points))) {
+        // Use segmentation if available, otherwise use points
+        const polygonPoints = annotation.segmentation || annotation.points;
+        
         logInfo('app.frontend.ui', 'polygon_annotation_processing', 'Processing polygon annotation', {
-          segmentationPoints: annotation.segmentation.length,
+          segmentationPoints: polygonPoints.length,
           imageId: annotation.image_id
         });
 
-        console.log('SAVING POLYGON WITH POINTS:', annotation.segmentation.length);
+        console.log('SAVING POLYGON WITH POINTS:', polygonPoints.length);
         
         // CRITICAL: Set the type explicitly for the backend
         annotationData.type = 'polygon';
         
         // For polygons, we MUST set the segmentation field
         // Make a deep copy to avoid reference issues
-        annotationData.segmentation = JSON.parse(JSON.stringify(annotation.segmentation));
+        annotationData.segmentation = JSON.parse(JSON.stringify(polygonPoints));
         
         // Calculate bounding box from points
-        const xs = annotation.segmentation.map(p => p.x);
-        const ys = annotation.segmentation.map(p => p.y);
+        const xs = polygonPoints.map(p => p.x);
+        const ys = polygonPoints.map(p => p.y);
         
         // Set both coordinate formats for compatibility
         annotationData.x = Math.min(...xs);
