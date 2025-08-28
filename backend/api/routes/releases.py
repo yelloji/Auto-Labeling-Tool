@@ -1946,6 +1946,9 @@ def create_complete_release_zip(
         'multiplier': multiplier
     })
     
+    # Derive images_per_original from user multiplier (augmented images only)
+    images_per_original = max(0, multiplier - 1)
+    
     # Prefer a project-local staging dir (same drive as final ZIP) to avoid Windows temp issues
     # Use a hidden staging directory (prefixed with a dot) so it isn't visible to users
     staging_root = os.path.join(os.path.dirname(zip_path), f".staging_{release_id}")
@@ -2159,7 +2162,7 @@ def create_complete_release_zip(
                 } for idx, t in enumerate(transformations or [])
             ])
             # images_per_original means augmented images per original (exclude original)
-            schema.set_sampling_config(images_per_original=max(0, multiplier - 1), strategy="intelligent")
+            schema.set_sampling_config(images_per_original=max(0, multiplier - 1), strategy="intelligent", fixed_combinations=2)
             logger.debug("operations.transformations", f"Transformation schema initialized successfully", "schema_init_success", {
                 'transformation_count': len(transformations or []),
                 'multiplier': multiplier
@@ -2222,11 +2225,11 @@ def create_complete_release_zip(
                     } for t in (transformations or [])
                 ]
                 max_images_result = calculate_max_images_per_original(transformation_list)
-                max_images = max_images_result.get('max', 6)  # Default to 6 for brightness+flip
+                total_with_original = max_images_result.get('max', 6)  # Default to 6 for brightness+flip
                 schema.set_sampling_config(
-                    images_per_original=max_images,
+                    images_per_original=images_per_original,
                     strategy="intelligent",
-                    fixed_combinations=0
+                    fixed_combinations=2
                 )
                 total_with_original = schema.get_combination_count_estimate()
                 variant_cap = max(0, int(total_with_original) - 1)
