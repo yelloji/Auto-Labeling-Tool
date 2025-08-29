@@ -350,6 +350,8 @@ def transform_segmentation_annotations_to_yolo(
                     if len(pts) >= 2 and all(isinstance(v, (int, float)) for v in pts):
                         it = iter(pts)
                         pairs = [(float(x), float(next(it))) for x in it]
+                    elif len(pts) >= 1 and isinstance(pts[0], dict) and "x" in pts[0] and "y" in pts[0]:
+                        pairs = [(float(p["x"]), float(p["y"])) for p in pts]
                     elif len(pts) >= 1 and isinstance(pts[0], (list, tuple)):
                         pairs = [(float(x), float(y)) for x, y in pts]
                         
