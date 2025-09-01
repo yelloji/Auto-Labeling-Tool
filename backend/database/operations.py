@@ -802,6 +802,115 @@ class ImageOperations:
         return annotations
     
     @staticmethod
+    def delete_image(db: Session, image_id: str) -> bool:
+        """Delete image, its annotations, and the file from disk."""
+        logger.info("app.database", "Deleting image", "image_deletion_start", {
+            "image_id": image_id
+        })
+        try:
+            image = db.query(Image).filter(Image.id == image_id).first()
+            if not image:
+                logger.warning("app.database", "Image not found for deletion", "image_deletion_not_found", {
+                    "image_id": image_id
+                })
+                return False
+
+            # Store dataset_id before deleting the image
+            dataset_id = image.dataset_id
+
+            # Delete all annotations for this image
+            annotation_count = db.query(Annotation).filter(Annotation.image_id == image_id).delete(synchronize_session=False)
+            logger.info("app.database", f"Deleted {annotation_count} annotations for image", "annotations_deleted_for_image", {
+                "image_id": image_id,
+                "annotations_deleted": annotation_count
+            })
+
+            # Delete the image file from disk
+            from utils.path_utils import path_manager
+            file_path = image.file_path
+            abs_path = path_manager.get_absolute_path(file_path)
+            if abs_path.exists():
+                abs_path.unlink()
+                logger.info("app.database", f"Deleted image file from disk: {abs_path}", "image_file_deleted", {
+                    "image_id": image_id,
+                    "file_path": str(abs_path)
+                })
+            else:
+                logger.warning("app.database", f"Image file not found on disk: {abs_path}", "image_file_not_found_on_disk", {
+                    "image_id": image_id,
+                    "file_path": str(abs_path)
+                })
+
+            # Delete the image record
+            db.delete(image)
+            db.commit()
+            
+            # Update dataset statistics after successful deletion
+            DatasetOperations.update_dataset_stats(db, dataset_id)
+            
+            # Check if dataset folder is empty and remove it if so
+            try:
+                dataset = DatasetOperations.get_dataset(db, dataset_id)
+                if dataset:
+                    # Get remaining images count for this dataset
+                    remaining_images = db.query(Image).filter(Image.dataset_id == dataset_id).count()
+                    
+                    if remaining_images == 0:
+                        # No images left, remove empty dataset folder
+                        from database.operations import ProjectOperations
+                        project = ProjectOperations.get_project(db, str(dataset.project_id))
+                        
+                        if project:
+                            from pathlib import Path
+                            import os
+                            from core.config import settings
+                            
+                            # Check all possible workflow locations for the dataset folder
+                            project_folder = Path(settings.PROJECTS_DIR) / project.name
+                            possible_locations = ["unassigned", "annotating", "dataset"]
+                            
+                            for location in possible_locations:
+                                dataset_folder_path = project_folder / location / dataset.name
+                                if dataset_folder_path.exists():
+                                    # Check if folder is empty or only contains empty subdirectories
+                                    is_empty = True
+                                    for root, dirs, files in os.walk(dataset_folder_path):
+                                        if files:  # Found files, not empty
+                                            is_empty = False
+                                            break
+                                    
+                                    if is_empty:
+                                        import shutil
+                                        shutil.rmtree(str(dataset_folder_path))
+                                        logger.info("operations.operations", f"Removed empty dataset folder: {dataset_folder_path}", "empty_folder_cleanup", {
+                                            "dataset_id": dataset_id,
+                                            "dataset_name": dataset.name,
+                                            "project_name": project.name,
+                                            "location": location,
+                                            "folder_path": str(dataset_folder_path)
+                                        })
+                                    break
+            except Exception as cleanup_error:
+                logger.warning("errors.system", f"Failed to cleanup empty dataset folder: {cleanup_error}", "folder_cleanup_failed", {
+                    "dataset_id": dataset_id,
+                    "error": str(cleanup_error)
+                })
+                # Don't fail the entire operation if folder cleanup fails
+            
+            logger.info("app.database", "Image deleted successfully", "image_deletion_complete", {
+                "image_id": image_id
+            })
+            return True
+        except Exception as e:
+            logger.error("errors.system", f"Error deleting image: {str(e)}", "image_deletion_error", {
+                "image_id": image_id,
+                "error": str(e),
+                "error_type": type(e).__name__
+            })
+            db.rollback()
+            return False
+
+    @staticmethod
     def update_image_path(db: Session, image_id: str, new_path: str) -> Optional[Image]:
         """Update image file path"""
         logger.info("app.database", "Updating image file path", "image_path_update", {

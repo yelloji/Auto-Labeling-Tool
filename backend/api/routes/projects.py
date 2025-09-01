@@ -632,6 +632,16 @@ async def get_project_datasets(project_id: str, db: Session = Depends(get_db)):
         
         dataset_responses = []
         for dataset in datasets:
+            # Skip datasets with zero images to prevent empty folders in frontend
+            if dataset.total_images == 0 or dataset.total_images is None:
+                logger.debug("operations.datasets", f"Skipping empty dataset from dropdown", "empty_dataset_skipped", {
+                    "dataset_id": dataset.id,
+                    "dataset_name": dataset.name,
+                    "total_images": dataset.total_images,
+                    "reason": "zero_images"
+                })
+                continue
+                
             dataset_response = {
                 "id": dataset.id,
                 "name": dataset.name,
@@ -709,6 +719,16 @@ async def get_project_management_data(project_id: str, db: Session = Depends(get
         completed = []
         
         for dataset in datasets:
+            # Skip datasets with zero images to prevent empty folders in management view
+            if dataset.total_images == 0 or dataset.total_images is None:
+                logger.debug("operations.datasets", f"Skipping empty dataset from management view", "empty_dataset_skipped_management", {
+                    "dataset_id": dataset.id,
+                    "dataset_name": dataset.name,
+                    "total_images": dataset.total_images,
+                    "reason": "zero_images_management"
+                })
+                continue
+                
             dataset_info = {
                 "id": dataset.id,
                 "name": dataset.name,
@@ -786,7 +806,7 @@ async def get_project_management_data(project_id: str, db: Session = Depends(get
                     "dataset_name": dataset.name
                 })
                 annotating.append(dataset_info)
-            elif dataset_folder.exists() or actual_location == "dataset" or dataset.labeled_images == dataset.total_images:
+            elif dataset_folder.exists() or actual_location == "dataset" or (dataset.labeled_images == dataset.total_images and dataset.total_images > 0):
                 logger.debug("operations.operations", f"Adding dataset to COMPLETED", "dataset_completed", {
                     "dataset_id": dataset.id,
                     "dataset_name": dataset.name
@@ -2947,7 +2967,7 @@ async def get_project_images(
             "dataset_count": len(datasets)
         })
         
-        # Get images from all datasets
+        # Get images from all datasets, but only process datasets that have images
         logger.debug("operations.images", f"Starting image collection from datasets", "image_collection_start", {
             "project_id": project_id,
             "dataset_count": len(datasets)
@@ -2955,6 +2975,7 @@ async def get_project_images(
         
         all_images = []
         total_annotations = 0
+        datasets_with_images = 0
         
         for dataset_index, dataset in enumerate(datasets):
             logger.debug("operations.datasets", f"Processing dataset {dataset_index + 1}/{len(datasets)}", "dataset_processing", {
@@ -2966,6 +2987,16 @@ async def get_project_images(
             
             images = ImageOperations.get_images_by_dataset(db, dataset.id)
             
+            # Skip datasets with no images to prevent empty folders in frontend
+            if len(images) == 0:
+                logger.debug("operations.datasets", f"Skipping empty dataset", "empty_dataset_skipped", {
+                    "dataset_id": dataset.id,
+                    "dataset_name": dataset.name,
+                    "reason": "no_images_found"
+                })
+                continue
+                
+            datasets_with_images += 1
             logger.debug("operations.images", f"Images fetched for dataset", "dataset_images_fetched", {
                 "dataset_id": dataset.id,
                 "dataset_name": dataset.name,
@@ -3048,7 +3079,9 @@ async def get_project_images(
             "project_name": project.name,
             "total_images": len(all_images),
             "total_annotations": total_annotations,
-            "dataset_count": len(datasets)
+            "total_datasets": len(datasets),
+            "datasets_with_images": datasets_with_images,
+            "empty_datasets_skipped": len(datasets) - datasets_with_images
         })
         
         # Apply pagination
@@ -3069,7 +3102,9 @@ async def get_project_images(
             "limit": limit,
             "offset": offset,
             "has_more": offset + limit < total_images,
-            "split_type_filter": split_type
+            "split_type_filter": split_type,
+            "datasets_with_images": datasets_with_images,
+            "empty_datasets_filtered": len(datasets) - datasets_with_images
         })
         
         return {
@@ -3535,6 +3570,19 @@ async def move_dataset_to_completed(
             "unlabeled_count": len(images) - labeled_count
         })
         
+        # Check if dataset has any images at all
+        if len(images) == 0:
+            logger.warning("errors.validation", f"Cannot move empty dataset to completed", "empty_dataset_blocking_move", {
+                "dataset_id": dataset_id,
+                "dataset_name": dataset.name,
+                "total_images": 0
+            })
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot move empty dataset to completed. Please add and label images first."
+            )
+        
+        # Check if all images are labeled
         if labeled_count < len(images):
             unlabeled_count = len(images) - labeled_count
             logger.warning("errors.validation", f"Cannot move dataset to completed - images still need labeling", "incomplete_labeling_blocking_move", {

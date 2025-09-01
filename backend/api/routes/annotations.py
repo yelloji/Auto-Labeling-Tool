@@ -176,8 +176,37 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
                     "label_id": existing_label.id
                 })
         
-        # Add other fields to update_data
-        if annotation.class_id is not None:
+        # Handle class_name change - update class_id accordingly
+        if annotation.class_name is not None and annotation.class_name != existing.class_name:
+            update_data["class_name"] = annotation.class_name
+            
+            # Get the correct class_id from labels table for the new class_name
+            correct_label = db.query(Label).filter(
+                Label.name == annotation.class_name,
+                Label.project_id == project_id
+            ).first()
+            
+            if correct_label:
+                update_data["class_id"] = correct_label.id
+            else:
+                # Create new label if it doesn't exist
+                import random
+                r = random.randint(0, 255)
+                g = random.randint(0, 255)
+                b = random.randint(0, 255)
+                color = f"#{r:02x}{g:02x}{b:02x}"
+                
+                new_label = Label(
+                    name=annotation.class_name,
+                    color=color,
+                    project_id=project_id
+                )
+                db.add(new_label)
+                db.commit()
+                update_data["class_id"] = new_label.id
+        
+        # Handle direct class_id updates (should be rare)
+        elif annotation.class_id is not None:
             update_data["class_id"] = annotation.class_id
             
         if annotation.x_min is not None:
@@ -235,7 +264,7 @@ async def update_annotation(annotation_id: str, annotation: AnnotationUpdate, db
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update annotation: {str(e)}")
 
-@router.delete("/{annotation_id}")
+@router.delete("/annotations/{annotation_id}")
 async def delete_annotation(annotation_id: str, db: Session = Depends(get_db)):
     """Delete annotation"""
     logger.info("app.backend", f"Deleting annotation: {annotation_id}", "annotation_deletion", {
@@ -430,12 +459,21 @@ async def save_image_annotations(image_id: str, data: AnnotationData, db: Sessio
             x_max = x + width
             y_max = y + height
             
+            # Get the correct class_id from labels table
+            correct_label = db.query(Label).filter(
+                Label.name == class_name,
+                Label.project_id == project_id
+            ).first()
+            
+            # Use the correct label ID, not 0
+            correct_class_id = correct_label.id if correct_label else 0
+            
             # Create annotation in database
             new_annotation = AnnotationOperations.create_annotation(
                 db=db,
                 image_id=image_id,
                 class_name=class_name,
-                class_id=ann.get("class_id", 0),
+                class_id=correct_class_id,
                 x_min=x_min,
                 y_min=y_min,
                 x_max=x_max,

@@ -13,6 +13,7 @@ from database.operations import (
     DatasetOperations, ProjectOperations, ImageOperations, 
     AutoLabelJobOperations
 )
+from database.models import Annotation
 from core.file_handler import file_handler
 from core.auto_labeler import auto_labeler
 from models.model_manager import model_manager
@@ -22,6 +23,44 @@ from logging_system.professional_logger import get_professional_logger
 logger = get_professional_logger()
 
 router = APIRouter()
+
+# Create a separate router for image operations
+images_router = APIRouter()
+
+# Add a new endpoint for deleting images
+@images_router.delete("/images/{image_id}", tags=["images"])
+async def delete_image(image_id: str, db: Session = Depends(get_db)):
+    """Delete an image by ID"""
+    logger.info("app.backend", f"Deleting image", "image_deletion", {
+        "image_id": image_id,
+        "endpoint": f"/api/v1/images/{image_id}"
+    })
+    
+    try:
+        # Use the existing, working delete_image method from ImageOperations
+        success = ImageOperations.delete_image(db, image_id)
+        if not success:
+            logger.warning("errors.validation", f"Image {image_id} not found or failed to delete", "image_deletion_failed", {
+                "image_id": image_id
+            })
+            raise HTTPException(status_code=404, detail="Image not found or failed to delete")
+        
+        logger.info("operations.images", f"Image deleted successfully", "image_deleted", {
+            "image_id": image_id
+        })
+        return {"status": "success", "message": f"Image {image_id} deleted successfully"}
+    
+    except HTTPException as http_ex:
+        # Re-raise HTTP exceptions
+        raise http_ex
+    except Exception as e:
+        # Log the error
+        logger.error("errors.system", f"Error deleting image: {str(e)}", "delete_image_error", {
+            "image_id": image_id,
+            "error": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Error deleting image: {str(e)}")
+
 
 
 class DatasetCreateRequest(BaseModel):
@@ -669,6 +708,37 @@ async def get_image_by_id(
             "error": str(e)
         })
         raise HTTPException(status_code=500, detail=f"Failed to get image: {str(e)}")
+
+
+@router.delete("/images/{image_id}")
+async def delete_image_by_id(
+    image_id: str,
+    db: Session = Depends(get_db)
+):
+    """Delete an image, its annotations, and its file from disk."""
+    logger.info("app.backend", f"Deleting image by ID", "image_deletion", {
+        "image_id": image_id,
+        "endpoint": "/api/datasets/images/{image_id}"
+    })
+    try:
+        success = ImageOperations.delete_image(db, image_id)
+        if not success:
+            logger.warning("errors.validation", f"Image {image_id} not found or failed to delete", "image_deletion_failed", {
+                "image_id": image_id
+            })
+            raise HTTPException(status_code=404, detail="Image not found or failed to delete")
+        logger.info("operations.images", f"Image deleted successfully", "image_deleted", {
+            "image_id": image_id
+        })
+        return {"message": f"Image {image_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("errors.system", f"Error deleting image", "image_deletion_error", {
+            "image_id": image_id,
+            "error": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Failed to delete image: {str(e)}")
 
 
 class SplitSectionUpdate(BaseModel):

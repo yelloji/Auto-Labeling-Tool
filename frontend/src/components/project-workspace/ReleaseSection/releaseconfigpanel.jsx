@@ -874,8 +874,8 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
                 <Option value="yolo_detection">YOLO Detection</Option>
                 <Option value="yolo_segmentation">YOLO Segmentation</Option>
                 <Option value="coco">COCO</Option>
-                <Option value="pascal_voc">Pascal VOC</Option>
-                <Option value="csv">CSV</Option>
+                <Option value="pascal_voc">Pascal VOC (For Object Detection Tasks)</Option>
++               <Option value="csv">CSV (For Upcoming Classification Tasks)</Option>
               </Select>
             </Form.Item>
           </Col>

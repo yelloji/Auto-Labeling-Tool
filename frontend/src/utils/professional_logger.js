@@ -57,26 +57,9 @@ class ProfessionalFrontendLogger {
     }
     
     async sendToBackend(logData) {
-        try {
-            // Send to main batch endpoint (now fixed)
-            const response = await fetch(`${this.apiBaseUrl}/api/v1/logs/frontend/batch`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify([logData]) // Send as array for batch endpoint
-            });
-            
-            if (!response.ok) {
-                console.error('Failed to send log to backend:', response.status, response.statusText);
-                return false;
-            }
-            
-            return true;
-        } catch (error) {
-            console.error('Error sending log to backend:', error);
-            return false;
-        }
+        // Temporarily disabled to prevent UI blocking
+        // Backend logging system needs to be properly set up
+        return true;
     }
     
     createLogData(level, category, operation, message, details = null) {

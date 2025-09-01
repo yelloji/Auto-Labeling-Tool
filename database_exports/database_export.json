@@ -1,0 +1,289 @@
+{
+  "export_timestamp": "2025-09-01T10:58:01.012759",
+  "database_path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\database.db",
+  "projects": [
+    {
+      "id": 1,
+      "name": "gevis",
+      "description": "",
+      "project_type": "segmentation",
+      "created_at": "2025-06-17 12:00:38",
+      "updated_at": "2025-06-17 12:00:38",
+      "statistics": {
+        "datasets": 6,
+        "total_images": 9,
+        "labeled_images": 9,
+        "unlabeled_images": 0,
+        "annotations": 10
+      },
+      "datasets": [
+        {
+          "id": "1c62d270-2df3-4568-986d-0cff06cd7e7d",
+          "name": "car_dataset",
+          "description": "Images uploaded to gevis",
+          "created_at": "2025-06-19 13:26:47",
+          "updated_at": "2025-09-01 07:29:51.666182",
+          "statistics": {
+            "total_images": 5,
+            "labeled_images": 5,
+            "unlabeled_images": 0,
+            "annotations": 5
+          },
+          "images": [
+            {
+              "id": "4cd30f24-e25a-4354-8196-253a9aba4a27",
+              "filename": "car_1.jpg",
+              "original_filename": "car_1.jpg",
+              "file_path": "projects\\gevis\\dataset\\car_dataset\\train\\car_1.jpg",
+              "width": 300,
+              "height": 168,
+              "format": "JPEG",
+              "file_size": 8848,
+              "split_type": "dataset",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2025-06-19 13:26:47",
+              "updated_at": "2025-09-01 07:41:59",
+              "file_exists": false
+            },
+            {
+              "id": "c0abe285-bd28-4e6e-ab5a-a08ecd5b7385",
+              "filename": "car_2.jpg",
+              "original_filename": "car_2.jpg",
+              "file_path": "projects\\gevis\\dataset\\car_dataset\\train\\car_2.jpg",
+              "width": 300,
+              "height": 168,
+              "format": "JPEG",
+              "file_size": 7191,
+              "split_type": "dataset",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2025-06-19 13:26:47",
+              "updated_at": "2025-09-01 07:41:59",
+              "file_exists": false
+            },
+            {
+              "id": "3cbdd14e-83a5-46b0-8bc3-48792aaefc38",
+              "filename": "car_3.jpg",
+              "original_filename": "car_3.jpg",
+              "file_path": "projects\\gevis\\dataset\\car_dataset\\train\\car_3.jpg",
+              "width": 300,
+              "height": 168,
+              "format": "JPEG",
+              "file_size": 9937,
+              "split_type": "dataset",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2025-06-19 13:26:47",
+              "updated_at": "2025-09-01 07:40:47",
+              "file_exists": false
+            },
+            {
+              "id": "4237eb50-7c18-4180-9df1-11686408bbf2",
+              "filename": "car_4.jpg",
+              "original_filename": "car_4.jpg",
+              "file_path": "projects\\gevis\\dataset\\car_dataset\\train\\car_4.jpg",
+              "width": 275,
+              "height": 183,
+              "format": "JPEG",
+              "file_size": 6820,
+              "split_type": "dataset",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2025-06-19 13:26:47",
+              "updated_at": "2025-09-01 07:41:59",
+              "file_exists": false
+            },
+            {
+              "id": "ee50e17c-7ea7-4ba3-8d8b-1df3dd40981d",
+              "filename": "car_5.jpg",
+              "original_filename": "car_5.jpg",
+              "file_path": "projects\\gevis\\dataset\\car_dataset\\train\\car_5.jpg",
+              "width": 275,
+              "height": 183,
+              "format": "JPEG",
+              "file_size": 7170,
+              "split_type": "dataset",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2025-06-19 13:26:47",
+              "updated_at": "2025-09-01 07:40:47",
+              "file_exists": false
+            }
+          ]
+        },
+        {
+          "id": "aa17acf7-8689-4b30-842d-712250a4df45",
+          "name": "one",
+          "description": "Images uploaded to gevis",
+          "created_at": "2025-08-26 13:30:43",
+          "updated_at": "2025-08-26 13:30:53.730455",
+          "statistics": {
+            "total_images": 0,
+            "labeled_images": 0,
+            "unlabeled_images": 0,
+            "annotations": 0
+          },
+          "images": []
+        },
+        {
+          "id": "0ad82748-e577-4e29-abd3-b99692f04cff",
+          "name": "fh",
+          "description": "Images uploaded to gevis",
+          "created_at": "2025-08-26 13:33:25",
+          "updated_at": "2025-08-26 13:33:56.170573",
+          "statistics": {
+            "total_images": 0,
+            "labeled_images": 0,
+            "unlabeled_images": 0,
+            "annotations": 0
+          },
+          "images": []
+        },
+        {
+          "id": "d5e70b23-ff2c-46e6-bf4e-fc5dd3f6033b",
+          "name": "ko",
+          "description": "Images uploaded to gevis",
+          "created_at": "2025-08-26 14:08:14",
+          "updated_at": "2025-08-26 14:09:03.742729",
+          "statistics": {
+            "total_images": 0,
+            "labeled_images": 0,
+            "unlabeled_images": 0,
+            "annotations": 0
+          },
+          "images": []
+        },
+        {
+          "id": "e6fee5c6-62b5-48b8-b656-048b3639ce45",
+          "name": "animal",
+          "description": "Images uploaded to gevis",
+          "created_at": "2025-08-26 14:13:06",
+          "updated_at": "2025-08-29 21:39:46.524440",
+          "statistics": {
+            "total_images": 3,
+            "labeled_images": 3,
+            "unlabeled_images": 0,
+            "annotations": 4
+          },
+          "images": [
+            {
+              "id": "b30c0dd0-3410-4552-a202-28eb067e81e2",
+              "filename": "car.jpg",
+              "original_filename": "car.jpg",
+              "file_path": "projects\\gevis\\dataset\\animal\\val\\car.jpg",
+              "width": 800,
+              "height": 600,
+              "format": "JPEG",
+              "file_size": 57407,
+              "split_type": "dataset",
+              "split_section": "val",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 2,
+              "created_at": "2025-08-26 14:13:06",
+              "updated_at": "2025-09-01 07:40:47",
+              "file_exists": false
+            },
+            {
+              "id": "f2675f12-d201-4ce1-b0c3-ba8f6633b114",
+              "filename": "cat.jpg",
+              "original_filename": "cat.jpg",
+              "file_path": "projects\\gevis\\dataset\\animal\\test\\cat.jpg",
+              "width": 800,
+              "height": 600,
+              "format": "JPEG",
+              "file_size": 54749,
+              "split_type": "dataset",
+              "split_section": "test",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2025-08-26 14:13:07",
+              "updated_at": "2025-09-01 07:40:47",
+              "file_exists": false
+            },
+            {
+              "id": "ace7fbef-b79a-44f3-bc7f-120708731468",
+              "filename": "dog.jpg",
+              "original_filename": "dog.jpg",
+              "file_path": "projects\\gevis\\dataset\\animal\\train\\dog.jpg",
+              "width": 800,
+              "height": 600,
+              "format": "JPEG",
+              "file_size": 76182,
+              "split_type": "dataset",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2025-08-26 14:13:07",
+              "updated_at": "2025-09-01 07:40:47",
+              "file_exists": false
+            }
+          ]
+        },
+        {
+          "id": "0099c5b6-3da8-4231-887a-723e8ac68e31",
+          "name": "riay",
+          "description": "Images uploaded to gevis",
+          "created_at": "2025-09-01 07:18:42",
+          "updated_at": "2025-09-01 07:43:58.141786",
+          "statistics": {
+            "total_images": 1,
+            "labeled_images": 1,
+            "unlabeled_images": 0,
+            "annotations": 1
+          },
+          "images": [
+            {
+              "id": "95bb2ec3-5067-45a0-81d0-1470c5aa06c8",
+              "filename": "cat.jpg",
+              "original_filename": "cat.jpg",
+              "file_path": "projects/gevis/dataset/riay/val/cat.jpg",
+              "width": 800,
+              "height": 600,
+              "format": "JPEG",
+              "file_size": 54749,
+              "split_type": "dataset",
+              "split_section": "val",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2025-09-01 07:18:42",
+              "updated_at": "2025-09-01 07:43:58.129784",
+              "file_exists": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_projects": 1,
+    "total_datasets": 6,
+    "total_images": 9,
+    "total_annotations": 10,
+    "labeled_images": 9,
+    "unlabeled_images": 0
+  }
+}

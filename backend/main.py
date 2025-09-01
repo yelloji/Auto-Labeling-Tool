@@ -127,6 +127,10 @@ app.include_router(datasets.router, prefix="/api/v1/datasets", tags=["datasets"]
 app.include_router(annotations.router, prefix="/api/v1/images", tags=["image-annotations"])
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 
+# Include the images router to handle image operations
+from api.routes.datasets import images_router
+app.include_router(images_router, prefix="/api/v1", tags=["images"])
+
 app.include_router(enhanced_export.router, prefix="/api/v1/enhanced-export", tags=["enhanced-export"])
 app.include_router(releases.router, prefix="/api/v1", tags=["releases"])
 
@@ -340,6 +344,34 @@ async def startup_event():
     })
     await init_db()
     logger.info("app.database", "✅ Database initialized successfully", "database_initialized")
+    
+    # Initialize auto-export system based on dedicated configuration
+    try:
+        from database.export_config import export_settings
+        
+        if export_settings.is_enabled:
+            from database.export_hooks import initialize_auto_export
+            
+            config = export_settings.get_export_config()
+            logger.info("app.startup", "🔄 Initializing database auto-export system", "auto_export_init", config)
+            
+            initialize_auto_export(
+                enable_monitoring=export_settings.should_monitor, 
+                check_interval=export_settings.CHECK_INTERVAL
+            )
+            
+            status = "with monitoring" if export_settings.should_monitor else "without monitoring"
+            logger.info("app.startup", f"✅ Auto-export system initialized successfully {status}", "auto_export_ready", {
+                "environment": export_settings.ENVIRONMENT,
+                "monitoring": export_settings.should_monitor
+            })
+        else:
+            logger.info("app.startup", "⏸️ Auto-export system disabled by configuration", "auto_export_disabled")
+            
+    except Exception as e:
+        logger.error("errors.system", f"Failed to initialize auto-export system: {str(e)}", "auto_export_error", {
+            "error": str(e)
+        })
 
 @app.on_event("shutdown")
 async def shutdown_event():

@@ -68,30 +68,37 @@ class AnnotationAPI {
       // Convert annotation to the format expected by the backend
       const annotationData = {
         class_name: annotation.class_name || annotation.label,
-        class_id: 0, // Default class ID
         confidence: annotation.confidence || 1.0,
         image_id: annotation.image_id
       };
       
+      // Only include class_id if it's explicitly provided (should be rare)
+      if (annotation.class_id !== undefined && annotation.class_id !== null) {
+        annotationData.class_id = annotation.class_id;
+      }
+      
       // CRITICAL FIX: Handle each type separately and explicitly
-      if (annotation.type === 'polygon' && Array.isArray(annotation.segmentation)) {
+      if (annotation.type === 'polygon' && (Array.isArray(annotation.segmentation) || Array.isArray(annotation.points))) {
+        // Use segmentation if available, otherwise use points
+        const polygonPoints = annotation.segmentation || annotation.points;
+        
         logInfo('app.frontend.ui', 'polygon_annotation_processing', 'Processing polygon annotation', {
-          segmentationPoints: annotation.segmentation.length,
+          segmentationPoints: polygonPoints.length,
           imageId: annotation.image_id
         });
 
-        console.log('SAVING POLYGON WITH POINTS:', annotation.segmentation.length);
+        console.log('SAVING POLYGON WITH POINTS:', polygonPoints.length);
         
         // CRITICAL: Set the type explicitly for the backend
         annotationData.type = 'polygon';
         
         // For polygons, we MUST set the segmentation field
         // Make a deep copy to avoid reference issues
-        annotationData.segmentation = JSON.parse(JSON.stringify(annotation.segmentation));
+        annotationData.segmentation = JSON.parse(JSON.stringify(polygonPoints));
         
         // Calculate bounding box from points
-        const xs = annotation.segmentation.map(p => p.x);
-        const ys = annotation.segmentation.map(p => p.y);
+        const xs = polygonPoints.map(p => p.x);
+        const ys = polygonPoints.map(p => p.y);
         
         // Set both coordinate formats for compatibility
         annotationData.x = Math.min(...xs);
@@ -191,7 +198,7 @@ class AnnotationAPI {
       });
 
       console.log('Updating annotation:', annotationId, updates);
-      // The annotations router is mounted at /api/v1/images
+      // Correct endpoint: annotations router mounted under /api/v1/images
       const response = await axios.put(`${API_BASE}/images/${annotationId}`, updates);
       
       logInfo('app.frontend.interactions', 'update_annotation_success', 'Annotation updated successfully', {
@@ -232,9 +239,9 @@ class AnnotationAPI {
       console.log('AnnotationAPI: Sending DELETE request for annotation:', annotationId);
       
       // The annotations router is mounted at /api/v1/images
-      // The delete endpoint is /{annotation_id}
-      // So the full path is /api/v1/images/{annotation_id}
-      const deleteUrl = `${API_BASE}/images/${annotationId}`;
+      // The delete endpoint is /annotations/{annotation_id}
+      // So the full path is /api/v1/images/annotations/{annotation_id}
+      const deleteUrl = `${API_BASE}/images/annotations/${annotationId}`;
       console.log('DELETE URL:', deleteUrl);
       
       const response = await axios.delete(deleteUrl);
@@ -938,6 +945,32 @@ class AnnotationAPI {
       console.error('Failed to update image split section:', error);
       console.error('Error details:', error.response?.data || error.message);
       return false;
+    }
+  }
+  
+  /**
+   * Delete an image by ID
+   * @param {string} imageId - Image ID
+   * @returns {Promise<void>}
+   */
+  static async deleteImage(imageId) {
+    try {
+      logInfo('app.frontend.interactions', 'delete_image_started', 'Image deletion started', {
+        imageId,
+        endpoint: `${API_BASE}/images/${imageId}`
+      });
+      await axios.delete(`${API_BASE}/images/${imageId}`);
+      logInfo('app.frontend.interactions', 'delete_image_success', 'Image deleted successfully', {
+        imageId
+      });
+    } catch (error) {
+      logError('app.frontend.validation', 'delete_image_failed', 'Failed to delete image', {
+        imageId,
+        error: error.message,
+        status: error.response?.status
+      });
+      console.error('Failed to delete image:', error);
+      throw error;
     }
   }
 }

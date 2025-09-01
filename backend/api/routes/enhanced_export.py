@@ -272,9 +272,9 @@ task: segment  # for segmentation
                 if ann.get("image_id", 0) == img_idx:
                     class_id = ann.get("class_id", 0)
                     
-                    if ann.get("type") == "polygon" and ann.get("points"):
+                    if ann.get("type") in ["polygon", "segmentation"] and (ann.get("points") or ann.get("segmentation")):
                         # YOLO segmentation format: class_id x1 y1 x2 y2 x3 y3 ...
-                        points = ann.get("points", [])
+                        points = ann.get("points") or ann.get("segmentation") or []
                         normalized_points = []
                         
                         for point in points:

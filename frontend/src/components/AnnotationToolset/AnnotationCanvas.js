@@ -13,19 +13,42 @@ const AnnotationCanvas = ({
   onAnnotationSelect,
   onAnnotationDelete,
   onImagePositionChange,
+  onPolygonStateChange,
   style = {}
 }) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const imageRef = useRef(null);
+  const handleMouseDownRef = useRef(null);
+  const handleMouseMoveRef = useRef(null);
+  const handleMouseUpRef = useRef(null);
+  const handleDoubleClickRef = useRef(null);
+  const handleCanvasClickRef = useRef(null);
+  const handleRightClickRef = useRef(null);
   
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState(null);
   const [currentShape, setCurrentShape] = useState(null);
   const [polygonPoints, setPolygonPoints] = useState([]);
+  // Polygon point history for undo/redo functionality
+  const [polygonPointsHistory, setPolygonPointsHistory] = useState([]);
+  const [polygonPointsFuture, setPolygonPointsFuture] = useState([]);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 }); // Used for canvas dimensions
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+
+  // Throttled logging for redraws (reduce console/log noise during frequent redraws)
+  const redrawLogTimestampsRef = useRef({ started: 0, completed: 0 });
+  const logRedrawThrottled = useCallback((stage, payload) => {
+    const now = Date.now();
+    const last = redrawLogTimestampsRef.current[stage] || 0;
+    if (now - last > 300) {
+      redrawLogTimestampsRef.current[stage] = now;
+      const eventId = stage === 'started' ? 'canvas_redraw_started' : 'canvas_redraw_completed';
+      const message = stage === 'started' ? 'Canvas redraw operation started' : 'Canvas redraw operation completed';
+      logInfo('app.frontend.ui', eventId, message, payload);
+    }
+  }, []);
 
   // Initialize Smart Polygon Tool
   const smartPolygonTool = SmartPolygonTool({
@@ -156,8 +179,85 @@ const AnnotationCanvas = ({
       });
       console.log('Clearing incomplete polygon due to tool change');
       setPolygonPoints([]);
+      setPolygonPointsHistory([]);
+      setPolygonPointsFuture([]);
     }
   }, [activeTool, polygonPoints.length]);
+
+  // Notify parent component when polygon drawing state changes
+  useEffect(() => {
+    if (onPolygonStateChange) {
+      const isPolygonDrawing = activeTool === 'polygon' && polygonPoints.length > 0;
+      onPolygonStateChange(isPolygonDrawing, polygonPoints.length);
+    }
+  }, [activeTool, polygonPoints.length, onPolygonStateChange]);
+
+  // Redraw canvas with image and annotations
+  const redrawCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    const img = imageRef.current;
+    
+    if (!canvas || !ctx || !img) {
+      logError('app.frontend.validation', 'redraw_canvas_missing_elements', 'Cannot redraw canvas - missing required elements', {
+        hasCanvas: !!canvas,
+        hasContext: !!ctx,
+        hasImage: !!img
+      });
+      return;
+    }
+
+    logRedrawThrottled('started', {
+      imageId,
+      annotationCount: annotations.length,
+      selectedAnnotationId: selectedAnnotation?.id,
+      activeTool,
+      zoomLevel
+    });
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw image
+    const displayWidth = imageSize.width * (zoomLevel / 100);
+    const displayHeight = imageSize.height * (zoomLevel / 100);
+    
+    ctx.drawImage(
+      img,
+      imagePosition.x,
+      imagePosition.y,
+      displayWidth,
+      displayHeight
+    );
+
+    // Draw existing annotations
+    annotations.forEach(annotation => {
+      drawAnnotation(ctx, annotation, annotation.id === selectedAnnotation?.id);
+    });
+
+    // Draw current shape being drawn
+    if (currentShape) {
+      drawShape(ctx, currentShape, true);
+    }
+
+    // Draw polygon points
+    if (activeTool === 'polygon' && polygonPoints.length > 0) {
+      drawPolygonInProgress(ctx, polygonPoints);
+    }
+
+    // Draw smart polygon
+    if (activeTool === 'smart_polygon') {
+      smartPolygonTool.renderPolygon(ctx);
+    }
+
+    logRedrawThrottled('completed', {
+      imageId,
+      annotationsDrawn: annotations.length,
+      hasCurrentShape: !!currentShape,
+      polygonPointsCount: polygonPoints.length,
+      activeTool
+    });
+  }, [annotations, selectedAnnotation, currentShape, polygonPoints, activeTool, imagePosition, imageSize, zoomLevel, smartPolygonTool, imageId]);
 
   // Resize canvas to fit container
   const resizeCanvas = useCallback(() => {
@@ -259,73 +359,6 @@ const AnnotationCanvas = ({
     redrawCanvas();
   }, [zoomLevel, imageId, imageSize, onImagePositionChange, redrawCanvas]);
 
-  // Redraw canvas with image and annotations
-  const redrawCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    const img = imageRef.current;
-    
-    if (!canvas || !ctx || !img) {
-      logError('app.frontend.validation', 'redraw_canvas_missing_elements', 'Cannot redraw canvas - missing required elements', {
-        hasCanvas: !!canvas,
-        hasContext: !!ctx,
-        hasImage: !!img
-      });
-      return;
-    }
-
-    logInfo('app.frontend.ui', 'canvas_redraw_started', 'Canvas redraw operation started', {
-      imageId,
-      annotationCount: annotations.length,
-      selectedAnnotationId: selectedAnnotation?.id,
-      activeTool,
-      zoomLevel
-    });
-
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw image
-    const displayWidth = imageSize.width * (zoomLevel / 100);
-    const displayHeight = imageSize.height * (zoomLevel / 100);
-    
-    ctx.drawImage(
-      img,
-      imagePosition.x,
-      imagePosition.y,
-      displayWidth,
-      displayHeight
-    );
-
-    // Draw existing annotations
-    annotations.forEach(annotation => {
-      drawAnnotation(ctx, annotation, annotation.id === selectedAnnotation?.id);
-    });
-
-    // Draw current shape being drawn
-    if (currentShape) {
-      drawShape(ctx, currentShape, true);
-    }
-
-    // Draw polygon points
-    if (activeTool === 'polygon' && polygonPoints.length > 0) {
-      drawPolygonInProgress(ctx, polygonPoints);
-    }
-
-    // Draw smart polygon
-    if (activeTool === 'smart_polygon') {
-      smartPolygonTool.renderPolygon(ctx);
-    }
-
-    logInfo('app.frontend.ui', 'canvas_redraw_completed', 'Canvas redraw operation completed', {
-      imageId,
-      annotationsDrawn: annotations.length,
-      hasCurrentShape: !!currentShape,
-      polygonPointsCount: polygonPoints.length,
-      activeTool
-    });
-  }, [annotations, selectedAnnotation, currentShape, polygonPoints, activeTool, imagePosition, imageSize, zoomLevel, smartPolygonTool, imageId]);
-
   // Draw a single annotation
   const drawAnnotation = (ctx, annotation, isSelected = false) => {
     logInfo('app.frontend.ui', 'annotation_drawing_started', 'Drawing annotation', {
@@ -335,8 +368,7 @@ const AnnotationCanvas = ({
       imageId
     });
 
-    console.log('Drawing annotation:', annotation);
-    console.log('Annotation type:', annotation.type);
+    // Removed verbose console logs in hot draw path
     
     // Set styles based on selection state
     ctx.strokeStyle = isSelected ? '#ff4d4f' : (annotation.color || '#1890ff');
@@ -351,11 +383,6 @@ const AnnotationCanvas = ({
     const width = annotation.width * scale;
     const height = annotation.height * scale;
     
-    console.log(`Drawing annotation type: ${annotation.type}, coordinates: (${x}, ${y}, ${width}, ${height})`);
-    if (annotation.type === 'polygon') {
-      console.log('Polygon points:', annotation.points);
-    }
-
     if (annotation.type === 'box') {
       ctx.fillRect(x, y, width, height);
       ctx.strokeRect(x, y, width, height);
@@ -369,8 +396,6 @@ const AnnotationCanvas = ({
         ctx.fillText(annotation.label, x + 4, y - 6);
       }
     } else if (annotation.type === 'polygon' && annotation.points) {
-      console.log('Drawing polygon with points:', annotation.points);
-      
       // Make sure we have valid points
       if (!Array.isArray(annotation.points) || annotation.points.length < 3) {
         logError('app.frontend.validation', 'polygon_insufficient_points', 'Not enough points to draw polygon', {
@@ -378,7 +403,6 @@ const AnnotationCanvas = ({
           pointsCount: annotation.points?.length || 0,
           points: annotation.points
         });
-        console.warn('Not enough points to draw polygon:', annotation.points);
         return;
       }
       
@@ -394,7 +418,6 @@ const AnnotationCanvas = ({
             pointIndex: index,
             point: point
           });
-          console.warn('Invalid polygon point:', point);
           return;
         }
         
@@ -433,7 +456,6 @@ const AnnotationCanvas = ({
           validPointsCount,
           totalPoints: annotation.points.length
         });
-        console.warn('Not enough valid points to draw polygon:', validPointsCount);
       }
       
       // Draw label for polygon too
@@ -505,11 +527,20 @@ const AnnotationCanvas = ({
     ctx.stroke();
 
     // Draw points
-    points.forEach(point => {
+    points.forEach((point, index) => {
       ctx.beginPath();
       ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
       ctx.fillStyle = '#52c41a';
       ctx.fill();
+      
+      // Highlight first point if we have enough points to complete
+      if (index === 0 && points.length >= 3) {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 8, 0, 2 * Math.PI);
+        ctx.strokeStyle = '#ff4d4f';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
     });
   };
 
@@ -550,6 +581,18 @@ const AnnotationCanvas = ({
       y: e.clientY - rect.top
     };
   };
+
+  // Helper function to check if click is near first polygon point
+  const isNearFirstPoint = useCallback((mousePos) => {
+    if (polygonPoints.length < 3) return false;
+    
+    const firstPoint = polygonPoints[0];
+    const distance = Math.sqrt(
+      Math.pow(mousePos.x - firstPoint.x, 2) + Math.pow(mousePos.y - firstPoint.y, 2)
+    );
+    
+    return distance <= 12; // 12 pixel threshold for first point detection
+  }, [polygonPoints]);
 
   // Mouse event handlers
   const handleMouseDown = useCallback((e) => {
@@ -593,6 +636,41 @@ const AnnotationCanvas = ({
         height: 0
       });
     } else if (activeTool === 'polygon') {
+      // Check if clicking near first point to complete polygon
+      if (isNearFirstPoint(mousePos)) {
+        if (polygonPoints.length >= 3) {
+          logInfo('app.frontend.interactions', 'polygon_completed_first_point_click', 'Polygon completed by clicking first point', {
+            imageId,
+            pointsCount: polygonPoints.length,
+            zoomLevel
+          });
+          
+          // Complete polygon
+          const imagePoints = polygonPoints.map(point => screenToImageCoords(point.x, point.y));
+          
+          const shape = {
+            type: 'polygon',
+            points: imagePoints
+          };
+
+          onShapeComplete?.(shape);
+          
+          logInfo('app.frontend.interactions', 'polygon_on_shape_complete_called', 'onShapeComplete called for polygon via first point click', {
+            imageId,
+            shapeType: shape.type,
+            pointsCount: imagePoints.length
+          });
+          
+          // Clear polygon points and history
+          setPolygonPoints([]);
+          setPolygonPointsHistory([]);
+          setPolygonPointsFuture([]);
+          redrawCanvas();
+          return;
+        }
+      }
+      
+      // Add new point with history management
       logUserClick('AnnotationCanvas', 'polygon_point_added', {
         imageId,
         newPoint: mousePos,
@@ -607,10 +685,15 @@ const AnnotationCanvas = ({
         zoomLevel,
         totalPoints: polygonPoints.length + 1
       });
+      
+      // Save current state to history before adding new point
+      setPolygonPointsHistory(prev => [...prev, polygonPoints]);
+      setPolygonPointsFuture([]); // Clear future when new action is performed
+      
       const newPoint = mousePos;
       setPolygonPoints(prev => [...prev, newPoint]);
     }
-  }, [activeTool, smartPolygonTool, imageId, isDrawing, startPoint, polygonPoints.length, zoomLevel]);
+  }, [activeTool, smartPolygonTool, imageId, isDrawing, startPoint, polygonPoints.length, zoomLevel, isNearFirstPoint, polygonPoints, screenToImageCoords, onShapeComplete, redrawCanvas]);
 
   const handleMouseMove = useCallback((e) => {
     if (activeTool === 'smart_polygon') {
@@ -634,12 +717,7 @@ const AnnotationCanvas = ({
       zoomLevel
     });
 
-    console.log('Mouse move - drawing box:', {
-      start: startPoint,
-      current: mousePos,
-      width: Math.abs(width),
-      height: Math.abs(height)
-    });
+    // Removed verbose console logs during mouse move
 
     setCurrentShape({
       type: 'box',
@@ -665,7 +743,7 @@ const AnnotationCanvas = ({
       shapeSize: currentShape ? { width: currentShape.width, height: currentShape.height } : null
     });
 
-    console.log('Mouse up - isDrawing:', isDrawing, 'currentShape:', currentShape);
+    // Removed verbose console logs on mouse up
     if (!isDrawing || !currentShape || activeTool !== 'box') {
       logInfo('app.frontend.interactions', 'mouse_up_no_drawing', 'Mouse up but no active drawing', {
         imageId,
@@ -698,8 +776,6 @@ const AnnotationCanvas = ({
         screenCoordinates: currentShape
       });
       
-      console.log('✅ Shape completed:', currentShape);
-      
       // Convert to image coordinates
       const imageCoords = screenToImageCoords(currentShape.x, currentShape.y);
       const imageWidth = currentShape.width / (zoomLevel / 100);
@@ -721,9 +797,6 @@ const AnnotationCanvas = ({
         conversionFactor: zoomLevel / 100
       });
 
-      console.log('✅ Calling onShapeComplete with shape:', shape);
-      console.log('✅ onShapeComplete function exists:', !!onShapeComplete);
-      
       if (onShapeComplete) {
         onShapeComplete(shape);
         logInfo('app.frontend.interactions', 'on_shape_complete_called', 'onShapeComplete callback called successfully', {
@@ -732,14 +805,12 @@ const AnnotationCanvas = ({
           shapeCoordinates: { x: shape.x, y: shape.y, width: shape.width, height: shape.height },
           tool: activeTool
         });
-        console.log('✅ onShapeComplete called successfully');
       } else {
         logError('app.frontend.validation', 'on_shape_complete_missing', 'onShapeComplete function is not provided', {
           imageId,
           shapeType: shape.type,
           tool: activeTool
         });
-        console.error('❌ onShapeComplete function is not provided!');
       }
     } else {
       logUserClick('AnnotationCanvas', 'box_shape_too_small', {
@@ -755,14 +826,12 @@ const AnnotationCanvas = ({
         minimumSize: 5,
         tool: activeTool
       });
-      console.log('❌ Shape too small, not creating annotation. Size:', currentShape.width, 'x', currentShape.height);
     }
 
-    // ALWAYS clear the temporary shape immediately after drawing (professional behavior)
+    // ALWAYS clear the temporary shape immediately after drawing
     setCurrentShape(null);
     setStartPoint(null);
     redrawCanvas();
-    console.log('✅ Box cleared immediately - popup should appear');
   }, [isDrawing, currentShape, activeTool, onShapeComplete, zoomLevel, smartPolygonTool, imageId, redrawCanvas]);
 
   const handleDoubleClick = useCallback((e) => {
@@ -772,7 +841,6 @@ const AnnotationCanvas = ({
         pointsCount: polygonPoints.length,
         zoomLevel
       });
-      console.log('✅ Polygon completed with', polygonPoints.length, 'points');
       
       // Complete polygon
       const imagePoints = polygonPoints.map(point => screenToImageCoords(point.x, point.y));
@@ -782,7 +850,6 @@ const AnnotationCanvas = ({
         points: imagePoints
       };
 
-      console.log('✅ Calling onShapeComplete for polygon:', shape);
       onShapeComplete?.(shape);
       
       logInfo('app.frontend.interactions', 'polygon_on_shape_complete_called', 'onShapeComplete called for polygon', {
@@ -791,10 +858,9 @@ const AnnotationCanvas = ({
         pointsCount: imagePoints.length
       });
       
-      // ALWAYS clear polygon points immediately after completion (professional behavior)
+      // ALWAYS clear polygon points immediately after completion
       setPolygonPoints([]);
       redrawCanvas();
-      console.log('✅ Polygon points cleared immediately - popup should appear');
     }
   }, [activeTool, polygonPoints, onShapeComplete, screenToImageCoords, imageId, redrawCanvas, zoomLevel]);
 
@@ -808,7 +874,8 @@ const AnnotationCanvas = ({
 
       // Check if clicking on an annotation
       const mousePos = getMousePos(e);
-      const clickedAnnotation = annotations.find(ann => {
+      // Find all annotations that contain the click point
+      const matchingAnnotations = annotations.filter(ann => {
         const scale = zoomLevel / 100;
         
         // For box annotations
@@ -834,6 +901,9 @@ const AnnotationCanvas = ({
         
         return false;
       });
+      
+      // Select the topmost annotation (last in array = most recently drawn)
+      const clickedAnnotation = matchingAnnotations.length > 0 ? matchingAnnotations[matchingAnnotations.length - 1] : null;
 
       if (clickedAnnotation) {
         logInfo('app.frontend.interactions', 'annotation_selected', 'Annotation selected via click', {
@@ -865,7 +935,114 @@ const AnnotationCanvas = ({
     }
   }, [activeTool, smartPolygonTool, imageId, zoomLevel]);
 
-  // Setup event listeners
+  // Keep handler refs in sync with latest callbacks so listeners bind once but call newest logic
+  useEffect(() => {
+    handleMouseDownRef.current = handleMouseDown;
+    handleMouseMoveRef.current = handleMouseMove;
+    handleMouseUpRef.current = handleMouseUp;
+    handleDoubleClickRef.current = handleDoubleClick;
+    handleCanvasClickRef.current = handleCanvasClick;
+    handleRightClickRef.current = handleRightClick;
+  }, [handleMouseDown, handleMouseMove, handleMouseUp, handleDoubleClick, handleCanvasClick, handleRightClick]);
+
+  // Handle keyboard events for polygon completion and undo/redo
+  const handleKeyDown = useCallback((e) => {
+    if (activeTool === 'polygon') {
+      if (e.key === 'Backspace' && polygonPoints.length > 0) {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent event from bubbling to parent handlers
+        
+        logInfo('app.frontend.interactions', 'polygon_point_removed_backspace', 'Last polygon point removed with Backspace', {
+          imageId,
+          removedPointIndex: polygonPoints.length - 1,
+          remainingPoints: polygonPoints.length - 1,
+          zoomLevel
+        });
+        
+        // Save current state to future before undoing
+        setPolygonPointsFuture(prev => [polygonPoints, ...prev]);
+        
+        // Restore previous state from history or remove last point
+        if (polygonPointsHistory.length > 0) {
+          const previousState = polygonPointsHistory[polygonPointsHistory.length - 1];
+          setPolygonPoints(previousState);
+          setPolygonPointsHistory(prev => prev.slice(0, -1));
+        } else {
+          // Fallback: just remove last point if no history
+          setPolygonPoints(prev => prev.slice(0, -1));
+        }
+        
+        redrawCanvas();
+        return;
+      }
+      
+      // Handle Shift+Y for polygon point redo
+      if (e.shiftKey && e.key === 'Y' && polygonPointsFuture.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        logInfo('app.frontend.interactions', 'polygon_point_redo_shift_y', 'Polygon point redo with Shift+Y', {
+          imageId,
+          futureStatesCount: polygonPointsFuture.length,
+          zoomLevel
+        });
+        
+        // Save current state to history before redoing
+        setPolygonPointsHistory(prev => [...prev, polygonPoints]);
+        
+        // Restore next state from future
+        const nextState = polygonPointsFuture[0];
+        setPolygonPoints(nextState);
+        setPolygonPointsFuture(prev => prev.slice(1));
+        
+        redrawCanvas();
+        return;
+      }
+      
+      if (polygonPoints.length >= 3) {
+        if (e.key === 'Enter' || e.key === 'Escape') {
+          e.preventDefault();
+          
+          if (e.key === 'Enter') {
+            logInfo('app.frontend.interactions', 'polygon_completed_enter_key', 'Polygon completed with Enter key', {
+              imageId,
+              pointsCount: polygonPoints.length,
+              zoomLevel
+            });
+            
+            // Complete polygon
+            const imagePoints = polygonPoints.map(point => screenToImageCoords(point.x, point.y));
+            
+            const shape = {
+              type: 'polygon',
+              points: imagePoints
+            };
+
+            onShapeComplete?.(shape);
+            
+            logInfo('app.frontend.interactions', 'polygon_on_shape_complete_called', 'onShapeComplete called for polygon via Enter key', {
+              imageId,
+              shapeType: shape.type,
+              pointsCount: imagePoints.length
+            });
+          } else {
+            logInfo('app.frontend.interactions', 'polygon_cancelled_escape_key', 'Polygon cancelled with Escape key', {
+              imageId,
+              pointsCount: polygonPoints.length
+            });
+          }
+          
+          // Clear polygon points and history
+          setPolygonPoints([]);
+          setPolygonPointsHistory([]);
+          setPolygonPointsFuture([]);
+          redrawCanvas();
+        }
+      }
+    }
+  }, [activeTool, polygonPoints, polygonPointsHistory, polygonPointsFuture, screenToImageCoords, onShapeComplete, imageId, zoomLevel, redrawCanvas]);
+
+  // Setup event listeners using refs to avoid dependency issues
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) {
@@ -880,25 +1057,50 @@ const AnnotationCanvas = ({
       activeTool
     });
 
-    canvas.addEventListener('mousedown', handleMouseDown);
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mouseup', handleMouseUp);
-    canvas.addEventListener('dblclick', handleDoubleClick);
-    canvas.addEventListener('click', handleCanvasClick);
-    canvas.addEventListener('contextmenu', handleRightClick);
+    const onMouseDown = (e) => handleMouseDownRef.current && handleMouseDownRef.current(e);
+    const onMouseMove = (e) => handleMouseMoveRef.current && handleMouseMoveRef.current(e);
+    const onMouseUp = (e) => handleMouseUpRef.current && handleMouseUpRef.current(e);
+    const onDblClick = (e) => handleDoubleClickRef.current && handleDoubleClickRef.current(e);
+    const onClick = (e) => handleCanvasClickRef.current && handleCanvasClickRef.current(e);
+    const onContextMenu = (e) => handleRightClickRef.current && handleRightClickRef.current(e);
+
+    canvas.addEventListener('mousedown', onMouseDown);
+    canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('mouseup', onMouseUp);
+    canvas.addEventListener('dblclick', onDblClick);
+    canvas.addEventListener('click', onClick);
+    canvas.addEventListener('contextmenu', onContextMenu);
 
     return () => {
       logInfo('app.frontend.ui', 'canvas_event_listeners_cleanup', 'Cleaning up canvas event listeners', {
         imageId
       });
-      canvas.removeEventListener('mousedown', handleMouseDown);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mouseup', handleMouseUp);
-      canvas.removeEventListener('dblclick', handleDoubleClick);
-      canvas.removeEventListener('click', handleCanvasClick);
-      canvas.removeEventListener('contextmenu', handleRightClick);
+      canvas.removeEventListener('mousedown', onMouseDown);
+      canvas.removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('mouseup', onMouseUp);
+      canvas.removeEventListener('dblclick', onDblClick);
+      canvas.removeEventListener('click', onClick);
+      canvas.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [handleMouseDown, handleMouseMove, handleMouseUp, handleDoubleClick, handleCanvasClick, handleRightClick, imageId, activeTool]);
+  }, []);
+
+  // Setup keyboard event listener separately
+  useEffect(() => {
+    logInfo('app.frontend.ui', 'keyboard_event_listener_setup', 'Setting up keyboard event listener', {
+      imageId,
+      activeTool
+    });
+
+    // Add keyboard event listener to document for polygon completion
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      logInfo('app.frontend.ui', 'keyboard_event_listener_cleanup', 'Cleaning up keyboard event listener', {
+        imageId
+      });
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown, imageId, activeTool]);
 
   // Redraw when dependencies change
   useEffect(() => {
@@ -1020,6 +1222,28 @@ const AnnotationCanvas = ({
         </div>
       )}
 
+      {/* Polygon drawing instructions */}
+       {activeTool === 'polygon' && polygonPoints.length > 0 && (
+         <div style={{
+           position: 'absolute',
+           bottom: 20,
+           left: '50%',
+           transform: 'translateX(-50%)',
+           background: 'rgba(0, 0, 0, 0.8)',
+           color: 'white',
+           padding: '8px 16px',
+           borderRadius: '8px',
+           fontSize: '12px',
+           zIndex: 1000,
+           textAlign: 'center'
+         }}>
+           {polygonPoints.length >= 3 
+             ? 'Click first point, double-click, or press Enter to complete • Backspace to undo • Escape to cancel'
+             : `${polygonPoints.length} point${polygonPoints.length === 1 ? '' : 's'} added • Backspace to undo • Escape to cancel`
+           }
+         </div>
+       )}
+
       {/* Debug info */}
       <div style={{
         position: 'absolute',
@@ -1033,6 +1257,7 @@ const AnnotationCanvas = ({
         pointerEvents: 'none'
       }}>
         Tool: {activeTool} | Zoom: {zoomLevel}% | Annotations: {annotations.length}
+        {activeTool === 'polygon' && polygonPoints.length > 0 && ` | Points: ${polygonPoints.length}`}
       </div>
     </div>
   );

@@ -47,6 +47,40 @@ const ManualLabeling = () => {
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(true);
   
+  // Image deletion handler
+  const handleDeleteImage = async () => {
+    if (!imageData || !imageData.id) {
+      console.error('No image data available for deletion');
+      return;
+    }
+    const confirmed = window.confirm('Are you sure you want to delete this image? This action cannot be undone.');
+    if (!confirmed) return;
+    try {
+      console.log('Deleting image with ID:', imageData.id);
+      await AnnotationAPI.deleteImage(imageData.id);
+      message.success('Image deleted successfully');
+      
+      // Trigger dataset refresh across all components
+      window.dispatchEvent(new CustomEvent('datasetChanged', {
+        detail: { projectId: datasetId, action: 'imageDeleted' }
+      }));
+      
+      const newImageList = imageList.filter(img => img.id !== imageData.id);
+      setImageList(newImageList);
+      if (newImageList.length === 0) {
+        navigate(`/annotate/${datasetId}/manual`);
+        return;
+      }
+      const newIndex = Math.max(0, currentImageIndex - (currentImageIndex === newImageList.length ? 1 : 0));
+      setCurrentImageIndex(newIndex);
+      const newImage = newImageList[newIndex];
+      navigate(`/annotate/${datasetId}/manual?imageId=${newImage.id}`);
+    } catch (error) {
+      message.error('Failed to delete image');
+      console.error('Delete image error:', error);
+    }
+  };
+  
   // Annotation state
   const [annotations, setAnnotations] = useState([]);
   const [selectedAnnotation, setSelectedAnnotation] = useState(null);
@@ -54,6 +88,37 @@ const ManualLabeling = () => {
   const [pendingShape, setPendingShape] = useState(null);
   const [activeTool, setActiveTool] = useState('box');
   const [zoomLevel, setZoomLevel] = useState(100);
+
+  // History stacks for Undo/Redo (local only)
+  const [historyPast, setHistoryPast] = useState([]);
+  const [historyFuture, setHistoryFuture] = useState([]);
+  // Per-image history storage to preserve undo/redo across image switches
+  const [imageHistoryMap, setImageHistoryMap] = useState(new Map());
+  const pushHistory = useCallback((prevSnapshot) => {
+    console.log('📚 pushHistory called with snapshot:', prevSnapshot?.length || 0, 'annotations');
+    setHistoryPast((p) => {
+      const newPast = [...p, prevSnapshot];
+      // Limit history to maximum 5 actions
+      const limitedPast = newPast.length > 5 ? newPast.slice(-5) : newPast;
+      console.log('📚 History past updated. New length:', limitedPast.length, '(limited to 5)');
+      return limitedPast;
+    });
+    setHistoryFuture([]);
+    console.log('📚 History future cleared');
+  }, []);
+  const canUndo = historyPast.length > 0;
+  const canRedo = historyFuture.length > 0;
+  
+  // Debug: Log history state changes
+  useEffect(() => {
+    console.log('📊 History state updated:', {
+      canUndo,
+      canRedo,
+      historyPastLength: historyPast.length,
+      historyFutureLength: historyFuture.length,
+      annotationsLength: annotations.length
+    });
+  }, [canUndo, canRedo, historyPast.length, historyFuture.length, annotations.length]);
   
   // Label management
   const [projectLabels, setProjectLabels] = useState([]);
@@ -73,6 +138,10 @@ const ManualLabeling = () => {
     percentage: 0
   });
 
+  // State to track polygon drawing
+  const [isPolygonDrawing, setIsPolygonDrawing] = useState(false);
+  const [polygonPointsCount, setPolygonPointsCount] = useState(0);
+
   // Load initial data
   useEffect(() => {
     if (datasetId) {
@@ -82,7 +151,6 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
       console.log('Loading initial data for dataset:', datasetId);
-      
       // Clean up orphaned labels on app start using the direct endpoint
       const cleanupOrphanedLabels = async () => {
         try {
@@ -147,16 +215,279 @@ const ManualLabeling = () => {
     }
   }, [imageId, imageList]);
 
-  // Load current image data
+  // Load current image data with per-image history management
   useEffect(() => {
     if (imageList.length > 0 && currentImageIndex >= 0) {
+      const currentImageId = imageList[currentImageIndex]?.id;
+      
+      // Save current image's history before switching
+      if (imageData?.id && imageData.id !== currentImageId) {
+        setImageHistoryMap(prev => {
+          const newMap = new Map(prev);
+          newMap.set(imageData.id, {
+            past: historyPast,
+            future: historyFuture
+          });
+          return newMap;
+        });
+      }
+      
+      // Load new image data
       loadImageData(imageList[currentImageIndex]);
+      
+      // Restore history for the new image
+      if (currentImageId) {
+        const savedHistory = imageHistoryMap.get(currentImageId);
+        if (savedHistory) {
+          setHistoryPast(savedHistory.past || []);
+          setHistoryFuture(savedHistory.future || []);
+        }
+        // Note: Don't clear history for new images - let it accumulate naturally
+      }
     }
-  }, [currentImageIndex, imageList]);
+  }, [currentImageIndex, imageList, imageData?.id, historyPast, historyFuture, imageHistoryMap]);
+
+  // Database synchronization function for undo/redo
+  const syncAnnotationsWithDatabase = useCallback(async (targetAnnotations, currentAnnotations) => {
+    try {
+      console.log('🔄 Syncing annotations with database...');
+      console.log('Current annotations:', currentAnnotations.length);
+      console.log('Target annotations:', targetAnnotations.length);
+      
+      // Filter out annotations without valid database IDs for comparison
+      const currentWithIds = currentAnnotations.filter(ann => ann.id && typeof ann.id === 'string' && ann.id.length > 0);
+      const targetWithIds = targetAnnotations.filter(ann => ann.id && typeof ann.id === 'string' && ann.id.length > 0);
+      
+      console.log('Current annotations with valid IDs:', currentWithIds.length);
+      console.log('Target annotations with valid IDs:', targetWithIds.length);
+      
+      // Create maps for easier comparison using only annotations with valid IDs
+      const currentMap = new Map(currentWithIds.map(ann => [ann.id, ann]));
+      const targetMap = new Map(targetWithIds.map(ann => [ann.id, ann]));
+      
+      // Find annotations to delete (in current but not in target)
+      const toDelete = currentWithIds.filter(ann => !targetMap.has(ann.id));
+      
+      // Find annotations to create (in target but not in current)
+      // Only try to create annotations that don't already exist in the database
+      const toCreate = targetWithIds.filter(ann => !currentMap.has(ann.id));
+      
+      // Find annotations to update (in both but different)
+      const toUpdate = targetWithIds.filter(ann => {
+        const current = currentMap.get(ann.id);
+        return current && JSON.stringify(current) !== JSON.stringify(ann);
+      });
+      
+      console.log(`Database sync plan: Delete ${toDelete.length}, Create ${toCreate.length}, Update ${toUpdate.length}`);
+      
+      // Execute deletions
+      for (const annotation of toDelete) {
+        try {
+          await AnnotationAPI.deleteAnnotation(annotation.id);
+          console.log('✅ Deleted annotation:', annotation.id);
+        } catch (error) {
+          console.error('❌ Failed to delete annotation:', annotation.id, error);
+        }
+      }
+      
+      // Execute creations - but only for annotations that truly don't exist
+      for (const annotation of toCreate) {
+        try {
+          // Double-check: fetch current annotations from database to avoid duplicates
+          const currentDbAnnotations = await AnnotationAPI.getImageAnnotations(imageData.id);
+          const existsInDb = currentDbAnnotations.some(dbAnn => dbAnn.id === annotation.id);
+          
+          if (!existsInDb) {
+            // Ensure the annotation has the correct image_id
+            const annotationToCreate = {
+              ...annotation,
+              image_id: imageData.id
+            };
+            await AnnotationAPI.createAnnotation(annotationToCreate);
+            console.log('✅ Created annotation:', annotation.id);
+          } else {
+            console.log('⚠️ Skipped creating annotation (already exists in DB):', annotation.id);
+          }
+        } catch (error) {
+          console.error('❌ Failed to create annotation:', annotation.id, error);
+        }
+      }
+      
+      // Execute updates
+      for (const annotation of toUpdate) {
+        try {
+          await AnnotationAPI.updateAnnotation(annotation.id, annotation);
+          console.log('✅ Updated annotation:', annotation.id);
+        } catch (error) {
+          console.error('❌ Failed to update annotation:', annotation.id, error);
+        }
+      }
+      
+      console.log('✅ Database synchronization completed');
+    } catch (error) {
+      console.error('❌ Database synchronization failed:', error);
+      throw error;
+    }
+  }, [imageData]);
+
+  // Intelligent undo handler - point-by-point during polygon drawing, annotation-level otherwise
+  const handleUndo = useCallback(async () => {
+    console.log('🔄 ManualLabeling handleUndo called! canUndo:', canUndo, 'historyPast length:', historyPast.length);
+    console.log('🎯 Polygon state:', { isPolygonDrawing, polygonPointsCount });
+    
+    // If polygon is being drawn and has points, let AnnotationCanvas handle point-by-point undo
+    if (isPolygonDrawing && polygonPointsCount > 0) {
+      console.log('🎯 Polygon is being drawn - letting AnnotationCanvas handle point-by-point undo via Backspace');
+      // The AnnotationCanvas component handles point removal via Backspace key
+      // We don't interfere with polygon drawing here
+      return;
+    }
+    
+    // Standard annotation-level undo
+    if (!canUndo) {
+      console.log('❌ Cannot undo - canUndo is false');
+      return;
+    }
+    
+    try {
+      const past = [...historyPast];
+      const last = past.pop();
+      console.log('✅ Undoing to previous state:', last);
+      
+      // Sync with database FIRST, then update UI state
+      try {
+        await syncAnnotationsWithDatabase(last || [], annotations);
+        console.log('✅ Database sync completed for undo');
+        
+        // Only update UI state after successful database sync
+        setHistoryPast(past);
+        setHistoryFuture((f) => [annotations, ...f]);
+        setAnnotations(last || []);
+        setSelectedAnnotation(null);
+      } catch (error) {
+        console.error('❌ Failed to sync undo with database:', error);
+        message.error('Failed to sync undo operation with database');
+        throw error;
+      }
+    } catch (error) {
+      console.error('❌ Undo operation failed:', error);
+      message.error('Undo operation failed');
+    }
+  }, [canUndo, annotations, historyPast, syncAnnotationsWithDatabase, isPolygonDrawing, polygonPointsCount]);
+
+  // Redo handler with database synchronization
+  const handleRedo = useCallback(async () => {
+    console.log('🔄 ManualLabeling handleRedo called! canRedo:', canRedo, 'historyFuture length:', historyFuture.length);
+    if (!canRedo) {
+      console.log('❌ Cannot redo - canRedo is false');
+      return;
+    }
+    
+    try {
+      const future = [...historyFuture];
+      const next = future.shift();
+      if (next) {
+        console.log('✅ Redoing to next state:', next);
+        
+        // Sync with database FIRST, then update UI state
+        try {
+          await syncAnnotationsWithDatabase(next, annotations);
+          console.log('✅ Database sync completed for redo');
+          
+          // Only update UI state after successful database sync
+          setHistoryPast((p) => [...p, annotations]);
+          setHistoryFuture(future);
+          setAnnotations(next);
+          setSelectedAnnotation(null);
+        } catch (error) {
+          console.error('❌ Failed to sync redo with database:', error);
+          message.error('Failed to sync redo operation with database');
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Redo operation failed:', error);
+      message.error('Redo operation failed');
+    }
+  }, [canRedo, annotations, historyFuture, syncAnnotationsWithDatabase]);
+
+  // Callback to handle polygon state changes from AnnotationCanvas
+  const handlePolygonStateChange = useCallback((isDrawing, pointsCount) => {
+    setIsPolygonDrawing(isDrawing);
+    setPolygonPointsCount(pointsCount || 0);
+    console.log('🎯 Polygon state changed:', { isDrawing, pointsCount });
+  }, []);
+
+  // Handle polygon point removal (canvas-level undo)
+  const handlePolygonPointRemoval = useCallback(() => {
+    console.log('🔄 Canvas-level undo: removing last polygon point');
+    // This will be handled by the AnnotationCanvas component
+    // We'll pass this function to the canvas to trigger point removal
+    return true; // Indicate that canvas should handle this
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e) => {
+      // Skip if event was already handled by canvas (e.g., polygon drawing)
+      if (e.defaultPrevented) {
+        return;
+      }
+      
+      // Skip if user is typing in an input field
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') {
+        return;
+      }
+      
+      // Shift+Z for polygon point undo during polygon drawing
+      if (e.shiftKey && e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.altKey && isPolygonDrawing) {
+        e.preventDefault();
+        console.log('🎹 Shift+Z pressed - triggering polygon point undo');
+        // Trigger backspace event to remove last polygon point
+        const backspaceEvent = new KeyboardEvent('keydown', {
+          key: 'Backspace',
+          code: 'Backspace',
+          keyCode: 8,
+          bubbles: true,
+          cancelable: true
+        });
+        document.dispatchEvent(backspaceEvent);
+        return;
+      }
+      
+      // Shift+Y for polygon point redo during polygon drawing
+      if (e.shiftKey && e.key.toLowerCase() === 'y' && !e.ctrlKey && !e.altKey && isPolygonDrawing) {
+        e.preventDefault();
+        console.log('🎹 Shift+Y pressed - polygon point redo');
+        // Trigger Shift+Y event for AnnotationCanvas to handle
+        const shiftYEvent = new KeyboardEvent('keydown', {
+          key: 'Y',
+          code: 'KeyY',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true
+        });
+        document.dispatchEvent(shiftYEvent);
+        return;
+      }
+      
+      // Ctrl+Z for annotation-level undo (only when not drawing polygon)
+      if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey && !isPolygonDrawing) {
+        e.preventDefault();
+        console.log('🎹 Ctrl+Z pressed - triggering annotation-level undo');
+        handleUndo();
+        return;
+      }
+      
+      // Ctrl+Y or Ctrl+Shift+Z for annotation-level redo (only when not drawing polygon)
+      if (((e.ctrlKey && e.key.toLowerCase() === 'y') || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z')) && !isPolygonDrawing) {
+        e.preventDefault();
+        console.log('🎹 Ctrl+Y/Ctrl+Shift+Z pressed - triggering annotation-level redo');
+        handleRedo();
+        return;
+      }
+      
+      // L key for label popup
       if (e.key.toLowerCase() === 'l' && pendingShape && !showLabelPopup) {
         setShowLabelPopup(true);
       }
@@ -164,7 +495,112 @@ const ManualLabeling = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [pendingShape, showLabelPopup]);
+  }, [pendingShape, showLabelPopup, handleUndo, handleRedo, isPolygonDrawing]);
+
+  // Clear all annotations for current image
+  const handleClearAll = useCallback(async () => {
+    if (!annotations || annotations.length === 0) {
+      message.info('No annotations to clear');
+      return;
+    }
+    const confirmed = window.confirm('Clear all annotations on this image? This cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      const snapshot = JSON.parse(JSON.stringify(annotations));
+      pushHistory(snapshot);
+      
+      // Delete all annotations from database first
+      let deletionErrors = 0;
+      for (const ann of snapshot) {
+        try { 
+          await AnnotationAPI.deleteAnnotation(ann.id); 
+          console.log('Successfully deleted annotation:', ann.id);
+        } catch (e) { 
+          console.error('Failed to delete', ann.id, e);
+          deletionErrors++;
+        }
+      }
+
+      // Refresh annotations from database to ensure UI reflects actual state
+      try {
+        const refreshedAnnotations = await AnnotationAPI.getImageAnnotations(imageData.id);
+        console.log('Refreshed annotations after clear all:', refreshedAnnotations);
+        
+        // Transform refreshed annotations for UI display
+        const transformedAnnotations = refreshedAnnotations.map(ann => {
+          let annotationType = ann.type || 'box';
+          if (ann.segmentation && Array.isArray(ann.segmentation) && ann.segmentation.length > 2) {
+            annotationType = 'polygon';
+          }
+          
+          return {
+            id: ann.id,
+            type: annotationType,
+            label: ann.class_name,
+            confidence: ann.confidence || 1.0,
+            x: ann.x_min,
+            y: ann.y_min,
+            width: ann.x_max - ann.x_min,
+            height: ann.y_max - ann.y_min,
+            points: ann.segmentation || ann.points || [],
+            segmentation: ann.segmentation || ann.points || []
+          };
+        });
+        
+        setAnnotations(transformedAnnotations);
+        setSelectedAnnotation(null);
+        setEditingAnnotation(null);
+        
+        // Update image labels based on remaining annotations
+        const labelCounts = {};
+        transformedAnnotations.forEach(ann => {
+          labelCounts[ann.label] = (labelCounts[ann.label] || 0) + 1;
+        });
+        
+        const updatedImageLabels = Object.entries(labelCounts).map(([name, count]) => {
+          const projectLabel = projectLabels.find(l => l.name === name);
+          return {
+            name,
+            count,
+            color: projectLabel?.color || AnnotationAPI.generateLabelColor(name)
+          };
+        });
+        
+        setImageLabels(updatedImageLabels);
+        
+        // Update dataset progress and image status
+        const hasAnnotations = transformedAnnotations.length > 0;
+        if (imageData?.is_labeled && !hasAnnotations) {
+          setDatasetProgress(prev => ({
+            ...prev,
+            labeled: Math.max(0, prev.labeled - 1),
+            percentage: prev.total > 0 ? Math.round(((Math.max(0, prev.labeled - 1)) / prev.total) * 100) : 0
+          }));
+          setImageData(prev => ({ ...prev, is_labeled: false }));
+        }
+        
+        if (deletionErrors > 0) {
+          message.warning(`Cleared annotations with ${deletionErrors} errors. Some annotations may still remain.`);
+        } else {
+          message.success('All annotations cleared successfully');
+        }
+        
+      } catch (refreshError) {
+        console.error('Failed to refresh annotations after clear:', refreshError);
+        // Fallback: clear UI state anyway
+        setAnnotations([]);
+        setSelectedAnnotation(null);
+        setEditingAnnotation(null);
+        setImageLabels([]);
+        message.warning('Annotations cleared but UI refresh failed. Please reload the page.');
+      }
+      
+    } catch (e) {
+      console.error('Clear all failed', e);
+      message.error('Failed to clear all annotations');
+    }
+  }, [annotations, imageData, projectLabels]);
 
   const loadDatasetImages = async () => {
     try {
@@ -406,13 +842,18 @@ const ManualLabeling = () => {
           console.log('Detected polygon annotation with segmentation points:', ann.segmentation.length);
         }
         
+        // CRITICAL: Get the correct label color from project labels
+        const labelName = ann.class_name || ann.label;
+        const existingProjectLabel = projectLabels.find(l => l.name === labelName);
+        const labelColor = existingProjectLabel?.color || AnnotationAPI.generateLabelColor(labelName);
+        
         // Create UI-friendly annotation object
         const uiAnnotation = {
           id: ann.id,
-          class_name: ann.class_name || ann.label,
-          label: ann.class_name || ann.label,
+          class_name: labelName,
+          label: labelName,
           confidence: ann.confidence || 1.0,
-          color: AnnotationAPI.generateLabelColor(ann.class_name || ann.label),
+          color: labelColor,
           type: annotationType
         };
         
@@ -485,21 +926,29 @@ const ManualLabeling = () => {
   };
 
   const handleToolChange = useCallback((tool) => {
-    logUserClick('ManualLabeling', 'tool_change', {
-      datasetId,
-      oldTool: activeTool,
-      newTool: tool,
-      timestamp: new Date().toISOString()
-    });
-    logInfo('app.frontend.interactions', 'annotation_tool_changed', 'Annotation tool changed', {
-      datasetId,
-      oldTool: activeTool,
-      newTool: tool,
-      timestamp: new Date().toISOString()
-    });
+    console.log('🎯 TOOL CHANGE REQUESTED:', tool);
+    console.log('🎯 Current activeTool:', activeTool);
+    console.log('🎯 handleToolChange function called with tool:', tool);
+    
+    console.log('🎯 About to call setActiveTool with:', tool);
+    // Set the tool immediately for UI responsiveness
     setActiveTool(tool);
     setSelectedAnnotation(null);
-  }, [activeTool, datasetId]);
+    console.log('🎯 Tool change completed. New activeTool will be:', tool);
+    
+    // Log asynchronously without blocking UI
+    logUserClick('ManualLabeling', 'tool_change', {
+      datasetId,
+      newTool: tool,
+      timestamp: new Date().toISOString()
+    }).catch(err => console.error('Logging error:', err));
+    
+    logInfo('app.frontend.interactions', 'annotation_tool_changed', 'Annotation tool changed', {
+      datasetId,
+      newTool: tool,
+      timestamp: new Date().toISOString()
+    }).catch(err => console.error('Logging error:', err));
+  }, [datasetId, activeTool]);
 
   const handleShapeComplete = useCallback(async (shape) => {
     console.log('🎯 handleShapeComplete called with shape:', shape);
@@ -678,6 +1127,11 @@ const ManualLabeling = () => {
     if (isEditing) {
       console.log('Updating existing annotation:', editingAnnotation);
       
+      // Push current state to history before updating annotation
+      const currentSnapshot = JSON.parse(JSON.stringify(annotations));
+      pushHistory(currentSnapshot);
+      console.log('📚 History pushed before updating annotation. History length:', historyPast.length + 1);
+      
       // Update the annotation in the UI immediately
       setAnnotations(prev => prev.map(ann => 
         ann.id === editingAnnotation.id ? {
@@ -698,9 +1152,7 @@ const ManualLabeling = () => {
           timestamp: new Date().toISOString()
         });
         await AnnotationAPI.updateAnnotation(editingAnnotation.id, {
-          class_name: labelName,
-          label: labelName,
-          image_id: editingAnnotation.image_id || imageData.id
+          class_name: labelName
         });
         
         message.success(`Annotation updated to "${labelName}"`);
@@ -932,7 +1384,18 @@ const ManualLabeling = () => {
     }
     
     console.log('Created UI annotation:', uiAnnotation);
-    setAnnotations(prev => [...prev, uiAnnotation]);
+    
+    // Push current state to history before adding new annotation
+    const currentSnapshot = JSON.parse(JSON.stringify(annotations));
+    pushHistory(currentSnapshot);
+    console.log('📚 History pushed before adding annotation. History length:', historyPast.length + 1);
+    
+    // Add the annotation with proper database ID to the state
+    setAnnotations(prev => {
+      const newAnnotations = [...prev, uiAnnotation];
+      console.log('✅ Added annotation with database ID:', uiAnnotation.id);
+      return newAnnotations;
+    });
     // Check if the label already exists in the project
     const existingProjectLabel = projectLabels.find(l => l.name === labelName);
     
@@ -1123,53 +1586,8 @@ const ManualLabeling = () => {
       timestamp: new Date().toISOString()
     });
     
-    // Refresh annotations from server to ensure we have the latest data
-    setTimeout(async () => {
-      try {
-        const refreshedAnnotations = await AnnotationAPI.getImageAnnotations(imageData.id);
-        console.log('Refreshed annotations from server:', refreshedAnnotations);
-        
-        // Transform refreshed annotations for UI display
-        const refreshedTransformedAnnotations = refreshedAnnotations.map(ann => {
-          // Create UI-friendly annotation object
-          const refreshedUiAnnotation = {
-            id: ann.id,
-            class_name: ann.class_name || ann.label,
-            label: ann.class_name || ann.label,
-            confidence: ann.confidence || 1.0,
-            color: AnnotationAPI.generateLabelColor(ann.class_name || ann.label),
-            type: ann.type || 'box'
-          };
-          
-          // Handle box annotations
-          if (ann.x_min !== undefined && ann.y_min !== undefined && 
-              ann.x_max !== undefined && ann.y_max !== undefined) {
-            refreshedUiAnnotation.x = ann.x_min;
-            refreshedUiAnnotation.y = ann.y_min;
-            refreshedUiAnnotation.width = ann.x_max - ann.x_min;
-            refreshedUiAnnotation.height = ann.y_max - ann.y_min;
-          } else if (ann.x !== undefined && ann.y !== undefined && 
-                    ann.width !== undefined && ann.height !== undefined) {
-            refreshedUiAnnotation.x = ann.x;
-            refreshedUiAnnotation.y = ann.y;
-            refreshedUiAnnotation.width = ann.width;
-            refreshedUiAnnotation.height = ann.height;
-          }
-          
-          // Handle polygon annotations
-          if (ann.type === 'polygon' && ann.segmentation) {
-            refreshedUiAnnotation.points = ann.segmentation;
-          }
-          
-          return refreshedUiAnnotation;
-        });
-        
-        console.log('Transformed refreshed annotations for UI:', refreshedTransformedAnnotations);
-        setAnnotations(refreshedTransformedAnnotations);
-      } catch (error) {
-        console.error('Failed to refresh annotations:', error);
-      }
-    }, 500); // Delay to ensure server has processed the save
+    // Note: Removed server refresh that was breaking undo/redo history chain
+    // The annotation is already added to UI state above, no need to refresh from server
     
   } catch (error) {
     logError('app.frontend.validation', 'annotation_save_failed', 'Failed to save annotation', error, {
@@ -1190,7 +1608,7 @@ const ManualLabeling = () => {
       setPendingShape(null);
     }, 100); // short delay is enough
   }
-}, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation]);
+}, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation, annotations, pushHistory, historyPast]);
 
   const handleAnnotationSelect = useCallback((annotation) => {
     logUserClick('ManualLabeling', 'annotation_select', {
@@ -1234,6 +1652,12 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
       console.log('Deleting annotation with ID:', annotationId);
+      
+      // Push current state to history before deleting annotation
+      const currentSnapshot = JSON.parse(JSON.stringify(annotations));
+      pushHistory(currentSnapshot);
+      console.log('📚 History pushed before deleting annotation. History length:', historyPast.length + 1);
+      
       await AnnotationAPI.deleteAnnotation(annotationId);
       
       // Update UI state
@@ -1268,7 +1692,24 @@ const ManualLabeling = () => {
       message.error('Failed to delete annotation');
       console.error('Delete annotation error:', error);
     }
-  }, [annotations, setAnnotations, setSelectedAnnotation, setEditingAnnotation, setShowLabelPopup, setImageLabels, datasetId, imageData]);
+  }, [annotations, setAnnotations, setSelectedAnnotation, setEditingAnnotation, setShowLabelPopup, setImageLabels, datasetId, imageData, pushHistory, historyPast]);
+
+  // Handle delete selected annotation from toolbox
+  const handleDeleteSelected = useCallback(() => {
+    if (!selectedAnnotation) {
+      message.info('No annotation selected');
+      return;
+    }
+    
+    logInfo('app.frontend.interactions', 'delete_selected_started', 'Delete selected annotation started', {
+      datasetId,
+      imageId: imageData?.id,
+      annotationId: selectedAnnotation.id,
+      timestamp: new Date().toISOString()
+    });
+    
+    handleAnnotationDelete(selectedAnnotation.id);
+  }, [selectedAnnotation, handleAnnotationDelete, datasetId, imageData]);
 
   const handleSplitChange = useCallback(async (newSplit) => {
     try {
@@ -1505,6 +1946,7 @@ const ManualLabeling = () => {
                 onAnnotationSelect={handleAnnotationSelect}
                 onAnnotationDelete={handleAnnotationDelete}
                 onImagePositionChange={setImagePosition}
+                onPolygonStateChange={handlePolygonStateChange}
                 style={{ 
                   maxWidth: '100%',
                   maxHeight: '100%',
@@ -1524,20 +1966,26 @@ const ManualLabeling = () => {
             background: '#001529',
             borderLeft: '1px solid #002140',
             padding: '8px 0',
-            height: '100%'
+            height: '100%',
+            position: 'relative',
+            zIndex: 2000,
+            pointerEvents: 'auto'
           }}
         >
           <AnnotationToolbox
             activeTool={activeTool}
-            onToolChange={handleToolChange}
+            onToolChange={setActiveTool}
             zoomLevel={zoomLevel}
             onZoomChange={setZoomLevel}
-            onUndo={() => console.log('Undo')}
-            onRedo={() => console.log('Redo')}
-            onClear={() => console.log('Clear')}
-            onSave={() => console.log('Save')}
-            canUndo={false}
-            canRedo={false}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onClear={handleClearAll}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            onDeleteImage={handleDeleteImage}
+            onDeleteSelected={handleDeleteSelected}
+            selectedAnnotation={selectedAnnotation}
+            annotations={annotations}
           />
         </Sider>
       </Layout>
@@ -1579,7 +2027,7 @@ const ManualLabeling = () => {
             annotationLabel: editingAnnotation.label,
             timestamp: new Date().toISOString()
           });
-          console.log('Delete triggered for annotation:', editingAnnotation);
+          console.log('Delete Image triggered');
           console.log('Annotation ID:', editingAnnotation.id);
           return handleAnnotationDelete(editingAnnotation.id);
         } : null}

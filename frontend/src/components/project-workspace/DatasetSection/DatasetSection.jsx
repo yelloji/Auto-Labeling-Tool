@@ -53,6 +53,24 @@ const DatasetSection = ({ projectId }) => {
     if (projectId) {
       fetchDatasetImages();
     }
+
+    // Listen for dataset changes from other components
+    const handleDatasetChange = (event) => {
+      if (event.detail.projectId === projectId) {
+        logInfo('app.frontend.interactions', 'dataset_auto_refresh_triggered', 'Dataset auto-refresh triggered by external change', {
+          timestamp: new Date().toISOString(),
+          projectId: projectId,
+          action: event.detail.action
+        });
+        fetchDatasetImages();
+      }
+    };
+
+    window.addEventListener('datasetChanged', handleDatasetChange);
+
+    return () => {
+      window.removeEventListener('datasetChanged', handleDatasetChange);
+    };
   }, [projectId]);
 
   // Navigate to Release section
@@ -84,20 +102,33 @@ const DatasetSection = ({ projectId }) => {
       const datasetImages = response.images || [];
       setAllImages(datasetImages);
       
-      // Extract unique dataset names for filter dropdown
-      const uniqueDatasets = [...new Set(datasetImages.map(img => img.dataset_name))].filter(Boolean);
-      setAvailableDatasets(uniqueDatasets);
+      // Fetch all datasets (including empty ones) for complete dropdown
+      const datasetsResponse = await projectsAPI.getProjectDatasets(projectId);
+      const allDatasets = datasetsResponse.datasets || [];
+      
+      // Extract dataset names from images
+      const datasetsWithImages = [...new Set(datasetImages.map(img => img.dataset_name))].filter(Boolean);
+      
+      // Combine all dataset names (from both API calls) to ensure empty datasets appear
+      const allDatasetNames = [...new Set([
+        ...allDatasets.map(dataset => dataset.name),
+        ...datasetsWithImages
+      ])].filter(Boolean);
+      
+      setAvailableDatasets(allDatasetNames);
       
       // Note: Available classes will be updated based on filtered images in separate useEffect
       
       console.log('Dataset images loaded:', datasetImages.length);
-      console.log('Available datasets:', uniqueDatasets);
+      console.log('All datasets loaded:', allDatasets.length);
+      console.log('Available datasets:', allDatasetNames);
 
-      logInfo('app.frontend.interactions', 'dataset_images_loading_success', 'Successfully loaded dataset images', {
+      logInfo('app.frontend.interactions', 'dataset_images_loading_success', 'Successfully loaded dataset images and datasets', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
         imagesCount: datasetImages.length,
-        datasetsCount: uniqueDatasets.length
+        totalDatasetsCount: allDatasets.length,
+        availableDatasetsCount: allDatasetNames.length
       });
     } catch (error) {
       logError('app.frontend.validation', 'dataset_images_loading_failed', 'Failed to load dataset images', {
