@@ -251,6 +251,14 @@ class Release(Base):
     total_augmented_images = Column(Integer)
     final_image_count = Column(Integer)  # total exported images
 
+    # Cached statistics & metadata from one-time ZIP scan
+    train_image_count = Column(Integer, default=0)
+    val_image_count = Column(Integer, default=0)
+    test_image_count = Column(Integer, default=0)
+    class_count = Column(Integer, default=0)
+    classes_json = Column(JSON)  # e.g. ["person", "car", ...]
+    shapes_json = Column(JSON)   # e.g. {"bbox": {"person": 120, "car": 80}}
+
     model_path = Column(String(500))  # path to ZIP or export folder
 
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -1,2 +1,2 @@
 ID,Name,Description,Type,Created,Updated,Datasets,Total Images,Labeled Images,Unlabeled Images,Annotations
-1,gevis,,segmentation,2025-06-17 12:00:38,2025-06-17 12:00:38,6,9,9,0,10
+1,gevis,,segmentation,2025-06-17 12:00:38,2025-06-17 12:00:38,5,6,6,0,6

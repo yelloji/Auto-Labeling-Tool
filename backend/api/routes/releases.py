@@ -640,6 +640,8 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 'project_id': project_id
             })
             
+
+            
         except Exception as e:
             logger.error("errors.system", f"Failed to create release ZIP", "release_zip_creation_error", {
                 'release_id': release_id,
@@ -677,6 +679,15 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         })
         
         db.commit()
+
+        # Now that the release row is committed, schedule stats extraction worker
+        try:
+            from backend.api.services.release_stats_worker import schedule_zip_stats_update
+            schedule_zip_stats_update(release_id)
+        except Exception as _e:
+            logger.warning("operations.releases", f"Failed to schedule ZIP stats update post-commit: {_e}", "zip_stats_worker_schedule_failed", {
+                'release_id': release_id
+            })
         
         logger.info("operations.releases", f"Release created successfully", "release_creation_complete", {
             'release_id': release_id,

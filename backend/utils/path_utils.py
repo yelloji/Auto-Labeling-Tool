@@ -19,10 +19,19 @@ class PathManager:
     @staticmethod
     def normalize_path(path: Union[str, Path]) -> str:
         """
-        Normalize path to be cross-platform compatible
-        Always returns forward slashes and relative to project root
+        Normalize path to be cross-platform compatible.
+        If the incoming path already references the projects folder ("projects/"),
+        we skip further manipulation to preserve integrity.
+        Always returns forward slashes.
         """
         logger.info("operations.operations", f"Starting path normalization", "normalize_path", {"input_path": str(path)})
+
+        # Fast-exit guard for already-relative project paths
+        path_str = str(path) if path is not None else ""
+        if PathManager.is_relative_project_path(path_str):
+            safeguarded = path_str.replace('\\', '/')
+            logger.info("operations.operations", "Path already relative to project scope; skipping conversion", "normalize_path", {"input_path": path_str, "safeguarded": safeguarded})
+            return safeguarded
         
         if not path:
             logger.warning("operations.operations", "Empty path provided for normalization", "normalize_path", {"input_path": str(path)})
@@ -59,6 +68,55 @@ class PathManager:
             logger.error("errors.system", f"Error during path normalization", "normalize_path", {"input_path": str(path), "error": str(e)})
             return str(path) if path else ""
     
+    # ------------------------------------------------------------------
+    # Helper to detect valid relative project paths
+    # ------------------------------------------------------------------
+    @staticmethod
+    def is_relative_project_path(path: str) -> bool:
+        """Return True if path already begins with 'projects/'."""
+        if not path:
+            return False
+        normalized = path.replace('\\', '/').lstrip('/')
+        return normalized.startswith('projects/')
+
+    # ------------------------------------------------------------------
+    # Ensure any input path becomes a clean projects-relative path
+    # ------------------------------------------------------------------
+    @staticmethod
+    def get_project_relative_path(input_path: Union[str, Path]) -> str:
+        """Return a normalized relative path that always begins with ``projects/``.
+        If ``input_path`` is absolute, it is first trimmed relative to ``settings.BASE_DIR``.
+        If it does not already start with ``projects/``, the function prepends it.
+        Always returns forward-slash style paths.
+        """
+        if not input_path:
+            return "projects/unknown"
+
+        # Fast path: already correct
+        if PathManager.is_relative_project_path(str(input_path)):
+            return PathManager.normalize_path(str(input_path))
+
+        # Work with Path object for safety
+        try:
+            p_obj = Path(input_path)
+            if p_obj.is_absolute():
+                try:
+                    p_obj = p_obj.relative_to(settings.BASE_DIR)
+                except ValueError:
+                    # Not under BASE_DIR – just take filename
+                    p_obj = Path(p_obj.name)
+            # Ensure prefix
+            normalized = str(p_obj).replace('\\', '/').lstrip('/')
+            if not normalized.startswith('projects/'):
+                normalized = f"projects/{normalized}"
+            return PathManager.normalize_path(normalized)
+        except Exception:
+            # Fallback – at least guarantee prefix
+            safe_path = str(input_path).replace('\\', '/').lstrip('/')
+            if not safe_path.startswith('projects/'):
+                safe_path = f"projects/{safe_path}"
+            return safe_path
+
     @staticmethod
     def get_absolute_path(relative_path: str) -> Path:
         """
@@ -247,9 +305,9 @@ class PathManager:
         
         try:
             # Normalize path and ensure forward slashes
-            normalized = PathManager.normalize_path(relative_path)
+            normalized = PathManager.get_project_relative_path(relative_path)
             
-            # If it starts with projects/ or uploads/, use it directly
+            # If it already starts with 'projects/', use it directly
             if normalized.startswith('projects/') or normalized.startswith('uploads/'):
                 web_url = f"/{normalized}"
                 logger.info("operations.operations", "Generated web URL with direct path", "get_web_url", {"relative_path": relative_path, "web_url": web_url})
@@ -276,7 +334,8 @@ class PathManager:
             return False
         
         try:
-            absolute_path = PathManager.get_absolute_path(relative_path)
+            project_relative = PathManager.get_project_relative_path(relative_path)
+            absolute_path = PathManager.get_absolute_path(project_relative)
             exists = absolute_path.exists()
             
             logger.info("operations.operations", "File existence check completed", "file_exists", {
