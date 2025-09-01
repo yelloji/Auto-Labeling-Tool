@@ -66,7 +66,11 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
       const response = await fetch(`${API_BASE_URL}/api/v1/projects/${projectId}/releases`);
       if (response.ok) {
         const data = await response.json();
-        setReleases(data);
+        const augmented = data.map(r => ({
+          ...r,
+          download_url: r.download_url || generateDownloadUrl(r)
+        }));
+        setReleases(augmented);
         logInfo('app.frontend.interactions', 'load_releases_success', 'Release history loaded successfully', {
           timestamp: new Date().toISOString(),
           projectId: projectId,
@@ -92,7 +96,7 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
             task_type: 'object_detection',
             export_format: 'yolo',
             status: 'completed',
-            download_url: '/api/releases/1/download'
+            model_path: '/api/v1/releases/1/download'
           },
           {
             id: '2',
@@ -103,7 +107,7 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
             task_type: 'classification',
             export_format: 'csv',
             status: 'completed',
-            download_url: '/api/releases/2/download'
+            model_path: '/api/v1/releases/2/download'
           },
           {
             id: '3',
@@ -114,10 +118,10 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
             task_type: 'segmentation',
             export_format: 'coco',
             status: 'completed',
-            download_url: '/api/releases/3/download'
+            model_path: '/api/v1/releases/3/download'
           }
         ];
-        setReleases(mockReleases);
+        setReleases(mockReleases.map(r => ({ ...r, download_url: generateDownloadUrl(r) })));
         logInfo('app.frontend.ui', 'load_releases_mock_data', 'Using mock release data due to API failure', {
           timestamp: new Date().toISOString(),
           projectId: projectId,
@@ -145,65 +149,57 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
     }
   };
 
+  // Helper to build a consistent download URL for any release
+  function generateDownloadUrl(release) {
+    const { model_path, id } = release;
+
+    if (model_path) {
+      // Absolute URL already provided by backend
+      if (model_path.startsWith('http://') || model_path.startsWith('https://')) {
+        return model_path;
+      }
+
+      // Relative API path exposed by backend (e.g. /api/v1/releases/123/download)
+      if (model_path.startsWith('/api/')) {
+        return `${API_BASE_URL}${model_path}`;
+      }
+
+      // Detect Windows/local filesystem style paths (e.g. "C:/project/..." or "V:\\project\\...")
+      const windowsPathPattern = /^[a-zA-Z]:[\\/]/;
+      if (!windowsPathPattern.test(model_path)) {
+        // Treat as a relative path that the backend can serve directly
+        if (model_path.startsWith('/')) {
+          return model_path;
+        }
+        return `${API_BASE_URL}/${model_path}`;
+      }
+      // If it's a local filesystem path, ignore and fall through to fallback
+    }
+
+    // Fallback to standard release download endpoint
+    return `/api/v1/releases/${id}/download`;
+  };
+
   const handleDownload = (release) => {
     logUserClick('release_download_button_clicked', 'User clicked release download button');
-    logInfo('app.frontend.interactions', 'release_download_started', 'Release download started', {
-      timestamp: new Date().toISOString(),
-      releaseId: release.id,
-      releaseName: release.name,
-      downloadUrl: release.download_url,
-      function: 'handleDownload'
-    });
-
-    if (release.download_url) {
-      window.open(release.download_url, '_blank');
+    const url = release.download_url || generateDownloadUrl(release);
+    if (url) {
+      window.open(url, '_blank');
       message.success(`Downloading ${release.name}...`);
-      logInfo('app.frontend.interactions', 'release_download_triggered', 'Release download triggered', {
-        timestamp: new Date().toISOString(),
-        releaseId: release.id,
-        releaseName: release.name,
-        downloadUrl: release.download_url,
-        function: 'handleDownload'
-      });
     } else {
-      logError('app.frontend.validation', 'release_download_no_url', 'Release download failed - no download URL', {
-        timestamp: new Date().toISOString(),
-        releaseId: release.id,
-        releaseName: release.name,
-        function: 'handleDownload'
-      });
       message.warning('Download not available for this release');
     }
   };
 
   const handleCopyLink = (release) => {
     logUserClick('release_copy_link_button_clicked', 'User clicked release copy link button');
-    logInfo('app.frontend.interactions', 'release_copy_link_started', 'Release copy link started', {
-      timestamp: new Date().toISOString(),
-      releaseId: release.id,
-      releaseName: release.name,
-      downloadUrl: release.download_url,
-      function: 'handleCopyLink'
-    });
-
-    if (release.download_url) {
-      const fullUrl = window.location.origin + release.download_url;
+    const url = release.download_url || generateDownloadUrl(release);
+    if (url) {
+      const fullUrl = url.startsWith('http') ? url : window.location.origin + url;
       navigator.clipboard.writeText(fullUrl);
       message.success('Download link copied to clipboard!');
-      logInfo('app.frontend.interactions', 'release_copy_link_success', 'Release download link copied successfully', {
-        timestamp: new Date().toISOString(),
-        releaseId: release.id,
-        releaseName: release.name,
-        fullUrl: fullUrl,
-        function: 'handleCopyLink'
-      });
     } else {
-      logError('app.frontend.validation', 'release_copy_link_no_url', 'Release copy link failed - no download URL', {
-        timestamp: new Date().toISOString(),
-        releaseId: release.id,
-        releaseName: release.name,
-        function: 'handleCopyLink'
-      });
+      message.warning('Download link not available');
     }
   };
 
