@@ -255,9 +255,9 @@ class Release(Base):
     train_image_count = Column(Integer, default=0)
     val_image_count = Column(Integer, default=0)
     test_image_count = Column(Integer, default=0)
-    class_count = Column(Integer, default=0)
-    classes_json = Column(JSON)  # e.g. ["person", "car", ...]
-    shapes_json = Column(JSON)   # e.g. {"bbox": {"person": 120, "car": 80}}
+    class_count = Column(Integer, default=0)  # nc: number of classes
+    # classes_json = Column(JSON)  # removed: redundant column
+    # shapes_json = Column(JSON)   # removed: redundant column
 
     model_path = Column(String(500))  # path to ZIP or export folder
 

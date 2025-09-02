@@ -667,10 +667,15 @@ class DatabaseDebugger:
         
         # Get all labels
         cursor.execute("""
-            SELECT l.id, l.name, l.color, l.project_id, p.name as project_name
+            SELECT 
+                p.name AS project_name,
+                l.id,
+                l.name,
+                l.color,
+                l.project_id
             FROM labels l
             LEFT JOIN projects p ON l.project_id = p.id
-            ORDER BY l.project_id, l.name
+            ORDER BY l.project_id
         """)
         
         labels = cursor.fetchall()
@@ -860,8 +865,7 @@ class DatabaseDebugger:
                    r.task_type, r.datasets_used, r.config, r.total_original_images,
                    r.total_augmented_images, r.final_image_count,
                    r.train_image_count, r.val_image_count, r.test_image_count,
-                   r.class_count, r.classes_json, r.shapes_json,
-                   r.model_path, r.created_at, p.name as project_name
+                   r.class_count,r.model_path, r.created_at, p.name as project_name
             FROM releases r
             LEFT JOIN projects p ON r.project_id = p.id
             ORDER BY r.created_at DESC
@@ -895,8 +899,7 @@ class DatabaseDebugger:
             print(f"      Val: {release['val_image_count'] or 'N/A'}")
             print(f"      Test: {release['test_image_count'] or 'N/A'}")
             print(f"      Classes: {release['class_count'] or 'N/A'}")
-            print(f"      Classes JSON: {release['classes_json'] or 'N/A'}")
-            print(f"      Shapes JSON: {release['shapes_json'] or 'N/A'}")
+            
             
             # Display model path
             if release['model_path']:

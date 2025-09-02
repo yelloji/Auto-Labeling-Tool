@@ -1077,6 +1077,32 @@ class ReleaseController:
                             "source_image": original_image,
                             "transformations": transformations_applied
                         }
+
+            # --- NEW: Persist split counts and class count to release record ---
+            try:
+                # Fallback to user-defined split_counts in the original configuration when
+                # automatic counting produced zeros (e.g. when images are not physically split yet).
+                train_count = dataset_stats["split_counts"].get("train", 0)
+                val_count = dataset_stats["split_counts"].get("val", 0)
+                test_count = dataset_stats["split_counts"].get("test", 0)
+                if train_count == 0 and hasattr(config, "split_counts"):
+                    train_count = config.split_counts.get("train", 0)
+                if val_count == 0 and hasattr(config, "split_counts"):
+                    val_count = config.split_counts.get("val", 0)
+                if test_count == 0 and hasattr(config, "split_counts"):
+                    test_count = config.split_counts.get("test", 0)
+
+                release.train_image_count = train_count
+                release.val_image_count = val_count
+                release.test_image_count = test_count
+                release.class_count = len(dataset_stats["class_distribution"])
+                self.db.commit()
+            except Exception as e:
+                self.db.rollback()
+                logger.warning("errors.system", f"Could not update split/class counts for release {release_id}: {str(e)}", "release_counts_update_failed", {
+                    'release_id': release_id,
+                    'error': str(e)
+                })
             
             # Generate metadata files (two-file schema)
             
@@ -1544,3 +1570,4 @@ if __name__ == "__main__":
     print("Release Controller initialized successfully!")
     print(f"Test configuration: {test_config}")
     print("Ready for release generation!")
+
