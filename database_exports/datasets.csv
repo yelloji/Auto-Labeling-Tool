@@ -1,6 +1,6 @@
 ID,Name,Description,Project ID,Project Name,Created,Updated,Total Images,Labeled Images,Unlabeled Images,Annotations
-1c62d270-2df3-4568-986d-0cff06cd7e7d,car_dataset,Images uploaded to gevis,1,gevis,2025-06-19 13:26:47,2025-09-01 15:01:25.076867,5,5,0,5
+1c62d270-2df3-4568-986d-0cff06cd7e7d,car_dataset,Images uploaded to gevis,1,gevis,2025-06-19 13:26:47,2025-09-02 07:22:08.715770,5,5,0,5
 aa17acf7-8689-4b30-842d-712250a4df45,one,Images uploaded to gevis,1,gevis,2025-08-26 13:30:43,2025-08-26 13:30:53.730455,0,0,0,0
 0ad82748-e577-4e29-abd3-b99692f04cff,fh,Images uploaded to gevis,1,gevis,2025-08-26 13:33:25,2025-08-26 13:33:56.170573,0,0,0,0
 d5e70b23-ff2c-46e6-bf4e-fc5dd3f6033b,ko,Images uploaded to gevis,1,gevis,2025-08-26 14:08:14,2025-08-26 14:09:03.742729,0,0,0,0
-a219eb20-a464-44b5-8b28-7ef1f798675a,pip,Images uploaded to gevis,1,gevis,2025-09-01 14:44:53,2025-09-01 15:01:37.470332,1,1,0,1
+6ec272ad-f769-4b77-9feb-07a7f6ddc4f8,animal,Images uploaded to gevis,1,gevis,2025-09-02 11:47:18,2025-09-02 11:50:11.040236,3,3,0,3

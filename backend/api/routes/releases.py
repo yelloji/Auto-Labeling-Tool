@@ -601,6 +601,9 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             total_original_images=total_original,
             total_augmented_images=total_augmented,
             final_image_count=final_image_count,
+            train_image_count=split_counts.get("train", 0),
+            val_image_count=split_counts.get("val", 0),
+            test_image_count=split_counts.get("test", 0),
             model_path=relative_model_path,
             created_at=datetime.now(),
         )
@@ -724,6 +727,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 "augmented": total_augmented,
                 "final": final_image_count
             },
+            "split_counts": split_counts,
             "datasets_processed": len(payload.dataset_ids),
             # Add release object with all fields that DownloadModal expects
             "release": {
@@ -741,6 +745,9 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 "created_at": created_release.created_at,
                 "model_path": created_release.model_path,
                 "datasets_used": created_release.datasets_used,
+                "train_image_count": created_release.train_image_count,
+                "val_image_count": created_release.val_image_count,
+                "test_image_count": created_release.test_image_count,
                 "project_id": created_release.project_id
             }
         }
@@ -823,8 +830,11 @@ def get_release_history(dataset_id: str, db: Session = Depends(get_db)):
                 "total_augmented_images": r.total_augmented_images,  # Add this field for frontend
                 "created_at": r.created_at,
                 "model_path": r.model_path,  # Add this for download modal
-                "description": r.description,  # Add this for download modal
-                "datasets_used": r.datasets_used,  # Add this to show which datasets were used
+                "description": r.description,
+                "train_image_count": r.train_image_count,
+                "val_image_count": r.val_image_count,
+                "test_image_count": r.test_image_count,
+                "datasets_used": r.datasets_used,
             }
             for r in releases
         ]
@@ -1427,6 +1437,40 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
                 if 'metadata/release_config.json' in zipf.namelist():
                     with zipf.open('metadata/release_config.json') as f:
                         release_config = json.load(f)
+
+                # ------------------------------------------------------------------
+                # Ensure split_counts are present and accurate by falling back to
+                # directory-based counts when metadata is missing or incomplete.
+                # ------------------------------------------------------------------
+                try:
+                    split_counts_meta = dataset_stats.get("split_counts", {}) if isinstance(dataset_stats, dict) else {}
+                except Exception:
+                    split_counts_meta = {}
+
+                # Build fallback from counted files
+                split_counts_fallback = {
+                    "train": file_counts["images"]["train"],
+                    "val": file_counts["images"]["val"],
+                    "test": file_counts["images"]["test"]
+                }
+
+                # Merge: use metadata values if they are non-zero, otherwise fallback
+                merged_split_counts = {
+                    "train": split_counts_meta.get("train", 0) or split_counts_fallback["train"],
+                    "val": split_counts_meta.get("val", 0) or split_counts_fallback["val"],
+                    "test": split_counts_meta.get("test", 0) or split_counts_fallback["test"]
+                }
+
+                # Persist back to dataset_stats for response consistency
+                if isinstance(dataset_stats, dict):
+                    dataset_stats["split_counts"] = merged_split_counts
+                    # Also ensure total_images key is populated
+                    dataset_stats.setdefault("total_images", file_counts["images"]["total"])
+                else:
+                    dataset_stats = {
+                        "total_images": file_counts["images"]["total"],
+                        "split_counts": merged_split_counts
+                    }
                 
                 # Get README content if available
                 readme_content = ""
@@ -1961,6 +2005,7 @@ def create_complete_release_zip(
     from PIL import Image as PILImage
     import io
     import yaml
+    import json
     
     logger.info("operations.releases", f"Creating complete release ZIP", "release_zip_creation_start", {
         'dataset_count': len(dataset_ids),
@@ -2602,6 +2647,83 @@ def create_complete_release_zip(
         data_yaml_path = os.path.join(staging_dir, "data.yaml")
         with open(data_yaml_path, 'w') as f:
             yaml.dump(data_yaml, f, default_flow_style=False)
+
+        # Step 3b: Write new metadata files (release_config.json & annotations.json) AFTER augmentation
+        metadata_dir = os.path.join(staging_dir, "metadata")
+        os.makedirs(metadata_dir, exist_ok=True)
+
+        # Build annotations mapping and gather split counts
+        split_counts_meta = {}
+        for _spl in ["train", "val", "test"]:
+            img_dir = os.path.join(staging_dir, "images", _spl)
+            split_counts_meta[_spl] = len([f for f in os.listdir(img_dir) if os.path.isfile(os.path.join(img_dir, f))]) if os.path.exists(img_dir) else 0
+
+        # Extract unique class indices from YOLO label files
+        unique_class_ids = set()
+        labels_root = os.path.join(staging_dir, "labels")
+        if os.path.exists(labels_root):
+            for root_lbl, _dirs_lbl, files_lbl in os.walk(labels_root):
+                for _lf in files_lbl:
+                    if _lf.lower().endswith(".txt"):
+                        try:
+                            with open(os.path.join(root_lbl, _lf), "r") as lf:
+                                for _ln in lf:
+                                    parts = _ln.strip().split()
+                                    if parts:
+                                        unique_class_ids.add(int(float(parts[0])))
+                        except Exception:
+                            pass
+        classes_sorted = sorted(unique_class_ids)
+
+        # Build annotations.json by parsing YOLO label files
+        annotations_data = {}
+        for split in ["train", "val", "test"]:
+            lbl_dir = os.path.join(labels_root, split)
+            img_dir_rel = os.path.join("images", split)
+            if not os.path.exists(lbl_dir):
+                continue
+            for lbl_file in os.listdir(lbl_dir):
+                if not lbl_file.lower().endswith(".txt"):
+                    continue
+                lbl_path = os.path.join(lbl_dir, lbl_file)
+                img_name = os.path.splitext(lbl_file)[0]
+                # Assume image has the selected output format extension
+                possible_exts = [".jpg", ".jpeg", ".png", ".bmp", ".webp"]
+                rel_img_path = None
+                for ext in possible_exts:
+                    _candidate = os.path.join(img_dir_rel, img_name + ext)
+                    if os.path.exists(os.path.join(staging_dir, _candidate)):
+                        rel_img_path = _candidate
+                        break
+                if rel_img_path is None:
+                    rel_img_path = os.path.join(img_dir_rel, img_name + possible_exts[0])
+                shapes = []
+                try:
+                    with open(lbl_path, "r") as lf:
+                        for _ln in lf:
+                            parts = _ln.strip().split()
+                            if len(parts) < 5:
+                                continue
+                            cid = int(float(parts[0]))
+                            cx, cy, w, h = map(float, parts[1:5])
+                            shapes.append({"class_id": cid, "bbox": [cx, cy, w, h]})
+                except Exception:
+                    pass
+                annotations_data[rel_img_path] = shapes
+
+        with open(os.path.join(metadata_dir, "annotations.json"), "w") as f:
+            json.dump(annotations_data, f, indent=2)
+
+        # Serialize release config to JSON and include classes
+        try:
+            config_data_json = config.dict() if hasattr(config, "dict") else dict(config.__dict__)
+        except Exception:
+            config_data_json = {}
+        config_data_json["classes"] = classes_sorted
+        config_data_json["split_counts"] = split_counts_meta
+        config_data_json["total_images"] = final_image_count
+        with open(os.path.join(metadata_dir, "release_config.json"), "w") as f:
+            json.dump(config_data_json, f, indent=2)
         
         # Step 4: Create ZIP file
         logger.info("operations.releases", f"Creating ZIP file with {final_image_count} total images", "zip_creation_start", {

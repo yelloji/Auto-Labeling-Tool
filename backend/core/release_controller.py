@@ -1078,9 +1078,45 @@ class ReleaseController:
                             "transformations": transformations_applied
                         }
             
-            # Generate metadata files
+            # Generate metadata files (two-file schema)
             
-            # 1. release_config.json
+            # Build classes array and transformation summary
+            classes = sorted(dataset_stats["class_distribution"].keys())
+            transformations_summary = [
+                {
+                    "tool": rec.get("transformation_type", "unknown"),
+                    "params": rec.get("parameters", {})
+                }
+                for rec in transformation_records
+            ]
+            
+            # Prepare release configuration dictionary
+            release_config = {
+                "release_version": release.name,
+                "release_id": release_id,
+                "release_date": datetime.utcnow().isoformat(),
+                "description": release.description,
+                "export_format": config.export_format,
+                "task_type": config.task_type,
+                "image_format": config.output_format,
+                "images_per_original": config.images_per_original,
+                "include_original": config.include_original,
+                "sampling_strategy": config.sampling_strategy,
+                "preserve_original_splits": config.preserve_original_splits,
+                "classes": classes,
+                "dataset_stats": dataset_stats,
+                "transformations": transformations_summary,
+                "source_datasets": config.dataset_ids
+            }
+            
+            # Write release_config.json
+            with open(os.path.join(metadata_dir, "release_config.json"), "w") as f:
+                json.dump(release_config, f, indent=4)
+            
+            # Build annotations.json
+            annotations_data = self._prepare_export_data(generation_results, config.task_type)
+            with open(os.path.join(metadata_dir, "annotations.json"), "w") as f:
+                json.dump(annotations_data, f, indent=4)
             release_config = {
                 "release_version": release.name,
                 "release_id": release_id,
@@ -1096,16 +1132,8 @@ class ReleaseController:
                 "source_datasets": config.dataset_ids
             }
             
-            with open(os.path.join(metadata_dir, "release_config.json"), 'w') as f:
-                json.dump(release_config, f, indent=4)
+            # Legacy aggregated metadata generation removed
             
-            # 2. dataset_stats.json
-            with open(os.path.join(metadata_dir, "dataset_stats.json"), 'w') as f:
-                json.dump(dataset_stats, f, indent=4)
-            
-            # 3. transformation_log.json
-            with open(os.path.join(metadata_dir, "transformation_log.json"), 'w') as f:
-                json.dump(transformation_log, f, indent=4)
             
             # 4. README.md
             readme_content = f"""# Release: {release.name}
@@ -1139,9 +1167,8 @@ class ReleaseController:
 - `metadata/` - Contains configuration and statistics files
 
 ## Metadata Files
-- `release_config.json` - Configuration settings used for this release
-- `dataset_stats.json` - Statistics about the dataset
-- `transformation_log.json` - Logs of transformations applied to each image
+- `release_config.json` - Build information, classes array, dataset stats, transformations
+- `annotations.json` - Ready-to-draw shapes with class IDs
 """
             
             with open(os.path.join(temp_dir, "README.md"), 'w') as f:
