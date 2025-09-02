@@ -2705,8 +2705,14 @@ def create_complete_release_zip(
                             if len(parts) < 5:
                                 continue
                             cid = int(float(parts[0]))
-                            cx, cy, w, h = map(float, parts[1:5])
-                            shapes.append({"class_id": cid, "bbox": [cx, cy, w, h]})
+                            if len(parts) == 5:
+                                # YOLO detection format
+                                cx, cy, w, h = map(float, parts[1:5])
+                                shapes.append({"class_id": cid, "bbox": [cx, cy, w, h]})
+                            else:
+                                # YOLO segmentation format: full polygon coordinates
+                                coords = list(map(float, parts[1:]))
+                                shapes.append({"class_id": cid, "polygon": coords})
                 except Exception:
                     pass
                 annotations_data[rel_img_path] = shapes
@@ -2719,9 +2725,19 @@ def create_complete_release_zip(
             config_data_json = config.dict() if hasattr(config, "dict") else dict(config.__dict__)
         except Exception:
             config_data_json = {}
-        config_data_json["classes"] = classes_sorted
+        # Prefer readable class names when available
+        if class_list_for_yaml:
+            config_data_json["classes"] = class_list_for_yaml
+        else:
+            config_data_json["classes"] = classes_sorted
         config_data_json["split_counts"] = split_counts_meta
         config_data_json["total_images"] = final_image_count
+        # Embed transformation info for transparency
+        try:
+            if transformations:
+                config_data_json["transformations"] = transformations
+        except NameError:
+            pass
         with open(os.path.join(metadata_dir, "release_config.json"), "w") as f:
             json.dump(config_data_json, f, indent=2)
         
