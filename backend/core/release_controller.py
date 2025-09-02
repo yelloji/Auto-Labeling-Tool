@@ -13,6 +13,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from sqlalchemy.sql import func  # Added for split count aggregation
 from PIL import Image
 
 # Import our components
@@ -73,6 +74,33 @@ class ReleaseController:
         self.augmentation_engine = None
         self.release_progress: Dict[str, ReleaseProgress] = {}
         
+    # -----------------------------------------------------------
+    # Utility: Calculate split-counts directly from DB
+    # -----------------------------------------------------------
+    def _calculate_split_counts(self, dataset_ids: List[str]) -> Tuple[int, Dict[str, int]]:
+        """Aggregate train/val/test counts across datasets."""
+        split_counts = {"train": 0, "val": 0, "test": 0}
+        total_original = 0
+
+        if not dataset_ids:
+            return total_original, split_counts
+
+        results = (
+            self.db.query(Image.split_section, func.count(Image.id))
+            .filter(Image.dataset_id.in_(dataset_ids), Image.is_labeled == True)
+            .group_by(Image.split_section)
+            .all()
+        )
+
+        for section, count in results:
+            key = section or "train"
+            if key not in split_counts:
+                split_counts[key] = 0
+            split_counts[key] += count
+            total_original += count
+
+        return total_original, split_counts
+
     def create_release_record(self, config: ReleaseConfig) -> str:
         """Create a new release record in database"""
         try:
@@ -526,10 +554,18 @@ class ReleaseController:
             # Update release record with results
             release = self.db.query(Release).filter(Release.id == release_id).first()
             if release:
+                # Persist overall image statistics
                 release.total_original_images = len(image_paths)
                 release.total_augmented_images = total_generated
                 release.final_image_count = total_generated + (len(image_paths) if config.include_original else 0)
                 release.model_path = PathManager().get_project_relative_path(output_dir)
+
+                # NEW: Compute and store accurate train/val/test split counts
+                _orig_total, split_counts = self._calculate_split_counts(config.dataset_ids)
+                release.train_image_count = split_counts.get("train", 0)
+                release.val_image_count = split_counts.get("val", 0)
+                release.test_image_count = split_counts.get("test", 0)
+
                 self.db.commit()
             
             # Mark transformations as completed
@@ -1262,7 +1298,9 @@ class ReleaseController:
                     "total_augmented_images": release.total_augmented_images,
                     "final_image_count": release.final_image_count,
                     "created_at": release.created_at.isoformat() if release.created_at else None,
-                    "model_path": release.model_path
+                    "model_path": release.model_path,
+                    "class_count": release.class_count,
+                    "total_classes": release.class_count
                 }
                 history.append(record)
             

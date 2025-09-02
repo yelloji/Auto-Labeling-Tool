@@ -738,6 +738,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 "export_format": created_release.export_format,
                 "task_type": created_release.task_type,
                 "final_image_count": created_release.final_image_count,
+                "class_count": created_release.class_count or 0,
                 "total_original_images": created_release.total_original_images,
                 "total_augmented_images": created_release.total_augmented_images,
                 "original_image_count": created_release.total_original_images,  # For backward compatibility
@@ -826,8 +827,10 @@ def get_release_history(dataset_id: str, db: Session = Depends(get_db)):
                 "original_image_count": r.total_original_images,
                 "augmented_image_count": r.total_augmented_images,
                 "final_image_count": r.final_image_count,  # Add this field for frontend
+                "class_count": r.class_count or 0,
                 "total_original_images": r.total_original_images,  # Add this field for frontend
-                "total_augmented_images": r.total_augmented_images,  # Add this field for frontend
+                "total_augmented_images": r.total_augmented_images,
+                "total_classes": r.class_count or 0,
                 "created_at": r.created_at,
                 "model_path": r.model_path,  # Add this for download modal
                 "description": r.description,
@@ -880,6 +883,8 @@ def get_project_releases(project_id: str, db: Session = Depends(get_db)):
                 "original_image_count": r.total_original_images,
                 "augmented_image_count": r.total_augmented_images,
                 "final_image_count": r.final_image_count,
+                "class_count": r.class_count or 0,
+                "total_classes": r.class_count or 0,
                 "total_original_images": r.total_original_images,
                 "total_augmented_images": r.total_augmented_images,
                 "created_at": r.created_at,
