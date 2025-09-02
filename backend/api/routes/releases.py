@@ -13,6 +13,7 @@ import os
 import json
 import uuid
 import shutil
+from backend.utils.path_utils import PathManager  # absolute import
 import random
 import yaml
 
@@ -552,11 +553,13 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         
         zip_filename = f"{payload.version_name.replace(' ', '_')}_{payload.export_format.lower()}.zip"
         model_path = os.path.join(releases_dir, zip_filename)
+        # Store relative path in database for portability
+        relative_model_path = PathManager.get_project_relative_path(model_path)
         
         logger.info("operations.exports", f"Export path created", "export_path_created", {
             "releases_dir": releases_dir,
             "zip_filename": zip_filename,
-            "model_path": model_path,
+            "model_path": relative_model_path,
             "project_id": project_id
         })
         
@@ -598,7 +601,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             total_original_images=total_original,
             total_augmented_images=total_augmented,
             final_image_count=final_image_count,
-            model_path=model_path,
+            model_path=relative_model_path,
             created_at=datetime.now(),
         )
         db.add(release)
@@ -917,17 +920,19 @@ def rename_release(release_id: str, new_name: dict, db: Session = Depends(get_db
         })
 
         # ✅ ENHANCED: Also rename the ZIP file if it exists
+        # Resolve absolute path from stored (possibly relative) model_path
+        abs_old_zip_path = PathManager.get_absolute_path(release.model_path) if release.model_path else None
         old_zip_path = None
         new_zip_path = None
         
-        if release.model_path and os.path.exists(release.model_path):
-            old_zip_path = release.model_path
+        if abs_old_zip_path and os.path.exists(abs_old_zip_path):
+            old_zip_path = abs_old_zip_path
             zip_dir = os.path.dirname(old_zip_path)
             zip_extension = os.path.splitext(old_zip_path)[1]  # .zip
             
             # Generate new ZIP filename: {new_name}_{export_format}.zip
             new_zip_filename = f"{new_name_value}_{release.export_format.lower()}{zip_extension}"
-            new_zip_path = os.path.join(zip_dir, new_zip_filename)
+            new_zip_path = os.path.join(zip_dir, new_zip_filename)  # absolute path
             
             logger.info("operations.releases", f"Renaming ZIP file", "zip_file_rename", {
                 "release_id": release_id,
@@ -942,7 +947,7 @@ def rename_release(release_id: str, new_name: dict, db: Session = Depends(get_db
                 os.rename(old_zip_path, new_zip_path)
                 
                 # Update the model_path in database
-                release.model_path = new_zip_path
+                release.model_path = PathManager.get_project_relative_path(new_zip_path)
                 
                 logger.info("operations.releases", f"ZIP file renamed successfully", "zip_rename_success", {
                     "release_id": release_id,
@@ -1192,21 +1197,24 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
             "model_path": release.model_path
         })
 
+        # Resolve absolute path using PathManager (handles both absolute & project-relative)
+        abs_model_path = PathManager.get_absolute_path(release.model_path) if release.model_path else None
+
         # Get file size if available
         file_size = 0
-        if release.model_path and os.path.exists(release.model_path):
-            file_size = os.path.getsize(release.model_path)
+        if abs_model_path and os.path.exists(abs_model_path):
+            file_size = os.path.getsize(abs_model_path)
             
             logger.debug("operations.releases", f"File exists, size: {file_size} bytes", "file_exists_download", {
                 "release_id": release_id,
                 "file_size": file_size,
-                "model_path": release.model_path
+                "model_path": abs_model_path
             })
             
             # Check if it's a ZIP file
-            if release.model_path.endswith('.zip'):
+            if str(abs_model_path).endswith('.zip'):
                 # Return direct download response for ZIP files
-                filename = os.path.basename(release.model_path)
+                filename = os.path.basename(abs_model_path)
                 
                 logger.info("operations.releases", f"Returning existing ZIP file for download", "existing_file_download", {
                     "release_id": release_id,
@@ -1215,7 +1223,7 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
                 })
                 
                 return FileResponse(
-                    path=release.model_path,
+                    path=abs_model_path,
                     filename=filename,
                     media_type='application/zip'
                 )
@@ -1280,7 +1288,8 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
                 "new_path": zip_path
             })
             
-            release.model_path = zip_path
+            relative_zip_path = PathManager.get_project_relative_path(zip_path)
+            release.model_path = relative_zip_path
             db.commit()
             
             logger.info("operations.releases", f"Minimal ZIP created and release updated", "minimal_zip_created", {
@@ -1350,23 +1359,24 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
         })
         
         # Check if release has a ZIP package
-        if not release.model_path or not os.path.exists(release.model_path) or not release.model_path.endswith('.zip'):
+        abs_model_path = PathManager.get_absolute_path(release.model_path) if release.model_path else None
+        if not abs_model_path or not os.path.exists(abs_model_path) or not str(abs_model_path).endswith('.zip'):
             logger.warning("errors.validation", f"Release ZIP package not found", "zip_package_not_found", {
                 "release_id": release_id,
                 "model_path": release.model_path,
-                "exists": os.path.exists(release.model_path) if release.model_path else False
+                "exists": os.path.exists(abs_model_path) if abs_model_path else False
             })
             raise HTTPException(status_code=404, detail="Release ZIP package not found")
         
         logger.info("operations.releases", f"ZIP package found, extracting metadata", "zip_metadata_extraction_start", {
             "release_id": release_id,
             "zip_path": release.model_path,
-            "zip_size": os.path.getsize(release.model_path)
+            "zip_size": os.path.getsize(abs_model_path)
         })
         
         try:
             # Extract metadata from ZIP package
-            with zipfile.ZipFile(release.model_path, 'r') as zipf:
+            with zipfile.ZipFile(abs_model_path, 'r') as zipf:
                 # Get file list and count by directory
                 file_counts = {
                     "images": {"total": 0, "train": 0, "val": 0, "test": 0},
@@ -1439,7 +1449,7 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
                     "dataset_stats": dataset_stats,
                     "release_config": release_config,
                     "readme": readme_content,
-                    "zip_size": os.path.getsize(release.model_path),
+                    "zip_size": os.path.getsize(abs_model_path),
                     "created_at": release.created_at.isoformat() if release.created_at else None
                 }
         

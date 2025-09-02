@@ -27,6 +27,7 @@ from api.routes.enhanced_export import ExportFormats, ExportRequest
 
 # Import professional logging system - CORRECT UNIFORM PATTERN
 from logging_system.professional_logger import get_professional_logger
+from utils.path_utils import PathManager
 
 # Initialize professional logger
 logger = get_professional_logger()
@@ -528,7 +529,7 @@ class ReleaseController:
                 release.total_original_images = len(image_paths)
                 release.total_augmented_images = total_generated
                 release.final_image_count = total_generated + (len(image_paths) if config.include_original else 0)
-                release.model_path = output_dir
+                release.model_path = PathManager().get_project_relative_path(output_dir)
                 self.db.commit()
             
             # Mark transformations as completed
@@ -572,7 +573,8 @@ class ReleaseController:
                 
                 # Update release with ZIP path
                 if release and zip_path:
-                    release.model_path = zip_path
+                    relative_zip_path = PathManager().get_project_relative_path(zip_path)
+                    release.model_path = relative_zip_path
                     release.export_format = optimal_export_format
                     release.task_type = config.task_type if hasattr(config, 'task_type') else 'object_detection'
                     self.db.commit()
@@ -589,7 +591,7 @@ class ReleaseController:
                 })
                 # Fall back to regular export path if ZIP creation fails
                 if release and export_path:
-                    release.model_path = export_path
+                    release.model_path = PathManager().get_project_relative_path(export_path)
                     release.export_format = optimal_export_format
                     release.task_type = config.task_type if hasattr(config, 'task_type') else 'object_detection'
                     self.db.commit()
