@@ -402,29 +402,256 @@ useEffect(() => {
               </svg>
             </span>
           </div>
+
+          {/* Metadata Cards Row */}
+          <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
+            <Col xs={24} sm={8} md={8} lg={8}>
+              <Card size="small" bordered={false} style={{
+                borderRadius: '16px',
+                background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
+                boxShadow: '0 2px 12px rgba(60, 60, 120, 0.10)',
+                padding: '16px',
+                minHeight: '110px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}>
+                <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2', marginBottom: '4px' }}>Images per Original</div>
+                <div style={{ fontSize: '14px', color: '#333' }}>{releaseConfig?.images_per_original ?? '--'}</div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={8} md={8} lg={8}>
+              <Card size="small" bordered={false} style={{
+                borderRadius: '16px',
+                background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
+                boxShadow: '0 2px 12px rgba(60, 60, 120, 0.10)',
+                padding: '16px',
+                minHeight: '110px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}>
+                <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2', marginBottom: '4px' }}>Output Format</div>
+                <div style={{ fontSize: '14px', color: '#333' }}>{releaseConfig?.output_format ?? '--'}</div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={8} md={8} lg={8}>
+              <Card size="small" bordered={false} style={{
+                borderRadius: '16px',
+                background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
+                boxShadow: '0 2px 12px rgba(60, 60, 120, 0.10)',
+                padding: '16px',
+                minHeight: '110px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}>
+                <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2', marginBottom: '4px' }}>Classes</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center' }}>
+                  {releaseConfig?.classes?.map((cls, idx) => {
+                    const classColors = ['#1976d2', '#388e3c', '#fbc02d', '#d32f2f', '#7b1fa2', '#0288d1', '#c2185b'];
+                    const bgColor = classColors[idx % classColors.length];
+                    return (
+                      <span key={cls} style={{
+                        background: bgColor,
+                        color: '#fff',
+                        borderRadius: '8px',
+                        padding: '4px 12px',
+                        fontWeight: 500,
+                        fontSize: '13px',
+                        minHeight: '24px',
+                        display: 'inline-block'
+                      }}>{cls}</span>
+                    );
+                  })}
+                </div>
+              </Card>
+            </Col>
+          </Row>
+
           <div
             style={{
-              background: isDetailsHovered ? '#e6f7ff' : '#f0f0f0',
-              border: '1px solid #ffffff',
-              borderRadius: '8px',
-              padding: '16px'
+              background: 'linear-gradient(135deg, #e0f7fa 0%, #f3e5f5 100%)',
+              border: 'none',
+              borderRadius: '16px',
+              padding: '24px',
+              boxShadow: '0 4px 24px rgba(60, 60, 120, 0.08)',
+              marginBottom: '24px'
             }}
             onMouseEnter={() => setIsDetailsHovered(true)}
             onMouseLeave={() => setIsDetailsHovered(false)}
           >
-            <List
-              dataSource={release.transformations || []}
-              renderItem={(item) => (
-                <List.Item>
-                  <Text strong>{item.tool}:</Text> {JSON.stringify(item.params)}
-                </List.Item>
-              )}
-            />
-            {(!release.transformations || release.transformations.length === 0) && (
-              <Text type="secondary">No transformation data available yet. We'll integrate this soon.</Text>
+            {releaseConfig?.transformations && releaseConfig.transformations.length > 0 ? (
+              <Row gutter={[24, 24]} style={{ justifyContent: 'flex-start' }}>
+                {releaseConfig.transformations.map((item, idx) => {
+                  // Emoji icon mapping for all 18 tools
+                  const emojiIcons = {
+                    resize: '📏', rotate: '🔄', flip: '🔀', crop: '✂️', brightness: '☀️', contrast: '🌗', blur: '🌫️', noise: '📺', color_jitter: '🎨', cutout: '⬛', random_zoom: '🔍', affine_transform: '📐', perspective_warp: '🏗️', grayscale: '⚫', shear: '📊', gamma_correction: '💡', equalize: '⚖️', clahe: '🔆'
+                  };
+                  const icon = <span style={{fontSize:'32px'}}>{emojiIcons[item.type] || '⚙️'}</span>;
+                  // Generate readable description for each tool
+                  const paramDesc = [];
+                  if (item.params) {
+                    Object.entries(item.params).forEach(([key, val]) => {
+                      // Use transformationUtils.js formatting
+                      let unit = '';
+                      let formatted = '';
+                      if (typeof val === 'number') {
+                        if (key === 'width' || key === 'height' || key === 'hole_size') unit = 'px';
+                        else if (key === 'angle' || key === 'rotation') unit = '°';
+                        else if (key === 'scale' || key === 'crop_percentage' || key === 'percentage' || key === 'strength' || key === 'intensity') unit = '%';
+                        else if (key === 'gamma') unit = '';
+                        else if (key === 'factor') unit = '×';
+                        else if (key === 'grid_size' || key === 'clip_limit') unit = '';
+                        formatted = `${val}${unit}`;
+                      } else if (typeof val === 'boolean') {
+                        formatted = val ? 'Yes' : 'No';
+                      } else {
+                        formatted = val;
+                      }
+                      paramDesc.push(`${key.charAt(0).toUpperCase()+key.slice(1)}: ${formatted}`);
+                    });
+                  }
+                  let description = paramDesc.length > 0 ? paramDesc.join(', ') : 'No parameters';
+                  // Special readable text for common tools
+                  if (item.type === 'resize' && item.params?.width && item.params?.height) description = `Resize to ${item.params.width}x${item.params.height} px`;
+                  if (item.type === 'brightness' && item.params?.percentage) description = `Adjust brightness by ${item.params.percentage}%`;
+                  if (item.type === 'contrast' && item.params?.percentage) description = `Adjust contrast by ${item.params.percentage}%`;
+                  if (item.type === 'rotate' && item.params?.angle) description = `Rotate by ${item.params.angle}°`;
+                  if (item.type === 'flip') description = `Flip: ${item.params?.horizontal?'Horizontal':''}${item.params?.vertical?' Vertical':''}`.trim() || 'Flip';
+                  if (item.type === 'crop' && item.params?.crop_percentage) description = `Crop ${item.params.crop_percentage}%`;
+                  if (item.type === 'blur' && item.params?.radius) description = `Blur radius ${item.params.radius}px`;
+                  if (item.type === 'noise' && item.params?.intensity) description = `Noise intensity ${item.params.intensity}%`;
+                  if (item.type === 'color_jitter') description = paramDesc.join(', ');
+                  if (item.type === 'cutout' && item.params?.num_holes && item.params?.hole_size) description = `Cutout ${item.params.num_holes} holes (${item.params.hole_size}px)`;
+                  if (item.type === 'random_zoom' && item.params?.scale) description = `Random zoom ${item.params.scale}%`;
+                  if (item.type === 'affine_transform') description = paramDesc.join(', ');
+                  if (item.type === 'perspective_warp' && item.params?.strength) description = `Perspective warp strength ${item.params.strength}%`;
+                  if (item.type === 'grayscale') description = 'Convert to grayscale';
+                  if (item.type === 'shear' && item.params?.angle) description = `Shear by ${item.params.angle}°`;
+                  if (item.type === 'gamma_correction' && item.params?.gamma) description = `Gamma correction ${item.params.gamma}`;
+                  if (item.type === 'equalize') description = 'Histogram equalization';
+                  if (item.type === 'clahe' && item.params?.grid_size && item.params?.clip_limit) description = `CLAHE grid ${item.params.grid_size}, clip ${item.params.clip_limit}`;
+                  return (
+                    <Col xs={24} sm={12} md={8} lg={8} key={idx}>
+                      <Card
+                        size="small"
+                        bordered={false}
+                        style={{
+                          borderRadius: '12px',
+                          background: 'linear-gradient(135deg, #fff 0%, #e3f2fd 100%)',
+                          boxShadow: '0 2px 12px rgba(60, 60, 120, 0.10)',
+                          padding: '16px',
+                          minHeight: '110px',
+                          display: 'flex',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: '16px'
+                        }}
+                        bodyStyle={{ padding: 0 }}
+                        title={null}
+                      >
+                        <div style={{ marginRight: '16px', flexShrink: 0 }}>{icon}</div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2', marginBottom: '4px' }}>
+                            {item.type.charAt(0).toUpperCase() + item.type.slice(1).replace('_', ' ')}
+                          </div>
+                          <div style={{ fontSize: '14px', color: '#333' }}>{description}</div>
+                        </div>
+                      </Card>
+                    </Col>
+                  );
+                })}
+              </Row>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <img src="https://cdn.jsdelivr.net/gh/ant-design/ant-design-icons@4.7.0/svg/outline/InboxOutline.svg" alt="No data" style={{ width: 48, opacity: 0.3, marginBottom: 8 }} />
+                <div style={{ color: '#888' }}>No transformation data available yet. We'll integrate this soon.</div>
+              </div>
             )}
           </div>
         </Card>
+
+        {/* Metadata Cards Row */}
+        <div style={{ fontWeight: 700, fontSize: '22px', color: '#1976d2', marginBottom: '16px', marginTop: '32px' }}>
+          Transformation
+        </div>
+        <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
+          <Col xs={24} sm={8} md={8} lg={8}>
+            <Card size="small" bordered={false} style={{
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
+              boxShadow: '0 2px 12px rgba(60, 60, 120, 0.10)',
+              padding: '16px',
+              minHeight: '110px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}>
+              <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2', marginBottom: '4px' }}>Images per Original</div>
+              <div style={{ fontSize: '14px', color: '#333' }}>{releaseConfig?.images_per_original ?? '--'}</div>
+            </Card>
+          </Col>
+          <Col xs={24} sm={8} md={8} lg={8}>
+            <Card size="small" bordered={false} style={{
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
+              boxShadow: '0 2px 12px rgba(60, 60, 120, 0.10)',
+              padding: '16px',
+              minHeight: '110px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}>
+              <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2', marginBottom: '4px' }}>Output Format</div>
+              <div style={{ fontSize: '14px', color: '#333' }}>{releaseConfig?.output_format ?? '--'}</div>
+            </Card>
+          </Col>
+          <Col xs={24} sm={8} md={8} lg={8}>
+            <Card size="small" bordered={false} style={{
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
+              boxShadow: '0 2px 12px rgba(60, 60, 120, 0.10)',
+              padding: '16px',
+              minHeight: '110px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}>
+              <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2', marginBottom: '4px' }}>Classes</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center' }}>
+                {releaseConfig?.classes?.map((cls, idx) => {
+                  const classColors = ['#1976d2', '#388e3c', '#fbc02d', '#d32f2f', '#7b1fa2', '#0288d1', '#c2185b'];
+                  const bgColor = classColors[idx % classColors.length];
+                  return (
+                    <span key={cls} style={{
+                      background: bgColor,
+                      color: '#fff',
+                      borderRadius: '8px',
+                      padding: '4px 12px',
+                      fontWeight: 500,
+                      fontSize: '13px',
+                      minHeight: '24px',
+                      display: 'inline-block'
+                    }}>{cls}</span>
+                  );
+                })}
+              </div>
+            </Card>
+          </Col>
+        </Row>
 
         {/* Images Grid */}
         <Card title="Release Images" extra={<Text type="secondary">{releaseImages.length} images</Text>} style={{ borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
