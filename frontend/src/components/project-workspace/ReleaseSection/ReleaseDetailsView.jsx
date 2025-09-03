@@ -52,19 +52,24 @@ const ReleaseDetailsView = ({
   const [newName, setNewName] = useState(release?.name || '');
 const [isHeaderHovered, setIsHeaderHovered] = useState(false);
 const [isDetailsHovered, setIsDetailsHovered] = useState(false);
+const [releaseConfig, setReleaseConfig] = useState(null);
 
-  const handleCopy = (text, successMsg) => {
-    navigator.clipboard.writeText(text).then(() => {
-      message.success(successMsg);
-    });
-  };
-
-  useEffect(() => {
-    if (release) {
-      loadReleaseImages();
-      setNewName(release.name);
-    }
-  }, [release]);
+useEffect(() => {
+  if (release) {
+    // Fetch release_config.json from backend
+    fetch(`${API_BASE_URL}/api/v1/releases/${release.id}/package-info`)
+      .then(res => res.json())
+      .then(data => {
+        setReleaseConfig(data.release_config || null);
+      })
+      .catch(err => {
+        message.error('Failed to load release config');
+        setReleaseConfig(null);
+      });
+    loadReleaseImages();
+    setNewName(release.name);
+  }
+}, [release]);
 
   const loadReleaseImages = async () => {
     if (!release) return;
@@ -299,27 +304,16 @@ const [isDetailsHovered, setIsDetailsHovered] = useState(false);
         {/* Release Information Card */}
         <Card style={{ marginBottom: '24px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
           {/* Slim header for Created and Status */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '4px 16px',
-            background: '#ffffff',
-            borderBottom: '1px solid #d9d9d9'
-          }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 16px', background: '#ffffff', borderBottom: '1px solid #d9d9d9' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CalendarOutlined style={{ fontSize: '16px', color: '#52c41a', marginRight: '8px' }} />
               <span style={{ color: '#666', fontSize: '12px', marginRight: '4px' }}>Created:</span>
-              <span style={{ color: '#389e0d', fontSize: '14px', fontWeight: 'bold' }}>
-                {formatDate(release.created_at)}
-              </span>
+              <span style={{ color: '#389e0d', fontSize: '14px', fontWeight: 'bold' }}>{formatDate(release.created_at)}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckCircleOutlined style={{ fontSize: '16px', color: '#389e0d', marginRight: '8px' }} />
               <span style={{ color: '#666', fontSize: '12px', marginRight: '4px' }}>Status:</span>
-              <span style={{ color: '#389e0d', fontSize: '14px', fontWeight: 'bold' }}>
-                {release.status || 'Completed'}
-              </span>
+              <span style={{ color: '#389e0d', fontSize: '14px', fontWeight: 'bold' }}>{release.status || 'Completed'}</span>
             </div>
           </div>
 
@@ -338,7 +332,7 @@ const [isDetailsHovered, setIsDetailsHovered] = useState(false);
                 <div style={{ textAlign: 'center' }}>
                   <FileImageOutlined style={{ fontSize: '24px', color: '#1890ff', marginBottom: '8px' }} />
                   <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                    {release.total_images || release.total_original_images || 0}
+                    {releaseConfig?.total_images ?? '--'}
                   </div>
                   <div style={{ color: '#666' }}>Total Images</div>
                 </div>
@@ -347,7 +341,7 @@ const [isDetailsHovered, setIsDetailsHovered] = useState(false);
                 <div style={{ textAlign: 'center' }}>
                   <FileImageOutlined style={{ fontSize: '24px', color: 'green', marginBottom: '8px' }} />
                   <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                    {releaseImages.filter(img => img.split === 'train').length}
+                    {releaseConfig?.split_counts?.train ?? '--'}
                   </div>
                   <div style={{ color: '#666' }}>Train Images</div>
                 </div>
@@ -356,16 +350,16 @@ const [isDetailsHovered, setIsDetailsHovered] = useState(false);
                 <div style={{ textAlign: 'center' }}>
                   <FileImageOutlined style={{ fontSize: '24px', color: 'blue', marginBottom: '8px' }} />
                   <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                    {releaseImages.filter(img => img.split === 'val').length}
+                    {releaseConfig?.split_counts?.val ?? '--'}
                   </div>
-                  <div style={{ color: '#666' }}>Val Images</div>
+                  <div style={{ color: '#666' }}>Validation Images</div>
                 </div>
               </Col>
               <Col span={4}>
                 <div style={{ textAlign: 'center' }}>
                   <FileImageOutlined style={{ fontSize: '24px', color: 'orange', marginBottom: '8px' }} />
                   <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                    {releaseImages.filter(img => img.split === 'test').length}
+                    {releaseConfig?.split_counts?.test ?? '--'}
                   </div>
                   <div style={{ color: '#666' }}>Test Images</div>
                 </div>
@@ -392,21 +386,21 @@ const [isDetailsHovered, setIsDetailsHovered] = useState(false);
           </div>
           
           <Divider />
-
+          
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
             <Title level={4} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Transformation</Title>
             <span style={{ marginLeft: '8px', fontSize: '16px', display: 'flex', alignItems: 'center' }}>
-  <svg width="16" height="16" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="transformationIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#1890ff" />
-        <stop offset="100%" stop-color="#722ed1" />
-      </linearGradient>
-    </defs>
-    <path fill="url(#transformationIconGradient)" d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z" />
-    <path fill="url(#transformationIconGradient)" d="M464 336a48 48 0 1096 0 48 48 0 10-96 0zm72 112h-48c-4.4 0-8 3.6-8 8v272c0 4.4 3.6 8 8 8h48c4.4 0 8-3.6 8-8V456c0-4.4-3.6-8-8-8z" />
-  </svg>
-</span>
+              <svg width="16" height="16" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="transformationIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#1890ff" />
+                    <stop offset="100%" stop-color="#722ed1" />
+                  </linearGradient>
+                </defs>
+                <path fill="url(#transformationIconGradient)" d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z" />
+                <path fill="url(#transformationIconGradient)" d="M464 336a48 48 0 1096 0 48 48 0 10-96 0zm72 112h-48c-4.4 0-8 3.6-8 8v272c0 4.4 3.6 8 8 8h48c4.4 0 8-3.6 8-8V456c0-4.4-3.6-8-8-8z" />
+              </svg>
+            </span>
           </div>
           <div
             style={{
