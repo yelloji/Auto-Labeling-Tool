@@ -15,7 +15,8 @@ import {
   Tooltip,
   Divider,
   Typography,
-  Image
+  Image,
+  List
 } from 'antd';
 import { 
   ArrowLeftOutlined, 
@@ -401,33 +402,18 @@ const [isDetailsHovered, setIsDetailsHovered] = useState(false);
             onMouseEnter={() => setIsDetailsHovered(true)}
             onMouseLeave={() => setIsDetailsHovered(false)}
           >
-            <Descriptions column={1} size="small" bordered>
-              <Descriptions.Item label="Task Type">
-                <Tag color="blue">
-                  {release.task_type?.replace('_', ' ') || 'Object Detection'}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="Model Path">
-                <Space>
-                  <Text code>{release.model_path || 'Not specified'}</Text>
-                  {release.model_path && (
-                    <Tooltip title="Copy to clipboard">
-                      <CopyOutlined onClick={() => handleCopy(release.model_path, 'Model path copied!')} style={{ cursor: 'pointer' }} />
-                    </Tooltip>
-                  )}
-                </Space>
-              </Descriptions.Item>
-              <Descriptions.Item label="ZIP File">
-                <Space>
-                  <Text code style={{ color: '#1677ff' }}>{release.model_path ? release.model_path.split('/')?.pop() : 'Not available'}</Text>
-                  {release.model_path && (
-                    <Tooltip title="Copy to clipboard">
-                      <CopyOutlined onClick={() => handleCopy(release.model_path.split('/')?.pop(), 'ZIP file name copied!')} style={{ cursor: 'pointer' }} />
-                    </Tooltip>
-                  )}
-                </Space>
-              </Descriptions.Item>
-            </Descriptions>
+            <Title level={4}>Transformation</Title>
+            <List
+              dataSource={release.transformations || []}
+              renderItem={(item) => (
+                <List.Item>
+                  <Text strong>{item.tool}:</Text> {JSON.stringify(item.params)}
+                </List.Item>
+              )}
+            />
+            {(!release.transformations || release.transformations.length === 0) && (
+              <Text type="secondary">No transformation data available yet. We'll integrate this soon.</Text>
+            )}
           </div>
         </Card>
 
