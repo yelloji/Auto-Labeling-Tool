@@ -6,6 +6,7 @@ import {
   Row, 
   Col, 
   Card, 
+  Descriptions, 
   message, 
   Tag, 
   Spin, 
@@ -23,9 +24,11 @@ import {
   PlusOutlined,
   EyeOutlined,
   CalendarOutlined,
+  CheckCircleOutlined,
   FileImageOutlined,
   TagsOutlined,
-  SettingOutlined
+  SettingOutlined,
+  CopyOutlined
 } from '@ant-design/icons';
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 import { API_BASE_URL } from '../../../config';
@@ -45,6 +48,14 @@ const ReleaseDetailsView = ({
   const [loading, setLoading] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(release?.name || '');
+const [isHeaderHovered, setIsHeaderHovered] = useState(false);
+const [isDetailsHovered, setIsDetailsHovered] = useState(false);
+
+  const handleCopy = (text, successMsg) => {
+    navigator.clipboard.writeText(text).then(() => {
+      message.success(successMsg);
+    });
+  };
 
   useEffect(() => {
     if (release) {
@@ -273,6 +284,7 @@ const ReleaseDetailsView = ({
                 </Button>
                 <Button 
                   icon={<DownloadOutlined />} 
+                  type="primary"
                   onClick={() => onDownload && onDownload(release)}
                 >
                   Download ZIP
@@ -283,84 +295,144 @@ const ReleaseDetailsView = ({
         </div>
 
         {/* Release Information Card */}
-        <Card style={{ marginBottom: '24px' }}>
-          <Row gutter={24}>
-            <Col span={8}>
-              <div style={{ textAlign: 'center' }}>
-                <FileImageOutlined style={{ fontSize: '24px', color: '#1890ff', marginBottom: '8px' }} />
-                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                  {release.total_images || release.total_original_images || 0}
+        <Card style={{ marginBottom: '24px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+          {/* Slim header for Created and Status */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '4px 16px',
+            background: '#ffffff',
+            borderBottom: '1px solid #d9d9d9'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <CalendarOutlined style={{ fontSize: '16px', color: '#52c41a', marginRight: '8px' }} />
+              <span style={{ color: '#666', fontSize: '12px', marginRight: '4px' }}>Created:</span>
+              <span style={{ color: '#389e0d', fontSize: '14px', fontWeight: 'bold' }}>
+                {formatDate(release.created_at)}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <CheckCircleOutlined style={{ fontSize: '16px', color: '#389e0d', marginRight: '8px' }} />
+              <span style={{ color: '#666', fontSize: '12px', marginRight: '4px' }}>Status:</span>
+              <span style={{ color: '#389e0d', fontSize: '14px', fontWeight: 'bold' }}>
+                {release.status || 'Completed'}
+              </span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: isHeaderHovered ? '#e6f7ff' : '#f0f0f0',
+              border: '1px solid #ffffff',
+              borderRadius: '8px',
+              padding: '8px'
+            }}
+            onMouseEnter={() => setIsHeaderHovered(true)}
+            onMouseLeave={() => setIsHeaderHovered(false)}
+          >
+            <Row gutter={24}>
+              <Col span={4}>
+                <div style={{ textAlign: 'center' }}>
+                  <FileImageOutlined style={{ fontSize: '24px', color: '#1890ff', marginBottom: '8px' }} />
+                  <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                    {release.total_images || release.total_original_images || 0}
+                  </div>
+                  <div style={{ color: '#666' }}>Total Images</div>
                 </div>
-                <div style={{ color: '#666' }}>Total Images</div>
-              </div>
-            </Col>
-            <Col span={8}>
-              <div style={{ textAlign: 'center' }}>
-                <TagsOutlined style={{ fontSize: '24px', color: '#52c41a', marginBottom: '8px' }} />
-                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                  {release.total_classes || 0}
+              </Col>
+              <Col span={4}>
+                <div style={{ textAlign: 'center' }}>
+                  <FileImageOutlined style={{ fontSize: '24px', color: 'green', marginBottom: '8px' }} />
+                  <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                    {releaseImages.filter(img => img.split === 'train').length}
+                  </div>
+                  <div style={{ color: '#666' }}>Train Images</div>
                 </div>
-                <div style={{ color: '#666' }}>Classes</div>
-              </div>
-            </Col>
-            <Col span={8}>
-              <div style={{ textAlign: 'center' }}>
-                <SettingOutlined style={{ fontSize: '24px', color: '#722ed1', marginBottom: '8px' }} />
-                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                  {release.export_format?.toUpperCase() || 'YOLO'}
+              </Col>
+              <Col span={4}>
+                <div style={{ textAlign: 'center' }}>
+                  <FileImageOutlined style={{ fontSize: '24px', color: 'blue', marginBottom: '8px' }} />
+                  <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                    {releaseImages.filter(img => img.split === 'val').length}
+                  </div>
+                  <div style={{ color: '#666' }}>Val Images</div>
                 </div>
-                <div style={{ color: '#666' }}>Format</div>
-              </div>
-            </Col>
-          </Row>
+              </Col>
+              <Col span={4}>
+                <div style={{ textAlign: 'center' }}>
+                  <FileImageOutlined style={{ fontSize: '24px', color: 'orange', marginBottom: '8px' }} />
+                  <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                    {releaseImages.filter(img => img.split === 'test').length}
+                  </div>
+                  <div style={{ color: '#666' }}>Test Images</div>
+                </div>
+              </Col>
+              <Col span={4}>
+                <div style={{ textAlign: 'center' }}>
+                  <TagsOutlined style={{ fontSize: '24px', color: '#52c41a', marginBottom: '8px' }} />
+                  <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                    {release.total_classes || 0}
+                  </div>
+                  <div style={{ color: '#666' }}>Classes</div>
+                </div>
+              </Col>
+              <Col span={4}>
+                <div style={{ textAlign: 'center' }}>
+                  <SettingOutlined style={{ fontSize: '24px', color: '#722ed1', marginBottom: '8px' }} />
+                  <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                    {release.export_format?.toUpperCase() || 'YOLO'}
+                  </div>
+                  <div style={{ color: '#666' }}>Format</div>
+                </div>
+              </Col>
+            </Row>
+          </div>
           
           <Divider />
-          
-          <Row gutter={16}>
-            <Col span={12}>
-              <Space direction="vertical" size="small">
-                <div>
-                  <Text strong>Task Type:</Text>
-                  <Tag color="blue" style={{ marginLeft: '8px' }}>
-                    {release.task_type?.replace('_', ' ') || 'Object Detection'}
-                  </Tag>
-                </div>
-                <div>
-                  <Text strong>Created:</Text>
-                  <Text style={{ marginLeft: '8px' }}>
-                    <CalendarOutlined style={{ marginRight: '4px' }} />
-                    {formatDate(release.created_at)}
-                  </Text>
-                </div>
-              </Space>
-            </Col>
-            <Col span={12}>
-              <Space direction="vertical" size="small">
-                <div>
-                  <Text strong>Status:</Text>
-                  <Tag color="green" style={{ marginLeft: '8px' }}>
-                    {release.status || 'Completed'}
-                  </Tag>
-                </div>
-                <div>
-                  <Text strong>Model Path:</Text>
-                  <Text code style={{ marginLeft: '8px' }}>
-                    {release.model_path || 'Not specified'}
-                  </Text>
-                </div>
-                <div>
-                  <Text strong>ZIP File:</Text>
-                  <Text code style={{ marginLeft: '8px', color: '#1890ff' }}>
-                    {release.model_path ? release.model_path.split('/').pop() : 'Not available'}
-                  </Text>
-                </div>
-              </Space>
-            </Col>
-          </Row>
+
+          <div
+            style={{
+              background: isDetailsHovered ? '#e6f7ff' : '#f0f0f0',
+              border: '1px solid #ffffff',
+              borderRadius: '8px',
+              padding: '16px'
+            }}
+            onMouseEnter={() => setIsDetailsHovered(true)}
+            onMouseLeave={() => setIsDetailsHovered(false)}
+          >
+            <Descriptions column={1} size="small" bordered>
+              <Descriptions.Item label="Task Type">
+                <Tag color="blue">
+                  {release.task_type?.replace('_', ' ') || 'Object Detection'}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Model Path">
+                <Space>
+                  <Text code>{release.model_path || 'Not specified'}</Text>
+                  {release.model_path && (
+                    <Tooltip title="Copy to clipboard">
+                      <CopyOutlined onClick={() => handleCopy(release.model_path, 'Model path copied!')} style={{ cursor: 'pointer' }} />
+                    </Tooltip>
+                  )}
+                </Space>
+              </Descriptions.Item>
+              <Descriptions.Item label="ZIP File">
+                <Space>
+                  <Text code style={{ color: '#1677ff' }}>{release.model_path ? release.model_path.split('/')?.pop() : 'Not available'}</Text>
+                  {release.model_path && (
+                    <Tooltip title="Copy to clipboard">
+                      <CopyOutlined onClick={() => handleCopy(release.model_path.split('/')?.pop(), 'ZIP file name copied!')} style={{ cursor: 'pointer' }} />
+                    </Tooltip>
+                  )}
+                </Space>
+              </Descriptions.Item>
+            </Descriptions>
+          </div>
         </Card>
 
         {/* Images Grid */}
-        <Card title="Release Images" extra={<Text type="secondary">{releaseImages.length} images</Text>}>
+        <Card title="Release Images" extra={<Text type="secondary">{releaseImages.length} images</Text>} style={{ borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '50px' }}>
               <Spin size="large" />
