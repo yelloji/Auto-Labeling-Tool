@@ -475,21 +475,24 @@ useEffect(() => {
                 borderRadius: '12px',
                 background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
                 boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)',
-                padding: '8px 12px',
-                minHeight: 'auto',
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'flex-start',
-                gap: '8px'
-              }} bodyStyle={{ padding: 0 }}>
-                <span style={{ fontSize: '18px', color: '#1976d2', flexShrink: 0 }}>
-                   <i className="fas fa-images" />
-                 </span>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                   <div style={{ fontWeight: 600, fontSize: '14px', color: '#1976d2' }}>Images per Original:</div>
-                   <div style={{ fontSize: '16px', color: '#333', whiteSpace: 'nowrap', fontWeight: 500 }}>{releaseConfig?.images_per_original ?? '--'}</div>
-                 </div>
+                minHeight: 'auto'
+              }} bodyStyle={{ padding: '8px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                  <div style={{ flexShrink: 0 }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <defs>
+                        <linearGradient id="imagesPerOriginalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#1976d2" />
+                          <stop offset="100%" stopColor="#42a5f5" />
+                        </linearGradient>
+                      </defs>
+                      <path fill="url(#imagesPerOriginalGradient)" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                      <circle fill="url(#imagesPerOriginalGradient)" cx="18" cy="6" r="2" opacity="0.8"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2' }}>Images per Original:</div>
+                  <div style={{ fontSize: '16px', color: '#333', whiteSpace: 'nowrap', fontWeight: 500 }}>{releaseConfig?.images_per_original ?? '--'}</div>
+                </div>
               </Card>
               </Col>
               <Col xs={24} sm={8} md={8} lg={8}>
@@ -497,21 +500,24 @@ useEffect(() => {
                   borderRadius: '12px',
                   background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
                   boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)',
-                  padding: '8px 12px',
-                  minHeight: 'auto',
-                  display: 'flex',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'flex-start',
-                  gap: '8px'
-                }} bodyStyle={{ padding: 0 }}>
-                  <span style={{ fontSize: '18px', color: '#1976d2', flexShrink: 0 }}>
-                     <i className="fas fa-file-archive" />
-                   </span>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                     <div style={{ fontWeight: 600, fontSize: '14px', color: '#1976d2' }}>Output Format:</div>
-                     <div style={{ fontSize: '16px', color: '#333', whiteSpace: 'nowrap', fontWeight: 500 }}>{releaseConfig?.output_format ?? '--'}</div>
-                   </div>
+                  minHeight: 'auto'
+                }} bodyStyle={{ padding: '8px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                    <div style={{ flexShrink: 0 }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                          <linearGradient id="outputFormatGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#1976d2" />
+                            <stop offset="100%" stopColor="#42a5f5" />
+                          </linearGradient>
+                        </defs>
+                        <path fill="url(#outputFormatGradient)" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                        <path fill="url(#outputFormatGradient)" d="M8 12h8v2H8zm0 4h6v2H8z" opacity="0.8"/>
+                      </svg>
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2' }}>Output Format:</div>
+                    <div style={{ fontSize: '16px', color: '#333', whiteSpace: 'nowrap', fontWeight: 500 }}>{releaseConfig?.output_format ?? '--'}</div>
+                  </div>
                 </Card>
                 </Col>
                 <Col xs={24} sm={8} md={8} lg={8}>
@@ -519,19 +525,22 @@ useEffect(() => {
                   borderRadius: '12px',
                   background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
                   boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)',
-                  padding: '8px 12px',
-                  minHeight: 'auto',
-                  display: 'flex',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'flex-start',
-                  gap: '8px'
-                }} bodyStyle={{ padding: 0 }}>
-                  <span style={{ fontSize: '18px', color: '#1976d2', flexShrink: 0 }}>
-                      <i className="fas fa-tags" />
-                    </span>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                     <div style={{ fontWeight: 600, fontSize: '14px', color: '#1976d2' }}>Classes:</div>
+                  minHeight: 'auto'
+                }} bodyStyle={{ padding: '8px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                    <div style={{ flexShrink: 0 }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                          <linearGradient id="classesMetadataGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#1976d2" />
+                            <stop offset="100%" stopColor="#42a5f5" />
+                          </linearGradient>
+                        </defs>
+                        <path fill="url(#classesMetadataGradient)" d="M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z"/>
+                        <circle fill="url(#classesMetadataGradient)" cx="7" cy="12" r="2" opacity="0.8"/>
+                      </svg>
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2' }}>Classes:</div>
                     <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '3px', justifyContent: 'flex-start', alignItems: 'center', overflow: 'auto' }}>
                       {releaseConfig?.classes?.map((cls, idx) => {
                         const classColors = ['#1976d2', '#388e3c', '#fbc02d', '#d32f2f', '#7b1fa2', '#0288d1', '#c2185b'];
@@ -548,7 +557,8 @@ useEffect(() => {
                              display: 'inline-flex',
                              alignItems: 'center',
                              lineHeight: 1.1,
-                             whiteSpace: 'nowrap'
+                             whiteSpace: 'nowrap',
+                             textDecoration: 'none'
                            }}>{cls}</span>
                         );
                       })}
@@ -622,7 +632,7 @@ useEffect(() => {
                       if (item.type === 'equalize') description = 'Histogram equalization';
                       if (item.type === 'clahe' && item.params?.grid_size && item.params?.clip_limit) description = `CLAHE grid ${item.params.grid_size}, clip ${item.params.clip_limit}`;
                       return (
-                        <Col xs={24} sm={12} md={8} lg={8} key={idx}>
+                        <Col xs={24} sm={12} md={8} lg={24/9} key={idx} style={{flex: '0 0 11.11%', maxWidth: '11.11%'}}>
                           <Card
                             size="small"
                             bordered={false}
@@ -630,22 +640,23 @@ useEffect(() => {
                               borderRadius: '12px',
                               background: 'linear-gradient(135deg, #fff 0%, #e3f2fd 100%)',
                               boxShadow: '0 2px 12px rgba(60, 60, 120, 0.10)',
-                              padding: '16px',
-                              minHeight: '110px',
+                              padding: '10px',
+                              height: '122px',
                               display: 'flex',
-                              flexDirection: 'row',
+                              flexDirection: 'column',
+                              justifyContent: 'center',
                               alignItems: 'center',
-                              gap: '16px'
+                              textAlign: 'center'
                             }}
                             bodyStyle={{ padding: 0 }}
                             title={null}
                           >
-                            <div style={{ marginRight: '16px', flexShrink: 0 }}>{icon}</div>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2', marginBottom: '4px' }}>
+                            <div style={{ marginBottom: '8px', flexShrink: 0 }}>{icon}</div>
+                            <div style={{ width: '100%', overflow: 'hidden' }}>
+                              <div style={{ fontWeight: 600, fontSize: '13px', color: '#1976d2', marginBottom: '2px', lineHeight: '1.2', height: '32px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                                 {item.type.charAt(0).toUpperCase() + item.type.slice(1).replace('_', ' ')}
                               </div>
-                              <div style={{ fontSize: '14px', color: '#333' }}>{description}</div>
+                              <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.2', height: '28px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{description}</div>
                             </div>
                           </Card>
                         </Col>
