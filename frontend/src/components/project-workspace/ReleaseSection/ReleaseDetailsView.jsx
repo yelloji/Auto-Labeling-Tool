@@ -29,7 +29,8 @@ import {
   FileImageOutlined,
   TagsOutlined,
   SettingOutlined,
-  CopyOutlined
+  CopyOutlined,
+  InfoCircleOutlined
 } from '@ant-design/icons';
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 import { API_BASE_URL } from '../../../config';
@@ -392,6 +393,21 @@ const [isDetailsHovered, setIsDetailsHovered] = useState(false);
           
           <Divider />
 
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+            <Title level={4} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Transformation</Title>
+            <span style={{ marginLeft: '8px', fontSize: '16px', display: 'flex', alignItems: 'center' }}>
+  <svg width="16" height="16" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="transformationIconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#1890ff" />
+        <stop offset="100%" stop-color="#722ed1" />
+      </linearGradient>
+    </defs>
+    <path fill="url(#transformationIconGradient)" d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z" />
+    <path fill="url(#transformationIconGradient)" d="M464 336a48 48 0 1096 0 48 48 0 10-96 0zm72 112h-48c-4.4 0-8 3.6-8 8v272c0 4.4 3.6 8 8 8h48c4.4 0 8-3.6 8-8V456c0-4.4-3.6-8-8-8z" />
+  </svg>
+</span>
+          </div>
           <div
             style={{
               background: isDetailsHovered ? '#e6f7ff' : '#f0f0f0',
@@ -402,7 +418,6 @@ const [isDetailsHovered, setIsDetailsHovered] = useState(false);
             onMouseEnter={() => setIsDetailsHovered(true)}
             onMouseLeave={() => setIsDetailsHovered(false)}
           >
-            <Title level={4}>Transformation</Title>
             <List
               dataSource={release.transformations || []}
               renderItem={(item) => (
