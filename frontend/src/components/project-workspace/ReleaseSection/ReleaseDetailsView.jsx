@@ -238,10 +238,10 @@ useEffect(() => {
   }
 
   return (
-    <Layout style={{ background: '#f5f5f5', minHeight: '100vh' }}>
-      <Content style={{ padding: '24px' }}>
+    <Layout style={{ background: '#fafafa', minHeight: '100vh' }}>
+      <Content style={{ padding: '3px' }}>
         {/* Header with Back Button and Action Buttons */}
-        <div style={{ marginBottom: '24px' }}>
+        <div style={{ marginBottom: '3px' }}>
           <Row justify="space-between" align="middle">
             <Col>
               <Space>
@@ -302,7 +302,7 @@ useEffect(() => {
         </div>
 
         {/* Release Information Card */}
-        <Card style={{ marginBottom: '24px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+        <Card style={{ marginBottom: '6px', borderRadius: 6, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
           {/* Slim header for Created and Status */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 16px', background: '#ffffff', borderBottom: '1px solid #d9d9d9' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -320,17 +320,17 @@ useEffect(() => {
           <div
             style={{
               background: isHeaderHovered ? 'linear-gradient(135deg, #e1f5fe 0%, #f8e5ff 100%)' : 'linear-gradient(135deg, #e0f7fa 0%, #f3e5f5 100%)',
-              border: '1px solid #ffffff',
-              borderRadius: '8px',
-              padding: '8px'
+              border: '2px solid #ffffff',
+              borderRadius: '6px',
+              padding: '4px'
             }}
             onMouseEnter={() => setIsHeaderHovered(true)}
             onMouseLeave={() => setIsHeaderHovered(false)}
           >
-            <Row gutter={24}>
+            <Row gutter={12}>
               <Col span={4}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ marginBottom: '8px' }}>
+                  <div style={{ marginBottom: '4px' }}>
                     <svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <defs>
                         <linearGradient id="totalImagesGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -350,7 +350,7 @@ useEffect(() => {
               </Col>
               <Col span={4}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ marginBottom: '8px' }}>
+                  <div style={{ marginBottom: '4px' }}>
                     <svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <defs>
                         <linearGradient id="trainGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -370,7 +370,7 @@ useEffect(() => {
               </Col>
               <Col span={4}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ marginBottom: '8px' }}>
+                  <div style={{ marginBottom: '4px' }}>
                     <svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <defs>
                         <linearGradient id="validationGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -389,7 +389,7 @@ useEffect(() => {
               </Col>
               <Col span={4}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ marginBottom: '8px' }}>
+                  <div style={{ marginBottom: '4px' }}>
                     <svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <defs>
                         <linearGradient id="testGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -408,7 +408,7 @@ useEffect(() => {
               </Col>
               <Col span={4}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ marginBottom: '8px' }}>
+                  <div style={{ marginBottom: '4px' }}>
                     <svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <defs>
                         <linearGradient id="classesGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -428,7 +428,7 @@ useEffect(() => {
               </Col>
               <Col span={4}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ marginBottom: '8px' }}>
+                  <div style={{ marginBottom: '4px' }}>
                     <svg width="28" height="28" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <defs>
                         <linearGradient id="formatGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -452,7 +452,7 @@ useEffect(() => {
           
           <Divider />
           
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
             <Title level={4} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Transformation</Title>
             <span style={{ marginLeft: '8px', fontSize: '16px', display: 'flex', alignItems: 'center' }}>
               <svg width="16" height="16" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
@@ -571,94 +571,190 @@ useEffect(() => {
               <div
                 style={{
                   background: 'linear-gradient(135deg, #e0f7fa 0%, #f3e5f5 100%)',
-                  border: 'none',
-                  borderRadius: '16px',
-                  padding: '24px',
-                  boxShadow: '0 4px 24px rgba(60, 60, 120, 0.08)',
-                  marginBottom: '24px'
+                  border: '8px solid',
+                  borderImage: 'linear-gradient(135deg, #e0f7fa 0%, #f3e5f5 100%) 1',
+                  borderRadius: '6px',
+                  padding: '4px',
+                  boxShadow: '0 1px 6px rgba(60, 60, 120, 0.03)',
+                  marginBottom: '4px'
                 }}
                 onMouseEnter={() => setIsDetailsHovered(true)}
                 onMouseLeave={() => setIsDetailsHovered(false)}
               >
                 {releaseConfig?.transformations && releaseConfig.transformations.length > 0 ? (
-                  <Row gutter={[24, 24]} style={{ justifyContent: 'flex-start' }}>
+                  <Row gutter={[8, 8]} style={{ justifyContent: 'flex-start' }}>
                     {releaseConfig.transformations.map((item, idx) => {
                       // Emoji icon mapping for all 18 tools
                       const emojiIcons = {
                         resize: '📏', rotate: '🔄', flip: '🔀', crop: '✂️', brightness: '☀️', contrast: '🌗', blur: '🌫️', noise: '📺', color_jitter: '🎨', cutout: '⬛', random_zoom: '🔍', affine_transform: '📐', perspective_warp: '🏗️', grayscale: '⚫', shear: '📊', gamma_correction: '💡', equalize: '⚖️', clahe: '🔆'
                       };
-                      const icon = <span style={{fontSize:'32px'}}>{emojiIcons[item.type] || '⚙️'}</span>;
-                      // Generate readable description for each tool
-                      const paramDesc = [];
-                      if (item.params) {
-                        Object.entries(item.params).forEach(([key, val]) => {
-                          // Use transformationUtils.js formatting
-                          let unit = '';
-                          let formatted = '';
-                          if (typeof val === 'number') {
-                            if (key === 'width' || key === 'height' || key === 'hole_size') unit = 'px';
-                            else if (key === 'angle' || key === 'rotation') unit = '°';
-                            else if (key === 'scale' || key === 'crop_percentage' || key === 'percentage' || key === 'strength' || key === 'intensity') unit = '%';
-                            else if (key === 'gamma') unit = '';
-                            else if (key === 'factor') unit = '×';
-                            else if (key === 'grid_size' || key === 'clip_limit') unit = '';
-                            formatted = `${val}${unit}`;
-                          } else if (typeof val === 'boolean') {
-                            formatted = val ? 'Yes' : 'No';
-                          } else {
-                            formatted = val;
+                      const icon = <span style={{fontSize:'22px'}}>{emojiIcons[item.type] || '⚙️'}</span>;
+
+                      
+                      const getFullDescription = (type, params) => {
+                        if (!params) return 'No parameters specified.';
+                        switch(type) {
+                          case 'resize': return params.width && params.height ? `Resize image to ${params.width} × ${params.height} pixels.` : 'Resize image.';
+                          case 'brightness': return typeof params.percentage === 'number' ? `Adjust brightness by ${params.percentage > 0 ? '+' : ''}${params.percentage}%.` : 'Adjust brightness.';
+                          case 'contrast': return typeof params.percentage === 'number' ? `Adjust contrast by ${params.percentage > 0 ? '+' : ''}${params.percentage}%.` : 'Adjust contrast.';
+                          case 'rotate': return typeof params.angle === 'number' ? `Rotate image by ${params.angle}°.` : 'Rotate image.';
+                          case 'flip': {
+                            let direction = '';
+                            if (params.horizontal && params.vertical) direction = 'horizontally and vertically';
+                            else if (params.horizontal) direction = 'horizontally';
+                            else if (params.vertical) direction = 'vertically';
+                            return direction ? `Flip image ${direction}.` : 'Flip image.';
                           }
-                          paramDesc.push(`${key.charAt(0).toUpperCase()+key.slice(1)}: ${formatted}`);
-                        });
-                      }
-                      let description = paramDesc.length > 0 ? paramDesc.join(', ') : 'No parameters';
-                      // Special readable text for common tools
-                      if (item.type === 'resize' && item.params?.width && item.params?.height) description = `Resize to ${item.params.width}x${item.params.height} px`;
-                      if (item.type === 'brightness' && item.params?.percentage) description = `Adjust brightness by ${item.params.percentage}%`;
-                      if (item.type === 'contrast' && item.params?.percentage) description = `Adjust contrast by ${item.params.percentage}%`;
-                      if (item.type === 'rotate' && item.params?.angle) description = `Rotate by ${item.params.angle}°`;
-                      if (item.type === 'flip') description = `Flip: ${item.params?.horizontal?'Horizontal':''}${item.params?.vertical?' Vertical':''}`.trim() || 'Flip';
-                      if (item.type === 'crop' && item.params?.crop_percentage) description = `Crop ${item.params.crop_percentage}%`;
-                      if (item.type === 'blur' && item.params?.radius) description = `Blur radius ${item.params.radius}px`;
-                      if (item.type === 'noise' && item.params?.intensity) description = `Noise intensity ${item.params.intensity}%`;
-                      if (item.type === 'color_jitter') description = paramDesc.join(', ');
-                      if (item.type === 'cutout' && item.params?.num_holes && item.params?.hole_size) description = `Cutout ${item.params.num_holes} holes (${item.params.hole_size}px)`;
-                      if (item.type === 'random_zoom' && item.params?.scale) description = `Random zoom ${item.params.scale}%`;
-                      if (item.type === 'affine_transform') description = paramDesc.join(', ');
-                      if (item.type === 'perspective_warp' && item.params?.strength) description = `Perspective warp strength ${item.params.strength}%`;
-                      if (item.type === 'grayscale') description = 'Convert to grayscale';
-                      if (item.type === 'shear' && item.params?.angle) description = `Shear by ${item.params.angle}°`;
-                      if (item.type === 'gamma_correction' && item.params?.gamma) description = `Gamma correction ${item.params.gamma}`;
-                      if (item.type === 'equalize') description = 'Histogram equalization';
-                      if (item.type === 'clahe' && item.params?.grid_size && item.params?.clip_limit) description = `CLAHE grid ${item.params.grid_size}, clip ${item.params.clip_limit}`;
+                          case 'crop': return typeof params.crop_percentage === 'number' ? `Crop ${params.crop_percentage}% from image edges.` : 'Crop image.';
+                          case 'blur': return typeof params.radius === 'number' ? `Apply blur with radius ${params.radius}px.` : 'Blur image.';
+                          case 'noise': {
+                            if (!params || Object.keys(params).length === 0) return 'Add noise.';
+                            const paramList = Object.entries(params)
+                              .filter(([k]) => k !== 'enabled')
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join(', ');
+                            return `Add noise (${paramList}).`;
+                          }
+                          case 'color_jitter': {
+                            if (!params || Object.keys(params).length === 0) return 'Apply color jitter.';
+                            const paramList = Object.entries(params)
+                              .filter(([k]) => k !== 'enabled')
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join(', ');
+                            return `Color jitter (${paramList}).`;
+                          }
+                          case 'random_zoom': {
+                            if (!params || Object.keys(params).length === 0) return 'Random zoom.';
+                            const paramList = Object.entries(params)
+                              .filter(([k]) => k !== 'enabled')
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join(', ');
+                            return `Random zoom (${paramList}).`;
+                          }
+                          case 'affine_transform': {
+                            if (!params || Object.keys(params).length === 0) return 'Apply affine transform.';
+                            const paramList = Object.entries(params)
+                              .filter(([k]) => k !== 'enabled')
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join(', ');
+                            return `Affine transform (${paramList}).`;
+                          }
+                          case 'perspective_warp': {
+                            if (!params || Object.keys(params).length === 0) return 'Apply perspective warp.';
+                            const paramList = Object.entries(params)
+                              .filter(([k]) => k !== 'enabled')
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join(', ');
+                            return `Perspective warp (${paramList}).`;
+                          }
+                          case 'shear': {
+                            if (!params || Object.keys(params).length === 0) return 'Apply shear.';
+                            const paramList = Object.entries(params)
+                              .filter(([k]) => k !== 'enabled')
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join(', ');
+                            return `Shear (${paramList}).`;
+                          }
+                          case 'gamma_correction': return typeof params.gamma === 'number' ? `Gamma correction (γ = ${params.gamma}).` : 'Apply gamma correction.';
+                          case 'equalize': return 'Apply histogram equalization.';
+                          case 'clahe': {
+                            let desc = 'CLAHE';
+                            if (params.grid_size && params.clip_limit) desc += `: grid size ${params.grid_size}, clip limit ${params.clip_limit}`;
+                            else if (params.grid_size) desc += `: grid size ${params.grid_size}`;
+                            else if (params.clip_limit) desc += `: clip limit ${params.clip_limit}`;
+                            return desc + '.';
+                          }
+                          case 'cutout': {
+                            // Only show num_holes if present
+                            if (params && typeof params.num_holes === 'number') {
+                              return `Cutout ${params.num_holes} holes`;
+                            }
+                            return 'Cutout.';
+                          }
+                          case 'grayscale': {
+                              return 'Convert to grayscale';
+                          }
+                          default: return 'Custom transformation.';
+                        }
+                      };
+                      
+                      const fullDesc = getFullDescription(item.type, item.params);
+                       
+                       // Short transformation names
+                       const shortNames = {
+                         'resize': 'Resize',
+                         'rotate': 'Rotate', 
+                         'flip': 'Flip',
+                         'crop': 'Crop',
+                         'brightness': 'Bright',
+                         'contrast': 'Contrast',
+                         'blur': 'Blur',
+                         'noise': 'Noise',
+                         'color_jitter': 'Color',
+                         'cutout': 'Cutout',
+                         'random_zoom': 'Zoom',
+                         'affine_transform': 'Affine',
+                         'perspective_warp': 'Perspective',
+                         'grayscale': 'Grayscale',
+                         'shear': 'Shear',
+                         'gamma_correction': 'Gamma',
+                         'equalize': 'Equalize',
+                         'clahe': 'CLAHE'
+                       };
+                       const displayName = shortNames[item.type] || item.type.charAt(0).toUpperCase() + item.type.slice(1).replace('_', ' ');
+                       
+                       const tooltipText = fullDesc;
                       return (
                         <Col xs={24} sm={12} md={8} lg={24/9} key={idx} style={{flex: '0 0 11.11%', maxWidth: '11.11%'}}>
-                          <Card
-                            size="small"
-                            bordered={false}
-                            style={{
-                              borderRadius: '12px',
-                              background: 'linear-gradient(135deg, #fff 0%, #e3f2fd 100%)',
-                              boxShadow: '0 2px 12px rgba(60, 60, 120, 0.10)',
-                              padding: '10px',
-                              height: '122px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              justifyContent: 'center',
-                              alignItems: 'center',
-                              textAlign: 'center'
-                            }}
-                            bodyStyle={{ padding: 0 }}
-                            title={null}
-                          >
-                            <div style={{ marginBottom: '8px', flexShrink: 0 }}>{icon}</div>
-                            <div style={{ width: '100%', overflow: 'hidden' }}>
-                              <div style={{ fontWeight: 600, fontSize: '13px', color: '#1976d2', marginBottom: '2px', lineHeight: '1.2', height: '32px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                                {item.type.charAt(0).toUpperCase() + item.type.slice(1).replace('_', ' ')}
+                          <Tooltip title={tooltipText} placement="top">
+                            <Card
+                              size="small"
+                              bordered={false}
+                              style={{
+                                borderRadius: '8px',
+                                background: 'linear-gradient(135deg, #fff 0%, #e3f2fd 100%)',
+                                boxShadow: '0 1px 6px rgba(60, 60, 120, 0.08)',
+                                padding: '4px',
+                                height: '80px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                textAlign: 'center',
+                                cursor: 'pointer'
+                              }}
+                              bodyStyle={{ padding: 0 }}
+                              title={null}
+                            >
+                              <div style={{ marginBottom: '3px', flexShrink: 0, fontSize: '14px' }}>{icon}</div>
+                              <div style={{ width: '100%', overflow: 'hidden', boxSizing: 'border-box', padding: '0 1px' }}>
+                                <div style={{ 
+                                  fontWeight: 600, 
+                                  fontSize: '12px', 
+                                  color: '#1976d2', 
+                                  marginBottom: '2px', 
+                                  lineHeight: '1.0', 
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}>
+                                  {displayName}
+                                </div>
+                                <div style={{ 
+                                  fontSize: '10px', 
+                                  color: '#444', 
+                                  lineHeight: '1.2',
+                                  overflow: 'hidden',
+                                  fontWeight: 500,
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical'
+                                }}>
+                                  {fullDesc}
+                                </div>
                               </div>
-                              <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.2', height: '28px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{description}</div>
-                            </div>
-                          </Card>
+                            </Card>
+                          </Tooltip>
                         </Col>
                       );
                     })}
@@ -744,3 +840,5 @@ useEffect(() => {
     };
 
     export default ReleaseDetailsView;
+
+
