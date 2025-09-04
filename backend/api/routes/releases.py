@@ -16,6 +16,10 @@ import shutil
 from backend.utils.path_utils import PathManager  # absolute import
 import random
 import yaml
+import zipfile
+from io import BytesIO
+from PIL import Image as PILImage
+from fastapi.responses import StreamingResponse
 
 # Import our new release system
 import sys
@@ -1338,6 +1342,148 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
         "version": release.name
     }
 
+@router.get("/releases/{release_id}/file/{filename:path}")
+def serve_release_file(release_id: str, filename: str, thumbnail: bool = False, db: Session = Depends(get_db)):
+    """
+    Serve individual files from release ZIP archives
+    
+    Args:
+        release_id: The release identifier
+        filename: Path to the file within the ZIP (e.g., "images/train/car_1.jpg")
+        thumbnail: If True, resize image to thumbnail size for faster loading
+    
+    Returns:
+        StreamingResponse with the file content
+    """
+    logger = get_professional_logger()
+    
+    logger.info("app.backend", f"Serving file from release ZIP", "release_file_serve_request", {
+        "release_id": release_id,
+        "filename": filename,
+        "thumbnail": thumbnail
+    })
+    
+    try:
+        # Get release from database
+        release = db.query(Release).filter(Release.id == release_id).first()
+        if not release:
+            logger.warning("errors.validation", f"Release not found for file serving", "release_not_found_file_serve", {
+                "release_id": release_id
+            })
+            raise HTTPException(status_code=404, detail="Release not found")
+        
+        # Get ZIP file path
+        abs_model_path = PathManager.get_absolute_path(release.model_path) if release.model_path else None
+        
+        if not abs_model_path or not os.path.exists(abs_model_path):
+            logger.warning("errors.validation", f"Release ZIP file not found", "release_zip_not_found", {
+                "release_id": release_id,
+                "model_path": release.model_path
+            })
+            raise HTTPException(status_code=404, detail="Release ZIP file not found")
+        
+        # Open ZIP file and extract the requested file
+        try:
+            with zipfile.ZipFile(abs_model_path, 'r') as zip_file:
+                # Check if file exists in ZIP
+                if filename not in zip_file.namelist():
+                    logger.warning("errors.validation", f"File not found in ZIP", "file_not_found_in_zip", {
+                        "release_id": release_id,
+                        "filename": filename,
+                        "available_files": zip_file.namelist()[:10]  # Log first 10 files
+                    })
+                    raise HTTPException(status_code=404, detail=f"File '{filename}' not found in release")
+                
+                # Extract file content
+                file_content = zip_file.read(filename)
+                
+                # Determine content type
+                content_type = "application/octet-stream"
+                if filename.lower().endswith(('.jpg', '.jpeg')):
+                    content_type = "image/jpeg"
+                elif filename.lower().endswith('.png'):
+                    content_type = "image/png"
+                elif filename.lower().endswith('.webp'):
+                    content_type = "image/webp"
+                elif filename.lower().endswith('.bmp'):
+                    content_type = "image/bmp"
+                elif filename.lower().endswith(('.tiff', '.tif')):
+                    content_type = "image/tiff"
+                elif filename.lower().endswith('.gif'):
+                    content_type = "image/gif"
+                elif filename.lower().endswith('.svg'):
+                    content_type = "image/svg+xml"
+                elif filename.lower().endswith('.txt'):
+                    content_type = "text/plain"
+                elif filename.lower().endswith('.json'):
+                    content_type = "application/json"
+                elif filename.lower().endswith('.yaml', '.yml'):
+                    content_type = "text/yaml"
+                
+                # If it's an image and thumbnail is requested, resize it
+                if thumbnail and content_type.startswith('image/'):
+                    try:
+                        # Open image with PIL
+                        image = PILImage.open(BytesIO(file_content))
+                        
+                        # Resize to thumbnail (max 200x200, maintain aspect ratio)
+                        image.thumbnail((200, 200), PILImage.Resampling.LANCZOS)
+                        
+                        # Save resized image to bytes
+                        output = BytesIO()
+                        # Preserve original format
+                        format_name = 'JPEG' if content_type == 'image/jpeg' else 'PNG'
+                        image.save(output, format=format_name, quality=85 if format_name == 'JPEG' else None)
+                        file_content = output.getvalue()
+                        
+                        logger.debug("operations.images", f"Generated thumbnail for image", "thumbnail_generated", {
+                            "release_id": release_id,
+                            "filename": filename,
+                            "original_size": len(zip_file.read(filename)),
+                            "thumbnail_size": len(file_content)
+                        })
+                        
+                    except Exception as e:
+                        logger.warning("errors.image_processing", f"Failed to generate thumbnail, serving original", "thumbnail_generation_failed", {
+                            "release_id": release_id,
+                            "filename": filename,
+                            "error": str(e)
+                        })
+                        # If thumbnail generation fails, serve original
+                        pass
+                
+                logger.info("operations.releases", f"Successfully served file from ZIP", "file_served_from_zip", {
+                    "release_id": release_id,
+                    "filename": filename,
+                    "content_type": content_type,
+                    "file_size": len(file_content),
+                    "thumbnail": thumbnail
+                })
+                
+                # Return file as streaming response
+                return StreamingResponse(
+                    BytesIO(file_content),
+                    media_type=content_type,
+                    headers={"Content-Disposition": f"inline; filename={os.path.basename(filename)}"}
+                )
+                
+        except zipfile.BadZipFile:
+            logger.error("errors.system", f"Invalid ZIP file", "invalid_zip_file", {
+                "release_id": release_id,
+                "model_path": abs_model_path
+            })
+            raise HTTPException(status_code=500, detail="Invalid ZIP file")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("errors.system", f"Failed to serve file from release", "release_file_serve_error", {
+            "release_id": release_id,
+            "filename": filename,
+            "error": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Failed to serve file: {str(e)}")
+
 @router.get("/releases/{release_id}/package-info")
 def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
     """
@@ -1405,16 +1551,21 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
                     "total_files": len(zipf.namelist())
                 })
                 
-                # Count files by directory
+                # Count files by directory and collect actual filenames
+                image_files = {"train": [], "val": [], "test": []}
+                
                 for filename in zipf.namelist():
                     if filename.startswith('images/'):
                         file_counts["images"]["total"] += 1
-                        if 'images/train/' in filename:
+                        if 'images/train/' in filename and not filename.endswith('/'):
                             file_counts["images"]["train"] += 1
-                        elif 'images/val/' in filename:
+                            image_files["train"].append(filename)
+                        elif 'images/val/' in filename and not filename.endswith('/'):
                             file_counts["images"]["val"] += 1
-                        elif 'images/test/' in filename:
+                            image_files["val"].append(filename)
+                        elif 'images/test/' in filename and not filename.endswith('/'):
                             file_counts["images"]["test"] += 1
+                            image_files["test"].append(filename)
                     elif filename.startswith('labels/'):
                         file_counts["labels"]["total"] += 1
                         if 'labels/train/' in filename:
@@ -1495,6 +1646,7 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
                     "release_id": release_id,
                     "release_name": release.name,
                     "file_counts": file_counts,
+                    "image_files": image_files,
                     "dataset_stats": dataset_stats,
                     "release_config": release_config,
                     "readme": readme_content,

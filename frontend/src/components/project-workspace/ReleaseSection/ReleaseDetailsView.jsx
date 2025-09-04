@@ -34,6 +34,7 @@ import {
 } from '@ant-design/icons';
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 import { API_BASE_URL } from '../../../config';
+import ReleaseImageViewerModal from './ReleaseImageViewerModal';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -50,26 +51,44 @@ const ReleaseDetailsView = ({
   const [loading, setLoading] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(release?.name || '');
-const [isHeaderHovered, setIsHeaderHovered] = useState(false);
-const [isDetailsHovered, setIsDetailsHovered] = useState(false);
-const [releaseConfig, setReleaseConfig] = useState(null);
+  const [releaseConfig, setReleaseConfig] = useState({});
+  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
+  const [isDetailsHovered, setIsDetailsHovered] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [imagesPerPage] = useState(50);
+const [modalVisible, setModalVisible] = useState(false);
+const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
 useEffect(() => {
   if (release) {
-    // Fetch release_config.json from backend
-    fetch(`${API_BASE_URL}/api/v1/releases/${release.id}/package-info`)
-      .then(res => res.json())
-      .then(data => {
-        setReleaseConfig(data.release_config || null);
-      })
-      .catch(err => {
-        message.error('Failed to load release config');
-        setReleaseConfig(null);
-      });
     loadReleaseImages();
     setNewName(release.name);
   }
 }, [release]);
+
+  const handleImageClick = (index) => {
+    setSelectedImageIndex(index);
+    setModalVisible(true);
+  };
+
+  // Pagination logic
+  const totalImages = releaseImages.length;
+  const totalPages = Math.ceil(totalImages / imagesPerPage);
+  const startIndex = (currentPage - 1) * imagesPerPage;
+  const endIndex = startIndex + imagesPerPage;
+  const currentImages = releaseImages.slice(startIndex, endIndex);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
 
   const loadReleaseImages = async () => {
     if (!release) return;
@@ -83,45 +102,60 @@ useEffect(() => {
 
     setLoading(true);
     try {
-      // TODO: Replace with actual API call to get images from ZIP
-      // For now, using mock data
-      const mockImages = [
-        {
-          id: 1,
-          filename: 'car_1.jpg',
-          split: 'train',
-          annotations: [
-            { class: 'car', bbox: [100, 50, 200, 150], confidence: 0.95 }
-          ],
-          thumbnail: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDE4MCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxODAiIGhlaWdodD0iMTIwIiBmaWxsPSIjZjBmMGYwIi8+Cjx0ZXh0IHg9IjkwIiB5PSI2MCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEyIiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5jYXJfMS5qcGc8L3RleHQ+Cjwvc3ZnPgo='
-        },
-        {
-          id: 2,
-          filename: 'car_2.jpg',
-          split: 'val',
-          annotations: [
-            { class: 'car', bbox: [80, 60, 180, 140], confidence: 0.92 }
-          ],
-          thumbnail: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDE4MCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxODAiIGhlaWdodD0iMTIwIiBmaWxsPSIjZjBmMGYwIi8+Cjx0ZXh0IHg9IjkwIiB5PSI2MCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEyIiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5jYXJfMi5qcGc8L3RleHQ+Cjwvc3ZnPgo='
-        },
-        {
-          id: 3,
-          filename: 'car_3.jpg',
-          split: 'test',
-          annotations: [
-            { class: 'car', bbox: [120, 40, 220, 160], confidence: 0.88 }
-          ],
-          thumbnail: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDE4MCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxODAiIGhlaWdodD0iMTIwIiBmaWxsPSIjZjBmMGYwIi8+Cjx0ZXh0IHg9IjkwIiB5PSI2MCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEyIiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5jYXJfMy5qcGc8L3RleHQ+Cjwvc3ZnPgo='
+      // Fetch package info to get real image filenames
+      const response = await fetch(`${API_BASE_URL}/api/v1/releases/${release.id}/package-info`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch package info: ${response.status}`);
+      }
+      
+      const packageData = await response.json();
+      const { image_files, file_counts } = packageData;
+      
+      // Create image objects from real filenames
+      const images = [];
+      let imageId = 1;
+      
+      // Process each split (train, val, test)
+      ['train', 'val', 'test'].forEach(split => {
+        if (image_files[split]) {
+          image_files[split].forEach(filename => {
+            // Extract just the filename without path
+            const displayName = filename.split('/').pop();
+            
+            images.push({
+              id: imageId++,
+              filename: displayName,
+              fullPath: filename, // Keep full path for API requests
+              split: split,
+              path: filename,
+              thumbnailUrl: `${API_BASE_URL}/api/v1/releases/${release.id}/file/${filename}?thumbnail=true`,
+              fullImageUrl: `${API_BASE_URL}/api/v1/releases/${release.id}/file/${filename}`,
+              hasAnnotations: file_counts?.labels?.[split] > 0,
+              annotationFile: `labels/${split}/${displayName.replace(/\.(jpg|jpeg|png)$/i, '.txt')}`
+            });
+          });
         }
-      ];
+      });
 
-      setReleaseImages(mockImages);
+      setReleaseImages(images);
+      setCurrentPage(1); // Reset to first page when loading new images
+      
+      // Update releaseConfig with accurate counts
+      setReleaseConfig({
+        ...packageData.release_config,
+        total_images: file_counts?.images?.total || 0,
+        train_images: file_counts?.images?.train || 0,
+        val_images: file_counts?.images?.val || 0,
+        test_images: file_counts?.images?.test || 0,
+        has_annotations: file_counts?.labels?.total > 0
+      });
       
       logInfo('app.frontend.interactions', 'load_release_images_success', 'Release images loaded successfully', {
         timestamp: new Date().toISOString(),
         releaseId: release.id,
         releaseName: release.name,
-        imagesCount: mockImages.length,
+        imagesCount: images.length,
+        realFilenames: true,
         function: 'loadReleaseImages'
       });
     } catch (error) {
@@ -132,6 +166,7 @@ useEffect(() => {
         error: error.message,
         function: 'loadReleaseImages'
       });
+      setReleaseImages([]);
       message.error('Failed to load release images');
     } finally {
       setLoading(false);
@@ -228,6 +263,60 @@ useEffect(() => {
       minute: '2-digit'
     });
   };
+
+  const release_id = release.id;
+  const mappedImages = releaseImages.map((img, index) => {
+    const { filename, split, path, thumbnailUrl, hasAnnotations } = img;
+    return (
+      <Col span={4} key={`${split}-${filename}-${index}`}>
+        <Card
+          hoverable
+          onClick={() => {
+            setSelectedImageIndex(index);
+            setModalVisible(true);
+          }}
+          cover={
+            <img
+              alt={filename}
+              src={thumbnailUrl}
+              style={{ height: '200px', width: '100%', objectFit: 'cover' }}
+              onLoad={() => {
+                console.log(`✅ Image loaded successfully: ${filename}`);
+                logInfo('app.frontend.ui', 'release_image_loaded', 'Release image loaded successfully', {
+                  timestamp: new Date().toISOString(),
+                  filename: filename,
+                  releaseId: release_id,
+                  imagePath: path,
+                  thumbnailUrl: thumbnailUrl
+                });
+              }}
+              onError={(e) => {
+                console.error(`❌ Image failed to load: ${filename}`, e);
+                logError('app.frontend.ui', 'release_image_load_failed', 'Release image failed to load', {
+                  timestamp: new Date().toISOString(),
+                  filename: filename,
+                  releaseId: release_id,
+                  imagePath: path,
+                  thumbnailUrl: thumbnailUrl,
+                  error: e.message || 'Image load error'
+                });
+              }}
+            />
+          }
+        >
+          <Card.Meta
+            title={filename}
+            description={
+              <Space>
+                <Tag color={getSplitColor(split)}>{split.toUpperCase()}</Tag>
+                {hasAnnotations && <Tag color="green" icon={<TagsOutlined />}>Annotated</Tag>}
+              </Space>
+            }
+          />
+        </Card>
+      </Col>
+    );
+  });
 
   if (!release) {
     return (
@@ -776,62 +865,95 @@ useEffect(() => {
                   <div style={{ marginTop: '16px' }}>Loading release images...</div>
                 </div>
               ) : (
-                <Row gutter={[16, 16]}>
-                  {releaseImages.map((image) => (
-                    <Col key={image.id} xs={24} sm={12} md={8} lg={6}>
-                      <Card
-                        size="small"
-                        hoverable
-                        style={{ height: '100%' }}
-                        cover={
-                          <div style={{ position: 'relative', height: '120px' }}>
-                            <img
-                              src={image.thumbnail}
-                              alt={image.filename}
-                              style={{ 
-                                width: '100%', 
-                                height: '100%', 
-                                objectFit: 'cover' 
-                              }}
-                            />
-                            {/* Annotation Overlay */}
-                            {image.annotations?.map((annotation, index) => (
-                              <div
-                                key={index}
-                                style={{
-                                  position: 'absolute',
-                                  left: `${(annotation.bbox[0] / 180) * 100}%`,
-                                  top: `${(annotation.bbox[1] / 120) * 100}%`,
-                                  width: `${((annotation.bbox[2] - annotation.bbox[0]) / 180) * 100}%`,
-                                  height: `${((annotation.bbox[3] - annotation.bbox[1]) / 120) * 100}%`,
-                                  border: '2px solid #ff4d4f',
-                                  backgroundColor: 'rgba(255, 77, 79, 0.1)',
-                                  pointerEvents: 'none'
+                <>
+                  <Row gutter={[16, 16]} style={{flexWrap: 'wrap'}}>
+                    {currentImages.map((img, index) => {
+                      const actualIndex = startIndex + index;
+                      const { filename, split, path, thumbnailUrl, hasAnnotations } = img;
+                      return (
+                        <Col span={4} key={`${split}-${filename}-${actualIndex}`}>
+                          <Card
+                            hoverable
+                            onClick={() => {
+                              setSelectedImageIndex(actualIndex);
+                              setModalVisible(true);
+                            }}
+                            cover={
+                              <img
+                                alt={filename}
+                                src={thumbnailUrl}
+                                style={{ height: '200px', width: '100%', objectFit: 'cover' }}
+                                onLoad={() => {
+                                  console.log(`✅ Image loaded successfully: ${filename}`);
+                                  logInfo('app.frontend.ui', 'release_image_loaded', 'Release image loaded successfully', {
+                                    timestamp: new Date().toISOString(),
+                                    filename: filename,
+                                    releaseId: release_id,
+                                    imagePath: path,
+                                    thumbnailUrl: thumbnailUrl
+                                  });
+                                }}
+                                onError={(e) => {
+                                  console.error(`❌ Image failed to load: ${filename}`, e);
+                                  logError('app.frontend.ui', 'release_image_load_failed', 'Release image failed to load', {
+                                    timestamp: new Date().toISOString(),
+                                    filename: filename,
+                                    releaseId: release_id,
+                                    imagePath: path,
+                                    thumbnailUrl: thumbnailUrl,
+                                    error: e.message || 'Image load error'
+                                  });
                                 }}
                               />
-                            ))}
-                          </div>
-                        }
+                            }
+                          >
+                            <Card.Meta
+                              title={filename}
+                              description={
+                                <Space>
+                                  <Tag color={getSplitColor(split)}>{split.toUpperCase()}</Tag>
+                                  {hasAnnotations && <Tag color="green" icon={<TagsOutlined />}>Annotated</Tag>}
+                                </Space>
+                              }
+                            />
+                          </Card>
+                        </Col>
+                      );
+                    })}
+                  </Row>
+                  
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '24px', gap: '16px' }}>
+                      <Button
+                        onClick={handlePrevPage}
+                        disabled={currentPage === 1}
+                        type={currentPage === 1 ? 'default' : 'primary'}
                       >
-                        <div style={{ padding: '8px 0' }}>
-                          <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>
-                            {image.filename}
-                          </div>
-                          <Space size="small">
-                            <Tag color={getSplitColor(image.split)} size="small">
-                              {image.split.toUpperCase()}
-                            </Tag>
-                            {image.annotations?.length > 0 && (
-                              <Tag color="red" size="small">
-                                {image.annotations.length} label{image.annotations.length !== 1 ? 's' : ''}
-                              </Tag>
-                            )}
-                          </Space>
-                        </div>
-                      </Card>
-                    </Col>
-                  ))}
-                </Row>
+                        Previous
+                      </Button>
+                      
+                      <Text type="secondary">
+                        Page {currentPage} of {totalPages} ({totalImages} images)
+                      </Text>
+                      
+                      <Button
+                        onClick={handleNextPage}
+                        disabled={currentPage === totalPages}
+                        type={currentPage === totalPages ? 'default' : 'primary'}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
+                  <ReleaseImageViewerModal
+                    visible={modalVisible}
+                    onClose={() => setModalVisible(false)}
+                    images={releaseImages}
+                    initialIndex={selectedImageIndex}
+                    releaseId={release_id}
+                  />
+                </>
               )}
             </Card>
           </Content>
