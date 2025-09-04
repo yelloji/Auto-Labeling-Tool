@@ -51,13 +51,16 @@ const ReleaseDetailsView = ({
   const [loading, setLoading] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(release?.name || '');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [releaseConfig, setReleaseConfig] = useState({});
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const [isDetailsHovered, setIsDetailsHovered] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [imagesPerPage] = useState(50);
-const [modalVisible, setModalVisible] = useState(false);
-const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [annotations, setAnnotations] = useState({});
+  const [classMapping, setClassMapping] = useState({});
+  const [showAnnotations, setShowAnnotations] = useState(true);
 
 useEffect(() => {
   if (release) {
@@ -139,6 +142,23 @@ useEffect(() => {
 
       setReleaseImages(images);
       setCurrentPage(1); // Reset to first page when loading new images
+      
+      // Store annotations and class mapping
+      console.log('📊 Package Data:', packageData);
+      console.log('🎯 Annotations received:', packageData.annotations);
+      console.log('🏷️ Class mapping received:', packageData.class_mapping);
+      console.log('🗂️ Image files structure:', packageData.image_files);
+      
+      // Debug: Check if annotations exist and their structure
+      if (packageData.annotations && Object.keys(packageData.annotations).length > 0) {
+        console.log('✅ Annotations found! Keys:', Object.keys(packageData.annotations));
+        console.log('📝 First annotation example:', Object.entries(packageData.annotations)[0]);
+      } else {
+        console.log('❌ No annotations found in package data');
+      }
+      
+      setAnnotations(packageData.annotations || {});
+      setClassMapping(packageData.class_mapping || {});
       
       // Update releaseConfig with accurate counts
       setReleaseConfig({
@@ -858,7 +878,23 @@ useEffect(() => {
             </Card>
 
             {/* Images Grid */}
-            <Card title="Release Images" extra={<Text type="secondary">{releaseImages.length} images</Text>} style={{ borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+            <Card 
+              title="Release Images" 
+              extra={
+                <Space>
+                  <Button
+                    size="small"
+                    type={showAnnotations ? "primary" : "default"}
+                    icon={<TagsOutlined />}
+                    onClick={() => setShowAnnotations(!showAnnotations)}
+                  >
+                    {showAnnotations ? 'Hide' : 'Show'} Annotations
+                  </Button>
+                  <Text type="secondary">{releaseImages.length} images</Text>
+                </Space>
+              } 
+              style={{ borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+            >
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '50px' }}>
                   <Spin size="large" />
@@ -869,7 +905,7 @@ useEffect(() => {
                   <Row gutter={[16, 16]} style={{flexWrap: 'wrap'}}>
                     {currentImages.map((img, index) => {
                       const actualIndex = startIndex + index;
-                      const { filename, split, path, thumbnailUrl, hasAnnotations } = img;
+                      const { filename, split, path, thumbnailUrl, hasAnnotations, fullPath } = img;
                       return (
                         <Col span={4} key={`${split}-${filename}-${actualIndex}`}>
                           <Card
@@ -879,32 +915,213 @@ useEffect(() => {
                               setModalVisible(true);
                             }}
                             cover={
-                              <img
-                                alt={filename}
-                                src={thumbnailUrl}
-                                style={{ height: '200px', width: '100%', objectFit: 'cover' }}
-                                onLoad={() => {
-                                  console.log(`✅ Image loaded successfully: ${filename}`);
-                                  logInfo('app.frontend.ui', 'release_image_loaded', 'Release image loaded successfully', {
-                                    timestamp: new Date().toISOString(),
-                                    filename: filename,
-                                    releaseId: release_id,
-                                    imagePath: path,
-                                    thumbnailUrl: thumbnailUrl
-                                  });
-                                }}
-                                onError={(e) => {
-                                  console.error(`❌ Image failed to load: ${filename}`, e);
-                                  logError('app.frontend.ui', 'release_image_load_failed', 'Release image failed to load', {
-                                    timestamp: new Date().toISOString(),
-                                    filename: filename,
-                                    releaseId: release_id,
-                                    imagePath: path,
-                                    thumbnailUrl: thumbnailUrl,
-                                    error: e.message || 'Image load error'
-                                  });
-                                }}
-                              />
+                              <div style={{ position: 'relative', height: '200px', overflow: 'hidden' }}>
+                                <img
+                                  alt={filename}
+                                  src={thumbnailUrl}
+                                  style={{ height: '200px', width: '100%', objectFit: 'cover' }}
+                                  onLoad={() => {
+                                    console.log(`✅ Image loaded successfully: ${filename}`);
+                                    logInfo('app.frontend.ui', 'release_image_loaded', 'Release image loaded successfully', {
+                                      timestamp: new Date().toISOString(),
+                                      filename: filename,
+                                      releaseId: release_id,
+                                      imagePath: path,
+                                      thumbnailUrl: thumbnailUrl
+                                    });
+                                  }}
+                                  onError={(e) => {
+                                    console.error(`❌ Image failed to load: ${filename}`, e);
+                                    logError('app.frontend.ui', 'release_image_load_failed', 'Release image failed to load', {
+                                      timestamp: new Date().toISOString(),
+                                      filename: filename,
+                                      releaseId: release_id,
+                                      imagePath: path,
+                                      thumbnailUrl: thumbnailUrl,
+                                      error: e.message || 'Image load error'
+                                    });
+                                  }}
+                                />
+                                
+                                {/* Annotation Overlay */}
+                                {console.log(`🔍 Checking annotations for ${path}:`, annotations[path], 'showAnnotations:', showAnnotations)}
+                                {console.log(`🗝️ Available annotation keys:`, Object.keys(annotations))}
+                                {console.log(`🎯 Looking for path: "${path}" in annotations`)}
+                                {(() => {
+                                  // Handle both forward and backward slashes for cross-platform compatibility
+                                  const normalizedPath = path.replace(/\\/g, '/');
+                                  const backslashPath = path.replace(/\//g, '\\');
+                                  const possibleKeys = [path, filename, fullPath, normalizedPath, backslashPath];
+                                  
+                                  let annotationKey = null;
+                                  let imageAnnotations = null;
+                                  
+                                  for (const key of possibleKeys) {
+                                    if (annotations[key]) {
+                                      annotationKey = key;
+                                      imageAnnotations = annotations[key];
+                                      break;
+                                    }
+                                  }
+                                  
+                                  console.log(`🎯 Tried keys: [${possibleKeys.join(', ')}]`);
+                                  if (annotationKey) {
+                                    console.log(`✅ Found annotations for image using key: ${annotationKey}`, imageAnnotations);
+                                  } else {
+                                    console.log(`❌ No annotations found for any key variant`);
+                                  }
+                                  
+                                  return showAnnotations && imageAnnotations && (
+                                      <svg
+                                        style={{
+                                          position: 'absolute',
+                                          top: 0,
+                                          left: 0,
+                                          width: '100%',
+                                          height: '100%',
+                                          pointerEvents: 'none'
+                                        }}
+                                        viewBox="0 0 100 100"
+                                        preserveAspectRatio="none"
+                                      >
+                                        {imageAnnotations.map((annotation, annIndex) => {
+                                      const { class_id, bbox, polygon, segmentation, type } = annotation;
+                                      const className = classMapping[class_id] || `Class ${class_id}`;
+                                      
+                                      // Generate color based on class_id
+                                      const colors = ['#ff4d4f', '#52c41a', '#1890ff', '#fa8c16', '#eb2f96', '#722ed1'];
+                                      const color = colors[class_id % colors.length];
+                                      
+                                      // Handle polygon annotations (flat array format from your JSON)
+                                      if (polygon && Array.isArray(polygon) && polygon.length > 0) {
+                                        // Convert flat array [x1, y1, x2, y2, ...] to points
+                                        const points = [];
+                                        for (let i = 0; i < polygon.length; i += 2) {
+                                          if (i + 1 < polygon.length) {
+                                            points.push({ x: polygon[i], y: polygon[i + 1] });
+                                          }
+                                        }
+                                        
+                                        if (points.length > 0) {
+                                          // Convert polygon points to SVG path
+                                          const pathData = points.map((point, index) => {
+                                            const x = point.x * 100; // Convert to percentage
+                                            const y = point.y * 100;
+                                            return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+                                          }).join(' ') + ' Z'; // Close the path
+                                          
+                                          // Calculate centroid for text placement
+                                          const centroidX = points.reduce((sum, p) => sum + p.x, 0) / points.length * 100;
+                                          const centroidY = points.reduce((sum, p) => sum + p.y, 0) / points.length * 100;
+                                          
+                                          return (
+                                            <g key={annIndex}>
+                                              <path
+                                                d={pathData}
+                                                fill={color}
+                                                fillOpacity="0.1"
+                                                stroke={color}
+                                                strokeWidth="0.5"
+                                                opacity="0.8"
+                                              />
+                                              <text
+                                                x={centroidX}
+                                                y={centroidY}
+                                                fill={color}
+                                                fontSize="2"
+                                                fontWeight="bold"
+                                                textAnchor="middle"
+                                                dominantBaseline="middle"
+                                              >
+                                                {className}
+                                              </text>
+                                            </g>
+                                          );
+                                        }
+                                      }
+                                      
+                                      // Handle polygon annotations
+                                       if (type === 'polygon' && segmentation && Array.isArray(segmentation)) {
+                                         // Convert polygon points to SVG path
+                                         const pathData = segmentation.map((point, index) => {
+                                           const x = (point.x / 1) * 100; // Assuming normalized coordinates
+                                           const y = (point.y / 1) * 100;
+                                           return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+                                         }).join(' ') + ' Z'; // Close the path
+                                         
+                                         // Calculate centroid for text placement
+                                         const centroidX = segmentation.reduce((sum, p) => sum + p.x, 0) / segmentation.length * 100;
+                                         const centroidY = segmentation.reduce((sum, p) => sum + p.y, 0) / segmentation.length * 100;
+                                         
+                                         return (
+                                           <g key={annIndex}>
+                                             <path
+                                               d={pathData}
+                                               fill={color}
+                                               fillOpacity="0.1"
+                                               stroke={color}
+                                               strokeWidth="0.5"
+                                               opacity="0.8"
+                                             />
+                                             <text
+                                               x={centroidX}
+                                               y={centroidY}
+                                               fontSize="3"
+                                               fill={color}
+                                               fontWeight="bold"
+                                               textAnchor="middle"
+                                               style={{ textShadow: '0 0 2px rgba(255,255,255,0.8)' }}
+                                             >
+                                               {className}
+                                             </text>
+                                           </g>
+                                         );
+                                       }
+                                       
+                                       // Handle bounding box annotations (your bbox format)
+                                       if (bbox && Array.isArray(bbox) && bbox.length >= 4) {
+                                         // Convert bbox coordinates to percentages
+                                         const [x, y, width, height] = bbox;
+                                         const rectX = x * 100; // Already normalized coordinates
+                                         const rectY = y * 100;
+                                         const rectWidth = width * 100;
+                                         const rectHeight = height * 100;
+                                         
+                                         return (
+                                           <g key={annIndex}>
+                                             <rect
+                                               x={rectX}
+                                               y={rectY}
+                                               width={rectWidth}
+                                               height={rectHeight}
+                                               fill={color}
+                                               fillOpacity="0.1"
+                                               stroke={color}
+                                               strokeWidth="0.5"
+                                               opacity="0.8"
+                                             />
+                                             <text
+                                               x={rectX + 1}
+                                               y={rectY - 1}
+                                               fill={color}
+                                               fontSize="2"
+                                               fontWeight="bold"
+                                               textAnchor="start"
+                                             >
+                                               {className}
+                                             </text>
+                                           </g>
+                                         );
+                                       }
+                                       
+                                       // Return null for unsupported annotation types
+                                       return null;
+                                    })}
+                                       </svg>
+                                     );
+                                   })()}
+                                 )}
+                              </div>
                             }
                           >
                             <Card.Meta
@@ -950,8 +1167,12 @@ useEffect(() => {
                     visible={modalVisible}
                     onClose={() => setModalVisible(false)}
                     images={releaseImages}
-                    initialIndex={selectedImageIndex}
-                    releaseId={release_id}
+                    currentIndex={selectedImageIndex}
+                    onIndexChange={setSelectedImageIndex}
+                    releaseId={release?.id}
+                    annotations={annotations}
+                    classMapping={classMapping}
+                    showAnnotations={showAnnotations}
                   />
                 </>
               )}

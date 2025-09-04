@@ -1,0 +1,4 @@
+# Requirements for debug_annotation_visualizer.py
+opencv-python>=4.5.0
+Pillow>=8.0.0
+numpy>=1.19.0

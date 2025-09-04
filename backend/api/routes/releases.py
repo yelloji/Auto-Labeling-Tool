@@ -1634,12 +1634,104 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
                     with zipf.open('README.md') as f:
                         readme_content = f.read().decode('utf-8')
                 
+                # Read annotations.json from metadata folder
+                annotations_data = {}
+                class_mapping = {}
+                
+                # Look for annotations.json in metadata folder or root
+                annotation_files_found = []
+                for file_path in zipf.namelist():
+                    if file_path.endswith('annotations.json') or file_path.endswith('metadata/annotations.json'):
+                        annotation_files_found.append(file_path)
+                        try:
+                            with zipf.open(file_path) as f:
+                                annotations_content = f.read().decode('utf-8')
+                                parsed_annotations = json.loads(annotations_content)
+                                
+                                # Log detailed structure for debugging
+                                sample_keys = list(parsed_annotations.keys())[:3] if parsed_annotations else []
+                                sample_annotation = None
+                                if sample_keys:
+                                    sample_annotation = parsed_annotations[sample_keys[0]]
+                                
+                                logger.info("operations.releases", f"Annotations data loaded", "annotations_loaded", {
+                                    "release_id": release_id,
+                                    "annotation_count": len(parsed_annotations),
+                                    "file_path": file_path,
+                                    "sample_keys": sample_keys,
+                                    "sample_annotation_structure": type(sample_annotation).__name__ if sample_annotation else None,
+                                    "sample_annotation_keys": list(sample_annotation.keys()) if isinstance(sample_annotation, dict) else None
+                                })
+                                
+                                # Merge annotations (in case multiple files exist)
+                                annotations_data.update(parsed_annotations)
+                                
+                        except Exception as e:
+                            logger.warning("operations.releases", f"Failed to parse annotations.json", "annotations_parse_error", {
+                                "release_id": release_id,
+                                "file_path": file_path,
+                                "error": str(e)
+                            })
+                
+                logger.info("operations.releases", f"Annotation files search completed", "annotation_files_search", {
+                    "release_id": release_id,
+                    "annotation_files_found": annotation_files_found,
+                    "total_annotations": len(annotations_data)
+                })
+                
+                # Look for data.yaml or classes.txt for class mapping
+                for file_path in zipf.namelist():
+                    if file_path.endswith('data.yaml') or file_path.endswith('data.yml'):
+                        try:
+                            with zipf.open(file_path) as f:
+                                yaml_content = f.read().decode('utf-8')
+                                import yaml
+                                yaml_data = yaml.safe_load(yaml_content)
+                                if 'names' in yaml_data:
+                                    # YOLO format: names can be dict or list
+                                    if isinstance(yaml_data['names'], dict):
+                                        class_mapping = yaml_data['names']
+                                    elif isinstance(yaml_data['names'], list):
+                                        class_mapping = {i: name for i, name in enumerate(yaml_data['names'])}
+                                logger.info("operations.releases", f"Class mapping loaded from data.yaml", "class_mapping_loaded", {
+                                    "release_id": release_id,
+                                    "class_count": len(class_mapping),
+                                    "file_path": file_path
+                                })
+                                break
+                        except Exception as e:
+                            logger.warning("operations.releases", f"Failed to parse data.yaml", "yaml_parse_error", {
+                                "release_id": release_id,
+                                "file_path": file_path,
+                                "error": str(e)
+                            })
+                    elif file_path.endswith('classes.txt'):
+                        try:
+                            with zipf.open(file_path) as f:
+                                classes_content = f.read().decode('utf-8')
+                                class_names = [line.strip() for line in classes_content.split('\n') if line.strip()]
+                                class_mapping = {i: name for i, name in enumerate(class_names)}
+                                logger.info("operations.releases", f"Class mapping loaded from classes.txt", "class_mapping_loaded", {
+                                    "release_id": release_id,
+                                    "class_count": len(class_mapping),
+                                    "file_path": file_path
+                                })
+                                break
+                        except Exception as e:
+                            logger.warning("operations.releases", f"Failed to parse classes.txt", "classes_parse_error", {
+                                "release_id": release_id,
+                                "file_path": file_path,
+                                "error": str(e)
+                            })
+                
                 logger.info("operations.releases", f"Package info extracted successfully", "package_info_extraction_success", {
                     "release_id": release_id,
                     "total_files": file_counts["total_files"],
                     "image_count": file_counts["images"]["total"],
                     "label_count": file_counts["labels"]["total"],
-                    "metadata_count": file_counts["metadata"]
+                    "metadata_count": file_counts["metadata"],
+                    "annotations_count": len(annotations_data),
+                    "class_mapping_count": len(class_mapping)
                 })
                 
                 return {
@@ -1647,6 +1739,8 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
                     "release_name": release.name,
                     "file_counts": file_counts,
                     "image_files": image_files,
+                    "annotations": annotations_data,
+                    "class_mapping": class_mapping,
                     "dataset_stats": dataset_stats,
                     "release_config": release_config,
                     "readme": readme_content,
