@@ -13,6 +13,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from sqlalchemy.sql import func  # Added for split count aggregation
 from PIL import Image
 
 # Import our components
@@ -27,6 +28,7 @@ from api.routes.enhanced_export import ExportFormats, ExportRequest
 
 # Import professional logging system - CORRECT UNIFORM PATTERN
 from logging_system.professional_logger import get_professional_logger
+from utils.path_utils import PathManager
 
 # Initialize professional logger
 logger = get_professional_logger()
@@ -72,6 +74,33 @@ class ReleaseController:
         self.augmentation_engine = None
         self.release_progress: Dict[str, ReleaseProgress] = {}
         
+    # -----------------------------------------------------------
+    # Utility: Calculate split-counts directly from DB
+    # -----------------------------------------------------------
+    def _calculate_split_counts(self, dataset_ids: List[str]) -> Tuple[int, Dict[str, int]]:
+        """Aggregate train/val/test counts across datasets."""
+        split_counts = {"train": 0, "val": 0, "test": 0}
+        total_original = 0
+
+        if not dataset_ids:
+            return total_original, split_counts
+
+        results = (
+            self.db.query(Image.split_section, func.count(Image.id))
+            .filter(Image.dataset_id.in_(dataset_ids), Image.is_labeled == True)
+            .group_by(Image.split_section)
+            .all()
+        )
+
+        for section, count in results:
+            key = section or "train"
+            if key not in split_counts:
+                split_counts[key] = 0
+            split_counts[key] += count
+            total_original += count
+
+        return total_original, split_counts
+
     def create_release_record(self, config: ReleaseConfig) -> str:
         """Create a new release record in database"""
         try:
@@ -525,10 +554,18 @@ class ReleaseController:
             # Update release record with results
             release = self.db.query(Release).filter(Release.id == release_id).first()
             if release:
+                # Persist overall image statistics
                 release.total_original_images = len(image_paths)
                 release.total_augmented_images = total_generated
                 release.final_image_count = total_generated + (len(image_paths) if config.include_original else 0)
-                release.model_path = output_dir
+                release.model_path = PathManager().get_project_relative_path(output_dir)
+
+                # NEW: Compute and store accurate train/val/test split counts
+                _orig_total, split_counts = self._calculate_split_counts(config.dataset_ids)
+                release.train_image_count = split_counts.get("train", 0)
+                release.val_image_count = split_counts.get("val", 0)
+                release.test_image_count = split_counts.get("test", 0)
+
                 self.db.commit()
             
             # Mark transformations as completed
@@ -572,7 +609,8 @@ class ReleaseController:
                 
                 # Update release with ZIP path
                 if release and zip_path:
-                    release.model_path = zip_path
+                    relative_zip_path = PathManager().get_project_relative_path(zip_path)
+                    release.model_path = relative_zip_path
                     release.export_format = optimal_export_format
                     release.task_type = config.task_type if hasattr(config, 'task_type') else 'object_detection'
                     self.db.commit()
@@ -589,7 +627,7 @@ class ReleaseController:
                 })
                 # Fall back to regular export path if ZIP creation fails
                 if release and export_path:
-                    release.model_path = export_path
+                    release.model_path = PathManager().get_project_relative_path(export_path)
                     release.export_format = optimal_export_format
                     release.task_type = config.task_type if hasattr(config, 'task_type') else 'object_detection'
                     self.db.commit()
@@ -1075,10 +1113,72 @@ class ReleaseController:
                             "source_image": original_image,
                             "transformations": transformations_applied
                         }
+
+            # --- NEW: Persist split counts and class count to release record ---
+            try:
+                # Fallback to user-defined split_counts in the original configuration when
+                # automatic counting produced zeros (e.g. when images are not physically split yet).
+                train_count = dataset_stats["split_counts"].get("train", 0)
+                val_count = dataset_stats["split_counts"].get("val", 0)
+                test_count = dataset_stats["split_counts"].get("test", 0)
+                if train_count == 0 and hasattr(config, "split_counts"):
+                    train_count = config.split_counts.get("train", 0)
+                if val_count == 0 and hasattr(config, "split_counts"):
+                    val_count = config.split_counts.get("val", 0)
+                if test_count == 0 and hasattr(config, "split_counts"):
+                    test_count = config.split_counts.get("test", 0)
+
+                release.train_image_count = train_count
+                release.val_image_count = val_count
+                release.test_image_count = test_count
+                release.class_count = len(dataset_stats["class_distribution"])
+                self.db.commit()
+            except Exception as e:
+                self.db.rollback()
+                logger.warning("errors.system", f"Could not update split/class counts for release {release_id}: {str(e)}", "release_counts_update_failed", {
+                    'release_id': release_id,
+                    'error': str(e)
+                })
             
-            # Generate metadata files
+            # Generate metadata files (two-file schema)
             
-            # 1. release_config.json
+            # Build classes array and transformation summary
+            classes = sorted(dataset_stats["class_distribution"].keys())
+            transformations_summary = [
+                {
+                    "tool": rec.get("transformation_type", "unknown"),
+                    "params": rec.get("parameters", {})
+                }
+                for rec in transformation_records
+            ]
+            
+            # Prepare release configuration dictionary
+            release_config = {
+                "release_version": release.name,
+                "release_id": release_id,
+                "release_date": datetime.utcnow().isoformat(),
+                "description": release.description,
+                "export_format": config.export_format,
+                "task_type": config.task_type,
+                "image_format": config.output_format,
+                "images_per_original": config.images_per_original,
+                "include_original": config.include_original,
+                "sampling_strategy": config.sampling_strategy,
+                "preserve_original_splits": config.preserve_original_splits,
+                "classes": classes,
+                "dataset_stats": dataset_stats,
+                "transformations": transformations_summary,
+                "source_datasets": config.dataset_ids
+            }
+            
+            # Write release_config.json
+            with open(os.path.join(metadata_dir, "release_config.json"), "w") as f:
+                json.dump(release_config, f, indent=4)
+            
+            # Build annotations.json
+            annotations_data = self._prepare_export_data(generation_results, config.task_type)
+            with open(os.path.join(metadata_dir, "annotations.json"), "w") as f:
+                json.dump(annotations_data, f, indent=4)
             release_config = {
                 "release_version": release.name,
                 "release_id": release_id,
@@ -1094,16 +1194,8 @@ class ReleaseController:
                 "source_datasets": config.dataset_ids
             }
             
-            with open(os.path.join(metadata_dir, "release_config.json"), 'w') as f:
-                json.dump(release_config, f, indent=4)
+            # Legacy aggregated metadata generation removed
             
-            # 2. dataset_stats.json
-            with open(os.path.join(metadata_dir, "dataset_stats.json"), 'w') as f:
-                json.dump(dataset_stats, f, indent=4)
-            
-            # 3. transformation_log.json
-            with open(os.path.join(metadata_dir, "transformation_log.json"), 'w') as f:
-                json.dump(transformation_log, f, indent=4)
             
             # 4. README.md
             readme_content = f"""# Release: {release.name}
@@ -1137,9 +1229,8 @@ class ReleaseController:
 - `metadata/` - Contains configuration and statistics files
 
 ## Metadata Files
-- `release_config.json` - Configuration settings used for this release
-- `dataset_stats.json` - Statistics about the dataset
-- `transformation_log.json` - Logs of transformations applied to each image
+- `release_config.json` - Build information, classes array, dataset stats, transformations
+- `annotations.json` - Ready-to-draw shapes with class IDs
 """
             
             with open(os.path.join(temp_dir, "README.md"), 'w') as f:
@@ -1207,7 +1298,9 @@ class ReleaseController:
                     "total_augmented_images": release.total_augmented_images,
                     "final_image_count": release.final_image_count,
                     "created_at": release.created_at.isoformat() if release.created_at else None,
-                    "model_path": release.model_path
+                    "model_path": release.model_path,
+                    "class_count": release.class_count,
+                    "total_classes": release.class_count
                 }
                 history.append(record)
             
@@ -1515,3 +1608,4 @@ if __name__ == "__main__":
     print("Release Controller initialized successfully!")
     print(f"Test configuration: {test_config}")
     print("Ready for release generation!")
+

@@ -1,0 +1,10 @@
+names:
+- car
+- green car
+- orange car
+- red-car
+nc: 4
+path: .
+test: images/test
+train: images/train
+val: images/val

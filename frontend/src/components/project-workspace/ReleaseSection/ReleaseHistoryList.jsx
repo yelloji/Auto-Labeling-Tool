@@ -510,44 +510,42 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
                   <Tag color={getStatusColor(release.status)} size="small">{release.status}</Tag>
                 </div>
                 
-                <div style={{ fontSize: '12px', color: '#666', marginBottom: 8 }}>
-                  <CalendarOutlined style={{ marginRight: 4 }} />
-                  {formatDate(release.created_at)}
-                </div>
-                
-                <Space wrap size="small">
-                  <Tag color="blue" size="small">{release.task_type.replace('_', ' ')}</Tag>
-                  <Tag color="green" size="small">{release.export_format.toUpperCase()}</Tag>
-                </Space>
+              {/* Date / Time */}
+              <div style={{ display: 'flex', alignItems: 'center', fontSize: '12px', color: '#999', marginBottom: 4 }}>
+                <CalendarOutlined style={{ marginRight: 4 }} />
+                {formatDate(release.created_at)}
               </div>
-              
-              {/* Release Stats */}
+
+              {/* Task type & Format pills */}
               <Row gutter={8} style={{ marginBottom: 8 }}>
-                <Col span={8}>
+                <Col span={12} style={{ textAlign: 'center' }}>
+                  <Tag color="blue" style={{ textTransform: 'capitalize' }}>{release.task_type.replace(/_/g, ' ')}</Tag>
+                </Col>
+                <Col span={12} style={{ textAlign: 'center' }}>
+                  <Tag color="green">{release.export_format.toUpperCase()}</Tag>
+                </Col>
+              </Row>
+
+              {/* Image & Class counts */}
+              <Row gutter={8} style={{ marginBottom: 8 }}>
+                <Col span={12}>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '12px', fontWeight: 600, color: '#1890ff' }}>
-                      {release.total_images}
+                      {release.final_image_count ?? release.total_images ?? 0}
                     </div>
                     <div style={{ fontSize: '10px', color: '#666' }}>Images</div>
                   </div>
                 </Col>
-                <Col span={8}>
+                <Col span={12}>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '12px', fontWeight: 600, color: '#52c41a' }}>
-                      {release.total_classes}
+                      {release.class_count ?? release.total_classes ?? 0}
                     </div>
                     <div style={{ fontSize: '10px', color: '#666' }}>Classes</div>
                   </div>
                 </Col>
-                <Col span={8}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#722ed1' }}>
-                      {release.export_format.toUpperCase()}
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#666' }}>Format</div>
-                  </div>
-                </Col>
               </Row>
+              </div>
               
               {/* Action Buttons */}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}>

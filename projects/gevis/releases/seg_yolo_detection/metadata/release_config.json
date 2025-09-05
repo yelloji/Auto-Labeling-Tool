@@ -1,0 +1,47 @@
+{
+  "release_name": "seg",
+  "description": "",
+  "project_id": 1,
+  "dataset_ids": [
+    "1c62d270-2df3-4568-986d-0cff06cd7e7d",
+    "6ec272ad-f769-4b77-9feb-07a7f6ddc4f8"
+  ],
+  "export_format": "yolo_detection",
+  "task_type": "object_detection",
+  "images_per_original": 3,
+  "sampling_strategy": "intelligent",
+  "output_format": "png",
+  "include_original": true,
+  "split_sections": [
+    "train",
+    "val",
+    "test"
+  ],
+  "preserve_original_splits": true,
+  "classes": [
+    "car",
+    "cat",
+    "dog",
+    "green car",
+    "orange car",
+    "red-car"
+  ],
+  "split_counts": {
+    "train": 9,
+    "val": 9,
+    "test": 6
+  },
+  "total_images": 24,
+  "transformations": [
+    {
+      "type": "resize",
+      "params": {}
+    },
+    {
+      "type": "brightness",
+      "params": {
+        "percentage": 50
+      }
+    }
+  ]
+}

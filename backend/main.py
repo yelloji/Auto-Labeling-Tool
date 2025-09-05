@@ -22,7 +22,7 @@ from api.routes import labels
 
 from api.routes import projects, datasets, annotations, models, enhanced_export, releases
 from api.routes import analytics, augmentation, dataset_management
-from api.routes import image_transformations, logs, frontend_logs
+from api.routes import image_transformations, logs, frontend_logs, release_detail_view
 from api import active_learning
 from core.config import settings
 from database.database import init_db
@@ -133,6 +133,7 @@ app.include_router(images_router, prefix="/api/v1", tags=["images"])
 
 app.include_router(enhanced_export.router, prefix="/api/v1/enhanced-export", tags=["enhanced-export"])
 app.include_router(releases.router, prefix="/api/v1", tags=["releases"])
+app.include_router(release_detail_view.router, prefix="/api/v1", tags=["release-details"])
 
 # Include new feature routes
 app.include_router(analytics.router, tags=["analytics"])

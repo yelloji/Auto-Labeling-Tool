@@ -13,8 +13,13 @@ import os
 import json
 import uuid
 import shutil
+from backend.utils.path_utils import PathManager  # absolute import
 import random
 import yaml
+import zipfile
+from io import BytesIO
+from PIL import Image as PILImage
+from fastapi.responses import StreamingResponse
 
 # Import our new release system
 import sys
@@ -552,11 +557,13 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         
         zip_filename = f"{payload.version_name.replace(' ', '_')}_{payload.export_format.lower()}.zip"
         model_path = os.path.join(releases_dir, zip_filename)
+        # Store relative path in database for portability
+        relative_model_path = PathManager.get_project_relative_path(model_path)
         
         logger.info("operations.exports", f"Export path created", "export_path_created", {
             "releases_dir": releases_dir,
             "zip_filename": zip_filename,
-            "model_path": model_path,
+            "model_path": relative_model_path,
             "project_id": project_id
         })
         
@@ -598,7 +605,10 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             total_original_images=total_original,
             total_augmented_images=total_augmented,
             final_image_count=final_image_count,
-            model_path=model_path,
+            train_image_count=split_counts.get("train", 0),
+            val_image_count=split_counts.get("val", 0),
+            test_image_count=split_counts.get("test", 0),
+            model_path=relative_model_path,
             created_at=datetime.now(),
         )
         db.add(release)
@@ -640,6 +650,8 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 'project_id': project_id
             })
             
+
+            
         except Exception as e:
             logger.error("errors.system", f"Failed to create release ZIP", "release_zip_creation_error", {
                 'release_id': release_id,
@@ -677,6 +689,15 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         })
         
         db.commit()
+
+        # Now that the release row is committed, schedule stats extraction worker
+        try:
+            from backend.api.services.release_stats_worker import schedule_zip_stats_update
+            schedule_zip_stats_update(release_id)
+        except Exception as _e:
+            logger.warning("operations.releases", f"Failed to schedule ZIP stats update post-commit: {_e}", "zip_stats_worker_schedule_failed", {
+                'release_id': release_id
+            })
         
         logger.info("operations.releases", f"Release created successfully", "release_creation_complete", {
             'release_id': release_id,
@@ -710,6 +731,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 "augmented": total_augmented,
                 "final": final_image_count
             },
+            "split_counts": split_counts,
             "datasets_processed": len(payload.dataset_ids),
             # Add release object with all fields that DownloadModal expects
             "release": {
@@ -720,6 +742,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 "export_format": created_release.export_format,
                 "task_type": created_release.task_type,
                 "final_image_count": created_release.final_image_count,
+                "class_count": created_release.class_count or 0,
                 "total_original_images": created_release.total_original_images,
                 "total_augmented_images": created_release.total_augmented_images,
                 "original_image_count": created_release.total_original_images,  # For backward compatibility
@@ -727,6 +750,9 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 "created_at": created_release.created_at,
                 "model_path": created_release.model_path,
                 "datasets_used": created_release.datasets_used,
+                "train_image_count": created_release.train_image_count,
+                "val_image_count": created_release.val_image_count,
+                "test_image_count": created_release.test_image_count,
                 "project_id": created_release.project_id
             }
         }
@@ -805,12 +831,17 @@ def get_release_history(dataset_id: str, db: Session = Depends(get_db)):
                 "original_image_count": r.total_original_images,
                 "augmented_image_count": r.total_augmented_images,
                 "final_image_count": r.final_image_count,  # Add this field for frontend
+                "class_count": r.class_count or 0,
                 "total_original_images": r.total_original_images,  # Add this field for frontend
-                "total_augmented_images": r.total_augmented_images,  # Add this field for frontend
+                "total_augmented_images": r.total_augmented_images,
+                "total_classes": r.class_count or 0,
                 "created_at": r.created_at,
                 "model_path": r.model_path,  # Add this for download modal
-                "description": r.description,  # Add this for download modal
-                "datasets_used": r.datasets_used,  # Add this to show which datasets were used
+                "description": r.description,
+                "train_image_count": r.train_image_count,
+                "val_image_count": r.val_image_count,
+                "test_image_count": r.test_image_count,
+                "datasets_used": r.datasets_used,
             }
             for r in releases
         ]
@@ -856,6 +887,8 @@ def get_project_releases(project_id: str, db: Session = Depends(get_db)):
                 "original_image_count": r.total_original_images,
                 "augmented_image_count": r.total_augmented_images,
                 "final_image_count": r.final_image_count,
+                "class_count": r.class_count or 0,
+                "total_classes": r.class_count or 0,
                 "total_original_images": r.total_original_images,
                 "total_augmented_images": r.total_augmented_images,
                 "created_at": r.created_at,
@@ -906,17 +939,19 @@ def rename_release(release_id: str, new_name: dict, db: Session = Depends(get_db
         })
 
         # ✅ ENHANCED: Also rename the ZIP file if it exists
+        # Resolve absolute path from stored (possibly relative) model_path
+        abs_old_zip_path = PathManager.get_absolute_path(release.model_path) if release.model_path else None
         old_zip_path = None
         new_zip_path = None
         
-        if release.model_path and os.path.exists(release.model_path):
-            old_zip_path = release.model_path
+        if abs_old_zip_path and os.path.exists(abs_old_zip_path):
+            old_zip_path = abs_old_zip_path
             zip_dir = os.path.dirname(old_zip_path)
             zip_extension = os.path.splitext(old_zip_path)[1]  # .zip
             
             # Generate new ZIP filename: {new_name}_{export_format}.zip
             new_zip_filename = f"{new_name_value}_{release.export_format.lower()}{zip_extension}"
-            new_zip_path = os.path.join(zip_dir, new_zip_filename)
+            new_zip_path = os.path.join(zip_dir, new_zip_filename)  # absolute path
             
             logger.info("operations.releases", f"Renaming ZIP file", "zip_file_rename", {
                 "release_id": release_id,
@@ -931,7 +966,7 @@ def rename_release(release_id: str, new_name: dict, db: Session = Depends(get_db
                 os.rename(old_zip_path, new_zip_path)
                 
                 # Update the model_path in database
-                release.model_path = new_zip_path
+                release.model_path = PathManager.get_project_relative_path(new_zip_path)
                 
                 logger.info("operations.releases", f"ZIP file renamed successfully", "zip_rename_success", {
                     "release_id": release_id,
@@ -1181,21 +1216,24 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
             "model_path": release.model_path
         })
 
+        # Resolve absolute path using PathManager (handles both absolute & project-relative)
+        abs_model_path = PathManager.get_absolute_path(release.model_path) if release.model_path else None
+
         # Get file size if available
         file_size = 0
-        if release.model_path and os.path.exists(release.model_path):
-            file_size = os.path.getsize(release.model_path)
+        if abs_model_path and os.path.exists(abs_model_path):
+            file_size = os.path.getsize(abs_model_path)
             
             logger.debug("operations.releases", f"File exists, size: {file_size} bytes", "file_exists_download", {
                 "release_id": release_id,
                 "file_size": file_size,
-                "model_path": release.model_path
+                "model_path": abs_model_path
             })
             
             # Check if it's a ZIP file
-            if release.model_path.endswith('.zip'):
+            if str(abs_model_path).endswith('.zip'):
                 # Return direct download response for ZIP files
-                filename = os.path.basename(release.model_path)
+                filename = os.path.basename(abs_model_path)
                 
                 logger.info("operations.releases", f"Returning existing ZIP file for download", "existing_file_download", {
                     "release_id": release_id,
@@ -1204,7 +1242,7 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
                 })
                 
                 return FileResponse(
-                    path=release.model_path,
+                    path=abs_model_path,
                     filename=filename,
                     media_type='application/zip'
                 )
@@ -1269,7 +1307,8 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
                 "new_path": zip_path
             })
             
-            release.model_path = zip_path
+            relative_zip_path = PathManager.get_project_relative_path(zip_path)
+            release.model_path = relative_zip_path
             db.commit()
             
             logger.info("operations.releases", f"Minimal ZIP created and release updated", "minimal_zip_created", {
@@ -1302,6 +1341,148 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
         "task_type": release.task_type,
         "version": release.name
     }
+
+@router.get("/releases/{release_id}/file/{filename:path}")
+def serve_release_file(release_id: str, filename: str, thumbnail: bool = False, db: Session = Depends(get_db)):
+    """
+    Serve individual files from release ZIP archives
+    
+    Args:
+        release_id: The release identifier
+        filename: Path to the file within the ZIP (e.g., "images/train/car_1.jpg")
+        thumbnail: If True, resize image to thumbnail size for faster loading
+    
+    Returns:
+        StreamingResponse with the file content
+    """
+    logger = get_professional_logger()
+    
+    logger.info("app.backend", f"Serving file from release ZIP", "release_file_serve_request", {
+        "release_id": release_id,
+        "filename": filename,
+        "thumbnail": thumbnail
+    })
+    
+    try:
+        # Get release from database
+        release = db.query(Release).filter(Release.id == release_id).first()
+        if not release:
+            logger.warning("errors.validation", f"Release not found for file serving", "release_not_found_file_serve", {
+                "release_id": release_id
+            })
+            raise HTTPException(status_code=404, detail="Release not found")
+        
+        # Get ZIP file path
+        abs_model_path = PathManager.get_absolute_path(release.model_path) if release.model_path else None
+        
+        if not abs_model_path or not os.path.exists(abs_model_path):
+            logger.warning("errors.validation", f"Release ZIP file not found", "release_zip_not_found", {
+                "release_id": release_id,
+                "model_path": release.model_path
+            })
+            raise HTTPException(status_code=404, detail="Release ZIP file not found")
+        
+        # Open ZIP file and extract the requested file
+        try:
+            with zipfile.ZipFile(abs_model_path, 'r') as zip_file:
+                # Check if file exists in ZIP
+                if filename not in zip_file.namelist():
+                    logger.warning("errors.validation", f"File not found in ZIP", "file_not_found_in_zip", {
+                        "release_id": release_id,
+                        "filename": filename,
+                        "available_files": zip_file.namelist()[:10]  # Log first 10 files
+                    })
+                    raise HTTPException(status_code=404, detail=f"File '{filename}' not found in release")
+                
+                # Extract file content
+                file_content = zip_file.read(filename)
+                
+                # Determine content type
+                content_type = "application/octet-stream"
+                if filename.lower().endswith(('.jpg', '.jpeg')):
+                    content_type = "image/jpeg"
+                elif filename.lower().endswith('.png'):
+                    content_type = "image/png"
+                elif filename.lower().endswith('.webp'):
+                    content_type = "image/webp"
+                elif filename.lower().endswith('.bmp'):
+                    content_type = "image/bmp"
+                elif filename.lower().endswith(('.tiff', '.tif')):
+                    content_type = "image/tiff"
+                elif filename.lower().endswith('.gif'):
+                    content_type = "image/gif"
+                elif filename.lower().endswith('.svg'):
+                    content_type = "image/svg+xml"
+                elif filename.lower().endswith('.txt'):
+                    content_type = "text/plain"
+                elif filename.lower().endswith('.json'):
+                    content_type = "application/json"
+                elif filename.lower().endswith('.yaml', '.yml'):
+                    content_type = "text/yaml"
+                
+                # If it's an image and thumbnail is requested, resize it
+                if thumbnail and content_type.startswith('image/'):
+                    try:
+                        # Open image with PIL
+                        image = PILImage.open(BytesIO(file_content))
+                        
+                        # Resize to thumbnail (max 200x200, maintain aspect ratio)
+                        image.thumbnail((200, 200), PILImage.Resampling.LANCZOS)
+                        
+                        # Save resized image to bytes
+                        output = BytesIO()
+                        # Preserve original format
+                        format_name = 'JPEG' if content_type == 'image/jpeg' else 'PNG'
+                        image.save(output, format=format_name, quality=85 if format_name == 'JPEG' else None)
+                        file_content = output.getvalue()
+                        
+                        logger.debug("operations.images", f"Generated thumbnail for image", "thumbnail_generated", {
+                            "release_id": release_id,
+                            "filename": filename,
+                            "original_size": len(zip_file.read(filename)),
+                            "thumbnail_size": len(file_content)
+                        })
+                        
+                    except Exception as e:
+                        logger.warning("errors.image_processing", f"Failed to generate thumbnail, serving original", "thumbnail_generation_failed", {
+                            "release_id": release_id,
+                            "filename": filename,
+                            "error": str(e)
+                        })
+                        # If thumbnail generation fails, serve original
+                        pass
+                
+                logger.info("operations.releases", f"Successfully served file from ZIP", "file_served_from_zip", {
+                    "release_id": release_id,
+                    "filename": filename,
+                    "content_type": content_type,
+                    "file_size": len(file_content),
+                    "thumbnail": thumbnail
+                })
+                
+                # Return file as streaming response
+                return StreamingResponse(
+                    BytesIO(file_content),
+                    media_type=content_type,
+                    headers={"Content-Disposition": f"inline; filename={os.path.basename(filename)}"}
+                )
+                
+        except zipfile.BadZipFile:
+            logger.error("errors.system", f"Invalid ZIP file", "invalid_zip_file", {
+                "release_id": release_id,
+                "model_path": abs_model_path
+            })
+            raise HTTPException(status_code=500, detail="Invalid ZIP file")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("errors.system", f"Failed to serve file from release", "release_file_serve_error", {
+            "release_id": release_id,
+            "filename": filename,
+            "error": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Failed to serve file: {str(e)}")
 
 @router.get("/releases/{release_id}/package-info")
 def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
@@ -1339,23 +1520,24 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
         })
         
         # Check if release has a ZIP package
-        if not release.model_path or not os.path.exists(release.model_path) or not release.model_path.endswith('.zip'):
+        abs_model_path = PathManager.get_absolute_path(release.model_path) if release.model_path else None
+        if not abs_model_path or not os.path.exists(abs_model_path) or not str(abs_model_path).endswith('.zip'):
             logger.warning("errors.validation", f"Release ZIP package not found", "zip_package_not_found", {
                 "release_id": release_id,
                 "model_path": release.model_path,
-                "exists": os.path.exists(release.model_path) if release.model_path else False
+                "exists": os.path.exists(abs_model_path) if abs_model_path else False
             })
             raise HTTPException(status_code=404, detail="Release ZIP package not found")
         
         logger.info("operations.releases", f"ZIP package found, extracting metadata", "zip_metadata_extraction_start", {
             "release_id": release_id,
             "zip_path": release.model_path,
-            "zip_size": os.path.getsize(release.model_path)
+            "zip_size": os.path.getsize(abs_model_path)
         })
         
         try:
             # Extract metadata from ZIP package
-            with zipfile.ZipFile(release.model_path, 'r') as zipf:
+            with zipfile.ZipFile(abs_model_path, 'r') as zipf:
                 # Get file list and count by directory
                 file_counts = {
                     "images": {"total": 0, "train": 0, "val": 0, "test": 0},
@@ -1369,16 +1551,21 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
                     "total_files": len(zipf.namelist())
                 })
                 
-                # Count files by directory
+                # Count files by directory and collect actual filenames
+                image_files = {"train": [], "val": [], "test": []}
+                
                 for filename in zipf.namelist():
                     if filename.startswith('images/'):
                         file_counts["images"]["total"] += 1
-                        if 'images/train/' in filename:
+                        if 'images/train/' in filename and not filename.endswith('/'):
                             file_counts["images"]["train"] += 1
-                        elif 'images/val/' in filename:
+                            image_files["train"].append(filename)
+                        elif 'images/val/' in filename and not filename.endswith('/'):
                             file_counts["images"]["val"] += 1
-                        elif 'images/test/' in filename:
+                            image_files["val"].append(filename)
+                        elif 'images/test/' in filename and not filename.endswith('/'):
                             file_counts["images"]["test"] += 1
+                            image_files["test"].append(filename)
                     elif filename.startswith('labels/'):
                         file_counts["labels"]["total"] += 1
                         if 'labels/train/' in filename:
@@ -1406,6 +1593,40 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
                 if 'metadata/release_config.json' in zipf.namelist():
                     with zipf.open('metadata/release_config.json') as f:
                         release_config = json.load(f)
+
+                # ------------------------------------------------------------------
+                # Ensure split_counts are present and accurate by falling back to
+                # directory-based counts when metadata is missing or incomplete.
+                # ------------------------------------------------------------------
+                try:
+                    split_counts_meta = dataset_stats.get("split_counts", {}) if isinstance(dataset_stats, dict) else {}
+                except Exception:
+                    split_counts_meta = {}
+
+                # Build fallback from counted files
+                split_counts_fallback = {
+                    "train": file_counts["images"]["train"],
+                    "val": file_counts["images"]["val"],
+                    "test": file_counts["images"]["test"]
+                }
+
+                # Merge: use metadata values if they are non-zero, otherwise fallback
+                merged_split_counts = {
+                    "train": split_counts_meta.get("train", 0) or split_counts_fallback["train"],
+                    "val": split_counts_meta.get("val", 0) or split_counts_fallback["val"],
+                    "test": split_counts_meta.get("test", 0) or split_counts_fallback["test"]
+                }
+
+                # Persist back to dataset_stats for response consistency
+                if isinstance(dataset_stats, dict):
+                    dataset_stats["split_counts"] = merged_split_counts
+                    # Also ensure total_images key is populated
+                    dataset_stats.setdefault("total_images", file_counts["images"]["total"])
+                else:
+                    dataset_stats = {
+                        "total_images": file_counts["images"]["total"],
+                        "split_counts": merged_split_counts
+                    }
                 
                 # Get README content if available
                 readme_content = ""
@@ -1413,22 +1634,117 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
                     with zipf.open('README.md') as f:
                         readme_content = f.read().decode('utf-8')
                 
+                # Read annotations.json from metadata folder
+                annotations_data = {}
+                class_mapping = {}
+                
+                # Look for annotations.json in metadata folder or root
+                annotation_files_found = []
+                for file_path in zipf.namelist():
+                    if file_path.endswith('annotations.json') or file_path.endswith('metadata/annotations.json'):
+                        annotation_files_found.append(file_path)
+                        try:
+                            with zipf.open(file_path) as f:
+                                annotations_content = f.read().decode('utf-8')
+                                parsed_annotations = json.loads(annotations_content)
+                                
+                                # Log detailed structure for debugging
+                                sample_keys = list(parsed_annotations.keys())[:3] if parsed_annotations else []
+                                sample_annotation = None
+                                if sample_keys:
+                                    sample_annotation = parsed_annotations[sample_keys[0]]
+                                
+                                logger.info("operations.releases", f"Annotations data loaded", "annotations_loaded", {
+                                    "release_id": release_id,
+                                    "annotation_count": len(parsed_annotations),
+                                    "file_path": file_path,
+                                    "sample_keys": sample_keys,
+                                    "sample_annotation_structure": type(sample_annotation).__name__ if sample_annotation else None,
+                                    "sample_annotation_keys": list(sample_annotation.keys()) if isinstance(sample_annotation, dict) else None
+                                })
+                                
+                                # Merge annotations (in case multiple files exist)
+                                annotations_data.update(parsed_annotations)
+                                
+                        except Exception as e:
+                            logger.warning("operations.releases", f"Failed to parse annotations.json", "annotations_parse_error", {
+                                "release_id": release_id,
+                                "file_path": file_path,
+                                "error": str(e)
+                            })
+                
+                logger.info("operations.releases", f"Annotation files search completed", "annotation_files_search", {
+                    "release_id": release_id,
+                    "annotation_files_found": annotation_files_found,
+                    "total_annotations": len(annotations_data)
+                })
+                
+                # Look for data.yaml or classes.txt for class mapping
+                for file_path in zipf.namelist():
+                    if file_path.endswith('data.yaml') or file_path.endswith('data.yml'):
+                        try:
+                            with zipf.open(file_path) as f:
+                                yaml_content = f.read().decode('utf-8')
+                                import yaml
+                                yaml_data = yaml.safe_load(yaml_content)
+                                if 'names' in yaml_data:
+                                    # YOLO format: names can be dict or list
+                                    if isinstance(yaml_data['names'], dict):
+                                        class_mapping = yaml_data['names']
+                                    elif isinstance(yaml_data['names'], list):
+                                        class_mapping = {i: name for i, name in enumerate(yaml_data['names'])}
+                                logger.info("operations.releases", f"Class mapping loaded from data.yaml", "class_mapping_loaded", {
+                                    "release_id": release_id,
+                                    "class_count": len(class_mapping),
+                                    "file_path": file_path
+                                })
+                                break
+                        except Exception as e:
+                            logger.warning("operations.releases", f"Failed to parse data.yaml", "yaml_parse_error", {
+                                "release_id": release_id,
+                                "file_path": file_path,
+                                "error": str(e)
+                            })
+                    elif file_path.endswith('classes.txt'):
+                        try:
+                            with zipf.open(file_path) as f:
+                                classes_content = f.read().decode('utf-8')
+                                class_names = [line.strip() for line in classes_content.split('\n') if line.strip()]
+                                class_mapping = {i: name for i, name in enumerate(class_names)}
+                                logger.info("operations.releases", f"Class mapping loaded from classes.txt", "class_mapping_loaded", {
+                                    "release_id": release_id,
+                                    "class_count": len(class_mapping),
+                                    "file_path": file_path
+                                })
+                                break
+                        except Exception as e:
+                            logger.warning("operations.releases", f"Failed to parse classes.txt", "classes_parse_error", {
+                                "release_id": release_id,
+                                "file_path": file_path,
+                                "error": str(e)
+                            })
+                
                 logger.info("operations.releases", f"Package info extracted successfully", "package_info_extraction_success", {
                     "release_id": release_id,
                     "total_files": file_counts["total_files"],
                     "image_count": file_counts["images"]["total"],
                     "label_count": file_counts["labels"]["total"],
-                    "metadata_count": file_counts["metadata"]
+                    "metadata_count": file_counts["metadata"],
+                    "annotations_count": len(annotations_data),
+                    "class_mapping_count": len(class_mapping)
                 })
                 
                 return {
                     "release_id": release_id,
                     "release_name": release.name,
                     "file_counts": file_counts,
+                    "image_files": image_files,
+                    "annotations": annotations_data,
+                    "class_mapping": class_mapping,
                     "dataset_stats": dataset_stats,
                     "release_config": release_config,
                     "readme": readme_content,
-                    "zip_size": os.path.getsize(release.model_path),
+                    "zip_size": os.path.getsize(abs_model_path),
                     "created_at": release.created_at.isoformat() if release.created_at else None
                 }
         
@@ -1940,6 +2256,7 @@ def create_complete_release_zip(
     from PIL import Image as PILImage
     import io
     import yaml
+    import json
     
     logger.info("operations.releases", f"Creating complete release ZIP", "release_zip_creation_start", {
         'dataset_count': len(dataset_ids),
@@ -2581,6 +2898,99 @@ def create_complete_release_zip(
         data_yaml_path = os.path.join(staging_dir, "data.yaml")
         with open(data_yaml_path, 'w') as f:
             yaml.dump(data_yaml, f, default_flow_style=False)
+
+        # Step 3b: Write new metadata files (release_config.json & annotations.json) AFTER augmentation
+        metadata_dir = os.path.join(staging_dir, "metadata")
+        os.makedirs(metadata_dir, exist_ok=True)
+
+        # Build annotations mapping and gather split counts
+        split_counts_meta = {}
+        for _spl in ["train", "val", "test"]:
+            img_dir = os.path.join(staging_dir, "images", _spl)
+            split_counts_meta[_spl] = len([f for f in os.listdir(img_dir) if os.path.isfile(os.path.join(img_dir, f))]) if os.path.exists(img_dir) else 0
+
+        # Extract unique class indices from YOLO label files
+        unique_class_ids = set()
+        labels_root = os.path.join(staging_dir, "labels")
+        if os.path.exists(labels_root):
+            for root_lbl, _dirs_lbl, files_lbl in os.walk(labels_root):
+                for _lf in files_lbl:
+                    if _lf.lower().endswith(".txt"):
+                        try:
+                            with open(os.path.join(root_lbl, _lf), "r") as lf:
+                                for _ln in lf:
+                                    parts = _ln.strip().split()
+                                    if parts:
+                                        unique_class_ids.add(int(float(parts[0])))
+                        except Exception:
+                            pass
+        classes_sorted = sorted(unique_class_ids)
+
+        # Build annotations.json by parsing YOLO label files
+        annotations_data = {}
+        for split in ["train", "val", "test"]:
+            lbl_dir = os.path.join(labels_root, split)
+            img_dir_rel = os.path.join("images", split)
+            if not os.path.exists(lbl_dir):
+                continue
+            for lbl_file in os.listdir(lbl_dir):
+                if not lbl_file.lower().endswith(".txt"):
+                    continue
+                lbl_path = os.path.join(lbl_dir, lbl_file)
+                img_name = os.path.splitext(lbl_file)[0]
+                # Assume image has the selected output format extension
+                possible_exts = [".jpg", ".jpeg", ".png", ".bmp", ".webp"]
+                rel_img_path = None
+                for ext in possible_exts:
+                    _candidate = os.path.join(img_dir_rel, img_name + ext)
+                    if os.path.exists(os.path.join(staging_dir, _candidate)):
+                        rel_img_path = _candidate
+                        break
+                if rel_img_path is None:
+                    rel_img_path = os.path.join(img_dir_rel, img_name + possible_exts[0])
+                shapes = []
+                try:
+                    with open(lbl_path, "r") as lf:
+                        for _ln in lf:
+                            parts = _ln.strip().split()
+                            if len(parts) < 5:
+                                continue
+                            cid = int(float(parts[0]))
+                            if len(parts) == 5:
+                                # YOLO detection format
+                                cx, cy, w, h = map(float, parts[1:5])
+                                shapes.append({"class_id": cid, "bbox": [cx, cy, w, h]})
+                            else:
+                                # YOLO segmentation format: full polygon coordinates
+                                coords = list(map(float, parts[1:]))
+                                shapes.append({"class_id": cid, "polygon": coords})
+                except Exception:
+                    pass
+                annotations_data[rel_img_path] = shapes
+
+        with open(os.path.join(metadata_dir, "annotations.json"), "w") as f:
+            json.dump(annotations_data, f, indent=2)
+
+        # Serialize release config to JSON and include classes
+        try:
+            config_data_json = config.dict() if hasattr(config, "dict") else dict(config.__dict__)
+        except Exception:
+            config_data_json = {}
+        # Prefer readable class names when available
+        if class_list_for_yaml:
+            config_data_json["classes"] = class_list_for_yaml
+        else:
+            config_data_json["classes"] = classes_sorted
+        config_data_json["split_counts"] = split_counts_meta
+        config_data_json["total_images"] = final_image_count
+        # Embed transformation info for transparency
+        try:
+            if transformations:
+                config_data_json["transformations"] = transformations
+        except NameError:
+            pass
+        with open(os.path.join(metadata_dir, "release_config.json"), "w") as f:
+            json.dump(config_data_json, f, indent=2)
         
         # Step 4: Create ZIP file
         logger.info("operations.releases", f"Creating ZIP file with {final_image_count} total images", "zip_creation_start", {

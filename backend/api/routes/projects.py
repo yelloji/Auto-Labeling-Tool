@@ -998,10 +998,9 @@ async def assign_dataset_to_annotating(project_id: str, dataset_id: str, db: Ses
             for image in images:
                 old_path = image.file_path
                 # Find the source file path from train/val/test subfolder
-                source_path = Path("..") / image.file_path
+                source_path = path_manager.get_absolute_path(image.file_path)
                 # Create target path in flat annotating folder
                 target_path = annotating_folder / image.filename
-                
                 # Copy the file if it exists
                 if source_path.exists():
                     try:
@@ -3295,8 +3294,8 @@ async def move_dataset_to_unassigned(
                     "total_images": len(images)
                 })
                 
-                # Get the current image file path
-                source_path = Path("..") / image.file_path
+                # Get the current image file path using PathManager for robust absolute resolution
+                source_path = path_manager.get_absolute_path(image.file_path)
                 
                 # Create the target path in unassigned
                 target_path = unassigned_folder / image.filename
@@ -3674,7 +3673,7 @@ async def move_dataset_to_completed(
                 })
                 
                 # Get the current image file path
-                source_path = Path("..") / image.file_path
+                source_path = path_manager.get_absolute_path(image.file_path)
                 
                 # Determine the target split folder based on database split_section
                 split_section = image.split_section

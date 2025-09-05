@@ -1,10 +1,9 @@
 ID,Filename,Original Filename,File Path,Project,Dataset,Width,Height,Format,File Size,Split Type,Split Section,Is Labeled,Is Auto Labeled,Is Verified,Annotations,File Exists,Created,Updated
-4cd30f24-e25a-4354-8196-253a9aba4a27,car_1.jpg,car_1.jpg,projects\gevis\dataset\car_dataset\train\car_1.jpg,gevis,car_dataset,300,168,JPEG,8848,dataset,train,Yes,No,No,1,No,2025-06-19 13:26:47,2025-09-01 07:41:59
-c0abe285-bd28-4e6e-ab5a-a08ecd5b7385,car_2.jpg,car_2.jpg,projects\gevis\dataset\car_dataset\train\car_2.jpg,gevis,car_dataset,300,168,JPEG,7191,dataset,train,Yes,No,No,1,No,2025-06-19 13:26:47,2025-09-01 07:41:59
-3cbdd14e-83a5-46b0-8bc3-48792aaefc38,car_3.jpg,car_3.jpg,projects\gevis\dataset\car_dataset\train\car_3.jpg,gevis,car_dataset,300,168,JPEG,9937,dataset,train,Yes,No,No,1,No,2025-06-19 13:26:47,2025-09-01 07:40:47
-4237eb50-7c18-4180-9df1-11686408bbf2,car_4.jpg,car_4.jpg,projects\gevis\dataset\car_dataset\train\car_4.jpg,gevis,car_dataset,275,183,JPEG,6820,dataset,train,Yes,No,No,1,No,2025-06-19 13:26:47,2025-09-01 07:41:59
-ee50e17c-7ea7-4ba3-8d8b-1df3dd40981d,car_5.jpg,car_5.jpg,projects\gevis\dataset\car_dataset\train\car_5.jpg,gevis,car_dataset,275,183,JPEG,7170,dataset,train,Yes,No,No,1,No,2025-06-19 13:26:47,2025-09-01 07:40:47
-b30c0dd0-3410-4552-a202-28eb067e81e2,car.jpg,car.jpg,projects\gevis\dataset\animal\val\car.jpg,gevis,animal,800,600,JPEG,57407,dataset,val,Yes,No,No,2,No,2025-08-26 14:13:06,2025-09-01 07:40:47
-f2675f12-d201-4ce1-b0c3-ba8f6633b114,cat.jpg,cat.jpg,projects\gevis\dataset\animal\test\cat.jpg,gevis,animal,800,600,JPEG,54749,dataset,test,Yes,No,No,1,No,2025-08-26 14:13:07,2025-09-01 07:40:47
-ace7fbef-b79a-44f3-bc7f-120708731468,dog.jpg,dog.jpg,projects\gevis\dataset\animal\train\dog.jpg,gevis,animal,800,600,JPEG,76182,dataset,train,Yes,No,No,1,No,2025-08-26 14:13:07,2025-09-01 07:40:47
-95bb2ec3-5067-45a0-81d0-1470c5aa06c8,cat.jpg,cat.jpg,projects/gevis/dataset/riay/val/cat.jpg,gevis,riay,800,600,JPEG,54749,dataset,val,Yes,No,No,1,No,2025-09-01 07:18:42,2025-09-01 07:43:58.129784
+4cd30f24-e25a-4354-8196-253a9aba4a27,car_1.jpg,car_1.jpg,projects/gevis/dataset/car_dataset/train/car_1.jpg,gevis,car_dataset,300,168,JPEG,8848,dataset,train,Yes,No,No,1,Yes,2025-06-19 13:26:47,2025-09-03 08:46:39.407653
+c0abe285-bd28-4e6e-ab5a-a08ecd5b7385,car_2.jpg,car_2.jpg,projects/gevis/dataset/car_dataset/test/car_2.jpg,gevis,car_dataset,300,168,JPEG,7191,dataset,test,Yes,No,No,1,Yes,2025-06-19 13:26:47,2025-09-03 08:46:39.419162
+3cbdd14e-83a5-46b0-8bc3-48792aaefc38,car_3.jpg,car_3.jpg,projects/gevis/dataset/car_dataset/val/car_3.jpg,gevis,car_dataset,300,168,JPEG,9937,dataset,val,Yes,No,No,1,Yes,2025-06-19 13:26:47,2025-09-03 08:46:39.430714
+4237eb50-7c18-4180-9df1-11686408bbf2,car_4.jpg,car_4.jpg,projects/gevis/dataset/car_dataset/train/car_4.jpg,gevis,car_dataset,275,183,JPEG,6820,dataset,train,Yes,No,No,1,Yes,2025-06-19 13:26:47,2025-09-03 08:46:39.441714
+ee50e17c-7ea7-4ba3-8d8b-1df3dd40981d,car_5.jpg,car_5.jpg,projects/gevis/dataset/car_dataset/val/car_5.jpg,gevis,car_dataset,275,183,JPEG,7170,dataset,val,Yes,No,No,1,Yes,2025-06-19 13:26:47,2025-09-03 08:46:39.452719
+6b278151-bd8a-460d-b2f9-a02b72edfa0d,car.jpg,car.jpg,projects/gevis/dataset/animal/train/car.jpg,gevis,animal,800,600,JPEG,57407,dataset,train,Yes,No,No,1,Yes,2025-09-02 11:47:18,2025-09-03 08:56:49.499720
+c5cd9dd2-5bb1-4faa-bee4-1a40a0778703,cat.jpg,cat.jpg,projects/gevis/dataset/animal/test/cat.jpg,gevis,animal,800,600,JPEG,54749,dataset,test,Yes,No,No,1,Yes,2025-09-02 11:47:18,2025-09-03 08:56:49.515240
+39ecbde1-4ddf-4711-a6fd-dc6a756edd66,dog.jpg,dog.jpg,projects/gevis/dataset/animal/val/dog.jpg,gevis,animal,800,600,JPEG,76182,dataset,val,Yes,No,No,1,Yes,2025-09-02 11:47:18,2025-09-03 08:56:49.531231

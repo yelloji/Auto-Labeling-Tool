@@ -1,0 +1,266 @@
+{
+  "images\\train\\car.png": [
+    {
+      "class_id": 2,
+      "bbox": [
+        0.567969,
+        0.552344,
+        0.721875,
+        0.765625
+      ]
+    }
+  ],
+  "images\\train\\car_1.png": [
+    {
+      "class_id": 4,
+      "bbox": [
+        0.249653,
+        0.155556,
+        0.234028,
+        0.149306
+      ]
+    }
+  ],
+  "images\\train\\car_1_brightness+50.png": [
+    {
+      "class_id": 4,
+      "bbox": [
+        0.249653,
+        0.155556,
+        0.234028,
+        0.149306
+      ]
+    }
+  ],
+  "images\\train\\car_1_brightness-50.png": [
+    {
+      "class_id": 4,
+      "bbox": [
+        0.249653,
+        0.155556,
+        0.234028,
+        0.149306
+      ]
+    }
+  ],
+  "images\\train\\car_4.png": [
+    {
+      "class_id": 5,
+      "bbox": [
+        0.227486,
+        0.160827,
+        0.29375,
+        0.120313
+      ]
+    }
+  ],
+  "images\\train\\car_4_brightness+50.png": [
+    {
+      "class_id": 5,
+      "bbox": [
+        0.227486,
+        0.160827,
+        0.29375,
+        0.120313
+      ]
+    }
+  ],
+  "images\\train\\car_4_brightness-50.png": [
+    {
+      "class_id": 5,
+      "bbox": [
+        0.227486,
+        0.160827,
+        0.29375,
+        0.120313
+      ]
+    }
+  ],
+  "images\\train\\car_brightness+50.png": [
+    {
+      "class_id": 2,
+      "bbox": [
+        0.567969,
+        0.552344,
+        0.721875,
+        0.765625
+      ]
+    }
+  ],
+  "images\\train\\car_brightness-50.png": [
+    {
+      "class_id": 2,
+      "bbox": [
+        0.567969,
+        0.552344,
+        0.721875,
+        0.765625
+      ]
+    }
+  ],
+  "images\\val\\car_3.png": [
+    {
+      "class_id": 4,
+      "bbox": [
+        0.24233,
+        0.153795,
+        0.325,
+        0.173437
+      ]
+    }
+  ],
+  "images\\val\\car_3_brightness+50.png": [
+    {
+      "class_id": 4,
+      "bbox": [
+        0.24233,
+        0.153795,
+        0.325,
+        0.173437
+      ]
+    }
+  ],
+  "images\\val\\car_3_brightness-50.png": [
+    {
+      "class_id": 4,
+      "bbox": [
+        0.24233,
+        0.153795,
+        0.325,
+        0.173437
+      ]
+    }
+  ],
+  "images\\val\\car_5.png": [
+    {
+      "class_id": 3,
+      "bbox": [
+        0.21733,
+        0.135827,
+        0.323437,
+        0.145313
+      ]
+    }
+  ],
+  "images\\val\\car_5_brightness+50.png": [
+    {
+      "class_id": 3,
+      "bbox": [
+        0.21733,
+        0.135827,
+        0.323437,
+        0.145313
+      ]
+    }
+  ],
+  "images\\val\\car_5_brightness-50.png": [
+    {
+      "class_id": 3,
+      "bbox": [
+        0.21733,
+        0.135827,
+        0.323437,
+        0.145313
+      ]
+    }
+  ],
+  "images\\val\\dog.png": [
+    {
+      "class_id": 2,
+      "bbox": [
+        0.690625,
+        0.496094,
+        0.820312,
+        0.875
+      ]
+    }
+  ],
+  "images\\val\\dog_brightness+50.png": [
+    {
+      "class_id": 2,
+      "bbox": [
+        0.690625,
+        0.496094,
+        0.820312,
+        0.875
+      ]
+    }
+  ],
+  "images\\val\\dog_brightness-50.png": [
+    {
+      "class_id": 2,
+      "bbox": [
+        0.690625,
+        0.496094,
+        0.820312,
+        0.875
+      ]
+    }
+  ],
+  "images\\test\\car_2.png": [
+    {
+      "class_id": 0,
+      "bbox": [
+        0.239844,
+        0.151562,
+        0.36875,
+        0.182812
+      ]
+    }
+  ],
+  "images\\test\\car_2_brightness+50.png": [
+    {
+      "class_id": 0,
+      "bbox": [
+        0.239844,
+        0.151562,
+        0.36875,
+        0.182812
+      ]
+    }
+  ],
+  "images\\test\\car_2_brightness-50.png": [
+    {
+      "class_id": 0,
+      "bbox": [
+        0.239844,
+        0.151562,
+        0.36875,
+        0.182812
+      ]
+    }
+  ],
+  "images\\test\\cat.png": [
+    {
+      "class_id": 1,
+      "bbox": [
+        0.678125,
+        0.4875,
+        1.0,
+        0.848437
+      ]
+    }
+  ],
+  "images\\test\\cat_brightness+50.png": [
+    {
+      "class_id": 1,
+      "bbox": [
+        0.678125,
+        0.4875,
+        1.0,
+        0.848437
+      ]
+    }
+  ],
+  "images\\test\\cat_brightness-50.png": [
+    {
+      "class_id": 1,
+      "bbox": [
+        0.678125,
+        0.4875,
+        1.0,
+        0.848437
+      ]
+    }
+  ]
+}
