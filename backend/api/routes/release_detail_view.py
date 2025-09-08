@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 import os
 import zipfile
 import json
-from backend.database.database import get_db
-from backend.database.models import Release
-from backend.utils.path_utils import PathManager
+from database.database import get_db
+from database.models import Release
+from utils.path_utils import PathManager
 from fastapi.responses import StreamingResponse
 from PIL import Image
 import io

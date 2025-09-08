@@ -13,7 +13,7 @@ import os
 import json
 import uuid
 import shutil
-from backend.utils.path_utils import PathManager  # absolute import
+from utils.path_utils import PathManager  # relative import
 import random
 import yaml
 import zipfile
@@ -692,7 +692,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
 
         # Now that the release row is committed, schedule stats extraction worker
         try:
-            from backend.api.services.release_stats_worker import schedule_zip_stats_update
+            from api.services.release_stats_worker import schedule_zip_stats_update
             schedule_zip_stats_update(release_id)
         except Exception as _e:
             logger.warning("operations.releases", f"Failed to schedule ZIP stats update post-commit: {_e}", "zip_stats_worker_schedule_failed", {
@@ -1638,46 +1638,24 @@ def get_release_package_info(release_id: str, db: Session = Depends(get_db)):
                 annotations_data = {}
                 class_mapping = {}
                 
-                # Look for annotations.json in metadata folder or root
-                annotation_files_found = []
+                # Look for annotations.json in metadata folder
                 for file_path in zipf.namelist():
-                    if file_path.endswith('annotations.json') or file_path.endswith('metadata/annotations.json'):
-                        annotation_files_found.append(file_path)
+                    if file_path.endswith('metadata/annotations.json'):
                         try:
                             with zipf.open(file_path) as f:
                                 annotations_content = f.read().decode('utf-8')
-                                parsed_annotations = json.loads(annotations_content)
-                                
-                                # Log detailed structure for debugging
-                                sample_keys = list(parsed_annotations.keys())[:3] if parsed_annotations else []
-                                sample_annotation = None
-                                if sample_keys:
-                                    sample_annotation = parsed_annotations[sample_keys[0]]
-                                
+                                annotations_data = json.loads(annotations_content)
                                 logger.info("operations.releases", f"Annotations data loaded", "annotations_loaded", {
                                     "release_id": release_id,
-                                    "annotation_count": len(parsed_annotations),
-                                    "file_path": file_path,
-                                    "sample_keys": sample_keys,
-                                    "sample_annotation_structure": type(sample_annotation).__name__ if sample_annotation else None,
-                                    "sample_annotation_keys": list(sample_annotation.keys()) if isinstance(sample_annotation, dict) else None
+                                    "annotation_count": len(annotations_data),
+                                    "file_path": file_path
                                 })
-                                
-                                # Merge annotations (in case multiple files exist)
-                                annotations_data.update(parsed_annotations)
-                                
                         except Exception as e:
                             logger.warning("operations.releases", f"Failed to parse annotations.json", "annotations_parse_error", {
                                 "release_id": release_id,
                                 "file_path": file_path,
                                 "error": str(e)
                             })
-                
-                logger.info("operations.releases", f"Annotation files search completed", "annotation_files_search", {
-                    "release_id": release_id,
-                    "annotation_files_found": annotation_files_found,
-                    "total_annotations": len(annotations_data)
-                })
                 
                 # Look for data.yaml or classes.txt for class mapping
                 for file_path in zipf.namelist():
@@ -3169,13 +3147,13 @@ def create_yolo_label_content(annotations, db_image, mode: str = "yolo_detection
                         'point_count': len(points)
                     })
                 # 3) [x1,y1,x2,y2,...]
-            else:
-                flat = seg
-                for i in range(0, len(flat) - 1, 2):
-                    points.append((float(flat[i]), float(flat[i+1])))
-                logger.debug("operations.images", f"Segmentation points from flat list format", "segmentation_points_flat_list", {
-                    'point_count': len(points)
-                })
+                else:
+                    flat = seg
+                    for i in range(0, len(flat) - 1, 2):
+                        points.append((float(flat[i]), float(flat[i+1])))
+                    logger.debug("operations.images", f"Segmentation points from flat list format", "segmentation_points_flat_list", {
+                        'point_count': len(points)
+                    })
 
             if points:
                 # Detect normalized vs pixel
@@ -3183,8 +3161,8 @@ def create_yolo_label_content(annotations, db_image, mode: str = "yolo_detection
                 is_norm = max_val <= 1.0
                 norm_vals = []
                 for px, py in points:
-                    nx = px if is_norm else (px / max(1, image_width))
-                    ny = py if is_norm else (py / max(1, image_height))
+                    nx = px if is_norm else (px / image_width)
+                    ny = py if is_norm else (py / image_height)
                     nx = max(0.0, min(1.0, nx))
                     ny = max(0.0, min(1.0, ny))
                     norm_vals.extend([f"{nx:.6f}", f"{ny:.6f}"])
@@ -3213,10 +3191,10 @@ def create_yolo_label_content(annotations, db_image, mode: str = "yolo_detection
                     'cx': cx, 'cy': cy, 'w': w, 'h': h
                 })
             else:
-                cx = ((x_min + x_max) / 2.0) / max(1, image_width)
-                cy = ((y_min + y_max) / 2.0) / max(1, image_height)
-                w = (x_max - x_min) / max(1, image_width)
-                h = (y_max - y_min) / max(1, image_height)
+                cx = ((x_min + x_max) / 2.0) / image_width
+                cy = ((y_min + y_max) / 2.0) / image_height
+                w = (x_max - x_min) / image_width
+                h = (y_max - y_min) / image_height
                 logger.debug("operations.images", f"Converted pixel coordinates to normalized", "detection_pixel_to_normalized", {
                     'original': {'x_min': x_min, 'y_min': y_min, 'x_max': x_max, 'y_max': y_max},
                     'normalized': {'cx': cx, 'cy': cy, 'w': w, 'h': h}
