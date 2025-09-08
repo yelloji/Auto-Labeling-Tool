@@ -1120,7 +1120,7 @@ useEffect(() => {
                                        </svg>
                                      );
                                    })()}
-                                 )}
+                                 )
                               </div>
                             }
                           >
@@ -1183,5 +1183,4 @@ useEffect(() => {
     };
 
     export default ReleaseDetailsView;
-
 
