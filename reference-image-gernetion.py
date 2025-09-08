@@ -16,6 +16,7 @@ from api.services.image_transformer import ImageTransformer
 
 # Import dual-value transformation functions
 from core.transformation_config import is_dual_value_transformation, generate_auto_value
+from core.annotation_transformer import apply_transformations_to_annotations, BoundingBoxPixels, PolygonPixels
 
 # Import professional logging system - CORRECT UNIFORM PATTERN
 from logging_system.professional_logger import get_professional_logger
@@ -262,152 +263,106 @@ class ImageAugmentationEngine:
                                              new_dims: Tuple[int, int]) -> List[Union[BoundingBox, Polygon]]:
         """
         Update annotations based on applied transformations with dual-value support
-        Phase 1: Basic annotation updates for common transformations
+        Delegates to the centralized AnnotationTransformer to ensure identical ordering and behavior
+        to the image transformation pipeline (e.g., resize first, then geometric transforms).
         """
         if not annotations:
             return []
-        
-        # Resolve dual-value parameters for annotation processing
+
+        # Resolve dual-value parameters for annotation processing (consistent with image processing)
         resolved_config = self._resolve_dual_value_parameters(transformation_config)
-        
-        updated_annotations = []
-        
-        for annotation in annotations:
-            try:
-                updated_annotation = self._transform_single_annotation(
-                    annotation, resolved_config, original_dims, new_dims
-                )
-                if updated_annotation:
-                    updated_annotations.append(updated_annotation)
-            except Exception as e:
-                logger.warning("errors.validation", f"Failed to update annotation: {str(e)}", "annotation_update_failed", {
+        orig_w, orig_h = original_dims
+        new_w, new_h = new_dims
+
+        try:
+            # Run through the unified annotation transformer
+            transformed = apply_transformations_to_annotations(
+                annotations=annotations,
+                img_w=orig_w,
+                img_h=orig_h,
+                transformation_config=resolved_config,
+                new_dims=(new_w, new_h)
+            )
+        except Exception as e:
+            logger.error(
+                "errors.system",
+                f"Failed to transform annotations via AnnotationTransformer: {str(e)}",
+                "annotation_transformer_error",
+                {
                     'error': str(e),
-                    'annotation_type': type(annotation).__name__
+                    'original_dims': original_dims,
+                    'new_dims': new_dims,
+                }
+            )
+            # Fall back to returning originals to avoid pipeline break
+            return annotations
+
+        # Build metadata list from originals (only those we expect to be extractable)
+        original_meta: List[Dict[str, Any]] = []
+        for ann in annotations:
+            if isinstance(ann, (BoundingBox, Polygon)):
+                original_meta.append({
+                    'class_name': ann.class_name,
+                    'class_id': ann.class_id,
+                    'confidence': getattr(ann, 'confidence', 1.0)
                 })
-                # Keep original annotation if update fails
-                updated_annotations.append(annotation)
-        
-        logger.info("operations.transformations", f"Updated {len(updated_annotations)} annotations", "annotations_updated", {
-            'annotation_count': len(updated_annotations),
-            'original_count': len(annotations)
-        })
-        return updated_annotations
-    
-    def _transform_single_annotation(self, annotation: Union[BoundingBox, Polygon],
-                                   transformation_config: Dict[str, Any],
-                                   original_dims: Tuple[int, int],
-                                   new_dims: Tuple[int, int]) -> Optional[Union[BoundingBox, Polygon]]:
-        """Transform a single annotation based on transformations applied"""
-        
-        # For Phase 1, we'll handle basic transformations that don't change coordinates
-        # More complex transformations will be added in later phases
-        
-        if isinstance(annotation, BoundingBox):
-            return self._transform_bbox(annotation, transformation_config, original_dims, new_dims)
-        elif isinstance(annotation, Polygon):
-            return self._transform_polygon(annotation, transformation_config, original_dims, new_dims)
-        else:
-            return annotation
-    
-    def _transform_bbox(self, bbox: BoundingBox, transformation_config: Dict[str, Any],
-                       original_dims: Tuple[int, int], new_dims: Tuple[int, int]) -> Optional[BoundingBox]:
-        """Transform bounding box coordinates"""
-        
-        # Start with original coordinates
-        x_min, y_min, x_max, y_max = bbox.x_min, bbox.y_min, bbox.x_max, bbox.y_max
-        orig_width, orig_height = original_dims
-        new_width, new_height = new_dims
-        
-        # Handle transformations that affect coordinates
-        for transform_name, params in transformation_config.items():
-            if not params.get('enabled', True):
+            else:
+                # Best-effort meta extraction for foreign shapes
+                cid = int(getattr(ann, 'class_id', getattr(ann, 'label_id', 0)) or 0)
+                cname = getattr(ann, 'class_name', f'class_{cid}')
+                conf = float(getattr(ann, 'confidence', 1.0))
+                original_meta.append({'class_name': cname, 'class_id': cid, 'confidence': conf})
+
+        # Map transformed annotations back to local dataclasses, preserving meta order.
+        mapped: List[Union[BoundingBox, Polygon]] = []
+        meta_idx = 0
+        for t in transformed:
+            # Guard against any mismatch in counts (e.g., invalids removed)
+            meta = original_meta[meta_idx] if meta_idx < len(original_meta) else {
+                'class_name': f'class_{getattr(t, "class_id", 0)}',
+                'class_id': getattr(t, 'class_id', 0),
+                'confidence': 1.0,
+            }
+
+            if isinstance(t, BoundingBoxPixels):
+                mapped.append(
+                    BoundingBox(
+                        x_min=t.x_min,
+                        y_min=t.y_min,
+                        x_max=t.x_max,
+                        y_max=t.y_max,
+                        class_name=meta['class_name'],
+                        class_id=meta['class_id'],
+                        confidence=meta['confidence']
+                    )
+                )
+                meta_idx += 1
+            elif isinstance(t, PolygonPixels):
+                mapped.append(
+                    Polygon(
+                        points=t.points,
+                        class_name=meta['class_name'],
+                        class_id=meta['class_id'],
+                        confidence=meta['confidence']
+                    )
+                )
+                meta_idx += 1
+            else:
+                # Unknown type, skip safely
                 continue
-                
-            if transform_name == 'flip':
-                if params.get('horizontal', False):
-                    # Flip horizontally
-                    x_min, x_max = orig_width - x_max, orig_width - x_min
-                if params.get('vertical', False):
-                    # Flip vertically
-                    y_min, y_max = orig_height - y_max, orig_height - y_min
-            
-            elif transform_name == 'resize':
-                # Scale coordinates based on resize
-                width_ratio = new_width / orig_width
-                height_ratio = new_height / orig_height
-                
-                x_min *= width_ratio
-                x_max *= width_ratio
-                y_min *= height_ratio
-                y_max *= height_ratio
-                
-                # Update original dimensions for subsequent transformations
-                orig_width, orig_height = new_width, new_height
-        
-        # Ensure coordinates are within bounds
-        x_min = max(0, min(x_min, new_width))
-        x_max = max(0, min(x_max, new_width))
-        y_min = max(0, min(y_min, new_height))
-        y_max = max(0, min(y_max, new_height))
-        
-        # Ensure min < max
-        if x_min >= x_max or y_min >= y_max:
-            logger.warning("errors.validation", "Invalid bounding box after transformation, skipping", "invalid_bbox_skipped", {
-                'bbox_coords': (x_min, y_min, x_max, y_max),
-                'original_dims': original_dims,
-                'new_dims': new_dims
-            })
-            return None
-        
-        return BoundingBox(x_min, y_min, x_max, y_max, bbox.class_name, bbox.class_id, bbox.confidence)
+
+        logger.info(
+            "operations.transformations",
+            f"Updated {len(mapped)} annotations via unified transformer",
+            "annotations_updated_unified",
+            {
+                'output_count': len(mapped),
+                'input_count': len(annotations)
+            }
+        )
+        return mapped
     
-    def _transform_polygon(self, polygon: Polygon, transformation_config: Dict[str, Any],
-                          original_dims: Tuple[int, int], new_dims: Tuple[int, int]) -> Optional[Polygon]:
-        """Transform polygon coordinates"""
-        
-        # Start with original points
-        points = polygon.points.copy()
-        orig_width, orig_height = original_dims
-        new_width, new_height = new_dims
-        
-        # Handle transformations that affect coordinates
-        for transform_name, params in transformation_config.items():
-            if not params.get('enabled', True):
-                continue
-                
-            if transform_name == 'flip':
-                if params.get('horizontal', False):
-                    # Flip horizontally
-                    points = [(orig_width - x, y) for x, y in points]
-                if params.get('vertical', False):
-                    # Flip vertically
-                    points = [(x, orig_height - y) for x, y in points]
-            
-            elif transform_name == 'resize':
-                # Scale coordinates based on resize
-                width_ratio = new_width / orig_width
-                height_ratio = new_height / orig_height
-                
-                points = [(x * width_ratio, y * height_ratio) for x, y in points]
-                
-                # Update original dimensions for subsequent transformations
-                orig_width, orig_height = new_width, new_height
-        
-        # Ensure all points are within bounds
-        valid_points = []
-        for x, y in points:
-            x = max(0, min(x, new_width))
-            y = max(0, min(y, new_height))
-            valid_points.append((x, y))
-        
-        if len(valid_points) < 3:
-            logger.warning("errors.validation", "Polygon has less than 3 valid points after transformation, skipping", "invalid_polygon_skipped", {
-                'valid_points': len(valid_points),
-                'original_points': len(polygon.points)
-            })
-            return None
-        
-        return Polygon(valid_points, polygon.class_name, polygon.class_id, polygon.confidence)
+
     
     def generate_augmented_image(self, image_path: str, transformation_config: Dict[str, Any],
                                config_id: str, dataset_split: str = "train",

@@ -1,5 +1,4 @@
-"""
-Image Augmentation Engine for Auto-Labeling Tool Release Pipeline
+"""Image Augmentation Engine for Auto-Labeling Tool Release Pipeline
 Integrates with existing ImageTransformer service and handles annotation updates
 """
 
@@ -16,7 +15,6 @@ from api.services.image_transformer import ImageTransformer
 
 # Import dual-value transformation functions
 from core.transformation_config import is_dual_value_transformation, generate_auto_value
-from core.annotation_transformer import apply_transformations_to_annotations, BoundingBoxPixels, PolygonPixels
 
 # Import professional logging system - CORRECT UNIFORM PATTERN
 from logging_system.professional_logger import get_professional_logger
@@ -24,24 +22,8 @@ from logging_system.professional_logger import get_professional_logger
 # Initialize professional logger
 logger = get_professional_logger()
 
-@dataclass
-class BoundingBox:
-    """Bounding box representation"""
-    x_min: float
-    y_min: float
-    x_max: float
-    y_max: float
-    class_name: str
-    class_id: int
-    confidence: float = 1.0
-
-@dataclass
-class Polygon:
-    """Polygon representation for segmentation"""
-    points: List[Tuple[float, float]]
-    class_name: str
-    class_id: int
-    confidence: float = 1.0
+# Centralized annotation utilities
+from core.annotation_transformer import BoundingBox, Polygon, update_annotations_for_transformations
 
 @dataclass
 class AugmentationResult:
@@ -257,113 +239,6 @@ class ImageAugmentationEngine:
             # Return original image if transformation fails
             return image
     
-    def update_annotations_for_transformations(self, annotations: List[Union[BoundingBox, Polygon]], 
-                                             transformation_config: Dict[str, Any],
-                                             original_dims: Tuple[int, int],
-                                             new_dims: Tuple[int, int]) -> List[Union[BoundingBox, Polygon]]:
-        """
-        Update annotations based on applied transformations with dual-value support
-        Delegates to the centralized AnnotationTransformer to ensure identical ordering and behavior
-        to the image transformation pipeline (e.g., resize first, then geometric transforms).
-        """
-        if not annotations:
-            return []
-
-        # Resolve dual-value parameters for annotation processing (consistent with image processing)
-        resolved_config = self._resolve_dual_value_parameters(transformation_config)
-        orig_w, orig_h = original_dims
-        new_w, new_h = new_dims
-
-        try:
-            # Run through the unified annotation transformer
-            transformed = apply_transformations_to_annotations(
-                annotations=annotations,
-                img_w=orig_w,
-                img_h=orig_h,
-                transformation_config=resolved_config,
-                new_dims=(new_w, new_h)
-            )
-        except Exception as e:
-            logger.error(
-                "errors.system",
-                f"Failed to transform annotations via AnnotationTransformer: {str(e)}",
-                "annotation_transformer_error",
-                {
-                    'error': str(e),
-                    'original_dims': original_dims,
-                    'new_dims': new_dims,
-                }
-            )
-            # Fall back to returning originals to avoid pipeline break
-            return annotations
-
-        # Build metadata list from originals (only those we expect to be extractable)
-        original_meta: List[Dict[str, Any]] = []
-        for ann in annotations:
-            if isinstance(ann, (BoundingBox, Polygon)):
-                original_meta.append({
-                    'class_name': ann.class_name,
-                    'class_id': ann.class_id,
-                    'confidence': getattr(ann, 'confidence', 1.0)
-                })
-            else:
-                # Best-effort meta extraction for foreign shapes
-                cid = int(getattr(ann, 'class_id', getattr(ann, 'label_id', 0)) or 0)
-                cname = getattr(ann, 'class_name', f'class_{cid}')
-                conf = float(getattr(ann, 'confidence', 1.0))
-                original_meta.append({'class_name': cname, 'class_id': cid, 'confidence': conf})
-
-        # Map transformed annotations back to local dataclasses, preserving meta order.
-        mapped: List[Union[BoundingBox, Polygon]] = []
-        meta_idx = 0
-        for t in transformed:
-            # Guard against any mismatch in counts (e.g., invalids removed)
-            meta = original_meta[meta_idx] if meta_idx < len(original_meta) else {
-                'class_name': f'class_{getattr(t, "class_id", 0)}',
-                'class_id': getattr(t, 'class_id', 0),
-                'confidence': 1.0,
-            }
-
-            if isinstance(t, BoundingBoxPixels):
-                mapped.append(
-                    BoundingBox(
-                        x_min=t.x_min,
-                        y_min=t.y_min,
-                        x_max=t.x_max,
-                        y_max=t.y_max,
-                        class_name=meta['class_name'],
-                        class_id=meta['class_id'],
-                        confidence=meta['confidence']
-                    )
-                )
-                meta_idx += 1
-            elif isinstance(t, PolygonPixels):
-                mapped.append(
-                    Polygon(
-                        points=t.points,
-                        class_name=meta['class_name'],
-                        class_id=meta['class_id'],
-                        confidence=meta['confidence']
-                    )
-                )
-                meta_idx += 1
-            else:
-                # Unknown type, skip safely
-                continue
-
-        logger.info(
-            "operations.transformations",
-            f"Updated {len(mapped)} annotations via unified transformer",
-            "annotations_updated_unified",
-            {
-                'output_count': len(mapped),
-                'input_count': len(annotations)
-            }
-        )
-        return mapped
-    
-
-    
     def generate_augmented_image(self, image_path: str, transformation_config: Dict[str, Any],
                                config_id: str, dataset_split: str = "train",
                                output_format: str = "jpg",
@@ -405,10 +280,10 @@ class ImageAugmentationEngine:
             # Save augmented image with proper format conversion
             self._save_image_with_format(augmented_image, output_path, output_format)
             
-            # Update annotations if provided
+            # Update annotations if provided using centralized function
             updated_annotations = []
             if annotations:
-                updated_annotations = self.update_annotations_for_transformations(
+                updated_annotations = update_annotations_for_transformations(
                     annotations, transformation_config, original_dims, augmented_dims
                 )
             
