@@ -1071,19 +1071,37 @@ def delete_release(release_id: str, db: Session = Depends(get_db)):
         
         # ✅ STEP 1: Delete ZIP file from file system
         zip_deleted = False
-        if zip_file_path and os.path.exists(zip_file_path):
-            try:
-                os.remove(zip_file_path)
-                zip_deleted = True
-                logger.info("operations.releases", f"ZIP file deleted successfully", "zip_file_delete_success", {
+        if zip_file_path:
+            # Convert relative path to absolute path
+            from utils.path_utils import PathManager
+            abs_zip_path = PathManager.get_absolute_path(zip_file_path)
+            
+            logger.debug("operations.releases", f"Checking ZIP file for deletion", "zip_file_check", {
+                "release_id": release_id,
+                "relative_path": zip_file_path,
+                "absolute_path": abs_zip_path,
+                "exists": os.path.exists(abs_zip_path) if abs_zip_path else False
+            })
+            
+            if abs_zip_path and os.path.exists(abs_zip_path):
+                try:
+                    os.remove(abs_zip_path)
+                    zip_deleted = True
+                    logger.info("operations.releases", f"ZIP file deleted successfully", "zip_file_delete_success", {
+                        "release_id": release_id,
+                        "zip_file_path": abs_zip_path
+                    })
+                except OSError as zip_error:
+                    logger.warning("operations.releases", f"Failed to delete ZIP file, continuing with database deletion", "zip_file_delete_warning", {
+                        "release_id": release_id,
+                        "zip_file_path": abs_zip_path,
+                        "error": str(zip_error)
+                    })
+            else:
+                logger.warning("operations.releases", f"ZIP file not found for deletion", "zip_file_not_found", {
                     "release_id": release_id,
-                    "zip_file_path": zip_file_path
-                })
-            except OSError as zip_error:
-                logger.warning("operations.releases", f"Failed to delete ZIP file, continuing with database deletion", "zip_file_delete_warning", {
-                    "release_id": release_id,
-                    "zip_file_path": zip_file_path,
-                    "error": str(zip_error)
+                    "relative_path": zip_file_path,
+                    "absolute_path": abs_zip_path
                 })
         
         # ✅ STEP 2: Clean up related transformations

@@ -46,11 +46,11 @@ async def init_db():
             Project, Dataset, Image, Annotation, 
             ModelUsage, AutoLabelJob,
             Label, DatasetSplit, LabelAnalytics,
-            Release, ImageTransformation  # Include new models
+            Release, ImageTransformation, ImageVariant  # Include new models
         )
         
         logger.info("app.database", "Database models imported successfully", "models_import_complete", {
-            "models_count": 11  # Total number of models imported
+            "models_count": 12  # Total number of models imported
         })
         
         # Create all tables

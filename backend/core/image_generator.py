@@ -4,17 +4,34 @@ Integrates with existing ImageTransformer service and handles annotation updates
 
 import os
 import json
+import numpy as np
 from typing import List, Dict, Any, Tuple, Optional, Union
 from dataclasses import dataclass
 from pathlib import Path
 from PIL import Image
 import uuid
 
+# Pillow 9/10 compatibility for resampling
+RESAMPLING = getattr(Image, "Resampling", Image)
+
+# Whitelist of photometric adjustments to be applied post-geometry
+PHOTOMETRIC_KEYS = {
+    "brightness", "contrast", "blur", "noise",
+    "color_jitter", "gamma_correction", "clahe",
+    "equalize", "grayscale", "cutout"
+}
+
 # Import existing transformation service
 from api.services.image_transformer import ImageTransformer
 
 # Import dual-value transformation functions
-from core.transformation_config import is_dual_value_transformation, generate_auto_value
+#from core.transformation_config import is_dual_value_transformation, generate_auto_value
+
+# Import variant generation function
+# Import necessary modules for affine transformations
+from api.services.transform_resolver import resolve_to_op_tape
+from api.services.affine_builder import build_affine_from_ops
+from backend.database.image_variant_repository import ImageVariantRepository
 
 # Import professional logging system - CORRECT UNIFORM PATTERN
 from logging_system.professional_logger import get_professional_logger
@@ -44,7 +61,7 @@ class ImageAugmentationEngine:
     def __init__(self, output_base_dir: str = "augmented"):
         self.output_base_dir = Path(output_base_dir)
         self.transformer = ImageTransformer()
-        self.supported_formats = ['.jpg', '.jpeg', '.png', '.bmp']
+        self.supported_formats = ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff']
         
         # Create output directories
         for split in ['train', 'val', 'test']:
@@ -216,18 +233,78 @@ class ImageAugmentationEngine:
         })
         return resolved_config
     
+    def _split_config_into_geometry_and_photometric(self, transformation_config: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]: 
+        """Split the incoming config into geometry-first and photometric-only dicts."""
+        geometry_config: Dict[str, Any] = {} 
+        photometric_config: Dict[str, Any] = {} 
+ 
+        for key, val in (transformation_config or {}).items(): 
+            if key in PHOTOMETRIC_KEYS: 
+                photometric_config[key] = val 
+            else: 
+                geometry_config[key] = val 
+ 
+        return geometry_config, photometric_config
+    
     def apply_transformations_to_image(self, image: Image.Image, 
                                      transformation_config: Dict[str, Any]) -> Image.Image:
-        """Apply transformations using existing ImageTransformer service with dual-value support"""
+        """Apply transformations using affine for geometry and ImageTransformer for photometric"""
         try:
             # Resolve dual-value parameters before applying transformations
             resolved_config = self._resolve_dual_value_parameters(transformation_config)
             
-            # Use the existing ImageTransformer service
-            transformed_image = self.transformer.apply_transformations(image, resolved_config)
+            # Split into geometry vs photometric
+            geometry_config, photometric_config = self._split_config_into_geometry_and_photometric(resolved_config)
+            
+            # Apply geometry transformations if any
+            transformed_image = image
+            if geometry_config:
+                W0, H0 = image.size
+                ops = resolve_to_op_tape(geometry_config, orig_size=(W0, H0))
+                
+                A, (Wf, Hf) = build_affine_from_ops(W0, H0, ops)
+                Wf_i, Hf_i = int(Wf), int(Hf)
+                # Store affine matrix for annotation transformation
+                affine_matrix = A.tolist()
+                
+                # Safety: singular check
+                detA = float(np.linalg.det(A))
+                if abs(detA) < 1e-10:
+                    logger.error("errors.validation", f"Affine is singular/near-singular (det={detA}); cannot warp", "affine_singular", {
+                        'determinant': detA,
+                        'final_dimensions': f"{Wf_i}x{Hf_i}"
+                    })
+                    raise ValueError("Singular affine matrix")
+                
+                # Inverse for PIL
+                Ai = np.linalg.inv(A)
+                a, b, c = float(Ai[0, 0]), float(Ai[0, 1]), float(Ai[0, 2])
+                d, e, f = float(Ai[1, 0]), float(Ai[1, 1]), float(Ai[1, 2])
+                
+                transformed_image = image.transform(
+                    (Wf_i, Hf_i),
+                    Image.AFFINE,
+                    (a, b, c, d, e, f),
+                    resample=RESAMPLING.BILINEAR
+                )
+                if transformed_image.mode != 'RGB':
+                    transformed_image = transformed_image.convert('RGB')
+            
+            # Apply photometric transformations if any
+            if photometric_config:
+                try:
+                    transformed_image = self.transformer.apply_transformations(transformed_image, photometric_config)
+                except Exception as pe:
+                    logger.error("errors.system", f"Photometric pass failed: {str(pe)}", "photometric_transform_error", {
+                        'error': str(pe),
+                        'keys': list(photometric_config.keys())
+                    })
+            
             logger.info("operations.transformations", f"Applied transformations: {list(resolved_config.keys())}", "transformations_applied", {
                 'transformation_types': list(resolved_config.keys()),
-                'config_count': len(resolved_config)
+                'config_count': len(resolved_config),
+                'geometry_count': len(geometry_config),
+                'photometric_count': len(photometric_config)
             })
             return transformed_image
             
@@ -239,76 +316,122 @@ class ImageAugmentationEngine:
             # Return original image if transformation fails
             return image
     
-    def generate_augmented_image(self, image_path: str, transformation_config: Dict[str, Any],
-                               config_id: str, dataset_split: str = "train",
-                               output_format: str = "jpg",
-                               annotations: Optional[List[Union[BoundingBox, Polygon]]] = None) -> AugmentationResult:
-        """
-        Generate augmented image with updated annotations and dual-value support
-        
-        Args:
-            image_path: Path to original image
-            transformation_config: Dictionary of transformations to apply (supports dual-value format)
-            config_id: Unique identifier for this configuration
-            dataset_split: Dataset split (train/val/test)
-            output_format: Output image format
-            annotations: List of annotations to update
-            
-        Returns:
-            AugmentationResult with paths and updated annotations
-        """
-        try:
-            # Validate transformation config
-            if not transformation_config:
-                logger.warning("errors.validation", f"Empty transformation config for image: {image_path}", "empty_transformation_config", {
-                    'image_path': image_path
-                })
-                transformation_config = {}
-            
-            # Load original image
-            original_image, original_dims = self.load_image_from_path(image_path)
-            
-            # Apply transformations with dual-value support
-            augmented_image = self.apply_transformations_to_image(original_image, transformation_config)
-            augmented_dims = augmented_image.size
-            
-            # Generate output filename and path
-            original_filename = os.path.basename(image_path)
-            augmented_filename = self.generate_augmented_filename(original_filename, config_id, output_format)
-            output_path = self.output_base_dir / dataset_split / augmented_filename
-            
-            # Save augmented image with proper format conversion
-            self._save_image_with_format(augmented_image, output_path, output_format)
-            
-            # Update annotations if provided using centralized function
-            updated_annotations = []
-            if annotations:
-                updated_annotations = update_annotations_for_transformations(
-                    annotations, transformation_config, original_dims, augmented_dims
-                )
-            
-            result = AugmentationResult(
-                augmented_image_path=str(output_path),
-                updated_annotations=updated_annotations,
-                transformation_applied=transformation_config,
-                original_dimensions=original_dims,
-                augmented_dimensions=augmented_dims,
-                config_id=config_id
-            )
-            
-            logger.info("operations.transformations", f"Generated augmented image: {augmented_filename}", "augmented_image_generated", {
-                'augmented_filename': augmented_filename,
-                'config_id': config_id,
-                'output_path': str(output_path)
-            })
-            return result
-            
-        except Exception as e:
-            logger.error("errors.system", f"Failed to generate augmented image: {str(e)}", "augmented_image_generation_error", {
-                'error': str(e),
-                'image_path': image_path,
-                'config_id': config_id
-            })
+    def generate_augmented_image(self, image_path: str, transformation_config: Dict[str, Any], 
+                              config_id: str, dataset_split: str = "train", 
+                              output_format: str = "jpg", 
+                              annotations: Optional[List[Union[BoundingBox, Polygon]]] = None) -> AugmentationResult: 
+        """ 
+        Generate augmented image with updated annotations and dual-value support: 
+        geometry via single affine, then optional photometric pass. 
+        """ 
+        try: 
+            # 0) basic guard 
+            if not transformation_config: 
+                logger.warning("errors.validation", f"Empty transformation config for image: {image_path}", "empty_transformation_config", { 
+                    'image_path': image_path 
+                }) 
+                transformation_config = {} 
+ 
+            # 1) load source 
+            original_image, original_dims = self.load_image_from_path(image_path) 
+ 
+            # 2) resolve dual-value params once 
+            resolved_config = self._resolve_dual_value_parameters(transformation_config) 
+ 
+            # 3) split into geometry vs photometric 
+            geometry_config, photometric_config = self._split_config_into_geometry_and_photometric(resolved_config) 
+ 
+            # 4) if there is any geometry: build ops → A → warp pixels using inverse(A) 
+            augmented_image = original_image 
+            affine_matrix = None  # Initialize affine matrix variable
+            if geometry_config: 
+                W0, H0 = original_dims 
+                ops = resolve_to_op_tape(geometry_config, orig_size=(W0, H0)) 
+                logger.debug("operations.transformations", "Generated operation tape", "operation_tape_generated", { 
+                    'operation_count': len(ops), 
+                    'operation_types': [op.get('name', 'unknown') for op in ops if op.get('enabled', True)] 
+                }) 
+ 
+                A, (Wf, Hf) = build_affine_from_ops(W0, H0, ops) 
+                Wf_i, Hf_i = int(Wf), int(Hf) 
+                
+                # Store affine matrix for annotation transformation
+                affine_matrix = A.tolist()
+ 
+                # safety: singular check 
+                detA = float(np.linalg.det(A)) 
+                if abs(detA) < 1e-10: 
+                    logger.error("errors.validation", f"Affine is singular/near-singular (det={detA}); cannot warp", "affine_singular", { 
+                        'determinant': detA, 
+                        'final_dimensions': f"{Wf_i}x{Hf_i}" 
+                    }) 
+                    raise ValueError("Singular affine matrix") 
+ 
+                # inverse for PIL 
+                Ai = np.linalg.inv(A) 
+                a, b, c = float(Ai[0, 0]), float(Ai[0, 1]), float(Ai[0, 2]) 
+                d, e, f = float(Ai[1, 0]), float(Ai[1, 1]), float(Ai[1, 2]) 
+ 
+                augmented_image = original_image.transform( 
+                    (Wf_i, Hf_i), 
+                    Image.AFFINE, 
+                    (a, b, c, d, e, f), 
+                    resample=RESAMPLING.BILINEAR 
+                ) 
+                if augmented_image.mode != 'RGB': 
+                    augmented_image = augmented_image.convert('RGB') 
+            else: 
+                # no geometry: augmented image is the original (photometrics may still apply) 
+                Wf_i, Hf_i = original_dims 
+ 
+            # 5) optional photometric pass via ImageTransformer (labels unaffected) 
+            if photometric_config: 
+                try: 
+                    augmented_image = self.transformer.apply_transformations(augmented_image, photometric_config) 
+                except Exception as pe: 
+                    logger.error("errors.system", f"Photometric pass failed: {str(pe)}", "photometric_transform_error", { 
+                        'error': str(pe), 
+                        'keys': list(photometric_config.keys()) 
+                    }) 
+ 
+            augmented_dims = augmented_image.size 
+ 
+            # 6) save with requested format and name 
+            original_filename = os.path.basename(image_path) 
+            augmented_filename = self.generate_augmented_filename(original_filename, config_id, output_format) 
+            output_path = self.output_base_dir / dataset_split / augmented_filename 
+            self._save_image_with_format(augmented_image, output_path, output_format) 
+ 
+            # 7) update annotations (using affine matrix for precise transformations) 
+            updated_annotations: List[Union[BoundingBox, Polygon]] = [] 
+            if annotations: 
+                # Use the centralized annotation transformer with affine matrix
+                updated_annotations = update_annotations_for_transformations( 
+                    annotations, resolved_config, original_dims, augmented_dims, affine_matrix 
+                ) 
+ 
+            result = AugmentationResult( 
+                augmented_image_path=str(output_path), 
+                updated_annotations=updated_annotations, 
+                transformation_applied=resolved_config, 
+                original_dimensions=original_dims, 
+                augmented_dimensions=augmented_dims, 
+                config_id=config_id 
+            ) 
+ 
+            logger.info("operations.transformations", f"Generated augmented image: {augmented_filename}", "augmented_image_generated", { 
+                'augmented_filename': augmented_filename, 
+                'config_id': config_id, 
+                'output_path': str(output_path) 
+            }) 
+            return result 
+ 
+        except Exception as e: 
+            logger.error("errors.system", f"Failed to generate augmented image: {str(e)}", "augmented_image_generation_error", { 
+                'error': str(e), 
+                'image_path': image_path, 
+                'config_id': config_id 
+            }) 
             raise
     
     def process_image_with_multiple_configs(self, image_path: str, 
@@ -365,6 +488,48 @@ class ImageAugmentationEngine:
         """Get available transformations from ImageTransformer service"""
         return self.transformer.get_available_transformations()
     
+    def create_image_variant(self, db, parent_image_id: int, image_path: str, 
+                           transformation_config: Dict[str, Any], variants_root: str) -> int:
+        """
+        Create an image variant using the affine transformation pipeline
+        
+        Args:
+            db: Database connection
+            parent_image_id: ID of the parent image
+            image_path: Path to the parent image
+            transformation_config: Dictionary of transformations to apply
+            variants_root: Root directory for storing variants
+            
+        Returns:
+            int: ID of the newly created image variant
+        """
+        try:
+            # Resolve dual-value parameters before applying transformations
+            resolved_config = self._resolve_dual_value_parameters(transformation_config)
+            
+            # Load original image
+            original_image, _ = self.load_image_from_path(image_path)
+            
+            # Use the new generate_and_record_variant function
+            result = generate_and_record_variant(db, parent_image_id, original_image, resolved_config, variants_root)
+            variant_id = result["variant_id"]
+            
+            logger.info("operations.variants", f"Created image variant {variant_id} for parent image {parent_image_id}", "variant_created", {
+                'parent_image_id': parent_image_id,
+                'variant_id': variant_id,
+                'transformation_types': list(resolved_config.keys())
+            })
+            
+            return variant_id
+            
+        except Exception as e:
+            logger.error("errors.system", f"Failed to create image variant: {str(e)}", "variant_creation_error", {
+                'error': str(e),
+                'parent_image_id': parent_image_id,
+                'image_path': image_path
+            })
+            raise
+    
     def cleanup_output_directory(self, dataset_split: Optional[str] = None) -> None:
         """Clean up output directory"""
         if dataset_split:
@@ -384,6 +549,166 @@ class ImageAugmentationEngine:
                 self.cleanup_output_directory(split)
 
 
+def generate_and_record_variant( 
+    db, 
+    parent_image_id: int, 
+    pil_image: Image.Image, 
+    user_transform_config: Dict[str, Any],  # <- expect RESOLVED config here 
+    variants_root: str, 
+    annotations: List[Dict[str,Any]] = None, 
+) -> Dict[str,Any]: 
+    """ 
+    1) resolve_to_op_tape → 2) build_affine_from_ops → 3) apply A to pixels with PIL (inverse) → 
+    4) save temp → 5) insert DB row (affine_json=flattened 9 floats) → 
+    6) rename tmp to <variant_id>.jpg → 7) (optional) transform annotations by A → return dict. 
+    """ 
+ 
+    # OPTIONAL sanity check (warn if someone passed unresolved config) 
+    try: 
+        for _tool, _params in (user_transform_config or {}).items(): 
+            if isinstance(_params, dict): 
+                if any(isinstance(v, dict) and ("user_value" in v or "auto_value" in v) 
+                       for v in _params.values()): 
+                    logger.warning("errors.validation", 
+                                   "generate_and_record_variant expected a resolved config " 
+                                   "(found user_value/auto_value). Proceeding anyway.", 
+                                   "unresolved_dual_values_detected", 
+                                   {'tool': _tool}) 
+                    break 
+    except Exception: 
+        pass 
+ 
+    # --- USE CONFIG AS-IS (already resolved) --- 
+    transform_config = user_transform_config 
+ 
+    # Get original image dimensions 
+    W0, H0 = pil_image.size 
+ 
+    # 1) Build canonical ops 
+    ops = resolve_to_op_tape(transform_config, orig_size=(W0, H0)) 
+    logger.debug("operations.transformations", "Generated operation tape", "operation_tape_generated", { 
+        'operation_count': len(ops), 
+        'operation_types': [op.get('name', 'unknown') for op in ops if op.get('enabled', True)] 
+    }) 
+ 
+    # 2) Build one affine matrix A + final size 
+    A, (Wf, Hf) = build_affine_from_ops(W0, H0, ops) 
+    Wf_i, Hf_i = int(Wf), int(Hf) 
+ 
+    # 3) Apply transformation to pixels with PIL (inverse(A)) 
+    try: 
+        detA = float(np.linalg.det(A)) 
+        if abs(detA) < 1e-10: 
+            logger.error("errors.validation", 
+                         f"Affine is singular/near-singular (det={detA}); cannot warp", 
+                         "affine_singular", 
+                         {'determinant': detA, 'final_dimensions': f"{Wf_i}x{Hf_i}"}) 
+            raise ValueError("Singular affine matrix") 
+ 
+        Ai = np.linalg.inv(A) 
+        a, b, c = float(Ai[0, 0]), float(Ai[0, 1]), float(Ai[0, 2]) 
+        d, e, f = float(Ai[1, 0]), float(Ai[1, 1]), float(Ai[1, 2]) 
+ 
+        transformed_image = pil_image.transform( 
+            (Wf_i, Hf_i), 
+            Image.AFFINE, 
+            (a, b, c, d, e, f), 
+            resample=RESAMPLING.BILINEAR 
+        ) 
+ 
+        if transformed_image.mode != 'RGB': 
+            transformed_image = transformed_image.convert('RGB') 
+ 
+    except Exception as e: 
+        logger.error("errors.system", f"Failed to apply affine transformation: {str(e)}", 
+                     "affine_transform_error", 
+                     {'error': str(e), 
+                      'matrix_determinant': float(np.linalg.det(A)), 
+                      'final_dimensions': f"{Wf_i}x{Hf_i}"}) 
+        raise
+    
+    # 4) Save temporary file
+    parent_dir = os.path.join(variants_root, str(parent_image_id))
+    os.makedirs(parent_dir, exist_ok=True)
+    tmp_path = os.path.join(parent_dir, f"tmp_{uuid.uuid4().hex}.jpg")
+    transformed_image.save(tmp_path, format="JPEG", quality=95, optimize=True)
+    
+    # 5) Insert into database 
+    affine_json = json.dumps(A.flatten().tolist()) 
+    rel_tmp = os.path.relpath(tmp_path, variants_root) 
+ 
+    try: 
+        variant_id = ImageVariantRepository.insert_image_variant( 
+            db, parent_image_id, rel_tmp, Wf_i, Hf_i, affine_json 
+        ) 
+ 
+        # 6) Rename tmp → final 
+        final_rel = os.path.join(str(parent_image_id), f"{variant_id}.jpg") 
+        final_abs = os.path.join(variants_root, final_rel) 
+        os.replace(tmp_path, final_abs) 
+ 
+        # Update the path in DB 
+        ImageVariantRepository.update_image_variant_path(db, variant_id, final_rel) 
+ 
+        logger.info("operations.variants", 
+                    f"Generated image variant {variant_id} for parent image {parent_image_id}", 
+                    "variant_generated", 
+                    {'parent_image_id': parent_image_id, 
+                     'variant_id': variant_id, 
+                     'dimensions': f"{Wf_i}x{Hf_i}"}) 
+    except Exception as e: 
+        if os.path.exists(tmp_path): 
+            os.unlink(tmp_path) 
+        logger.error("errors.system", f"Failed to record image variant: {str(e)}", 
+                     "variant_recording_error", 
+                     {'error': str(e), 'parent_image_id': parent_image_id}) 
+        raise 
+ 
+    # 7) Transform annotations if provided (using same A) 
+    updated_annotations: List[Dict[str, Any]] = [] 
+    if annotations: 
+        for annotation in annotations: 
+            if 'bbox' in annotation: 
+                x_min, y_min, x_max, y_max = annotation['bbox'] 
+                corners = [ 
+                    [x_min, y_min, 1.0], 
+                    [x_max, y_min, 1.0], 
+                    [x_min, y_max, 1.0], 
+                    [x_max, y_max, 1.0] 
+                ] 
+                transformed_corners = [] 
+                for corner in corners: 
+                    p = np.array(corner, dtype=float).reshape(3, 1) 
+                    pT = A @ p 
+                    transformed_corners.append([pT[0,0]/pT[2,0], pT[1,0]/pT[2,0]]) 
+ 
+                xs = [pt[0] for pt in transformed_corners] 
+                ys = [pt[1] for pt in transformed_corners] 
+                updated = annotation.copy() 
+                updated['bbox'] = [min(xs), min(ys), max(xs), max(ys)] 
+                updated_annotations.append(updated) 
+ 
+            elif 'polygon' in annotation: 
+                pts = annotation['polygon'] 
+                out = [] 
+                for x_pt, y_pt in pts: 
+                    p = np.array([x_pt, y_pt, 1.0], dtype=float).reshape(3, 1) 
+                    pT = A @ p 
+                    out.append([pT[0,0]/pT[2,0], pT[1,0]/pT[2,0]]) 
+                updated = annotation.copy() 
+                updated['polygon'] = out 
+                updated_annotations.append(updated) 
+ 
+    return { 
+        "variant_id": variant_id, 
+        "rel_path": final_rel, 
+        "width": Wf_i, 
+        "height": Hf_i, 
+        "affine_json": affine_json, 
+        "updated_annotations": updated_annotations 
+    }
+
+
 # Utility functions for easy usage
 def create_augmentation_engine(output_dir: str = "augmented") -> ImageAugmentationEngine:
     """Create and configure augmentation engine"""
@@ -391,89 +716,139 @@ def create_augmentation_engine(output_dir: str = "augmented") -> ImageAugmentati
 
 
 def process_release_images(image_paths: List[str], 
-                         transformation_configs: Dict[str, List[Dict[str, Any]]],
-                         dataset_splits: Dict[str, str],
-                         output_dir: str = "augmented",
-                         output_format: str = "jpg",
-                         dataset_sources: Dict[str, Dict[str, Any]] = None) -> Dict[str, List[AugmentationResult]]:
+                           transformation_configs: Dict[str, List[Dict[str, Any]]],
+                           dataset_splits: Dict[str, str],
+                           output_dir: str = "augmented",
+                           output_format: str = "jpg",
+                           dataset_sources: Dict[str, Dict[str, Any]] = None,
+                           annotations_map: Optional[Dict[str, List[Union[BoundingBox, Polygon]]]] = None
+                           ) -> Dict[str, List[AugmentationResult]]:
     """
     Process multiple images for release generation with multi-dataset support
-    
+
     Args:
-        image_paths: List of image file paths
-        transformation_configs: Dict mapping image_id to list of transformation configs
-        dataset_splits: Dict mapping image_path to dataset split (train/val/test)
+        image_paths: List of absolute image file paths (source images)
+        transformation_configs: Dict mapping image_id -> list of transformation configs
+        dataset_splits: Dict mapping image_path -> dataset split (train/val/test)
         output_dir: Output directory for augmented images
-        output_format: Output image format
-        dataset_sources: Dict mapping image_path to dataset source information
-        
-    Returns:
-        Dictionary mapping image_path to list of AugmentationResult objects
+        output_format: Output image format ("jpg"|"png"|"webp"|"tiff"|"original")
+        dataset_sources: Dict mapping image_path -> {"dataset_name": ..., "original_filename": ...}
+        annotations_map: OPTIONAL. Dict keyed by image_path and/or image_id -> List[BoundingBox|Polygon] in **pixels**
     """
     engine = create_augmentation_engine(output_dir)
-    all_results = {}
+    all_results: Dict[str, List[AugmentationResult]] = {}
     dataset_sources = dataset_sources or {}
-    
-    logger.info("operations.transformations", f"🎨 PROCESSING {len(image_paths)} IMAGES FROM MULTIPLE DATASETS", "multi_dataset_processing_start", {
-        'total_images': len(image_paths),
-        'dataset_count': len(set(img['dataset_name'] for img in image_paths))
-    })
-    
+    annotations_map = annotations_map or {}
+
+    logger.info("operations.transformations",
+                f"🎨 PROCESSING {len(image_paths)} IMAGES FROM MULTIPLE DATASETS",
+                "multi_dataset_processing_start",
+                {
+                    'total_images': len(image_paths),
+                    'dataset_count': len(set(
+                        (dataset_sources[p].get('dataset_name', 'unknown')
+                         if (dataset_sources and p in dataset_sources) else 'unknown')
+                        for p in image_paths
+                    ))
+                })
+
     for image_path in image_paths:
         try:
-            # Get image ID from path - handle multi-dataset naming
             image_filename = Path(image_path).stem
-            
-            # Extract original image ID (remove dataset prefix if present)
+
+            # Derive a stable image_id that matches your transformation_configs keys
             if dataset_sources and image_path in dataset_sources:
                 source_info = dataset_sources[image_path]
                 original_filename = source_info.get("original_filename", image_filename)
                 image_id = Path(original_filename).stem
                 dataset_name = source_info.get("dataset_name", "unknown")
-                logger.info("operations.transformations", f"   Processing {dataset_name}/{original_filename}", "image_processing_start", {
-                    'dataset_name': dataset_name,
-                    'original_filename': original_filename,
-                    'image_path': image_path
-                })
+                logger.info("operations.transformations",
+                            f"   Processing {dataset_name}/{original_filename}",
+                            "image_processing_start",
+                            {
+                                'dataset_name': dataset_name,
+                                'original_filename': original_filename,
+                                'image_path': image_path
+                            })
             else:
                 image_id = image_filename
                 dataset_name = "unknown"
-            
-            # Get transformation configs for this image
+
+            # Get transformation configs for this image_id
             configs = transformation_configs.get(image_id, [])
             if not configs:
-                logger.warning("errors.validation", f"No transformation configs found for image: {image_id} (from {dataset_name})", "no_transformation_configs", {
-                    'image_id': image_id,
-                    'dataset_name': dataset_name,
-                    'image_path': image_path
-                })
+                logger.warning("errors.validation",
+                               f"No transformation configs found for image: {image_id} (from {dataset_name})",
+                               "no_transformation_configs",
+                               {
+                                   'image_id': image_id,
+                                   'dataset_name': dataset_name,
+                                   'image_path': image_path
+                               })
                 continue
-            
-            # Get dataset split for this image
+
+            # Resolve dataset split
             split = dataset_splits.get(image_path, "train")
+
+            # ----- FIXED: pull pixel annotations with robust fallback keys -----
             
-            # Process image with all configurations
+# Pull pixel-space annotations for this image, if provided by caller
+            annotations_for_this_image: Optional[List[Union[BoundingBox, Polygon]]] = None
+            if annotations_map:
+                # 1) exact key by absolute path
+                annotations_for_this_image = annotations_map.get(image_path)
+                if annotations_for_this_image is None:
+                    # 2) key by image_id (stem of original filename)
+                    annotations_for_this_image = annotations_map.get(image_id)
+
+            # Log how many we’re using for this image (safe even if None)
+            logger.info("operations.annotations",
+                f"Using {len(annotations_for_this_image or [])} annotations for {image_id}",
+                "release_annotations_selected",
+                {"image_path": image_path, "image_id": image_id}, 
+            )
+            if not annotations_for_this_image:
+                logger.warning(
+                    "operations.annotations",
+                    "No annotations found for this image; labels will NOT be transformed",
+                    "release_annotations_missing",
+                    {"image_path": image_path, "image_id": image_id}
+                )  
+            # Optional: normalize to empty list
+            if annotations_for_this_image is None:
+                annotations_for_this_image = []
+             # Process with all configurations (now passing annotations)
             results = engine.process_image_with_multiple_configs(
                 image_path=image_path,
                 transformation_configs=configs,
                 dataset_split=split,
-                output_format=output_format
+                output_format=output_format,
+                annotations=annotations_for_this_image
             )
-            
+
             all_results[image_path] = results
-            
+
+
         except Exception as e:
-            logger.error("errors.system", f"Failed to process image {image_path}: {str(e)}", "image_processing_error", {
-                'error': str(e),
-                'image_path': image_path
-            })
+            logger.error("errors.system",
+                         f"Failed to process image {image_path}: {str(e)}",
+                         "image_processing_error",
+                         {
+                             'error': str(e),
+                             'image_path': image_path
+                         })
             continue
-    
-    logger.info("operations.transformations", f"Processed {len(all_results)} images for release generation", "release_images_processed", {
-        'processed_images': len(all_results),
-        'total_images': len(image_paths)
-    })
+
+    logger.info("operations.transformations",
+                f"Processed {len(all_results)} images for release generation",
+                "release_images_processed",
+                {
+                    'processed_images': len(all_results),
+                    'total_images': len(image_paths)
+                })
     return all_results
+
+
 
 
 if __name__ == "__main__":

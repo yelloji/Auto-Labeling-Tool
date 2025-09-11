@@ -1,8 +1,0 @@
-names:
-- car
-- colour-car
-nc: 2
-path: .
-test: images/test
-train: images/train
-val: images/val

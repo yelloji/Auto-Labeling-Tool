@@ -1,0 +1,51 @@
+{
+  "release_name": "version_auto_2025_09_09_16_46",
+  "description": "",
+  "project_id": 1,
+  "dataset_ids": [
+    "6ec272ad-f769-4b77-9feb-07a7f6ddc4f8"
+  ],
+  "export_format": "yolo_segmentation",
+  "task_type": "segmentation",
+  "images_per_original": 6,
+  "sampling_strategy": "intelligent",
+  "output_format": "original",
+  "include_original": true,
+  "split_sections": [
+    "train",
+    "val",
+    "test"
+  ],
+  "preserve_original_splits": true,
+  "classes": [
+    "cat",
+    "dog"
+  ],
+  "split_counts": {
+    "train": 6,
+    "val": 6,
+    "test": 6
+  },
+  "total_images": 18,
+  "transformations": [
+    {
+      "type": "resize",
+      "params": {
+        "width": 800,
+        "height": 600
+      }
+    },
+    {
+      "type": "rotate",
+      "params": {
+        "angle": 35.8
+      }
+    },
+    {
+      "type": "crop",
+      "params": {
+        "crop_percentage": 59
+      }
+    }
+  ]
+}

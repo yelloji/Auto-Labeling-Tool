@@ -3,7 +3,8 @@ Database models for the Auto-Labeling Tool
 Defines all database tables and relationships
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, JSON, Index
+import sqlalchemy as sa
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -117,6 +118,7 @@ class Image(Base):
     
     # Relationships
     annotations = relationship("Annotation", back_populates="image", cascade="all, delete-orphan")
+    variants = relationship("ImageVariant", back_populates="parent_image", cascade="all, delete-orphan")
     
     @property
     def normalized_file_path(self):
@@ -443,6 +445,47 @@ class LabelAnalytics(Base):
             "is_balanced": self.is_balanced
         })
         return f"<LabelAnalytics(dataset='{self.dataset_id}', classes={self.num_classes}, balanced={self.is_balanced})>"
+
+
+class ImageVariant(Base):
+    __tablename__ = "image_variants"
+
+    id = Column(Integer, primary_key=True)
+    # IMPORTANT: keep this INTEGER to match images.id
+    parent_image_id = Column(Integer, ForeignKey("images.id", ondelete="CASCADE"), nullable=False)
+
+    path = Column(Text, nullable=False)
+    width = Column(Integer, nullable=False)
+    height = Column(Integer, nullable=False)
+    affine_json = Column(Text, nullable=False)
+
+    # portable default (works in SQLite/Postgres)
+    created_at = Column(
+        DateTime,
+        nullable=False,
+        server_default=sa.text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = (
+        sa.Index("ix_image_variants_parent", "parent_image_id"),
+    )
+
+    # relationship back to Image model
+    parent_image = relationship("Image", back_populates="variants")
+
+    def __repr__(self):
+        logger.debug(
+            "app.database",
+            "ImageVariant model representation",
+            "image_variant_repr",
+            {
+                "variant_id": self.id,
+                "parent_image_id": self.parent_image_id,
+                "width": self.width,
+                "height": self.height,
+            },
+        )
+        return f"<ImageVariant(id={self.id}, parent_image_id={self.parent_image_id})>"
     
     
     

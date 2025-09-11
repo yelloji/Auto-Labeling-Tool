@@ -1704,4 +1704,3 @@ class ImageTransformer:
                 'image_count': len(images)
             })
             raise
-

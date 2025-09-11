@@ -1776,4 +1776,3 @@ class ImageTransformer:
                 'original_size': f"{image.size[0]}x{image.size[1]}"
             })
             raise
-

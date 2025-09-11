@@ -1,5 +1,5 @@
 {
-  "export_timestamp": "2025-09-08T16:50:08.321318",
+  "export_timestamp": "2025-09-10T17:31:53.001566",
   "database_path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\database.db",
   "projects": [
     {
@@ -47,7 +47,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-08 06:58:36",
               "updated_at": "2025-09-08 09:35:08.081514",
-              "file_exists": false
+              "file_exists": true
             },
             {
               "id": "f5a77762-6189-47bb-a75a-6967c5fa0fb9",
@@ -66,7 +66,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-08 06:58:36",
               "updated_at": "2025-09-08 09:35:08.084023",
-              "file_exists": false
+              "file_exists": true
             },
             {
               "id": "1cf7522f-f8ad-4f7c-b107-a4917df0e2b0",
@@ -85,7 +85,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-08 06:58:36",
               "updated_at": "2025-09-08 09:35:08.092034",
-              "file_exists": false
+              "file_exists": true
             },
             {
               "id": "ba30f445-13c7-4270-a31e-2864c19a48ac",
@@ -104,7 +104,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-08 06:58:36",
               "updated_at": "2025-09-08 09:35:08.093030",
-              "file_exists": false
+              "file_exists": true
             },
             {
               "id": "7c248f65-f07f-4930-ad08-2ca6d6bb9e9c",
@@ -123,7 +123,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-08 06:58:36",
               "updated_at": "2025-09-08 09:35:08.095549",
-              "file_exists": false
+              "file_exists": true
             }
           ]
         },
@@ -199,7 +199,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-02 11:47:18",
               "updated_at": "2025-09-08 07:37:54.670272",
-              "file_exists": false
+              "file_exists": true
             },
             {
               "id": "c5cd9dd2-5bb1-4faa-bee4-1a40a0778703",
@@ -218,7 +218,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-02 11:47:18",
               "updated_at": "2025-09-08 07:37:54.682274",
-              "file_exists": false
+              "file_exists": true
             },
             {
               "id": "39ecbde1-4ddf-4711-a6fd-dc6a756edd66",
@@ -237,7 +237,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-02 11:47:18",
               "updated_at": "2025-09-08 07:37:54.695277",
-              "file_exists": false
+              "file_exists": true
             }
           ]
         }
@@ -288,7 +288,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-08 10:11:48",
               "updated_at": "2025-09-08 10:34:16",
-              "file_exists": false
+              "file_exists": true
             },
             {
               "id": "ddd99f85-9c78-44c7-afd6-9570e8c32533",
@@ -307,7 +307,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-08 10:11:48",
               "updated_at": "2025-09-08 10:34:16",
-              "file_exists": false
+              "file_exists": true
             },
             {
               "id": "8b1ad3d5-7fc3-4bd4-bba9-ccfd5948d12f",
@@ -326,7 +326,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-08 10:11:48",
               "updated_at": "2025-09-08 10:34:16",
-              "file_exists": false
+              "file_exists": true
             },
             {
               "id": "eb394a45-79ae-48f7-aa98-54ae90333210",
@@ -345,7 +345,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-08 10:11:48",
               "updated_at": "2025-09-08 10:34:16",
-              "file_exists": false
+              "file_exists": true
             },
             {
               "id": "ecfed5f2-b43e-481b-9020-6bdb2c071fae",
@@ -364,7 +364,7 @@
               "annotation_count": 1,
               "created_at": "2025-09-08 10:11:48",
               "updated_at": "2025-09-08 10:34:16",
-              "file_exists": false
+              "file_exists": true
             }
           ]
         }
