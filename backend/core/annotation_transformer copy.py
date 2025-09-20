@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 from logging_system.professional_logger import get_professional_logger
-from TRANSFORMATION_DEBUG import debug_logger
 
 logger = get_professional_logger()
 
@@ -1323,27 +1322,15 @@ def transform_detection_annotations_to_yolo(
         
         print(f"   📏 Normalized: cx={cx:.4f}, cy={cy:.4f}, w={w:.4f}, h={h:.4f}")
 
-        # Clip out-of-bounds values instead of skipping
-        cx_clipped = max(0.0, min(1.0, cx))
-        cy_clipped = max(0.0, min(1.0, cy))
-        w_clipped = max(0.001, min(1.0, w))  # Minimum width to avoid degenerate boxes
-        h_clipped = max(0.001, min(1.0, h))  # Minimum height to avoid degenerate boxes
-        
-        # Check if clipping was needed
-        needs_clipping = (cx != cx_clipped or cy != cy_clipped or w != w_clipped or h != h_clipped)
-        
-        if needs_clipping:
-            print(f"   ⚠️  CLIPPED: Out of bounds values normalized")
-            print(f"      Original: cx={cx:.4f}, cy={cy:.4f}, w={w:.4f}, h={h:.4f}")
-            print(f"      Clipped:  cx={cx_clipped:.4f}, cy={cy_clipped:.4f}, w={w_clipped:.4f}, h={h_clipped:.4f}")
-            logger.debug("operations.annotations", "BBox clipped to valid [0,1] range",
-                         "yolo_detection_clipped",
-                         {'class_id': class_id, 
-                          'original': {'cx': cx, 'cy': cy, 'w': w, 'h': h},
-                          'clipped': {'cx': cx_clipped, 'cy': cy_clipped, 'w': w_clipped, 'h': h_clipped}})
-            
-            # Use clipped values
-            cx, cy, w, h = cx_clipped, cy_clipped, w_clipped, h_clipped
+        # sanity (don't "fix" here—if it fails, upstream clip/canvas is wrong)
+        if not (0.0 <= cx <= 1.0 and 0.0 <= cy <= 1.0 and 0.0 < w <= 1.0 and 0.0 < h <= 1.0):
+            print(f"   ❌ SKIPPED: Out of bounds after normalization!")
+            print(f"      cx valid: {0.0 <= cx <= 1.0}, cy valid: {0.0 <= cy <= 1.0}")
+            print(f"      w valid: {0.0 < w <= 1.0}, h valid: {0.0 < h <= 1.0}")
+            logger.debug("errors.validation", "BBox out of [0,1] after normalization — likely wrong clip/canvas upstream",
+                         "yolo_detection_out_of_bounds",
+                         {'class_id': class_id, 'normalized': {'cx': cx, 'cy': cy, 'w': w, 'h': h}})
+            continue
 
         yolo_line = f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}"
         yolo_lines.append(yolo_line)

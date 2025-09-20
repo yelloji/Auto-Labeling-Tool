@@ -17,11 +17,11 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 from logging_system.professional_logger import get_professional_logger
-from TRANSFORMATION_DEBUG import debug_logger
 
 logger = get_professional_logger()
 
-
+# Import debug logger
+from TRANSFORMATION_DEBUG import debug_logger
 @dataclass
 class BoundingBox:
     x_min: float
@@ -221,6 +221,7 @@ def update_annotations_for_transformations(
     new_dims: Tuple[int, int],
     affine_matrix: Optional[Union[List[float], List[List[float]], np.ndarray]] = None,
     debug_tracking: bool = False
+
 ) -> Union[List[Union[BoundingBox, Polygon]], Tuple[List[Union[BoundingBox, Polygon]], Dict]]:
 
     """
@@ -1171,17 +1172,19 @@ def _debug_yolo_dump(image_name, anns, final_w, final_h, transform_config=None, 
     # 🔧 FIX: Apply transformations FIRST if config provided
     if transform_config and original_w and original_h:
         print("🔧 APPLYING TRANSFORMATIONS TO ANNOTATIONS...")
-        # ✅ RIGHT - Use correct parameter names
+        # ✅ RIGHT
         transformed_anns, dbg = update_annotations_for_transformations(
             annotations=anns,
-            transformation_config=transform_config,   # correct key
-            original_dims=(original_w, original_h), # tuple (w,h)
-            new_dims=(final_w, final_h),            # the ACTUAL saved image size
+            transformation_config=transform_config,  # correct key
+            original_dims=(original_w, original_h),  # tuple (w,h)
+            new_dims=(final_w, final_h),             # tuple (w,h) = ACTUAL saved image size
             debug_tracking=True
         )
-        print(f"   Debug tracking: {dbg}")
-        print(f"   Original annotations: {len(anns)}")
+        print(f"   Debug tracking: {dbg}")  
+
         print(f"   Transformed annotations: {len(transformed_anns)}")
+       
+        print(f"   Original annotations: {len(anns)}")
         anns = transformed_anns  # Use transformed annotations
     else:
         print("⚠️  NO TRANSFORMATIONS APPLIED - using raw annotations")
@@ -1272,23 +1275,9 @@ def transform_detection_annotations_to_yolo(
     else:
         print(f"⚠️  NO TRANSFORMATION - using raw annotations")
 
-    # 🔍 DEBUG: Check annotations before YOLO conversion
-    print(f"🔍 ANNOTATIONS BEFORE YOLO CONVERSION:")
-    for i, ann in enumerate(working_annotations):
-        if hasattr(ann, 'x_min'):
-            print(f"   Ann {i+1}: BBox({ann.x_min:.2f}, {ann.y_min:.2f}, {ann.x_max:.2f}, {ann.y_max:.2f})")
-            print(f"           Canvas: {img_w}x{img_h}")
-            # Check if annotation is within bounds
-            if ann.x_min < 0 or ann.y_min < 0 or ann.x_max > img_w or ann.y_max > img_h:
-                print(f"           ⚠️  OUT OF BOUNDS!")
-            if (ann.x_max - ann.x_min) < 1 or (ann.y_max - ann.y_min) < 1:
-                print(f"           ⚠️  TOO SMALL!")
-
     yolo_lines: List[str] = []
 
-    for i, ann in enumerate(working_annotations):
-        print(f"🔍 Processing annotation {i+1}/{len(working_annotations)}")
-        
+    for ann in working_annotations:
         # class id
         if callable(class_index_resolver):
             try:
@@ -1304,12 +1293,9 @@ def transform_detection_annotations_to_yolo(
         y_min = float(getattr(ann, 'y_min', 0.0))
         x_max = float(getattr(ann, 'x_max', 0.0))
         y_max = float(getattr(ann, 'y_max', 0.0))
-        
-        print(f"   📦 BBox: ({x_min:.2f}, {y_min:.2f}, {x_max:.2f}, {y_max:.2f})")
 
         # skip degenerates
         if x_max <= x_min or y_max <= y_min:
-            print(f"   ❌ SKIPPED: Degenerate bbox (w={x_max-x_min:.2f}, h={y_max-y_min:.2f})")
             logger.debug("operations.annotations", "Skipping degenerate bbox", "yolo_detection_degenerate", {
                 'class_id': class_id, 'bbox': {'x_min': x_min, 'y_min': y_min, 'x_max': x_max, 'y_max': y_max}
             })
@@ -1320,34 +1306,16 @@ def transform_detection_annotations_to_yolo(
         cy = (y_min + y_max) / 2.0 / img_h
         w  = (x_max - x_min) / img_w
         h  = (y_max - y_min) / img_h
-        
-        print(f"   📏 Normalized: cx={cx:.4f}, cy={cy:.4f}, w={w:.4f}, h={h:.4f}")
 
-        # Clip out-of-bounds values instead of skipping
-        cx_clipped = max(0.0, min(1.0, cx))
-        cy_clipped = max(0.0, min(1.0, cy))
-        w_clipped = max(0.001, min(1.0, w))  # Minimum width to avoid degenerate boxes
-        h_clipped = max(0.001, min(1.0, h))  # Minimum height to avoid degenerate boxes
-        
-        # Check if clipping was needed
-        needs_clipping = (cx != cx_clipped or cy != cy_clipped or w != w_clipped or h != h_clipped)
-        
-        if needs_clipping:
-            print(f"   ⚠️  CLIPPED: Out of bounds values normalized")
-            print(f"      Original: cx={cx:.4f}, cy={cy:.4f}, w={w:.4f}, h={h:.4f}")
-            print(f"      Clipped:  cx={cx_clipped:.4f}, cy={cy_clipped:.4f}, w={w_clipped:.4f}, h={h_clipped:.4f}")
-            logger.debug("operations.annotations", "BBox clipped to valid [0,1] range",
-                         "yolo_detection_clipped",
-                         {'class_id': class_id, 
-                          'original': {'cx': cx, 'cy': cy, 'w': w, 'h': h},
-                          'clipped': {'cx': cx_clipped, 'cy': cy_clipped, 'w': w_clipped, 'h': h_clipped}})
-            
-            # Use clipped values
-            cx, cy, w, h = cx_clipped, cy_clipped, w_clipped, h_clipped
+        # sanity (don't "fix" here—if it fails, upstream clip/canvas is wrong)
+        if not (0.0 <= cx <= 1.0 and 0.0 <= cy <= 1.0 and 0.0 < w <= 1.0 and 0.0 < h <= 1.0):
+            logger.debug("errors.validation", "BBox out of [0,1] after normalization — likely wrong clip/canvas upstream",
+                         "yolo_detection_out_of_bounds",
+                         {'class_id': class_id, 'normalized': {'cx': cx, 'cy': cy, 'w': w, 'h': h}})
+            continue
 
         yolo_line = f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}"
         yolo_lines.append(yolo_line)
-        print(f"   ✅ SUCCESS: Added to YOLO: {yolo_line}")
 
         logger.debug("operations.annotations", "Detection annotation converted to YOLO", "yolo_detection_converted", {
             'class_id': class_id,
@@ -1358,8 +1326,6 @@ def transform_detection_annotations_to_yolo(
 
     logger.debug("operations.annotations", "Detection annotations converted to YOLO format", "yolo_detection_conversion_complete",
                  {'total_converted': len(yolo_lines)})
-
-
 
     return yolo_lines
 

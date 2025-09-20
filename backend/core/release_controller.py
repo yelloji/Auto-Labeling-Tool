@@ -1884,4 +1884,3 @@ if __name__ == "__main__":
     print("Release Controller initialized successfully!")
     print(f"Test configuration: {test_config}")
     print("Ready for release generation!")
-

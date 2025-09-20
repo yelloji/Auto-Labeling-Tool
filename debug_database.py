@@ -495,28 +495,22 @@ class DatabaseDebugger:
                         if isinstance(segmentation[0], dict) and 'x' in segmentation[0] and 'y' in segmentation[0]:
                             # Format: [{x: x1, y: y1}, {x: x2, y: y2}, ...]
                             print(f"            Polygon: {len(segmentation)} points")
-                            for j, point in enumerate(segmentation[:3]):  # Show first 3 points
-                                print(f"               Point {j+1}: ({point['x']}, {point['y']})")
-                            if len(segmentation) > 3:
-                                print(f"               ... and {len(segmentation)-3} more points")
+                            for j, point in enumerate(segmentation):  # Show ALL points
+                                print(f"               Point {j+1}: ({point['x']:8.2f}, {point['y']:8.2f})")
                         elif isinstance(segmentation[0], list):
                             # Polygon format: [[x1,y1,x2,y2,...]]
                             for i, polygon in enumerate(segmentation):
                                 points = [(polygon[j], polygon[j+1]) for j in range(0, len(polygon), 2)]
                                 print(f"            Polygon {i+1}: {len(points)} points")
-                                for j, (x, y) in enumerate(points[:3]):  # Show first 3 points
-                                    print(f"               Point {j+1}: ({x}, {y})")
-                                if len(points) > 3:
-                                    print(f"               ... and {len(points)-3} more points")
+                                for j, (x, y) in enumerate(points):  # Show ALL points
+                                    print(f"               Point {j+1}: ({x:8.2f}, {y:8.2f})")
                         elif all(isinstance(x, (int, float)) for x in segmentation):
                             # Single polygon: [x1,y1,x2,y2,...]
                             try:
                                 points = [(segmentation[j], segmentation[j+1]) for j in range(0, len(segmentation), 2)]
                                 print(f"            Polygon: {len(points)} points")
-                                for j, (x, y) in enumerate(points[:3]):  # Show first 3 points
-                                    print(f"               Point {j+1}: ({x}, {y})")
-                                if len(points) > 3:
-                                    print(f"               ... and {len(points)-3} more points")
+                                for j, (x, y) in enumerate(points):  # Show ALL points
+                                    print(f"               Point {j+1}: ({x:8.2f}, {y:8.2f})")
                             except IndexError:
                                 print(f"            ⚠️ Invalid polygon format: {segmentation}")
                         else:

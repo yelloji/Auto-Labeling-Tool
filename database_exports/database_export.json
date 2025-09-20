@@ -1,5 +1,5 @@
 {
-  "export_timestamp": "2025-09-10T17:31:53.001566",
+  "export_timestamp": "2025-09-20T19:41:09.758522",
   "database_path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\database.db",
   "projects": [
     {
@@ -14,7 +14,7 @@
         "total_images": 8,
         "labeled_images": 8,
         "unlabeled_images": 0,
-        "annotations": 8
+        "annotations": 11
       },
       "datasets": [
         {
@@ -22,7 +22,7 @@
           "name": "car_dataset",
           "description": "Images uploaded to gevis",
           "created_at": "2025-06-19 13:26:47",
-          "updated_at": "2025-09-08 09:35:08.110553",
+          "updated_at": "2025-09-20 17:40:28.847097",
           "statistics": {
             "total_images": 5,
             "labeled_images": 5,
@@ -40,13 +40,13 @@
               "format": "JPEG",
               "file_size": 8848,
               "split_type": "annotating",
-              "split_section": "test",
+              "split_section": "val",
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-08 06:58:36",
-              "updated_at": "2025-09-08 09:35:08.081514",
+              "updated_at": "2025-09-20 17:40:28.820483",
               "file_exists": true
             },
             {
@@ -59,13 +59,13 @@
               "format": "JPEG",
               "file_size": 7191,
               "split_type": "annotating",
-              "split_section": "val",
+              "split_section": "test",
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-08 06:58:36",
-              "updated_at": "2025-09-08 09:35:08.084023",
+              "updated_at": "2025-09-20 17:40:28.822483",
               "file_exists": true
             },
             {
@@ -84,7 +84,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-08 06:58:36",
-              "updated_at": "2025-09-08 09:35:08.092034",
+              "updated_at": "2025-09-20 17:40:28.824483",
               "file_exists": true
             },
             {
@@ -97,13 +97,13 @@
               "format": "JPEG",
               "file_size": 6820,
               "split_type": "annotating",
-              "split_section": "val",
+              "split_section": "test",
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-08 06:58:36",
-              "updated_at": "2025-09-08 09:35:08.093030",
+              "updated_at": "2025-09-20 17:40:28.825988",
               "file_exists": true
             },
             {
@@ -122,7 +122,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-08 06:58:36",
-              "updated_at": "2025-09-08 09:35:08.095549",
+              "updated_at": "2025-09-20 17:40:28.827993",
               "file_exists": true
             }
           ]
@@ -174,42 +174,61 @@
           "name": "animal",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-02 11:47:18",
-          "updated_at": "2025-09-08 07:37:54.707788",
+          "updated_at": "2025-09-16 09:24:12.106699",
           "statistics": {
             "total_images": 3,
             "labeled_images": 3,
             "unlabeled_images": 0,
-            "annotations": 3
+            "annotations": 6
           },
           "images": [
             {
               "id": "6b278151-bd8a-460d-b2f9-a02b72edfa0d",
               "filename": "car.jpg",
               "original_filename": "car.jpg",
-              "file_path": "projects/gevis/dataset/animal/train/car.jpg",
+              "file_path": "projects\\gevis\\dataset\\animal\\val\\car.jpg",
               "width": 800,
               "height": 600,
               "format": "JPEG",
               "file_size": 57407,
               "split_type": "dataset",
-              "split_section": "train",
+              "split_section": "val",
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
-              "annotation_count": 1,
+              "annotation_count": 2,
               "created_at": "2025-09-02 11:47:18",
-              "updated_at": "2025-09-08 07:37:54.670272",
+              "updated_at": "2025-09-20 10:03:58",
               "file_exists": true
             },
             {
               "id": "c5cd9dd2-5bb1-4faa-bee4-1a40a0778703",
               "filename": "cat.jpg",
               "original_filename": "cat.jpg",
-              "file_path": "projects/gevis/dataset/animal/test/cat.jpg",
+              "file_path": "projects\\gevis\\dataset\\animal\\train\\cat.jpg",
               "width": 800,
               "height": 600,
               "format": "JPEG",
               "file_size": 54749,
+              "split_type": "dataset",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 3,
+              "created_at": "2025-09-02 11:47:18",
+              "updated_at": "2025-09-20 10:03:58",
+              "file_exists": true
+            },
+            {
+              "id": "39ecbde1-4ddf-4711-a6fd-dc6a756edd66",
+              "filename": "dog.jpg",
+              "original_filename": "dog.jpg",
+              "file_path": "projects\\gevis\\dataset\\animal\\test\\dog.jpg",
+              "width": 800,
+              "height": 600,
+              "format": "JPEG",
+              "file_size": 76182,
               "split_type": "dataset",
               "split_section": "test",
               "is_labeled": true,
@@ -217,26 +236,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-02 11:47:18",
-              "updated_at": "2025-09-08 07:37:54.682274",
-              "file_exists": true
-            },
-            {
-              "id": "39ecbde1-4ddf-4711-a6fd-dc6a756edd66",
-              "filename": "dog.jpg",
-              "original_filename": "dog.jpg",
-              "file_path": "projects/gevis/dataset/animal/val/dog.jpg",
-              "width": 800,
-              "height": 600,
-              "format": "JPEG",
-              "file_size": 76182,
-              "split_type": "dataset",
-              "split_section": "val",
-              "is_labeled": true,
-              "is_auto_labeled": false,
-              "is_verified": false,
-              "annotation_count": 1,
-              "created_at": "2025-09-02 11:47:18",
-              "updated_at": "2025-09-08 07:37:54.695277",
+              "updated_at": "2025-09-20 10:03:58",
               "file_exists": true
             }
           ]
@@ -375,7 +375,7 @@
     "total_projects": 2,
     "total_datasets": 6,
     "total_images": 13,
-    "total_annotations": 13,
+    "total_annotations": 16,
     "labeled_images": 13,
     "unlabeled_images": 0
   }

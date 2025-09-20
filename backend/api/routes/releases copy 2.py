@@ -31,9 +31,6 @@ from core.transformation_schema import generate_release_configurations
 from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
 
 # Import transformation debugger
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 from TRANSFORMATION_DEBUG import TransformationDebugger
 
 # Initialize professional logger
@@ -95,7 +92,6 @@ class ReleaseCreate(BaseModel):
     include_annotations: bool = True
     verified_only: bool = False
     output_format: str = "original"  # Image format: original, jpg, png, webp, bmp, tiff
-    preview_data: Optional[dict] = None  # Preview data with calculated split counts
 
 class DatasetRebalanceRequest(BaseModel):
     train_count: int
@@ -543,35 +539,9 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             "project_id": project_id
         })
         
-        # Use preview data if available (frontend already calculated correctly)
-        if payload.preview_data and payload.preview_data.get('splitBreakdown'):
-            # Use frontend-calculated split counts (includes augmentation)
-            split_breakdown = payload.preview_data['splitBreakdown']
-            split_counts = {
-                "train": split_breakdown.get('train', 0),
-                "val": split_breakdown.get('val', 0), 
-                "test": split_breakdown.get('test', 0)
-            }
-            total_original = payload.preview_data.get('baseImages', 0)
-            final_image_count = payload.preview_data.get('totalImages', 0)
-            total_augmented = final_image_count - total_original
-            class_count = payload.preview_data.get('totalClasses', 0)  # nc - number of classes
-            
-            # Debug logging to see what we're getting
-            logger.info("operations.preview_data", f"Using preview data for release counts", "preview_data_usage", {
-                "split_breakdown": split_breakdown,
-                "total_original": total_original,
-                "final_image_count": final_image_count,
-                "total_augmented": total_augmented,
-                "class_count": class_count,
-                "split_counts": split_counts
-            })
-        else:
-            # Fallback to old calculation method
-            total_original, split_counts = calculate_total_image_counts(db, payload.dataset_ids)
-            total_augmented = total_original * (payload.multiplier - 1) if payload.multiplier > 1 else 0
-            final_image_count = total_original * payload.multiplier
-            class_count = 0  # Will be calculated later if needed
+        total_original, split_counts = calculate_total_image_counts(db, payload.dataset_ids)
+        total_augmented = total_original * (payload.multiplier - 1) if payload.multiplier > 1 else 0
+        final_image_count = total_original * payload.multiplier
         
         logger.info("operations.operations", f"Image counts calculated", "image_count_calculation_success", {
             "total_original": total_original,
@@ -644,7 +614,6 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             train_image_count=split_counts.get("train", 0),
             val_image_count=split_counts.get("val", 0),
             test_image_count=split_counts.get("test", 0),
-            class_count=class_count,  # ✅ FIXED: Set nc (number of classes) from preview data
             model_path=relative_model_path,
             created_at=datetime.now(),
         )
@@ -2754,63 +2723,34 @@ def create_complete_release_zip(
                             
                         else:
                             print(f"🎯 COMPLEX TRANSFORMATIONS for {img_data.get('filename', 'unknown')}")
-                            # FIXED: For original image in complex path, apply only resize (baseline behavior)
+                            # Use ImageTransformer for complex transformations (rotation, flip, etc.)
                             try:
                                 from PIL import Image as PILImage
                                 pil_img = PILImage.open(original_path).convert('RGB')
                                 original_dims = pil_img.size
                                 print(f"🖼️ Original image dims: {original_dims}")
                                 
-                                # CRITICAL FIX: For original image, apply ONLY resize transformation (baseline)
-                                # Find resize transformation in the list
-                                resize_transform = None
-                                for transform in transformations:
-                                    if transform.get('type') == 'resize':
-                                        resize_transform = transform
-                                        break
+                                # Apply transformations using ImageTransformer
+                                # Handles complex geometric operations with proper coordinate tracking
+                                from ..services.image_transformer import ImageTransformer
+                                transformer = ImageTransformer()
+                                print(f"🔄 Calling ImageTransformer.apply_transformations...")
                                 
-                                if resize_transform:
-                                    print(f"🎯 ORIGINAL IMAGE: Applying ONLY resize (baseline behavior)")
-                                    # Apply only resize to original image using proper resize logic
-                                    resize_params = resize_transform.get('params', {})
-                                    target_width = resize_params.get('width')
-                                    target_height = resize_params.get('height')
-                                    
-                                    if target_width and target_height:
-                                        # 🎯 FIXED: Use proper resize logic that respects resize_mode
-                                        from ..services.image_transformer import ImageTransformer
-                                        transformer = ImageTransformer()
-                                        
-                                        # Apply resize transformation with proper mode handling
-                                        augmented_image = transformer._apply_resize(pil_img, resize_params)
-                                        print(f"🖼️ Resized to: {augmented_image.size} using mode: {resize_params.get('resize_mode', 'stretch_to')}")
-                                        
-                                        # Track only resize transformation for original image
-                                        transformation_list = [resize_transform]
-                                        final_dims = augmented_image.size
-                                    else:
-                                        print(f"⚠️ No resize dimensions found, keeping original")
-                                        augmented_image = pil_img.copy()
-                                        transformation_list = []
-                                        final_dims = original_dims
-                                else:
-                                    print(f"🎯 ORIGINAL IMAGE: No resize found, applying all transformations")
-                                    # No resize found, apply all transformations using ImageTransformer
-                                    from ..services.image_transformer import ImageTransformer
-                                    transformer = ImageTransformer()
-                                    
-                                    # Convert transformations list to config dict
-                                    config_dict = {}
-                                    for transform in transformations:
-                                        transform_type = transform.get('type')
-                                        transform_params = transform.get('params', {})
-                                        # Add enabled flag
-                                        transform_params['enabled'] = True
-                                        config_dict[transform_type] = transform_params
-                                    
-                                    augmented_image = transformer.apply_transformations(pil_img, config_dict)
-                                    transformation_list = transformations
-                                    final_dims = augmented_image.size if augmented_image else original_dims
+                                # Convert transformations list to config dict
+                                config_dict = {}
+                                for transform in transformations:
+                                    transform_type = transform.get('type')
+                                    transform_params = transform.get('params', {})
+                                    # Add enabled flag
+                                    transform_params['enabled'] = True
+                                    config_dict[transform_type] = transform_params
+                                
+                                augmented_image = transformer.apply_transformations(pil_img, config_dict)
+                                print(f"✅ ImageTransformer.apply_transformations completed!")
+                                
+                                # For tracking, we need the transformation list
+                                transformation_list = transformations
+                                final_dims = augmented_image.size if augmented_image else original_dims
                                 
                                 # Track transformations for annotation coordinate transformation
                                 transformation_tracking_data = track_transformations_for_annotations(
@@ -2818,7 +2758,7 @@ def create_complete_release_zip(
                                     original_dims=original_dims,
                                     final_dims=final_dims
                                 )
-                                print(f"🎯 ORIGINAL IMAGE BASELINE: Applied resize-only, augmented images will get full combinations!")
+                                print(f"🎯 COMPLEX: Using tracking system for annotations!")
                                 
                             except Exception as complex_e:
                                 print(f"🚨 COMPLEX TRANSFORMATION ERROR: {complex_e}")
@@ -4767,19 +4707,6 @@ def generate_descriptive_suffix(transformations: dict) -> str:
             logger.debug("operations.operations", f"Noise suffix added to file naming", "noise_suffix_added", {
                 'suffix': suffix,
                 'intensity': intensity,
-                'operation': 'file_suffix_generation'
-            })
-        elif tool_type == 'crop':
-            crop_percentage = params.get('crop_percentage', params.get('percentage', 100))
-            logger.debug("operations.operations", f"Processing crop transformation for file suffix", "crop_suffix_processing", {
-                'crop_percentage': crop_percentage,
-                'operation': 'file_suffix_generation'
-            })
-            suffix = f"crop{int(crop_percentage)}"
-            parts.append(suffix)
-            logger.debug("operations.operations", f"Crop suffix added to file naming", "crop_suffix_added", {
-                'suffix': suffix,
-                'crop_percentage': crop_percentage,
                 'operation': 'file_suffix_generation'
             })
         else:

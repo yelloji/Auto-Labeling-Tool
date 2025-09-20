@@ -254,12 +254,10 @@ class Release(Base):
     final_image_count = Column(Integer)  # total exported images
 
     # Cached statistics & metadata from one-time ZIP scan
-    train_image_count = Column(Integer, default=0)
-    val_image_count = Column(Integer, default=0)
-    test_image_count = Column(Integer, default=0)
-    class_count = Column(Integer, default=0)  # nc: number of classes
-    # classes_json = Column(JSON)  # removed: redundant column
-    # shapes_json = Column(JSON)   # removed: redundant column
+    train_image_count = Column(Integer, default=0)  # Actual images in train folder of ZIP
+    val_image_count = Column(Integer, default=0)    # Actual images in val folder of ZIP  
+    test_image_count = Column(Integer, default=0)   # Actual images in test folder of ZIP
+    class_count = Column(Integer, default=0)        # nc: number of classes (enough for UI)
 
     model_path = Column(String(500))  # path to ZIP or export folder
 

@@ -125,11 +125,6 @@ class ImageTransformer:
             applied_transformations = []
             failed_transformations = []
             
-            # 🔍 DEBUG: Show image transformation order
-            transformation_order = list(config.keys())
-            print(f"\n🖼️ IMAGE GENERATION ORDER: {transformation_order}")
-            logger.info("operations.transformations", f"Image generation order: {transformation_order}")
-            
             # Apply transformations in order
             for transform_name, params in config.items():
                 if transform_name in self.transformation_methods and params.get('enabled', True):
@@ -1781,3 +1776,4 @@ class ImageTransformer:
                 'original_size': f"{image.size[0]}x{image.size[1]}"
             })
             raise
+

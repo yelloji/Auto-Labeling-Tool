@@ -117,14 +117,18 @@ class TransformationSchema:
     
     def generate_single_value_combinations(self) -> List[Dict[str, Any]]:
         """
-        Generate all possible combinations from single-value transformations
-        Phase 1: Uses current single-value system
+        Generate combinations using Priority structure for single-value transformations
+        
+        Priority Order:
+        1st: Individual transformations (each tool applied separately)
+        2nd: No auto-generated values (single-value tools don't have opposites)
+        3rd: Tool combinations (2+ tools together)
         """
         if not self.transformations:
-            logger.warning("operations.transformations", "No transformations available for combination generation", "no_transformations_warning", {
+            logger.warning("operations.transformations", "No transformations available for single-value combination generation", "no_transformations_single_value", {
                 'operation': 'generate_single_value_combinations'
             })
-            return [{}]  # Return empty config for no transformations
+            return [{}]
         
         # Get enabled transformations only
         enabled_transformations = [t for t in self.transformations if t.enabled]
@@ -136,24 +140,71 @@ class TransformationSchema:
             })
             return [{}]
         
-        # For single-value system, each transformation contributes one value
-        # Generate combinations by including/excluding each transformation
         combinations = []
         
-        # Generate all possible combinations (2^n where n is number of transformations)
-        for i in range(1, 2 ** len(enabled_transformations)):
-            combination = {}
-            
-            for j, transformation in enumerate(enabled_transformations):
-                # Check if this transformation is included in current combination
-                if i & (1 << j):
-                    combination[transformation.tool_type] = transformation.parameters
-            
-            combinations.append(combination)
+        # Separate resize from other transformations (resize is baseline, skip from combinations)
+        regular_transformations = []
+        for transformation in enabled_transformations:
+            if transformation.tool_type == 'resize':
+                logger.info("operations.transformations", f"⏭️ Skipping resize from combination generation (baseline transformation)", "skip_resize_baseline", {
+                    'tool_type': transformation.tool_type
+                })
+                continue
+            else:
+                regular_transformations.append(transformation)
         
-        logger.info("operations.transformations", f"Generated {len(combinations)} single-value combinations", "single_value_combinations_generated", {
+        # PRIORITY 1: Individual tools applied to original image
+        logger.info("operations.transformations", "Generating Priority 1 combinations (individual tools)", "priority1_generation_start", {
+            'tool_count': len(regular_transformations)
+        })
+        
+        for transformation in regular_transformations:
+            individual_combination = {
+                transformation.tool_type: transformation.parameters.copy()
+            }
+            combinations.append(individual_combination)
+            logger.info("operations.transformations", f"✅ PRIORITY 1 - Added individual tool: {transformation.tool_type}", "priority1_added", {
+                'tool_type': transformation.tool_type,
+                'parameters': transformation.parameters,
+                'combination': individual_combination
+            })
+        
+        # PRIORITY 2: No auto-generated values for single-value tools
+        # (Single-value tools don't have opposite values like dual-value tools)
+        logger.info("operations.transformations", "Priority 2: Skipped (no auto values for single-value tools)", "priority2_skipped", {
+            'reason': 'single_value_tools_no_auto_values'
+        })
+        
+        # PRIORITY 3: Tool combinations (2+ tools together)
+        logger.info("operations.transformations", "Generating Priority 3 combinations (tool combinations)", "priority3_generation_start", {
+            'tool_count': len(regular_transformations)
+        })
+        
+        # Generate all combinations of 2 or more tools
+        from itertools import combinations as iter_combinations
+        
+        for r in range(2, len(regular_transformations) + 1):  # 2, 3, 4, ... tools
+            for tool_combo in iter_combinations(regular_transformations, r):
+                combination = {}
+                tool_names = []
+                
+                for transformation in tool_combo:
+                    combination[transformation.tool_type] = transformation.parameters.copy()
+                    tool_names.append(transformation.tool_type)
+                
+                combinations.append(combination)
+                logger.info("operations.transformations", f"✅ PRIORITY 3 - Added tool combination: {'+'.join(tool_names)}", "priority3_added", {
+                    'tools': tool_names,
+                    'combination_size': len(tool_combo),
+                    'combination': combination
+                })
+        
+        logger.info("operations.transformations", f"Generated {len(combinations)} single-value combinations using Priority structure", "single_value_combinations_generated", {
             'combination_count': len(combinations),
-            'enabled_transformations': len(enabled_transformations)
+            'regular_transformations': len(regular_transformations),
+            'priority1_count': len(regular_transformations),
+            'priority2_count': 0,
+            'priority3_count': len(combinations) - len(regular_transformations)
         })
         return combinations
     
