@@ -30,8 +30,17 @@ from core.transformation_schema import generate_release_configurations
 # Import professional logging system
 from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
 
+# Import transformation debugger
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
+from TRANSFORMATION_DEBUG import TransformationDebugger
+
 # Initialize professional logger
 logger = get_professional_logger()
+
+# Initialize transformation debugger
+debug_logger = TransformationDebugger()
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -86,6 +95,7 @@ class ReleaseCreate(BaseModel):
     include_annotations: bool = True
     verified_only: bool = False
     output_format: str = "original"  # Image format: original, jpg, png, webp, bmp, tiff
+    preview_data: Optional[dict] = None  # Preview data with calculated split counts
 
 class DatasetRebalanceRequest(BaseModel):
     train_count: int
@@ -533,9 +543,35 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             "project_id": project_id
         })
         
-        total_original, split_counts = calculate_total_image_counts(db, payload.dataset_ids)
-        total_augmented = total_original * (payload.multiplier - 1) if payload.multiplier > 1 else 0
-        final_image_count = total_original * payload.multiplier
+        # Use preview data if available (frontend already calculated correctly)
+        if payload.preview_data and payload.preview_data.get('splitBreakdown'):
+            # Use frontend-calculated split counts (includes augmentation)
+            split_breakdown = payload.preview_data['splitBreakdown']
+            split_counts = {
+                "train": split_breakdown.get('train', 0),
+                "val": split_breakdown.get('val', 0), 
+                "test": split_breakdown.get('test', 0)
+            }
+            total_original = payload.preview_data.get('baseImages', 0)
+            final_image_count = payload.preview_data.get('totalImages', 0)
+            total_augmented = final_image_count - total_original
+            class_count = payload.preview_data.get('totalClasses', 0)  # nc - number of classes
+            
+            # Debug logging to see what we're getting
+            logger.info("operations.preview_data", f"Using preview data for release counts", "preview_data_usage", {
+                "split_breakdown": split_breakdown,
+                "total_original": total_original,
+                "final_image_count": final_image_count,
+                "total_augmented": total_augmented,
+                "class_count": class_count,
+                "split_counts": split_counts
+            })
+        else:
+            # Fallback to old calculation method
+            total_original, split_counts = calculate_total_image_counts(db, payload.dataset_ids)
+            total_augmented = total_original * (payload.multiplier - 1) if payload.multiplier > 1 else 0
+            final_image_count = total_original * payload.multiplier
+            class_count = 0  # Will be calculated later if needed
         
         logger.info("operations.operations", f"Image counts calculated", "image_count_calculation_success", {
             "total_original": total_original,
@@ -608,6 +644,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             train_image_count=split_counts.get("train", 0),
             val_image_count=split_counts.get("val", 0),
             test_image_count=split_counts.get("test", 0),
+            class_count=class_count,  # ✅ FIXED: Set nc (number of classes) from preview data
             model_path=relative_model_path,
             created_at=datetime.now(),
         )
@@ -2268,7 +2305,18 @@ def create_complete_release_zip(
     multiplier: int,
     zip_path: str
 ):
-    """Create complete release ZIP with proper dataset aggregation and augmentation"""
+    """
+    🎯 MAIN RELEASE ZIP CREATION FUNCTION - COMPLETE WORKFLOW
+    
+    This function creates a complete YOLO dataset ZIP with:
+    1. Dataset aggregation across multiple sources
+    2. Image transformations and augmentation
+    3. YOLO format conversion using new annotation transformer
+    4. Metadata and configuration files
+    5. Final ZIP packaging
+    
+    Workflow: Images → Transform → Track → Convert to YOLO → Package
+    """
     import tempfile
     import zipfile
     from PIL import Image as PILImage
@@ -2276,20 +2324,20 @@ def create_complete_release_zip(
     import yaml
     import json
     
+    # 🎯 START: Log the beginning of ZIP creation process
     logger.info("operations.releases", f"Creating complete release ZIP", "release_zip_creation_start", {
         'dataset_count': len(dataset_ids),
         'multiplier': multiplier
     })
     
-    # Derive images_per_original from user multiplier (augmented images only)
-    images_per_original = max(0, multiplier - 1)
+    # 🎯 STEP 0: Setup staging directory structure
+    images_per_original = max(0, multiplier - 1)  # Calculate augmented images count
     
-    # Prefer a project-local staging dir (same drive as final ZIP) to avoid Windows temp issues
-    # Use a hidden staging directory (prefixed with a dot) so it isn't visible to users
+    # 📁 Create hidden staging directory (avoids Windows temp issues)
     staging_root = os.path.join(os.path.dirname(zip_path), f".staging_{release_id}")
     if os.path.exists(staging_root):
         try:
-            shutil.rmtree(staging_root, ignore_errors=True)
+            shutil.rmtree(staging_root, ignore_errors=True)  # Clean existing directory
             logger.debug("operations.releases", f"Cleaned up existing staging directory", "staging_cleanup_success", {
                 'staging_root': staging_root
             })
@@ -2299,7 +2347,8 @@ def create_complete_release_zip(
                 'error': str(_e)
             })
     os.makedirs(staging_root, exist_ok=True)
-    # On Windows, also mark the folder as hidden
+    
+    # 🪟 Windows-specific: Mark staging directory as hidden
     try:
         if os.name == 'nt':
             import ctypes
@@ -2313,9 +2362,12 @@ def create_complete_release_zip(
             'staging_root': staging_root,
             'error': str(_e)
         })
+    
+    # 📂 Create main staging directory structure
     staging_dir = os.path.join(staging_root, "staging")
     os.makedirs(staging_dir, exist_ok=True)
-    # Initialize centralized image format engine once per ZIP build
+    
+    # 🖼️ Initialize image format engine for consistent output formatting
     try:
         from core.image_generator import create_augmentation_engine
         image_format_engine = create_augmentation_engine(staging_dir)
@@ -2330,23 +2382,22 @@ def create_complete_release_zip(
         image_format_engine = None
     try:
         
-        # Create split directories
+        # 📁 STEP 1: Create YOLO directory structure (images/train, labels/train, etc.)
         for split in ["train", "val", "test"]:
             os.makedirs(os.path.join(staging_dir, "images", split), exist_ok=True)
             os.makedirs(os.path.join(staging_dir, "labels", split), exist_ok=True)
         
-        # Step 0: Build dual-value map from DB if available for this release version
+        # 🔄 STEP 2: Build dual-value transformation mapping from database
         db_dual_value_map = {}
         try:
-            release_version = getattr(config, 'release_name', None) or getattr(config, 'project_id', None)  # attempt to get version name
-            # Prefer config.release_name which is payload.version_name in create_release
-            release_version = getattr(config, 'release_name', None)
+            release_version = getattr(config, 'release_name', None) or getattr(config, 'project_id', None)
+            release_version = getattr(config, 'release_name', None)  # Get release version name
             if release_version:
                 db_transforms = db.query(ImageTransformation).filter(
                     ImageTransformation.release_version == release_version
                 ).all()
                 for t in db_transforms:
-                    # Expect dual_value_parameters like {"angle": {"user_value": x, "auto_value": y}}
+                    # Extract dual-value parameters like {"angle": {"user_value": x, "auto_value": y}}
                     if getattr(t, 'dual_value_enabled', False) and getattr(t, 'dual_value_parameters', None):
                         db_dual_value_map.setdefault(t.transformation_type, {}).update(t.dual_value_parameters)
         except Exception as _e:
@@ -2354,7 +2405,8 @@ def create_complete_release_zip(
                 'error': str(_e)
             })
         
-        # Step 1: Aggregate images by split across all datasets
+        # 📊 STEP 3: Aggregate images by split across all datasets
+        # This collects images from multiple datasets and organizes them by train/val/test splits
         all_images_by_split = {"train": [], "val": [], "test": []}
         class_names = set()
         class_id_to_name = {}
@@ -2407,6 +2459,17 @@ def create_complete_release_zip(
                                 Annotation.image_id == db_image.id
                             ).all()
                             
+                            # 🔍 DEBUG: Print IMMEDIATE database read coordinates
+                            print(f"\n🔍🔍🔍 IMMEDIATE DATABASE READ for {image_file} 🔍🔍🔍")
+                            print(f"   Image dimensions from DB: {db_image.width}x{db_image.height}")
+                            print(f"   Found {len(annotations)} annotations")
+                            for i, ann in enumerate(annotations):
+                                print(f"   {i+1}. {ann.class_name}: x_min={ann.x_min}, y_min={ann.y_min}, x_max={ann.x_max}, y_max={ann.y_max}")
+                                print(f"      width={ann.x_max - ann.x_min}, height={ann.y_max - ann.y_min}")
+                                print(f"      annotation object type: {type(ann)}")
+                                print(f"      annotation object id: {id(ann)}")
+                            print(f"🔍🔍🔍 END IMMEDIATE DATABASE READ 🔍🔍🔍")
+                            
                             # Collect class names and build class_id_to_name mapping
                             for ann in annotations:
                                 cid = getattr(ann, 'class_id', None)
@@ -2417,6 +2480,13 @@ def create_complete_release_zip(
                                     class_id_to_name[int(cid)] = cname
                                 if cname:
                                     class_names.add(cname)
+                        
+                        # 🔍 DEBUG: Print coordinates before storing in img_data
+                        print(f"\n🔍🔍🔍 BEFORE STORING IN IMG_DATA for {image_file} 🔍🔍🔍")
+                        for i, ann in enumerate(annotations[:3]):  # Show first 3
+                            print(f"   {i+1}. {ann.class_name}: x_min={ann.x_min}, y_min={ann.y_min}, x_max={ann.x_max}, y_max={ann.y_max}")
+                            print(f"      annotation object id: {id(ann)}")
+                        print(f"🔍🔍🔍 END BEFORE STORING 🔍🔍🔍")
                         
                         # Add image to processing list regardless of annotation status
                         all_images_by_split[split].append({
@@ -2433,8 +2503,9 @@ def create_complete_release_zip(
             'test_count': len(all_images_by_split['test'])
         })
 
-        # Build consistent class index mapping for YOLO labels based on unique class names
-        # Collect all unique class names from annotations across all datasets for the project
+        # 🏷️ STEP 4: Build YOLO class mapping - creates consistent numeric IDs for class names
+        # 📊 Collect all unique class names from annotations across all datasets
+        # This ensures consistent class ID assignment across multiple datasets and splits
         all_unique_class_names = set()
         try:
             for split_name in ['train', 'val', 'test']:
@@ -2450,26 +2521,30 @@ def create_complete_release_zip(
             })
             raise
 
-        # Ensure a stable order for class names and assign YOLO IDs
+        # 📋 STEP 4a: Ensure stable alphabetical order for consistent YOLO ID assignment
+        # Alphabetical sorting guarantees identical class ID assignment across multiple runs
         sorted_unique_class_names = sorted(list(all_unique_class_names))
         if not sorted_unique_class_names:
-            sorted_unique_class_names = ["class_0"] # Default if no classes found
+            sorted_unique_class_names = ["class_0"] # Default class if none found
 
+        # 🔄 STEP 4b: Create bidirectional mapping between class names and YOLO IDs
+        # class_name_to_yolo_id: Maps human-readable names to YOLO numeric IDs (0, 1, 2...)
+        # yolo_id_to_class_name: Reverse mapping for metadata and debugging
         class_name_to_yolo_id = {name: idx for idx, name in enumerate(sorted_unique_class_names)}
         yolo_id_to_class_name = {idx: name for name, idx in class_name_to_yolo_id.items()}
-        class_list_for_yaml = sorted_unique_class_names
+        class_list_for_yaml = sorted_unique_class_names  # Preserve for data.yaml generation
 
-        # The original class_id_to_name and related mappings are no longer directly used for YOLO indexing
-        # but might be needed for other internal logic. We will keep it populated from the initial loop.
-        # However, for YOLO labels and data.yaml, we will use the new class_name_to_yolo_id mapping.
+        # 🔍 STEP 5: Class index resolution function - converts annotations to YOLO class IDs
+        # 🎯 This function handles both class_name and class_id based annotations with comprehensive fallback logic
+        # Priority: class_name → class_id → fallback to class 0 with detailed error logging
         def resolve_class_index(ann) -> int:
              try:
-                 # First try to resolve by class_name
+                 # 🎯 Priority 1: Resolve by class_name (preferred method - most reliable)
                  cname = getattr(ann, 'class_name', None)
                  if cname and cname in class_name_to_yolo_id:
                      return class_name_to_yolo_id[cname]
                  
-                 # Fallback to class_id if class_name fails
+                 # 🎯 Priority 2: Fallback to class_id if class_name is missing or invalid
                  class_id = getattr(ann, 'class_id', None)
                  if class_id is not None and class_id in class_id_to_name:
                      fallback_name = class_id_to_name[class_id]
@@ -2481,13 +2556,17 @@ def create_complete_release_zip(
                      'class_id': getattr(ann, 'class_id', None),
                      'error': str(e)
                  })
-             return 0
+             # 🎯 Priority 3: Ultimate fallback - default to class 0 with comprehensive error handling
+             return 0  # Default to class 0 if all resolution methods fail
 
-        # Prepare central schema once for priority-order generation
+        # 🎛️ STEP 6: Initialize transformation schema for intelligent augmentation
+        # 🎯 This schema manages the order, combination, and intelligent sampling of image transformations
+        # Features: intelligent combination generation, priority-based sampling, and fallback handling
         schema = None
         try:
             from core.transformation_schema import TransformationSchema
             schema = TransformationSchema()
+            # 📊 Load transformation configuration from database records
             schema.load_from_database_records([
                 {
                     'transformation_type': t.get('type'),
@@ -2496,7 +2575,7 @@ def create_complete_release_zip(
                     'order_index': idx
                 } for idx, t in enumerate(transformations or [])
             ])
-            # images_per_original means augmented images per original (exclude original)
+            # 🎯 Configure intelligent sampling: images_per_original = augmented images per original (excludes original)
             schema.set_sampling_config(images_per_original=max(0, multiplier - 1), strategy="intelligent", fixed_combinations=2)
             logger.debug("operations.transformations", f"Transformation schema initialized successfully", "schema_init_success", {
                 'transformation_count': len(transformations or []),
@@ -2507,16 +2586,27 @@ def create_complete_release_zip(
                 'error': str(_e)
             })
 
-        # Baseline resize params if present (applied to all outputs)
+        # 📏 STEP 7: Extract baseline resize parameters (applied to all output images)
+        # 🎯 This identifies resize transformations that serve as baseline for all output images
+        # Baseline resize ensures consistent output dimensions across the entire dataset
         resize_baseline_params = None
         try:
+            # 🚨 DEBUG: Log all transformations to see what we're working with
+            logger.debug("operations.transformations", f"Processing transformations for resize detection", "transformation_debug", {
+                'transformation_count': len(transformations or []),
+                'transformations': transformations
+            })
+            
+            # 🔍 Scan transformations to find the first resize operation
             for bt in (transformations or []):
                 if bt.get("type") == "resize":
                     rp = dict(bt.get("params", {}))
                     rp["enabled"] = True
                     resize_baseline_params = rp
                     logger.debug("operations.transformations", f"Found baseline resize parameters", "baseline_resize_found", {
-                        'resize_params': rp
+                        'resize_params': rp,
+                        'has_resize_mode': 'resize_mode' in rp,
+                        'resize_mode_value': rp.get('resize_mode', 'NOT_FOUND')
                     })
                     break
         except Exception as _e:
@@ -2525,7 +2615,9 @@ def create_complete_release_zip(
             })
             resize_baseline_params = None
         
-        # Step 2: Apply augmentation to each split
+        # 🖼️ STEP 8: Process each split (train/val/test) with augmentation
+        # 🎯 Main processing loop: Iterates through train/val/test splits for comprehensive dataset generation
+        # Each split is processed independently with its own augmentation strategy and image count tracking
         final_image_count = 0
         
         for split, images in all_images_by_split.items():
@@ -2538,10 +2630,17 @@ def create_complete_release_zip(
                 'multiplier': multiplier
             })
 
-            # Compute a cap on unique variants per original using central schema rules
+            # 🎯 STEP 9: Calculate variant cap - limits augmented images per original
+            # 📊 Purpose: Determines the maximum number of augmented variants per original image
+            # 🎯 Key functions:
+            #   - Prevents combinatorial explosion from multiple transformations
+            #   - Ensures dataset size remains manageable
+            #   - Uses intelligent sampling to prioritize diverse transformations
+            #   - Falls back to safe defaults when complex calculation fails
             try:
                 from core.transformation_schema import TransformationSchema
                 schema = TransformationSchema()
+                # 🔄 Convert transformation config to schema format
                 schema.load_from_database_records([
                     {
                         'transformation_type': t.get('type'),
@@ -2550,7 +2649,7 @@ def create_complete_release_zip(
                         'order_index': idx
                     } for idx, t in enumerate(transformations or [])
                 ])
-                # Set proper sampling configuration to enable Priority 3 combinations
+                # 📈 Set proper sampling configuration to enable Priority 3 combinations
                 from core.transformation_config import calculate_max_images_per_original
                 transformation_list = [
                     {
@@ -2559,17 +2658,23 @@ def create_complete_release_zip(
                         'parameters': t.get('params', {})
                     } for t in (transformations or [])
                 ]
+                # 🧮 Calculate maximum possible images from transformation combinations
                 max_images_result = calculate_max_images_per_original(transformation_list)
                 total_with_original = max_images_result.get('max', 6)  # Default to 6 for brightness+flip
+                # ⚙️ Configure intelligent sampling strategy
                 schema.set_sampling_config(
                     images_per_original=images_per_original,
                     strategy="intelligent",
                     fixed_combinations=2
                 )
+                # 📊 Get estimated combination count from schema
                 total_with_original = schema.get_combination_count_estimate()
+                # 🎯 Calculate variant cap (excluding original image)
                 variant_cap = max(0, int(total_with_original) - 1)
             except Exception:
+                # 🛡️ Fallback: Simple calculation when complex logic fails
                 variant_cap = max(0, (len(transformations or []) > 0) and 1 or 0)
+            # 🎯 Calculate effective multiplier (original + variants)
             effective_multiplier = 1 + max(0, min((multiplier - 1), variant_cap))
             # Extra safety: ensure split directories exist
             try:
@@ -2582,8 +2687,16 @@ def create_complete_release_zip(
                     'error': str(_e)
                 })
             
+            # 🖼️ STEP 10: Process each image in the current split
+            # 📊 Purpose: Main loop for processing individual images in the dataset split
+            # 🎯 Key functions:
+            #   - Handles both original and augmented image processing
+            #   - Manages file naming and format conversion
+            #   - Coordinates with transformation system for augmented variants
+            #   - Maintains proper directory structure for YOLO format
             for img_data in images:
-                # Copy original image
+                # 📁 Copy original image
+                # 🎯 Extract image metadata for processing
                 original_filename = img_data["filename"]
                 original_path = img_data["image_path"]
                 
@@ -2607,38 +2720,154 @@ def create_complete_release_zip(
                     dest_path = os.path.join(staging_dir, "images", safe_split, output_filename)
                     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
-                    # If a resize transformation is present, apply it to originals too
-                    resize_only_config = None
-                    try:
-                        for t in (transformations or []):
-                            if t.get("type") == "resize":
-                                params = dict(t.get("params", {}))
-                                params["enabled"] = True
-                                resize_only_config = {"resize": params}
-                                break
-                    except Exception:
-                        resize_only_config = None
-
-                    if resize_only_config:
-                        try:
-                            from ..services.image_transformer import ImageTransformer as FullTransformer
-                            transformer = FullTransformer()
+                    # 🔄 STEP 11: Transformation tracking system (for annotation coordinate conversion)
+                    # 📊 Purpose: Tracks geometric transformations to properly convert annotation coordinates
+                    # 🎯 Key functions:
+                    #   - Maintains transformation metadata for coordinate conversion
+                    #   - Handles both simple (resize-only) and complex transformations
+                    #   - Provides fallback mechanisms for transformation failures
+                    #   - Ensures annotation coordinates match transformed image geometry
+                    transformation_tracking_data = None
+                    
+                    # 🔍 DEBUG: Check transformations variable
+                    print(f"\n=== 🔍 TRANSFORMATIONS DEBUG :: {img_data.get('filename', 'unknown')} ===")
+                    print(f"transformations variable: {transformations}")
+                    print(f"transformations type: {type(transformations)}")
+                    print(f"transformations bool: {bool(transformations)}")
+                    
+                    # Check if we have any transformations to apply
+                    if transformations:
+                        # Check if this is resize-only transformation
+                        # Resize-only uses simple coordinate math, complex uses ImageTransformer
+                        is_resize_only = (
+                            len(transformations) == 1 and 
+                            transformations[0].get('type') == 'resize'
+                        )
+                        
+                        if is_resize_only:
+                            print(f"🎯 RESIZE-ONLY DETECTED for {img_data.get('filename', 'unknown')}")
+                            # Use simple resize (the original working method)
+                            resize_config = transformations[0]['params']
+                            target_width = resize_config.get('width')
+                            target_height = resize_config.get('height')
+                            
                             from PIL import Image as PILImage
                             pil_img = PILImage.open(original_path).convert('RGB')
-                            resized_img = transformer.apply_transformations(pil_img, resize_only_config)
-                            # Use centralized format conversion
-                            if image_format_engine is not None:
-                                image_format_engine._save_image_with_format(resized_img, dest_path, config.output_format)
+                            original_dims = pil_img.size
+                            print(f"🖼️ Original image dims: {original_dims}")
+                            
+                            # Simple resize - this was working before!
+                            augmented_image = pil_img.resize((target_width, target_height))
+                            final_dims = augmented_image.size
+                            print(f"🖼️ Resized image dims: {final_dims}")
+                            
+                            # Track transformations for annotation coordinate transformation
+                            # Creates transformation matrix for coordinate conversion
+                            transformation_tracking_data = track_transformations_for_annotations(
+                                transformations=transformations,
+                                original_dims=original_dims,
+                                final_dims=final_dims
+                            )
+                            print(f"🎯 RESIZE-ONLY: Using tracking system for annotations!")
+                            
+                        else:
+                            print(f"🎯 COMPLEX TRANSFORMATIONS for {img_data.get('filename', 'unknown')}")
+                            # FIXED: For original image in complex path, apply only resize (baseline behavior)
+                            try:
+                                from PIL import Image as PILImage
+                                pil_img = PILImage.open(original_path).convert('RGB')
+                                original_dims = pil_img.size
+                                print(f"🖼️ Original image dims: {original_dims}")
+                                
+                                # CRITICAL FIX: For original image, apply ONLY resize transformation (baseline)
+                                # Find resize transformation in the list
+                                resize_transform = None
+                                for transform in transformations:
+                                    if transform.get('type') == 'resize':
+                                        resize_transform = transform
+                                        break
+                                
+                                if resize_transform:
+                                    print(f"🎯 ORIGINAL IMAGE: Applying ONLY resize (baseline behavior)")
+                                    # Apply only resize to original image using proper resize logic
+                                    resize_params = resize_transform.get('params', {})
+                                    target_width = resize_params.get('width')
+                                    target_height = resize_params.get('height')
+                                    
+                                    if target_width and target_height:
+                                        # 🎯 FIXED: Use proper resize logic that respects resize_mode
+                                        from ..services.image_transformer import ImageTransformer
+                                        transformer = ImageTransformer()
+                                        
+                                        # Apply resize transformation with proper mode handling
+                                        augmented_image = transformer._apply_resize(pil_img, resize_params)
+                                        print(f"🖼️ Resized to: {augmented_image.size} using mode: {resize_params.get('resize_mode', 'stretch_to')}")
+                                        
+                                        # Track only resize transformation for original image
+                                        transformation_list = [resize_transform]
+                                        final_dims = augmented_image.size
+                                    else:
+                                        print(f"⚠️ No resize dimensions found, keeping original")
+                                        augmented_image = pil_img.copy()
+                                        transformation_list = []
+                                        final_dims = original_dims
+                                else:
+                                    print(f"🎯 ORIGINAL IMAGE: No resize found, applying all transformations")
+                                    # No resize found, apply all transformations using ImageTransformer
+                                    from ..services.image_transformer import ImageTransformer
+                                    transformer = ImageTransformer()
+                                    
+                                    # Convert transformations list to config dict
+                                    config_dict = {}
+                                    for transform in transformations:
+                                        transform_type = transform.get('type')
+                                        transform_params = transform.get('params', {})
+                                        # Add enabled flag
+                                        transform_params['enabled'] = True
+                                        config_dict[transform_type] = transform_params
+                                    
+                                    augmented_image = transformer.apply_transformations(pil_img, config_dict)
+                                    transformation_list = transformations
+                                    final_dims = augmented_image.size if augmented_image else original_dims
+                                
+                                # Track transformations for annotation coordinate transformation
+                                transformation_tracking_data = track_transformations_for_annotations(
+                                    transformations=transformation_list,
+                                    original_dims=original_dims,
+                                    final_dims=final_dims
+                                )
+                                print(f"🎯 ORIGINAL IMAGE BASELINE: Applied resize-only, augmented images will get full combinations!")
+                                
+                            except Exception as complex_e:
+                                print(f"🚨 COMPLEX TRANSFORMATION ERROR: {complex_e}")
+                                # Fallback to simple processing
+                                augmented_image = None
+                                transformation_tracking_data = None
+                        
+                        # Save the transformed image (common for both resize-only and complex)
+                        # Uses centralized format engine or falls back to direct PIL save
+                        try:
+                            if augmented_image:
+                                if image_format_engine is not None:
+                                    image_format_engine._save_image_with_format(augmented_image, dest_path, config.output_format)
+                                else:
+                                    augmented_image.save(dest_path)
+                                augmented_image.close()
                             else:
-                                resized_img.save(dest_path)
-                            # Explicitly close PIL images
+                                # Fallback: copy original when transformation fails
+                                shutil.copy2(original_path, dest_path)
+                            
                             pil_img.close()
-                            resized_img.close()
                         except Exception as _e:
-                            logger.warning("errors.system", f"Failed to apply resize to original, copying instead", "resize_fallback_copy", {
+                            print(f"🚨 EXCEPTION in tracking system: {str(_e)}")
+                            print(f"🚨 Exception type: {type(_e)}")
+                            import traceback
+                            print(f"🚨 Traceback: {traceback.format_exc()}")
+                            logger.warning("errors.system", f"Failed to apply transformations to original, copying instead", "transformation_fallback_copy", {
                                 'original_path': original_path,
                                 'error': str(_e)
                             })
+                            transformation_tracking_data = None
                             try:
                                 shutil.copy2(original_path, dest_path)
                             except Exception as _e2:
@@ -2658,7 +2887,7 @@ def create_complete_release_zip(
                                     })
                                     raise
                     else:
-                        # No resize requested → copy original with format conversion
+                        # No transformations → copy original with format conversion
                         try:
                             from PIL import Image as PILImage
                             pil_img = PILImage.open(original_path).convert('RGB')
@@ -2695,15 +2924,34 @@ def create_complete_release_zip(
                                     raise
                     
                     # Create label file (choose detection vs segmentation)
+                    # Determines YOLO format based on task type and export configuration
                     try:
+                        print(f"🔍 LABEL MODE DETECTION:")
+                        print(f"   Config exists: {config is not None}")
+                        if config:
+                            print(f"   Task type: {getattr(config, 'task_type', None)}")
+                            print(f"   Export format: {getattr(config, 'export_format', None)}")
+                        
                         if config and getattr(config, 'task_type', None) == 'segmentation' and getattr(config, 'export_format', '').lower() in ["yolo", "yolo_segmentation"]:
                             label_mode = "yolo_segmentation"
+                            print(f"   ✅ Using SEGMENTATION mode: {label_mode}")
                         else:
                             label_mode = "yolo_detection"
-                    except Exception:
+                            print(f"   ✅ Using DETECTION mode: {label_mode}")
+                    except Exception as e:
                         label_mode = "yolo_detection"
+                        print(f"   ⚠️  Exception in label mode detection: {e}")
+                        print(f"   ✅ Fallback to DETECTION mode: {label_mode}")
 
-                    # Write labels for original: if resize is applied, transform labels accordingly
+                    # ✅ USE TRACKING SYSTEM FOR ALL LABEL GENERATION
+                    # 📝 STEP 12: YOLO label file creation with transformation-aware coordinate conversion
+                    # Purpose: Generate YOLO format label files that match transformed image coordinates
+                    # Key Features:
+                    # - Transformation-aware coordinate conversion for geometric transforms (resize, crop, etc.)
+                    # - Support for both detection and segmentation task types
+                    # - Fallback paths for images without geometric transformations
+                    # - Comprehensive debug logging for troubleshooting
+                    # - Uses new annotation_transformer.py functions for consistent coordinate handling
                     # Ensure label matches the output image base name
                     label_filename = os.path.splitext(output_filename)[0] + ".txt"
                     label_path = os.path.join(staging_dir, "labels", safe_split, label_filename)
@@ -2711,64 +2959,194 @@ def create_complete_release_zip(
                     # Initialize label_content to avoid reference before assignment
                     label_content = None
                     try:
-                        if resize_only_config and label_mode == "yolo_detection":
-                            from core.annotation_transformer import transform_detection_annotations_to_yolo
-                            # If resize applied, use resulting size; otherwise db image size
-                            try:
-                                from PIL import Image as PILImage
-                                _tmp_img = PILImage.open(dest_path)
-                                img_w, img_h = _tmp_img.size
-                                _tmp_img.close()  # Close the temporary image
-                            except Exception:
-                                img_w = int(getattr(img_data["db_image"], 'width', 640))
-                                img_h = int(getattr(img_data["db_image"], 'height', 480))
-                            yolo_lines = transform_detection_annotations_to_yolo(
-                                annotations=img_data["annotations"],
-                                img_w=img_w,
-                                img_h=img_h,
-                                transform_config=resize_only_config,
-                                class_index_resolver=resolve_class_index,
-                            )
-                            label_content = "\n".join(yolo_lines)
-                            with open(label_path, 'w') as f:
-                                f.write(label_content)
-                        elif resize_only_config and label_mode == "yolo_segmentation":
-                            from core.annotation_transformer import transform_segmentation_annotations_to_yolo
-                            try:
-                                from PIL import Image as PILImage
-                                _tmp_img = PILImage.open(dest_path)
-                                img_w, img_h = _tmp_img.size
-                                _tmp_img.close()  # Close the temporary image
-                            except Exception:
-                                img_w = int(getattr(img_data["db_image"], 'width', 640))
-                                img_h = int(getattr(img_data["db_image"], 'height', 480))
-                            seg_lines = transform_segmentation_annotations_to_yolo(
-                                annotations=img_data["annotations"],
-                                img_w=img_w,
-                                img_h=img_h,
-                                transform_config=resize_only_config,
-                                class_index_resolver=resolve_class_index,
-                            )
-                            label_content = "\n".join(seg_lines)
+                        # Get final image dimensions
+                        try:
+                            from PIL import Image as PILImage
+                            _tmp_img = PILImage.open(dest_path)
+                            img_w, img_h = _tmp_img.size
+                            _tmp_img.close()  # Close the temporary image
+                        except Exception:
+                            img_w = int(getattr(img_data["db_image"], 'width', 640))
+                            img_h = int(getattr(img_data["db_image"], 'height', 480))
+                        
+                        # ✅ USE NEW TRANSFORMATION SYSTEM FOR ANNOTATIONS
+                        # 🔄 STEP 12a: Transformation-aware annotation conversion (with geometric transforms)
+                        if transformation_tracking_data and transformation_tracking_data.get("has_geometric_transforms", False):
+                            print(f"🎯 RELEASES.PY: Using NEW FUNCTIONS with internal transformation!")
+                            print(f"   📊 Tracking data: {transformation_tracking_data}")
+                            
+                            # Get original dimensions from tracking data
+                            original_dims = transformation_tracking_data.get("original_dims")
+                            transform_config = transformation_tracking_data.get("transformation_config")
+                            
+                            # Use NEW functions that transform internally
+                            # 📊 Uses advanced coordinate transformation from annotation_transformer.py
+                            if label_mode == "yolo_detection":
+                                from core.annotation_transformer import transform_detection_annotations_to_yolo
+                                yolo_lines = transform_detection_annotations_to_yolo(
+                                    annotations=img_data["annotations"],
+                                    img_w=img_w,
+                                    img_h=img_h,
+                                    transform_config=transform_config,
+                                    original_dims=original_dims,
+                                    class_index_resolver=resolve_class_index,
+                                    label_mode=label_mode
+                                )
+                                label_content = "\n".join(yolo_lines)
+                                print(f"✅ NEW DETECTION FUNCTION RESULT: {len(yolo_lines)} lines")
+                            elif label_mode == "yolo_segmentation":
+                                from core.annotation_transformer import transform_segmentation_annotations_to_yolo
+                                yolo_lines = transform_segmentation_annotations_to_yolo(
+                                    annotations=img_data["annotations"],
+                                    img_w=img_w,
+                                    img_h=img_h,
+                                    transform_config=transform_config,
+                                    original_dims=original_dims,
+                                    class_index_resolver=resolve_class_index,
+                                    label_mode=label_mode
+                                )
+                                label_content = "\n".join(yolo_lines)
+                                print(f"✅ NEW SEGMENTATION FUNCTION RESULT: {len(yolo_lines)} lines")
+                            
+                            # Write the label file
                             with open(label_path, 'w') as f:
                                 f.write(label_content)
                         else:
-                            # No resize: use original content
-                            label_content = create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode, class_index_resolver=resolve_class_index)
+                            # 🔄 STEP 12b: Fallback path - no geometric transformations applied
+                            # No resize: use new YOLO functions with original dimensions
+                            img_w = int(getattr(img_data["db_image"], 'width', 640))
+                            img_h = int(getattr(img_data["db_image"], 'height', 480))
+                            
+                            # 🔍 DEBUG: Show input annotations
+                            # 🔍 STEP 13: Comprehensive debug logging for annotation processing
+                            # Purpose: Provide detailed debugging information for YOLO label generation
+                            # Key Features:
+                            # - Shows input annotation details (count, class names, bounding boxes)
+                            # - Logs function selection and transformation status
+                            # - Displays YOLO conversion results with line counts and sample content
+                            # - Helps troubleshoot empty or incorrect label generation
+                            # - Provides visual feedback during development and testing
+                            print(f"\n=== 📥 INPUT ANNOTATIONS :: {img_data.get('filename', 'unknown')} ===")
+                            print(f"Image dimensions: {img_w}x{img_h}")
+                            print(f"Annotations count: {len(img_data['annotations'])}")
+                            print(f"🔍 COORDINATES BEFORE ANNOTATION TRANSFORMER:")
+                            for i, ann in enumerate(img_data["annotations"][:3]):  # Show first 3
+                                print(f"   Ann {i+1}: class={getattr(ann, 'class_name', 'unknown')}, "
+                                      f"bbox=({getattr(ann, 'x_min', 'N/A')}, {getattr(ann, 'y_min', 'N/A')}, "
+                                      f"{getattr(ann, 'x_max', 'N/A')}, {getattr(ann, 'y_max', 'N/A')})")
+                                if hasattr(ann, 'x_min') and hasattr(ann, 'x_max'):
+                                    print(f"      width={getattr(ann, 'x_max', 0) - getattr(ann, 'x_min', 0)}, height={getattr(ann, 'y_max', 0) - getattr(ann, 'y_min', 0)}")
+                            if len(img_data["annotations"]) > 3:
+                                print(f"   ... and {len(img_data['annotations']) - 3} more")
+                            
+                            # 🔍 DEBUG: USING NEW YOLO FUNCTIONS FROM annotation_transformer.py WITH TRANSFORMATIONS
+                            print(f"\n=== ✅ USING NEW YOLO FUNCTIONS :: {img_data.get('filename', 'unknown')} ===")
+                            print(f"Label mode: {label_mode}")
+                            print(f"Using NEW functions from annotation_transformer.py with proper transformations")
+                            
+                            # Use NEW functions from annotation_transformer.py with proper transformation config
+                            if label_mode == "yolo_segmentation":
+                                from core.annotation_transformer import transform_segmentation_annotations_to_yolo
+                                yolo_lines = transform_segmentation_annotations_to_yolo(
+                                    annotations=img_data["annotations"],
+                                    img_w=img_w,
+                                    img_h=img_h,
+                                    transform_config=transformation_tracking_data.get("transformation_config") if transformation_tracking_data else None,
+                                    class_index_resolver=resolve_class_index,
+                                    label_mode=label_mode
+                                )
+                                label_content = "\n".join(yolo_lines)
+                                print(f"✅ NEW SEGMENTATION FUNCTION RESULT: {len(yolo_lines)} lines")
+                            else:
+                                from core.annotation_transformer import transform_detection_annotations_to_yolo
+                                yolo_lines = transform_detection_annotations_to_yolo(
+                                    annotations=img_data["annotations"],
+                                    img_w=img_w,
+                                    img_h=img_h,
+                                    transform_config=transformation_tracking_data.get("transformation_config") if transformation_tracking_data else None,
+                                    class_index_resolver=resolve_class_index,
+                                    label_mode=label_mode
+                                )
+                                label_content = "\n".join(yolo_lines)
+                                print(f"✅ NEW DETECTION FUNCTION RESULT: {len(yolo_lines)} lines")
+                            
+                            # 🔍 STEP 13c: Comprehensive debug output for label file generation
+                            print(f"📝 WRITING TO LABEL FILE: {label_path}")
+                            print(f"   Content length: {len(label_content)} chars")
+                            if label_content.strip():
+                                lines = label_content.strip().split('\n')
+                                print(f"   Lines: {len(lines)}")
+                                print(f"   First line: {lines[0]}")
+                                if len(lines) > 1:
+                                    print(f"   Last line: {lines[-1]}")
+                            else:
+                                print(f"   ❌ EMPTY CONTENT!")
+                            
                             with open(label_path, 'w') as f:
                                 f.write(label_content)
                     except Exception as _e:
+                        # 🛡️ STEP 14: Robust error handling with comprehensive fallback system
+                        # PURPOSE: Provides multi-layer error recovery for YOLO label generation failures
+                        # KEY FEATURES:
+                        # • Primary error detection and logging for label write failures
+                        # • Secondary fallback using new annotation transformer functions
+                        # • Proper error handling with detailed error context
+                        # • Graceful degradation to empty labels if all recovery fails
+                        # • Maintains data integrity while providing diagnostic information
                         logger.warning("errors.system", f"Failed to write original labels (resize-aware)", "original_labels_write_error", {
                             'original_filename': original_filename,
                             'error': str(_e)
                         })
-                        label_content = create_yolo_label_content(img_data["annotations"], img_data["db_image"], mode=label_mode)
+                        # Fallback: use new annotation transformer functions with proper error handling
+                        try:
+                            img_w, img_h = img_data["db_image"].width, img_data["db_image"].height
+                            if label_mode == "yolo_detection":
+                                from core.annotation_transformer import transform_detection_annotations_to_yolo
+                                yolo_lines = transform_detection_annotations_to_yolo(
+                                    annotations=img_data["annotations"],
+                                    img_w=img_w,
+                                    img_h=img_h,
+                                    transform_config=None,
+                                    class_index_resolver=resolve_class_index,
+                                    label_mode=label_mode
+                                )
+                                label_content = "\n".join(yolo_lines)
+                            elif label_mode == "yolo_segmentation":
+                                from core.annotation_transformer import transform_segmentation_annotations_to_yolo
+                                yolo_lines = transform_segmentation_annotations_to_yolo(
+                                    annotations=img_data["annotations"],
+                                    img_w=img_w,
+                                    img_h=img_h,
+                                    transform_config=None,
+                                    class_index_resolver=resolve_class_index,
+                                    label_mode=label_mode
+                                )
+                                label_content = "\n".join(yolo_lines)
+                            else:
+                                label_content = ""
+                        except Exception as fallback_e:
+                            logger.error("errors.system", f"Fallback YOLO conversion also failed", "fallback_yolo_error", {
+                                'original_filename': original_filename,
+                                'original_error': str(_e),
+                                'fallback_error': str(fallback_e)
+                            })
+                            label_content = ""
+                        
                         with open(label_path, 'w') as f:
                             f.write(label_content)
                     
                     final_image_count += 1
                     
-                    # Generate augmented versions (schema-driven priority order)
+                    # 🎯 STEP 15: Augmented image generation with schema-driven priority order
+                    # PURPOSE: Generates augmented image variants using schema-driven transformations
+                    # KEY FEATURES:
+                    # • Schema-based augmentation plan generation with priority ordering
+                    # • Fallback mechanism for schema failures with replication-based augmentation
+                    # • Descriptive filename generation honoring output format preferences
+                    # • Centralized ImageTransformer usage for consistent transformation application
+                    # • Comprehensive transformation tracking for annotation coordinate mapping
+                    # • Safety mechanisms for resize enforcement and format conversion
+                    # • Advanced annotation transformation system with geometric awareness
                     # Use schema's combination count - centralized function already includes original
                     schema_combination_count = schema.get_combination_count_estimate() if schema else 1
                     num_aug_to_generate = max(0, schema_combination_count - 1)  # Subtract 1 for original
@@ -2844,6 +3222,14 @@ def create_complete_release_zip(
                                         "params": {k: v for k, v in params.items() if k != "enabled"}
                                     })
                             
+                            # 🚨 DEBUG: Log transformation_list to see what we're passing to tracking
+                            logger.debug("operations.transformations", f"Built transformation_list for tracking", "transformation_list_debug", {
+                                'transformation_list': transformation_list,
+                                'config_dict': config_dict,
+                                'original_dims': original_dims,
+                                'final_dims': final_dims
+                            })
+                            
                             # Track transformations for annotation coordinate transformation
                             transformation_tracking_data = track_transformations_for_annotations(
                                 transformations=transformation_list,
@@ -2884,17 +3270,34 @@ def create_complete_release_zip(
                                 try:
                                     # ✅ USE NEW TRANSFORMATION SYSTEM FOR ANNOTATIONS
                                     if transformation_tracking_data and transformation_tracking_data.get("has_geometric_transforms", False):
+                                        print(f"🎯 RELEASES.PY: Using ADVANCED transformation system for annotations!")
+                                        print(f"   📊 Tracking data: {transformation_tracking_data}")
                                         # Apply same transformations to annotations that were applied to image
+                                        print(f"🔍 DEBUG: About to transform {len(img_data['annotations'])} annotations")
+                                        print(f"   First annotation type: {type(img_data['annotations'][0]) if img_data['annotations'] else 'None'}")
+                                        if img_data['annotations']:
+                                            ann = img_data['annotations'][0]
+                                            print(f"   First annotation attrs: {[attr for attr in dir(ann) if not attr.startswith('_')]}")
+                                            if hasattr(ann, 'x_min'):
+                                                print(f"   First annotation coords: ({ann.x_min}, {ann.y_min}, {ann.x_max}, {ann.y_max})")
+                                        
                                         transformed_annotations = apply_transformations_to_annotations(
                                             annotations=img_data["annotations"],
                                             tracking_data=transformation_tracking_data
                                         )
+                                        
+                                        print(f"🔍 DEBUG: Transformation result: {len(transformed_annotations)} annotations")
+                                        if transformed_annotations:
+                                            ann = transformed_annotations[0]
+                                            print(f"   First transformed annotation: ({ann.x_min}, {ann.y_min}, {ann.x_max}, {ann.y_max})")
                                         logger.debug("operations.transformations", f"Using transformed annotations for augmented labels", "transformed_annotations_used", {
                                             'original_count': len(img_data["annotations"]),
                                             'transformed_count': len(transformed_annotations),
                                             'aug_filename': aug_filename
                                         })
                                     else:
+                                        print(f"⚪ RELEASES.PY: No geometric transformations detected, using original annotations")
+                                        print(f"   📊 Tracking data: {transformation_tracking_data}")
                                         # No geometric transformations, use original annotations
                                         transformed_annotations = img_data["annotations"]
                                         logger.debug("operations.transformations", f"Using original annotations (no geometric transforms)", "original_annotations_used", {
@@ -2904,21 +3307,37 @@ def create_complete_release_zip(
                                     
                                     # Create YOLO labels using transformed annotations
                                     if label_mode in ["yolo_detection", "yolo_segmentation"]:
-                                        # Use our enhanced create_yolo_label_content with transformed annotations
-                                        # Update image dimensions to match transformed image
-                                        transformed_db_image = type('TransformedImage', (), {
-                                            'width': augmented_image.size[0],
-                                            'height': augmented_image.size[1]
-                                        })()
+                                        # Use new YOLO conversion functions with transformed annotations
+                                        img_w, img_h = augmented_image.size[0], augmented_image.size[1]
                                         
-                                        # Create YOLO labels from transformed BoundingBox/Polygon objects
-                                        label_content = create_yolo_label_content_from_objects(
-                                            annotations=transformed_annotations,
-                                            image_width=augmented_image.size[0],
-                                            image_height=augmented_image.size[1],
-                                            mode=label_mode,
-                                            class_index_resolver=resolve_class_index
-                                        )
+                                        if label_mode == "yolo_detection":
+                                            from core.annotation_transformer import transform_detection_annotations_to_yolo, _debug_yolo_dump
+                                            
+                                            print(f"🔍 DEBUG: About to call _debug_yolo_dump")
+                                            print(f"   aug_filename: {aug_filename}")
+                                            print(f"   transformed_annotations count: {len(transformed_annotations)}")
+                                            print(f"   img_w, img_h: {img_w}, {img_h}")
+                                            if transformed_annotations:
+                                                ann = transformed_annotations[0]
+                                                print(f"   First annotation: {type(ann)} - {getattr(ann, 'x_min', 'NO_X_MIN')}")
+                                            
+                                            # 🔍 DEBUG: Call debug function before YOLO conversion
+                                            det_lines, seg_lines = _debug_yolo_dump(aug_filename, transformed_annotations, img_w, img_h)
+                                            
+                                            print(f"🔍 DEBUG: _debug_yolo_dump returned:")
+                                            print(f"   det_lines count: {len(det_lines)}")
+                                            print(f"   seg_lines count: {len(seg_lines)}")
+                                            if det_lines:
+                                                print(f"   First det_line: {det_lines[0]}")
+                                            
+                                            label_content = "\n".join(det_lines)
+                                            
+                                        else:  # yolo_segmentation
+                                            from core.annotation_transformer import transform_segmentation_annotations_to_yolo, _debug_yolo_dump
+                                            
+                                            # 🔍 DEBUG: Call debug function before YOLO conversion
+                                            det_lines, seg_lines = _debug_yolo_dump(aug_filename, transformed_annotations, img_w, img_h)
+                                            label_content = "\n".join(seg_lines)
                                         with open(aug_label_path, 'w') as f:
                                             f.write(label_content)
                                         
@@ -2980,8 +3399,68 @@ def create_complete_release_zip(
                                             'height': augmented_image.size[1]
                                         })()
                                         
+                                        # Use new YOLO functions for fallback too
+                                        img_w, img_h = augmented_image.size[0], augmented_image.size[1]
+                                        
+                                        if label_mode == "yolo_detection":
+                                            from core.annotation_transformer import transform_detection_annotations_to_yolo
+                                            yolo_lines = transform_detection_annotations_to_yolo(
+                                                annotations=fallback_annotations,
+                                                img_w=img_w,
+                                                img_h=img_h,
+                                                transform_config=None,
+                                                class_index_resolver=resolve_class_index,
+                                                label_mode=label_mode
+                                            )
+                                            fallback_content = "\n".join(yolo_lines)
+                                        elif label_mode == "yolo_segmentation":
+                                            from core.annotation_transformer import transform_segmentation_annotations_to_yolo
+                                            yolo_lines = transform_segmentation_annotations_to_yolo(
+                                                annotations=fallback_annotations,
+                                                img_w=img_w,
+                                                img_h=img_h,
+                                                transform_config=None,
+                                                class_index_resolver=resolve_class_index,
+                                                label_mode=label_mode
+                                            )
+                                            fallback_content = "\n".join(yolo_lines)
+                                        else:
+                                            # Ultimate fallback: use new annotation transformer functions
+                                            try:
+                                                img_w, img_h = fallback_db_image.width, fallback_db_image.height
+                                                if label_mode == "yolo_detection":
+                                                    from core.annotation_transformer import transform_detection_annotations_to_yolo
+                                                    yolo_lines = transform_detection_annotations_to_yolo(
+                                                        annotations=fallback_annotations,
+                                                        img_w=img_w,
+                                                        img_h=img_h,
+                                                        transform_config=None,
+                                                        class_index_resolver=resolve_class_index,
+                                                        label_mode=label_mode
+                                                    )
+                                                    fallback_content = "\n".join(yolo_lines)
+                                                elif label_mode == "yolo_segmentation":
+                                                    from core.annotation_transformer import transform_segmentation_annotations_to_yolo
+                                                    yolo_lines = transform_segmentation_annotations_to_yolo(
+                                                        annotations=fallback_annotations,
+                                                        img_w=img_w,
+                                                        img_h=img_h,
+                                                        transform_config=None,
+                                                        class_index_resolver=resolve_class_index,
+                                                        label_mode=label_mode
+                                                    )
+                                                    fallback_content = "\n".join(yolo_lines)
+                                                else:
+                                                    fallback_content = ""
+                                            except Exception as fallback_e:
+                                                logger.error("errors.system", f"Ultimate fallback YOLO conversion failed", "ultimate_fallback_error", {
+                                                    'aug_filename': aug_filename,
+                                                    'error': str(fallback_e)
+                                                })
+                                                fallback_content = ""
+                                        
                                         with open(aug_label_path, 'w') as f:
-                                            f.write(create_yolo_label_content(fallback_annotations, fallback_db_image, mode=label_mode))
+                                            f.write(fallback_content)
                                     except Exception as fallback_e:
                                         logger.error("errors.system", f"Fallback annotation transformation also failed", "fallback_transformation_error", {
                                             'aug_filename': aug_filename,
@@ -3082,6 +3561,14 @@ def create_complete_release_zip(
                     pass
                 annotations_data[rel_img_path] = shapes
 
+        # 🔍 DEBUG: Show annotations.json content
+        print(f"\n=== 📋 WRITING ANNOTATIONS.JSON ===")
+        print(f"Total images with annotations: {len(annotations_data)}")
+        for img_path, shapes in annotations_data.items():
+            print(f"   {img_path}: {len(shapes)} annotations")
+            if shapes:
+                print(f"      First annotation: {shapes[0]}")
+        
         with open(os.path.join(metadata_dir, "annotations.json"), "w") as f:
             json.dump(annotations_data, f, indent=2)
 
@@ -3196,428 +3683,6 @@ def create_complete_release_zip(
                 'staging_root': staging_root,
                 'error': str(e)
             })
-
-
-def create_yolo_label_content_from_objects(annotations, image_width: int, image_height: int, mode: str = "yolo_detection", class_index_resolver=None) -> str:
-    """
-    Create YOLO format label content from BoundingBox/Polygon objects (transformed annotations).
-    
-    Args:
-        annotations: List of BoundingBox/Polygon objects
-        image_width: Width of the image
-        image_height: Height of the image
-        mode: "yolo_detection" or "yolo_segmentation"
-        class_index_resolver: Function to resolve class indices
-        
-    Returns:
-        YOLO format label content as string
-    """
-    logger.debug("operations.transformations", f"Creating YOLO labels from transformed objects", "yolo_from_objects_start", {
-        'annotation_count': len(annotations),
-        'image_dims': (image_width, image_height),
-        'mode': mode
-    })
-    
-    if not annotations:
-        return ""
-    
-    lines = []
-    
-    for ann in annotations:
-        # Get class ID
-        if callable(class_index_resolver):
-            try:
-                class_id = int(class_index_resolver(ann))
-            except:
-                class_id = int(getattr(ann, 'class_id', 0))
-        else:
-            class_id = int(getattr(ann, 'class_id', 0))
-        
-        # Handle BoundingBox objects
-        if hasattr(ann, 'x_min') and hasattr(ann, 'y_min'):
-            if mode == "yolo_detection":
-                # Convert to YOLO format: class cx cy w h (normalized)
-                cx = (ann.x_min + ann.x_max) / 2.0 / image_width
-                cy = (ann.y_min + ann.y_max) / 2.0 / image_height
-                w = (ann.x_max - ann.x_min) / image_width
-                h = (ann.y_max - ann.y_min) / image_height
-                
-                # Clamp to [0, 1]
-                cx = max(0.0, min(1.0, cx))
-                cy = max(0.0, min(1.0, cy))
-                w = max(0.0, min(1.0, w))
-                h = max(0.0, min(1.0, h))
-                
-                lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
-                
-        # Handle Polygon objects
-        elif hasattr(ann, 'points'):
-            if mode == "yolo_segmentation":
-                # Convert to YOLO segmentation format: class x1 y1 x2 y2 ... (normalized)
-                normalized_points = []
-                for x, y in ann.points:
-                    norm_x = max(0.0, min(1.0, x / image_width))
-                    norm_y = max(0.0, min(1.0, y / image_height))
-                    normalized_points.extend([f"{norm_x:.6f}", f"{norm_y:.6f}"])
-                
-                if normalized_points:
-                    lines.append(f"{class_id} " + " ".join(normalized_points))
-    
-    result = "\n".join(lines)
-    logger.debug("operations.transformations", f"YOLO labels created from transformed objects", "yolo_from_objects_complete", {
-        'line_count': len(lines),
-        'result_length': len(result)
-    })
-    
-    return result
-
-
-def create_yolo_label_content_from_objects(annotations, image_width: int, image_height: int, mode: str = "yolo_detection", class_index_resolver=None) -> str:
-    """
-    Create YOLO format label content from BoundingBox/Polygon objects (transformed annotations).
-    
-    Args:
-        annotations: List of BoundingBox/Polygon objects
-        image_width: Width of the image
-        image_height: Height of the image
-        mode: "yolo_detection" or "yolo_segmentation"
-        class_index_resolver: Function to resolve class indices
-        
-    Returns:
-        YOLO format label content as string
-    """
-    logger.debug("operations.transformations", f"Creating YOLO labels from transformed objects", "yolo_from_objects_start", {
-        'annotation_count': len(annotations),
-        'image_dims': (image_width, image_height),
-        'mode': mode
-    })
-    
-    if not annotations:
-        return ""
-    
-    lines = []
-    
-    for ann in annotations:
-        # Get class ID
-        if callable(class_index_resolver):
-            try:
-                class_id = int(class_index_resolver(ann))
-            except:
-                class_id = int(getattr(ann, 'class_id', 0))
-        else:
-            class_id = int(getattr(ann, 'class_id', 0))
-        
-        # Handle BoundingBox objects
-        if hasattr(ann, 'x_min') and hasattr(ann, 'y_min'):
-            if mode == "yolo_detection":
-                # Convert to YOLO format: class cx cy w h (normalized)
-                cx = (ann.x_min + ann.x_max) / 2.0 / image_width
-                cy = (ann.y_min + ann.y_max) / 2.0 / image_height
-                w = (ann.x_max - ann.x_min) / image_width
-                h = (ann.y_max - ann.y_min) / image_height
-                
-                # Clamp to [0, 1]
-                cx = max(0.0, min(1.0, cx))
-                cy = max(0.0, min(1.0, cy))
-                w = max(0.0, min(1.0, w))
-                h = max(0.0, min(1.0, h))
-                
-                lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
-                
-        # Handle Polygon objects
-        elif hasattr(ann, 'points'):
-            if mode == "yolo_segmentation":
-                # Convert to YOLO segmentation format: class x1 y1 x2 y2 ... (normalized)
-                normalized_points = []
-                for x, y in ann.points:
-                    norm_x = max(0.0, min(1.0, x / image_width))
-                    norm_y = max(0.0, min(1.0, y / image_height))
-                    normalized_points.extend([f"{norm_x:.6f}", f"{norm_y:.6f}"])
-                
-                if normalized_points:
-                    lines.append(f"{class_id} " + " ".join(normalized_points))
-    
-    result = "\n".join(lines)
-    logger.debug("operations.transformations", f"YOLO labels created from transformed objects", "yolo_from_objects_complete", {
-        'line_count': len(lines),
-        'result_length': len(result)
-    })
-    
-    return result
-
-
-def create_yolo_label_content_from_objects(annotations, image_width: int, image_height: int, mode: str = "yolo_detection", class_index_resolver=None) -> str:
-    """
-    Create YOLO format label content from BoundingBox/Polygon objects (transformed annotations).
-    
-    Args:
-        annotations: List of BoundingBox/Polygon objects (pixel coordinates)
-        image_width: Width of the image
-        image_height: Height of the image
-        mode: "yolo_detection" or "yolo_segmentation"
-        class_index_resolver: Function to resolve class indices
-        
-    Returns:
-        YOLO format label content as string
-    """
-    logger.debug("operations.transformations", f"Creating YOLO labels from transformed objects", "yolo_from_objects_start", {
-        'annotation_count': len(annotations),
-        'image_dims': (image_width, image_height),
-        'mode': mode
-    })
-    
-    if not annotations:
-        return ""
-    
-    lines = []
-    
-    for ann in annotations:
-        # Get class ID
-        if callable(class_index_resolver):
-            try:
-                class_id = int(class_index_resolver(ann))
-            except:
-                class_id = int(getattr(ann, 'class_id', 0))
-        else:
-            class_id = int(getattr(ann, 'class_id', 0))
-        
-        # Handle BoundingBox objects (pixel coordinates)
-        if hasattr(ann, 'x_min') and hasattr(ann, 'y_min'):
-            if mode == "yolo_detection":
-                # Convert pixel coordinates to YOLO format: class cx cy w h (normalized)
-                cx = (ann.x_min + ann.x_max) / 2.0 / image_width
-                cy = (ann.y_min + ann.y_max) / 2.0 / image_height
-                w = (ann.x_max - ann.x_min) / image_width
-                h = (ann.y_max - ann.y_min) / image_height
-                
-                # Clamp to [0, 1]
-                cx = max(0.0, min(1.0, cx))
-                cy = max(0.0, min(1.0, cy))
-                w = max(0.0, min(1.0, w))
-                h = max(0.0, min(1.0, h))
-                
-                lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
-                
-        # Handle Polygon objects (pixel coordinates)
-        elif hasattr(ann, 'points'):
-            if mode == "yolo_segmentation":
-                # Convert pixel coordinates to YOLO segmentation format: class x1 y1 x2 y2 ... (normalized)
-                normalized_points = []
-                for x, y in ann.points:
-                    norm_x = max(0.0, min(1.0, x / image_width))
-                    norm_y = max(0.0, min(1.0, y / image_height))
-                    normalized_points.extend([f"{norm_x:.6f}", f"{norm_y:.6f}"])
-                
-                if normalized_points:
-                    lines.append(f"{class_id} " + " ".join(normalized_points))
-    
-    result = "\n".join(lines)
-    logger.debug("operations.transformations", f"YOLO labels created from transformed objects", "yolo_from_objects_complete", {
-        'line_count': len(lines),
-        'result_length': len(result)
-    })
-    
-    return result
-
-
-def create_yolo_label_content(annotations, db_image, mode: str = "yolo_detection", class_index_resolver=None) -> str:
-    """
-    Create YOLO format label content from database annotations.
-    mode:
-      - "yolo_detection": one line per bbox → "class cx cy w h" (normalized)
-      - "yolo_segmentation": one line per polygon → "class x1 y1 x2 y2 ..." (normalized)
-    """
-    logger.debug("operations.images", f"Creating YOLO label content", "yolo_label_creation_start", {
-        'annotation_count': len(annotations),
-        'mode': mode,
-        'has_class_resolver': bool(class_index_resolver)
-    })
-    
-    if not annotations:
-        logger.debug("operations.images", f"No annotations provided, returning empty content", "no_annotations_empty_return", {})
-        return ""
-    
-    lines = []
-    image_width = getattr(db_image, 'width', 640)  # Default width if not available
-    image_height = getattr(db_image, 'height', 480)  # Default height if not available
-    
-    logger.debug("operations.images", f"Image dimensions for normalization", "image_dimensions_set", {
-        'width': image_width,
-        'height': image_height,
-        'is_default_width': image_width == 640,
-        'is_default_height': image_height == 480
-    })
-    
-    for ann in annotations:
-        # Get class index using resolver if provided
-        if callable(class_index_resolver):
-            try:
-                class_id = int(class_index_resolver(ann))
-                logger.debug("operations.images", f"Class ID resolved using resolver", "class_id_resolver_success", {
-                    'class_id': class_id
-                })
-            except Exception as _e:
-                logger.warning("errors.validation", f"Class resolver failed, using fallback", "class_resolver_fallback", {
-                    'error': str(_e)
-                })
-                class_id = int(getattr(ann, 'class_id', 0))
-        else:
-            class_id = int(getattr(ann, 'class_id', 0))
-            logger.debug("operations.images", f"Class ID from annotation attribute", "class_id_attribute", {
-                'class_id': class_id
-            })
-        
-        # YOLO Segmentation: prefer polygons if requested
-        if mode == "yolo_segmentation":
-            logger.debug("operations.images", f"Processing segmentation annotation", "segmentation_processing_start", {
-                'class_id': class_id
-            })
-            
-            seg = getattr(ann, 'segmentation', None)
-            # Parse JSON string if needed
-            if isinstance(seg, str):
-                try:
-                    seg = json.loads(seg)
-                    logger.debug("operations.images", f"Segmentation JSON parsed successfully", "segmentation_json_parse_success", {
-                        'segmentation_type': type(seg).__name__
-                    })
-                except Exception as _e:
-                    logger.debug("errors.validation", f"Failed to parse segmentation JSON", "segmentation_json_parse_error", {
-                        'segmentation': seg,
-                        'error': str(_e)
-                    })
-                    seg = None
-            
-            points = []
-            if isinstance(seg, list) and len(seg) > 0:
-                # 1) list of {x,y}
-                if isinstance(seg[0], dict) and 'x' in seg[0] and 'y' in seg[0]:
-                    points = [(float(p['x']), float(p['y'])) for p in seg]
-                    logger.debug("operations.images", f"Segmentation points from dict format", "segmentation_points_dict_format", {
-                        'point_count': len(points)
-                    })
-                # 2) [[x1,y1,x2,y2,...]]
-                elif isinstance(seg[0], list):
-                    flat = seg[0]
-                    for i in range(0, len(flat) - 1, 2):
-                        points.append((float(flat[i]), float(flat[i+1])))
-                    logger.debug("operations.images", f"Segmentation points from nested list format", "segmentation_points_nested_list", {
-                        'point_count': len(points)
-                    })
-                # 3) [x1,y1,x2,y2,...]
-            else:
-                flat = seg
-                for i in range(0, len(flat) - 1, 2):
-                    points.append((float(flat[i]), float(flat[i+1])))
-                logger.debug("operations.images", f"Segmentation points from flat list format", "segmentation_points_flat_list", {
-                    'point_count': len(points)
-                })
-
-            if points:
-                # Detect normalized vs pixel
-                max_val = max([max(px, py) for px, py in points]) if points else 0
-                is_norm = max_val <= 1.0
-                norm_vals = []
-                for px, py in points:
-                    nx = px if is_norm else (px / max(1, image_width))
-                    ny = py if is_norm else (py / max(1, image_height))
-                    nx = max(0.0, min(1.0, nx))
-                    ny = max(0.0, min(1.0, ny))
-                    norm_vals.extend([f"{nx:.6f}", f"{ny:.6f}"])
-                if len(norm_vals) >= 6:  # at least 3 points
-                    lines.append(f"{class_id} " + " ".join(norm_vals))
-                    continue  # done for this annotation
-
-        # Detection path: prefer explicit x_min/x_max if present
-        if all(hasattr(ann, f) for f in ("x_min", "y_min", "x_max", "y_max")):
-            logger.debug("operations.images", f"Processing detection annotation with explicit bounds", "detection_explicit_bounds", {
-                'class_id': class_id
-            })
-            
-            x_min = float(getattr(ann, 'x_min', 0.0))
-            y_min = float(getattr(ann, 'y_min', 0.0))
-            x_max = float(getattr(ann, 'x_max', 0.0))
-            y_max = float(getattr(ann, 'y_max', 0.0))
-
-            is_norm = max(x_min, y_min, x_max, y_max) <= 1.0
-            if is_norm:
-                cx = (x_min + x_max) / 2.0
-                cy = (y_min + y_max) / 2.0
-                w = (x_max - x_min)
-                h = (y_max - y_min)
-                logger.debug("operations.images", f"Using normalized coordinates", "detection_normalized_coords", {
-                    'cx': cx, 'cy': cy, 'w': w, 'h': h
-                })
-            else:
-                cx = ((x_min + x_max) / 2.0) / max(1, image_width)
-                cy = ((y_min + y_max) / 2.0) / max(1, image_height)
-                w = (x_max - x_min) / max(1, image_width)
-                h = (y_max - y_min) / max(1, image_height)
-                logger.debug("operations.images", f"Converted pixel coordinates to normalized", "detection_pixel_to_normalized", {
-                    'original': {'x_min': x_min, 'y_min': y_min, 'x_max': x_max, 'y_max': y_max},
-                    'normalized': {'cx': cx, 'cy': cy, 'w': w, 'h': h}
-                })
-
-            cx = max(0.0, min(1.0, cx))
-            cy = max(0.0, min(1.0, cy))
-            w = max(0.0, min(1.0, w))
-            h = max(0.0, min(1.0, h))
-            lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
-            logger.debug("operations.images", f"Detection annotation processed successfully", "detection_annotation_success", {
-                'class_id': class_id,
-                'final_coords': {'cx': cx, 'cy': cy, 'w': w, 'h': h}
-            })
-            continue
-
-        # Legacy bbox fallback
-        if hasattr(ann, 'bbox') and ann.bbox:
-            bbox_raw = ann.bbox
-            if isinstance(bbox_raw, str):
-                try:
-                    bbox = json.loads(bbox_raw)
-                except Exception as _e:
-                    logger.debug("errors.validation", f"Failed to parse bbox JSON", "bbox_json_parse_error", {
-                        'bbox_raw': bbox_raw,
-                        'error': str(_e)
-                    })
-                    bbox = None
-        else:
-            bbox = bbox_raw
-
-            if bbox and len(bbox) >= 4:
-                x_min, y_min, x_max, y_max = bbox[:4]
-                is_norm = max(x_min, y_min, x_max, y_max) <= 1.0
-                if is_norm:
-                    cx = (x_min + x_max) / 2.0
-                    cy = (y_min + y_max) / 2.0
-                    w = (x_max - x_min)
-                    h = (y_max - y_min)
-                else:
-                    cx = ((x_min + x_max) / 2.0) / max(1, image_width)
-                    cy = ((y_min + y_max) / 2.0) / max(1, image_height)
-                    w = (x_max - x_min) / max(1, image_width)
-                    h = (y_max - y_min) / max(1, image_height)
-
-                cx = max(0.0, min(1.0, cx))
-                cy = max(0.0, min(1.0, cy))
-                w = max(0.0, min(1.0, w))
-                h = max(0.0, min(1.0, h))
-                lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
-                continue
-
-        # No usable annotation → skip (do not write dummy)
-        logger.debug("operations.images", f"Skipping unusable annotation", "annotation_skipped", {
-            'class_id': class_id
-        })
-        continue
-    
-    logger.info("operations.images", f"YOLO label content creation completed", "yolo_label_creation_complete", {
-        'total_annotations': len(annotations),
-        'successful_lines': len(lines),
-        'mode': mode
-    })
-    
-    return "\n".join(lines)
 
 
 def generate_augmented_transformations(base_transformations: List[dict], aug_idx: int, db_dual_value_map: Dict[str, Dict[str, Dict[str, float]]] = None) -> List[dict]:
@@ -3944,8 +4009,15 @@ def track_transformations_for_annotations(transformations: List[dict], original_
             "photometric_transforms": [...]    # Only photometric transforms (for reference)
         }
     """
+    # 🚨 DEBUG: Log INPUT to tracking function
+    print(f"\n🔍 TRACKING FUNCTION INPUT:")
+    print(f"   Transformations: {transformations}")
+    print(f"   Original dims: {original_dims}")
+    print(f"   Final dims: {final_dims}")
+    
     logger.debug("operations.transformations", f"Starting transformation tracking for annotations", "transformation_tracking_start", {
         'transformation_count': len(transformations),
+        'transformations': transformations,
         'original_dims': original_dims,
         'final_dims': final_dims,
         'purpose': 'annotation_coordinate_transformation'
@@ -3953,7 +4025,7 @@ def track_transformations_for_annotations(transformations: List[dict], original_
     
     # Define geometric vs photometric transformations
     geometric_transform_types = {
-        'resize', 'rotate', 'flip', 'crop', 'random_zoom', 
+        'resize', 'rotate', 'rotation', 'flip', 'crop', 'random_zoom', 
         'affine_transform', 'perspective_warp', 'shear'
     }
     photometric_transform_types = {
@@ -3975,7 +4047,9 @@ def track_transformations_for_annotations(transformations: List[dict], original_
             'index': idx,
             'type': transform_type,
             'params': transform_params,
-            'is_geometric': transform_type in geometric_transform_types
+            'is_geometric': transform_type in geometric_transform_types,
+            'geometric_types': list(geometric_transform_types),
+            'transform_type_exact': repr(transform_type)
         })
         
         # Add to sequence (preserves order)
@@ -3988,9 +4062,18 @@ def track_transformations_for_annotations(transformations: List[dict], original_
         })
         
         # Add to config format (for annotation_transformer.py compatibility)
+        config_params = dict(transform_params)
+        
+        # 🎯 CRITICAL FIX: Ensure resize has both width and height
+        if transform_type == "resize":
+            if "width" not in config_params:
+                config_params["width"] = final_dims[0]
+            if "height" not in config_params:
+                config_params["height"] = final_dims[1]
+        
         transformation_config[transform_type] = {
             "enabled": True,
-            **transform_params
+            **config_params
         }
         
         # Categorize transforms
@@ -4010,9 +4093,25 @@ def track_transformations_for_annotations(transformations: List[dict], original_
     # Add baseline resize transformation (ALL images get resized)
     # This is the critical insight from the user - even photometric images get geometric transformations
     if original_dims != final_dims:
+        # 🚨 CRITICAL FIX: Find actual resize_mode from existing transformations
+        actual_resize_mode = "stretch_to"  # Default fallback
+        
+        # Check if there's already a resize transformation with resize_mode
+        for transform in transformations:
+            if transform.get("type") == "resize":
+                transform_params = transform.get("params", {})
+                if "resize_mode" in transform_params:
+                    actual_resize_mode = transform_params["resize_mode"]
+                    logger.debug("operations.transformations", f"Found existing resize_mode", "existing_resize_mode_detected", {
+                        'resize_mode': actual_resize_mode,
+                        'transform_params': transform_params
+                    })
+                    break
+        
         logger.debug("operations.transformations", f"Adding baseline resize transformation", "baseline_resize_detected", {
             'original_dims': original_dims,
             'final_dims': final_dims,
+            'actual_resize_mode': actual_resize_mode,
             'reason': 'all_images_get_geometric_transformation'
         })
         
@@ -4022,25 +4121,52 @@ def track_transformations_for_annotations(transformations: List[dict], original_
             "params": {
                 "width": final_dims[0],
                 "height": final_dims[1],
-                "resize_mode": "stretch_to"  # Default mode
+                "resize_mode": actual_resize_mode  # 🎯 USE ACTUAL RESIZE_MODE!
             },
             "index": -1,  # Indicates baseline transformation
             "is_baseline": True
         }
         
-        geometric_transforms.insert(0, baseline_resize)
-        transformation_config["resize"] = {
-            "enabled": True,
-            "width": final_dims[0],
-            "height": final_dims[1],
-            "resize_mode": "stretch_to"
-        }
+        # 🎯 FIXED: Only add resize if not already present to avoid duplicates
+        # 🚨 CRITICAL FIX: Insert at BEGINNING, not append to end!
+        if not any(t["type"] == "resize" for t in geometric_transforms):
+            geometric_transforms.insert(0, baseline_resize)  # INSERT AT BEGINNING!
+        
+        # 🎯 FIXED: Only add resize to config if not already present
+        if "resize" not in transformation_config:
+            baseline_resize_config = {
+                "enabled": True,
+                "width": final_dims[0],
+                "height": final_dims[1],
+                "resize_mode": actual_resize_mode  # 🎯 USE ACTUAL RESIZE_MODE!
+            }
+            transformation_config["resize"] = baseline_resize_config
+            
+            # 🔍 DEBUG: Show what resize config we're adding
+            print(f"🎯 ADDING RESIZE CONFIG: {baseline_resize_config}")
+        else:
+            print(f"🎯 RESIZE CONFIG ALREADY EXISTS: {transformation_config['resize']}")
+    
+    # 🔍 DEBUG: Show annotation tracking order
+    annotation_order = list(transformation_config.keys())
+    geometric_order = [t["type"] for t in geometric_transforms]
+    
+    print(f"\n📍 ANNOTATION TRACKING ORDER: {annotation_order}")
+    print(f"🔧 GEOMETRIC TRANSFORMS ORDER: {geometric_order}")
+    print(f"🔍 TRANSFORMATION CONFIG DETAILS: {transformation_config}")
     
     tracking_data = {
         "transformation_sequence": transformation_sequence,
         "transformation_config": transformation_config,
         "original_dims": original_dims,
         "final_dims": final_dims,
+        # 🔍 DEBUG: Add transformation order info for debug.json
+        "debug_transformation_order": {
+            "annotation_config_order": annotation_order,
+            "geometric_transforms_order": geometric_order,
+            "orders_match": annotation_order == geometric_order,
+            "duplicate_resize_detected": len(geometric_order) != len(set(geometric_order))
+        },
         "has_geometric_transforms": len(geometric_transforms) > 0,
         "geometric_transforms": geometric_transforms,
         "photometric_transforms": photometric_transforms,
@@ -4049,12 +4175,21 @@ def track_transformations_for_annotations(transformations: List[dict], original_
         "photometric_count": len(photometric_transforms)
     }
     
+    # 🚨 DEBUG: Log OUTPUT from tracking function
+    print(f"\n🎯 TRACKING FUNCTION OUTPUT:")
+    print(f"   transformation_config: {transformation_config}")
+    print(f"   Has geometric transforms: {tracking_data['has_geometric_transforms']}")
+    print(f"   Geometric transforms: {geometric_transforms}")
+    
     logger.debug("operations.transformations", f"Transformation tracking completed", "transformation_tracking_complete", {
         'total_transforms': tracking_data["total_transforms"],
         'geometric_count': tracking_data["geometric_count"],
         'photometric_count': tracking_data["photometric_count"],
         'has_geometric_transforms': tracking_data["has_geometric_transforms"],
-        'baseline_resize_added': original_dims != final_dims
+        'baseline_resize_added': original_dims != final_dims,
+        'geometric_transforms': geometric_transforms,
+        'photometric_transforms': photometric_transforms,
+        'all_transform_types': [t.get("type") for t in transformations]
     })
     
     return tracking_data
@@ -4073,27 +4208,47 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
     Returns:
         List of transformed annotations (invalid ones are dropped)
     """
-    logger.debug("operations.transformations", f"Starting annotation transformation", "annotation_transformation_start", {
-        'annotation_count': len(annotations),
-        'has_geometric_transforms': tracking_data.get("has_geometric_transforms", False),
-        'geometric_count': tracking_data.get("geometric_count", 0),
-        'original_dims': tracking_data.get("original_dims"),
-        'final_dims': tracking_data.get("final_dims")
-    })
+
+    print(f"\n🚀🚀🚀 NEW VERSION LOADED - FUNCTION CALLED! 🚀🚀🚀")
+    print(f"   annotations count: {len(annotations)}")
+    print(f"   tracking_data keys: {list(tracking_data.keys()) if tracking_data else 'None'}")
+    print(f"🔥 IMMEDIATE CHECK: has_geometric_transforms = {tracking_data.get('has_geometric_transforms', 'KEY_NOT_FOUND')}")
     
+    logger.debug("operations.transformations", f"Starting annotation transformation", "annotation_transformation_start", {
+            'annotation_count': len(annotations),
+            'has_geometric_transforms': tracking_data.get("has_geometric_transforms", False),
+            'geometric_count': tracking_data.get("geometric_count", 0),
+            'original_dims': tracking_data.get("original_dims"),
+            'final_dims': tracking_data.get("final_dims")
+        })
+        
+    print(f"🔧 SKIPPING debug_logger.start_annotation_transformation (method doesn't exist)")
+    # 🎯 DEBUGGER: Start annotation transformation tracking (REMOVED - method doesn't exist)
+
     if not annotations:
+        print(f"❌ NO ANNOTATIONS TO TRANSFORM - returning empty list")
         logger.debug("operations.transformations", f"No annotations to transform", "annotation_transformation_empty", {})
         return []
     
+    print(f"🔍 CHECKING has_geometric_transforms:")
+    print(f"   tracking_data.get('has_geometric_transforms'): {tracking_data.get('has_geometric_transforms')}")
+    print(f"   tracking_data.get('has_geometric_transforms', False): {tracking_data.get('has_geometric_transforms', False)}")
+    print(f"   not tracking_data.get('has_geometric_transforms', False): {not tracking_data.get('has_geometric_transforms', False)}")
+    
     if not tracking_data.get("has_geometric_transforms", False):
+        print(f"❌ NO GEOMETRIC TRANSFORMS - returning original annotations")
         logger.debug("operations.transformations", f"No geometric transformations, returning original annotations", "annotation_transformation_no_geometric", {
             'photometric_count': tracking_data.get("photometric_count", 0)
         })
         return annotations
     
+    print(f"✅ HAS GEOMETRIC TRANSFORMS - proceeding with transformation")
+    
     try:
+        print(f"🔧 ABOUT TO IMPORT annotation_transformer...")
         # Import the enhanced annotation transformer
         from backend.core.annotation_transformer import update_annotations_for_transformations, BoundingBox, Polygon
+        print(f"✅ IMPORT SUCCESSFUL!")
         
         # Convert DB annotations to BoundingBox/Polygon objects if needed
         # Use same conversion logic as create_yolo_label_content()
@@ -4204,23 +4359,70 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
                     'x_max': float(ann.x_max),
                     'y_max': float(ann.y_max)
                 }
+                
+                # 🎯 DEBUGGER: Record original bbox annotation (REMOVED - method doesn't exist)
+                
             elif hasattr(ann, 'points'):  # Polygon
                 ann_debug['original_coordinates'] = {
                     'type': 'polygon',
                     'points': [(float(x), float(y)) for x, y in ann.points]
                 }
+                
+                # 🎯 DEBUGGER: Record original polygon annotation (REMOVED - method doesn't exist)
             
             debug_tracking['annotation_transformations'].append(ann_debug)
         
+        # 🚨 DEBUG: Log INPUT to annotation transformer
+        print(f"\n🎯 ANNOTATION TRANSFORMER INPUT:")
+        print(f"   transformation_config: {tracking_data['transformation_config']}")
+        print(f"   original_dims: {tracking_data['original_dims']}")
+        print(f"   new_dims: {tracking_data['final_dims']}")
+        print(f"   annotation_count: {len(converted_annotations)}")
+        
+        # 🎯 DEBUGGER: Log transformation configuration (REMOVED - method doesn't exist)
+        
         # Apply transformations using enhanced annotation_transformer.py WITH DEBUG TRACKING
-        transformed_annotations, transformer_debug = update_annotations_for_transformations(
+        print(f"\n🔧 ABOUT TO CALL update_annotations_for_transformations:")
+        print(f"   annotations count: {len(converted_annotations)}")
+        print(f"   transformation_config: {tracking_data['transformation_config']}")
+        print(f"   original_dims: {tracking_data['original_dims']}")
+        print(f"   new_dims: {tracking_data['final_dims']}")
+        print(f"   affine_matrix: None")
+        print(f"   debug_tracking: False")
+        
+        # Call transformation function - returns only annotations when debug_tracking=False
+        transformed_annotations = update_annotations_for_transformations(
             annotations=converted_annotations,
             transformation_config=tracking_data["transformation_config"],
             original_dims=tracking_data["original_dims"],
             new_dims=tracking_data["final_dims"],
             affine_matrix=None,  # Use legacy sequential path for now
-            debug_tracking=True  # Enable detailed step-by-step tracking
+            debug_tracking=False  # Disable debug tracking to use working path
         )
+        transformer_debug = None  # No debug info when debug_tracking=False
+        
+        print(f"🔧 update_annotations_for_transformations RETURNED:")
+        print(f"   transformed_annotations count: {len(transformed_annotations)}")
+        print(f"   transformer_debug keys: {list(transformer_debug.keys()) if transformer_debug else 'None'}")
+        
+        # 🔍 DEBUG: Print transformation results
+        print(f"\n=== ANNOTATION TRANSFORMATION RESULTS ===")
+        print(f"Original annotations: {len(converted_annotations)}")
+        print(f"Transformed annotations: {len(transformed_annotations)}")
+        print(f"Original dims: {tracking_data['original_dims']}")
+        print(f"Final dims: {tracking_data['final_dims']}")
+        print(f"Transformation config: {list(tracking_data['transformation_config'].keys())}")
+        
+        # Show resize mode specifically
+        resize_config = tracking_data['transformation_config'].get('resize', {})
+        if resize_config.get('enabled', False):
+            resize_mode = resize_config.get('resize_mode', 'stretch_to')
+            target_w = resize_config.get('width', 640)
+            target_h = resize_config.get('height', 640)
+            print(f"Resize mode: {resize_mode} -> {target_w}x{target_h}")
+        
+        if transformer_debug.get('actual_final_canvas_dims'):
+            print(f"Actual final canvas: {transformer_debug['actual_final_canvas_dims']}")
         
         # Integrate transformer debug data with our debug tracking
         debug_tracking['transformer_debug'] = transformer_debug
@@ -4246,6 +4448,8 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
                         'y_max': float(ann.y_max)
                     }
                     
+                    # 🎯 DEBUGGER: Record transformed bbox annotation (REMOVED - method doesn't exist)
+                    
                     # Calculate coordinate changes
                     if ann_debug['original_coordinates'] and ann_debug['original_coordinates']['type'] == 'bbox':
                         orig = ann_debug['original_coordinates']
@@ -4261,11 +4465,15 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
                             'height_change': (final['y_max'] - final['y_min']) - (orig['y_max'] - orig['y_min'])
                         }
                         
+                        # 🎯 DEBUGGER: Record coordinate changes for bbox (REMOVED - method doesn't exist)
+                        
                 elif hasattr(ann, 'points'):  # Polygon
                     ann_debug['final_coordinates'] = {
                         'type': 'polygon',
                         'points': [(float(x), float(y)) for x, y in ann.points]
                     }
+                    
+                    # 🎯 DEBUGGER: Record transformed polygon annotation (REMOVED - method doesn't exist)
                     
                     # Calculate coordinate changes for polygons
                     if ann_debug['original_coordinates'] and ann_debug['original_coordinates']['type'] == 'polygon':
@@ -4284,6 +4492,8 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
                                 'point_changes': point_changes,
                                 'total_points': len(point_changes)
                             }
+                            
+                            # 🎯 DEBUGGER: Record coordinate changes for polygon (REMOVED - method doesn't exist)
         
         # Store debug tracking data for later saving
         tracking_data['debug_info'] = debug_tracking
@@ -4295,9 +4505,21 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
             'transformation_config': list(tracking_data["transformation_config"].keys())
         })
         
+        # 🎯 DEBUGGER: Complete annotation transformation tracking (REMOVED - method doesn't exist)
+        
         return transformed_annotations
         
     except Exception as e:
+        print(f"\n🚨 EXCEPTION IN apply_transformations_to_annotations!")
+        print(f"   Error type: {type(e).__name__}")
+        print(f"   Error message: {str(e)}")
+        print(f"   Annotation count: {len(annotations)}")
+        print(f"   Tracking data keys: {list(tracking_data.keys()) if tracking_data else []}")
+        import traceback
+        print(f"   Full traceback:")
+        traceback.print_exc()
+        print(f"🚨 RETURNING ORIGINAL ANNOTATIONS AS FALLBACK")
+        
         logger.error("errors.system", f"Failed to transform annotations", "annotation_transformation_error", {
             'annotation_count': len(annotations),
             'tracking_data_keys': list(tracking_data.keys()) if tracking_data else [],
@@ -4334,7 +4556,9 @@ def save_debug_tracking_json(debug_info: dict, metadata_dir: str, image_name: st
                 'total_annotations': len(debug_info.get('annotation_transformations', [])),
                 'transformations_applied': list(debug_info.get('transformation_config', {}).keys()),
                 'dimension_change': f"{debug_info.get('original_dimensions', [])} → {debug_info.get('final_dimensions', [])}",
-                'coordinate_changes_detected': sum(1 for ann in debug_info.get('annotation_transformations', []) if ann.get('coordinate_changes'))
+                'coordinate_changes_detected': sum(1 for ann in debug_info.get('annotation_transformations', []) if ann.get('coordinate_changes')),
+                # 🔍 DEBUG: Add transformation order comparison to summary
+                'transformation_order_debug': debug_info.get('debug_transformation_order', {})
             },
             'detailed_tracking': debug_info
         }
@@ -4343,7 +4567,7 @@ def save_debug_tracking_json(debug_info: dict, metadata_dir: str, image_name: st
         with open(debug_path, 'w', encoding='utf-8') as f:
             json.dump(debug_data, f, indent=2, ensure_ascii=False)
         
-        logger.info("operations.debug", f"Debug tracking JSON saved", "debug_json_saved", {
+        logger.info("operations.exports", f"Debug tracking JSON saved", "debug_json_saved", {
             'debug_file': debug_filename,
             'annotation_count': debug_data['summary']['total_annotations'],
             'transformations': debug_data['summary']['transformations_applied']
@@ -4352,7 +4576,7 @@ def save_debug_tracking_json(debug_info: dict, metadata_dir: str, image_name: st
         return debug_path
         
     except Exception as e:
-        logger.error("errors.debug", f"Failed to save debug tracking JSON", "debug_json_save_error", {
+        logger.error("errors.system", f"Failed to save debug tracking JSON", "debug_json_save_error", {
             'error': str(e),
             'image_name': image_name,
             'metadata_dir': metadata_dir
@@ -4547,6 +4771,19 @@ def generate_descriptive_suffix(transformations: dict) -> str:
             logger.debug("operations.operations", f"Noise suffix added to file naming", "noise_suffix_added", {
                 'suffix': suffix,
                 'intensity': intensity,
+                'operation': 'file_suffix_generation'
+            })
+        elif tool_type == 'crop':
+            crop_percentage = params.get('crop_percentage', params.get('percentage', 100))
+            logger.debug("operations.operations", f"Processing crop transformation for file suffix", "crop_suffix_processing", {
+                'crop_percentage': crop_percentage,
+                'operation': 'file_suffix_generation'
+            })
+            suffix = f"crop{int(crop_percentage)}"
+            parts.append(suffix)
+            logger.debug("operations.operations", f"Crop suffix added to file naming", "crop_suffix_added", {
+                'suffix': suffix,
+                'crop_percentage': crop_percentage,
                 'operation': 'file_suffix_generation'
             })
         else:

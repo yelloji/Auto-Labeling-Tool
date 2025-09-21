@@ -2455,49 +2455,9 @@ def create_complete_release_zip(
                         # Include all images, whether they have annotations or not
                         annotations = []
                         if db_image:
-                            # Filter annotations based on task type and export format
-                            if config.task_type == 'segmentation':
-                                # For segmentation tasks: only read annotations that have polygon data
-                                annotations = db.query(Annotation).filter(
-                                    Annotation.image_id == db_image.id,
-                                    Annotation.segmentation.isnot(None)
-                                ).all()
-                            else:
-                                # For detection tasks: read ALL annotations (use bounding box coordinates)
-                                annotations = db.query(Annotation).filter(
-                                    Annotation.image_id == db_image.id
-                                ).all()
-                            
-                            # 🔍 DEBUG: Print IMMEDIATE database read coordinates
-                            print(f"\n🔍🔍🔍 IMMEDIATE DATABASE READ for {image_file} 🔍🔍🔍")
-                            print(f"   Image dimensions from DB: {db_image.width}x{db_image.height}")
-                            print(f"   Task type: {config.task_type}")
-                            print(f"   Found {len(annotations)} annotations")
-                            for i, ann in enumerate(annotations):
-                                if config.task_type == 'segmentation':
-                                    # For segmentation: show polygon data
-                                    if ann.segmentation:
-                                        import json
-                                        try:
-                                            polygon_data = json.loads(ann.segmentation) if isinstance(ann.segmentation, str) else ann.segmentation
-                                            if isinstance(polygon_data, list) and len(polygon_data) > 0:
-                                                points = polygon_data[0] if isinstance(polygon_data[0], list) else polygon_data
-                                                print(f"   {i+1}. {ann.class_name}: POLYGON with {len(points)//2} points")
-                                                print(f"      First 3 points: {points[:6] if len(points) >= 6 else points}")
-                                                print(f"      Bounding box (auto-calculated): x_min={ann.x_min}, y_min={ann.y_min}, x_max={ann.x_max}, y_max={ann.y_max}")
-                                            else:
-                                                print(f"   {i+1}. {ann.class_name}: POLYGON data format error")
-                                        except Exception as e:
-                                            print(f"   {i+1}. {ann.class_name}: POLYGON parse error: {e}")
-                                    else:
-                                        print(f"   {i+1}. {ann.class_name}: NO POLYGON DATA (should not happen for segmentation task)")
-                                else:
-                                    # For detection: show bounding box data
-                                    print(f"   {i+1}. {ann.class_name}: BOUNDING BOX x_min={ann.x_min}, y_min={ann.y_min}, x_max={ann.x_max}, y_max={ann.y_max}")
-                                    print(f"      width={ann.x_max - ann.x_min}, height={ann.y_max - ann.y_min}")
-                                print(f"      annotation object type: {type(ann)}")
-                                print(f"      annotation object id: {id(ann)}")
-                            print(f"🔍🔍🔍 END IMMEDIATE DATABASE READ 🔍🔍🔍")
+                            annotations = db.query(Annotation).filter(
+                                Annotation.image_id == db_image.id
+                            ).all()
                             
                             # Collect class names and build class_id_to_name mapping
                             for ann in annotations:
@@ -2509,13 +2469,6 @@ def create_complete_release_zip(
                                     class_id_to_name[int(cid)] = cname
                                 if cname:
                                     class_names.add(cname)
-                        
-                        # 🔍 DEBUG: Print coordinates before storing in img_data
-                        print(f"\n🔍🔍🔍 BEFORE STORING IN IMG_DATA for {image_file} 🔍🔍🔍")
-                        for i, ann in enumerate(annotations[:3]):  # Show first 3
-                            print(f"   {i+1}. {ann.class_name}: x_min={ann.x_min}, y_min={ann.y_min}, x_max={ann.x_max}, y_max={ann.y_max}")
-                            print(f"      annotation object id: {id(ann)}")
-                        print(f"🔍🔍🔍 END BEFORE STORING 🔍🔍🔍")
                         
                         # Add image to processing list regardless of annotation status
                         all_images_by_split[split].append({
@@ -2779,6 +2732,10 @@ def create_complete_release_zip(
                             resize_config = transformations[0]['params']
                             target_width = resize_config.get('width')
                             target_height = resize_config.get('height')
+                            
+                            # Check if resize dimensions are valid
+                            if not target_width or not target_height:
+                                raise ValueError(f"Invalid resize dimensions: width={target_width}, height={target_height}")
                             
                             from PIL import Image as PILImage
                             pil_img = PILImage.open(original_path).convert('RGB')
@@ -3058,13 +3015,10 @@ def create_complete_release_zip(
                             print(f"\n=== 📥 INPUT ANNOTATIONS :: {img_data.get('filename', 'unknown')} ===")
                             print(f"Image dimensions: {img_w}x{img_h}")
                             print(f"Annotations count: {len(img_data['annotations'])}")
-                            print(f"🔍 COORDINATES BEFORE ANNOTATION TRANSFORMER:")
                             for i, ann in enumerate(img_data["annotations"][:3]):  # Show first 3
                                 print(f"   Ann {i+1}: class={getattr(ann, 'class_name', 'unknown')}, "
                                       f"bbox=({getattr(ann, 'x_min', 'N/A')}, {getattr(ann, 'y_min', 'N/A')}, "
                                       f"{getattr(ann, 'x_max', 'N/A')}, {getattr(ann, 'y_max', 'N/A')})")
-                                if hasattr(ann, 'x_min') and hasattr(ann, 'x_max'):
-                                    print(f"      width={getattr(ann, 'x_max', 0) - getattr(ann, 'x_min', 0)}, height={getattr(ann, 'y_max', 0) - getattr(ann, 'y_min', 0)}")
                             if len(img_data["annotations"]) > 3:
                                 print(f"   ... and {len(img_data['annotations']) - 3} more")
                             
@@ -3312,7 +3266,9 @@ def create_complete_release_zip(
                                         
                                         transformed_annotations = apply_transformations_to_annotations(
                                             annotations=img_data["annotations"],
-                                            tracking_data=transformation_tracking_data
+                                            tracking_data=transformation_tracking_data,
+                                            task_type=config.task_type,
+                                            export_format=config.export_format
                                         )
                                         
                                         print(f"🔍 DEBUG: Transformation result: {len(transformed_annotations)} annotations")
@@ -3417,7 +3373,9 @@ def create_complete_release_zip(
                                         if transformation_tracking_data and transformation_tracking_data.get("has_geometric_transforms", False):
                                             fallback_annotations = apply_transformations_to_annotations(
                                                 annotations=img_data["annotations"],
-                                                tracking_data=transformation_tracking_data
+                                                tracking_data=transformation_tracking_data,
+                                                task_type=config.task_type,
+                                                export_format=config.export_format
                                             )
                                         else:
                                             fallback_annotations = img_data["annotations"]
@@ -4224,7 +4182,7 @@ def track_transformations_for_annotations(transformations: List[dict], original_
     return tracking_data
 
 
-def apply_transformations_to_annotations(annotations: List, tracking_data: dict) -> List:
+def apply_transformations_to_annotations(annotations: List, tracking_data: dict, task_type: str = "object_detection", export_format: str = "yolo_detection") -> List:
     """
     Apply the same transformations to annotations that were applied to images.
     
@@ -4258,6 +4216,47 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
         print(f"❌ NO ANNOTATIONS TO TRANSFORM - returning empty list")
         logger.debug("operations.transformations", f"No annotations to transform", "annotation_transformation_empty", {})
         return []
+    
+    # 🎯 ANNOTATION FILTERING: Filter annotations based on task type and export format
+    print(f"🎯 ANNOTATION FILTERING: task_type='{task_type}', export_format='{export_format}'")
+    
+    # Determine what to process based on task type and export format
+    if task_type == "object_detection" or export_format in ["yolo_detection", "yolo"]:
+        should_process_bbox = True
+        should_process_polygon = False
+        print(f"   🎯 DETECTION MODE: Processing ONLY bounding boxes")
+    elif task_type == "segmentation" or export_format in ["yolo_segmentation"]:
+        should_process_bbox = False
+        should_process_polygon = True
+        print(f"   🎯 SEGMENTATION MODE: Processing ONLY polygons")
+    else:
+        # Mixed mode - process both (fallback for formats like COCO)
+        should_process_bbox = True
+        should_process_polygon = True
+        print(f"   🎯 MIXED MODE: Processing both bounding boxes and polygons")
+    
+    # Filter annotations based on task requirements
+    filtered_annotations = []
+    for annotation in annotations:
+        if hasattr(annotation, 'x_min') and hasattr(annotation, 'x_max'):  # BoundingBox
+            if should_process_bbox:
+                filtered_annotations.append(annotation)
+                print(f"   ✅ BBOX PROCESSED: {getattr(annotation, 'class_name', 'unknown')}")
+            else:
+                print(f"   ⏭️  BBOX SKIPPED: {getattr(annotation, 'class_name', 'unknown')} (task_type={task_type})")
+        elif hasattr(annotation, 'points'):  # Polygon
+            if should_process_polygon:
+                filtered_annotations.append(annotation)
+                print(f"   ✅ POLYGON PROCESSED: {getattr(annotation, 'class_name', 'unknown')}")
+            else:
+                print(f"   ⏭️  POLYGON SKIPPED: {getattr(annotation, 'class_name', 'unknown')} (task_type={task_type})")
+        else:
+            # Unknown annotation type - include it to be safe
+            filtered_annotations.append(annotation)
+            print(f"   ❓ UNKNOWN TYPE PROCESSED: {getattr(annotation, 'class_name', 'unknown')}")
+    
+    print(f"🎯 FILTERING RESULT: {len(annotations)} → {len(filtered_annotations)} annotations")
+    annotations = filtered_annotations
     
     print(f"🔍 CHECKING has_geometric_transforms:")
     print(f"   tracking_data.get('has_geometric_transforms'): {tracking_data.get('has_geometric_transforms')}")
@@ -4417,18 +4416,16 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
         print(f"   original_dims: {tracking_data['original_dims']}")
         print(f"   new_dims: {tracking_data['final_dims']}")
         print(f"   affine_matrix: None")
-        print(f"   debug_tracking: False")
+        print(f"   debug_tracking: True")
         
-        # Call transformation function - returns only annotations when debug_tracking=False
-        transformed_annotations = update_annotations_for_transformations(
+        transformed_annotations, transformer_debug = update_annotations_for_transformations(
             annotations=converted_annotations,
             transformation_config=tracking_data["transformation_config"],
             original_dims=tracking_data["original_dims"],
             new_dims=tracking_data["final_dims"],
             affine_matrix=None,  # Use legacy sequential path for now
-            debug_tracking=False  # Disable debug tracking to use working path
+            debug_tracking=True  # Enable detailed step-by-step tracking
         )
-        transformer_debug = None  # No debug info when debug_tracking=False
         
         print(f"🔧 update_annotations_for_transformations RETURNED:")
         print(f"   transformed_annotations count: {len(transformed_annotations)}")
@@ -4450,7 +4447,7 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
             target_h = resize_config.get('height', 640)
             print(f"Resize mode: {resize_mode} -> {target_w}x{target_h}")
         
-        if transformer_debug and transformer_debug.get('actual_final_canvas_dims'):
+        if transformer_debug.get('actual_final_canvas_dims'):
             print(f"Actual final canvas: {transformer_debug['actual_final_canvas_dims']}")
         
         # Integrate transformer debug data with our debug tracking
@@ -4462,7 +4459,7 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
                 ann_debug = debug_tracking['annotation_transformations'][ann_idx]
                 
                 # Add transformer step-by-step debug data if available
-                if transformer_debug and ann_idx < len(transformer_debug.get('annotation_steps', [])):
+                if ann_idx < len(transformer_debug.get('annotation_steps', [])):
                     transformer_ann_debug = transformer_debug['annotation_steps'][ann_idx]
                     ann_debug['transformation_steps'] = transformer_ann_debug.get('transformation_steps', [])
                     ann_debug['transformation_method'] = transformer_ann_debug.get('transformation_method', 'sequential')

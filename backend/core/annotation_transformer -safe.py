@@ -523,25 +523,21 @@ def _transform_single_annotation(annotation: Union[BoundingBox, Polygon],
                             for p in transformed_polygon.points:
                                 new_seg_data.extend([float(p[0]), float(p[1])])
                         
-                        # Create a copy of the annotation to avoid modifying the original database object
-                        from copy import deepcopy
-                        annotation_copy = deepcopy(annotation)
-                        
-                        # Update the segmentation data on the copy
-                        annotation_copy.segmentation = json.dumps(new_seg_data) if isinstance(getattr(annotation, 'segmentation', None), str) else new_seg_data
+                        # Update the original annotation with transformed segmentation data
+                        annotation.segmentation = json.dumps(new_seg_data) if isinstance(getattr(annotation, 'segmentation', None), str) else new_seg_data
                         
                         # CRITICAL: Update bounding box coordinates based on transformed polygon
                         if transformed_polygon.points:
                             x_coords = [p[0] for p in transformed_polygon.points]
                             y_coords = [p[1] for p in transformed_polygon.points]
-                            annotation_copy.x_min = float(min(x_coords))
-                            annotation_copy.y_min = float(min(y_coords))
-                            annotation_copy.x_max = float(max(x_coords))
-                            annotation_copy.y_max = float(max(y_coords))
-                            print(f"         📦 Updated bounding box: x_min={annotation_copy.x_min}, y_min={annotation_copy.y_min}, x_max={annotation_copy.x_max}, y_max={annotation_copy.y_max}")
+                            annotation.x_min = float(min(x_coords))
+                            annotation.y_min = float(min(y_coords))
+                            annotation.x_max = float(max(x_coords))
+                            annotation.y_max = float(max(y_coords))
+                            print(f"         📦 Updated bounding box: x_min={annotation.x_min}, y_min={annotation.y_min}, x_max={annotation.x_max}, y_max={annotation.y_max}")
                         
                         print(f"         📦 Updated annotation with {len(transformed_polygon.points)} transformed points")
-                        return annotation_copy
+                        return annotation
         
         # Default: Use bounding box coordinates for object detection
         print(f"         🔧 Using bounding box coordinates for detection task...")
@@ -564,25 +560,21 @@ def _transform_single_annotation(annotation: Union[BoundingBox, Polygon],
         print(f"         🔧 TRANSFORMED BBOX TYPE: {type(transformed_bbox)}")
         print(f"         🔧 TRANSFORMED BBOX BOOL: {bool(transformed_bbox)}")
         print(f"         🔧 TRANSFORMED BBOX IS NONE: {transformed_bbox is None}")
-        if transformed_bbox and hasattr(transformed_bbox, 'x_min'):
+        if hasattr(transformed_bbox, 'x_min'):
             print(f"         🔧 TRANSFORMED BBOX HAS COORDS: x_min={transformed_bbox.x_min}, y_min={transformed_bbox.y_min}, x_max={transformed_bbox.x_max}, y_max={transformed_bbox.y_max}")
         
         print(f"         🔧 ABOUT TO CHECK IF CONDITION: if transformed_bbox:")
         if transformed_bbox:
-            # Create a copy of the annotation to avoid modifying the original database object
-            from copy import deepcopy
-            annotation_copy = deepcopy(annotation)
-            
-            # Update the copy with transformed coordinates
+            # Update the original annotation with transformed coordinates
             print(f"         🔧 BEFORE UPDATE: annotation.x_min={annotation.x_min}, annotation.y_min={annotation.y_min}")
             print(f"         🔧 TRANSFORMED BBOX: x_min={transformed_bbox.x_min}, y_min={transformed_bbox.y_min}, x_max={transformed_bbox.x_max}, y_max={transformed_bbox.y_max}")
-            annotation_copy.x_min = transformed_bbox.x_min
-            annotation_copy.y_min = transformed_bbox.y_min
-            annotation_copy.x_max = transformed_bbox.x_max
-            annotation_copy.y_max = transformed_bbox.y_max
-            print(f"         🔧 AFTER UPDATE: annotation_copy.x_min={annotation_copy.x_min}, annotation_copy.y_min={annotation_copy.y_min}")
-            print(f"         📦 Updated annotation: x_min={annotation_copy.x_min}, y_min={annotation_copy.y_min}, x_max={annotation_copy.x_max}, y_max={annotation_copy.y_max}")
-            return annotation_copy
+            annotation.x_min = transformed_bbox.x_min
+            annotation.y_min = transformed_bbox.y_min
+            annotation.x_max = transformed_bbox.x_max
+            annotation.y_max = transformed_bbox.y_max
+            print(f"         🔧 AFTER UPDATE: annotation.x_min={annotation.x_min}, annotation.y_min={annotation.y_min}")
+            print(f"         📦 Updated annotation: x_min={annotation.x_min}, y_min={annotation.y_min}, x_max={annotation.x_max}, y_max={annotation.y_max}")
+            return annotation
         else:
             print(f"         ⚠️  _transform_bbox returned falsy value - returning original annotation!")
             return annotation
@@ -655,25 +647,21 @@ def _transform_single_annotation(annotation: Union[BoundingBox, Polygon],
                 for p in transformed_polygon.points:
                     new_seg_data.extend([float(p[0]), float(p[1])])
             
-            # Create a copy of the annotation to avoid modifying the original database object
-            from copy import deepcopy
-            annotation_copy = deepcopy(annotation)
-            
-            # Update the copy with transformed segmentation data
-            annotation_copy.segmentation = json.dumps(new_seg_data) if isinstance(getattr(annotation, 'segmentation', None), str) else new_seg_data
+            # Update the original annotation with transformed segmentation data
+            annotation.segmentation = json.dumps(new_seg_data) if isinstance(getattr(annotation, 'segmentation', None), str) else new_seg_data
             
             # CRITICAL: Update bounding box coordinates based on transformed polygon
             if transformed_polygon.points:
                 x_coords = [p[0] for p in transformed_polygon.points]
                 y_coords = [p[1] for p in transformed_polygon.points]
-                annotation_copy.x_min = float(min(x_coords))
-                annotation_copy.y_min = float(min(y_coords))
-                annotation_copy.x_max = float(max(x_coords))
-                annotation_copy.y_max = float(max(y_coords))
-                print(f"         📦 Updated bounding box: x_min={annotation_copy.x_min}, y_min={annotation_copy.y_min}, x_max={annotation_copy.x_max}, y_max={annotation_copy.y_max}")
+                annotation.x_min = float(min(x_coords))
+                annotation.y_min = float(min(y_coords))
+                annotation.x_max = float(max(x_coords))
+                annotation.y_max = float(max(y_coords))
+                print(f"         📦 Updated bounding box: x_min={annotation.x_min}, y_min={annotation.y_min}, x_max={annotation.x_max}, y_max={annotation.y_max}")
             
             print(f"         📦 Updated annotation with {len(transformed_polygon.points)} transformed points")
-            return annotation_copy
+            return annotation
         else:
             print(f"         ⚠️  _transform_polygon returned None - returning original annotation!")
             return annotation
@@ -711,9 +699,6 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
     new_width, new_height = new_dims
 
     current_width, current_height = orig_width, orig_height
-    
-    # Track actual canvas dimensions (may differ from new_dims for fit_within mode)
-    actual_canvas_width, actual_canvas_height = new_width, new_height
     
     print(f"🔢 INITIAL VALUES:")
     print(f"   x_min: {x_min}, y_min: {y_min}")
@@ -822,7 +807,6 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                     print(f"   x_min: {x_min}, x_max: {x_max}")
                     print(f"   y_min: {y_min}, y_max: {y_max}")
                     canvas_width, canvas_height = tw, th
-                    actual_canvas_width, actual_canvas_height = tw, th
                     print(f"🖼️ CANVAS SIZE: {canvas_width} x {canvas_height}")
 
                 elif resize_mode == 'fit_within':
@@ -840,7 +824,6 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                     print(f"   y_min: {y_min}, y_max: {y_max}")
                     canvas_width  = source_w * s
                     canvas_height = source_h * s
-                    actual_canvas_width, actual_canvas_height = canvas_width, canvas_height
                     print(f"🖼️ CANVAS SIZE: {canvas_width} x {canvas_height}")
 
                 elif resize_mode in ['fit_reflect_edges', 'fit_black_edges', 'fit_white_edges']:
@@ -865,7 +848,6 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                     print(f"   x_min: {x_min}, x_max: {x_max}")
                     print(f"   y_min: {y_min}, y_max: {y_max}")
                     canvas_width, canvas_height = tw, th
-                    actual_canvas_width, actual_canvas_height = tw, th
                     print(f"🖼️ CANVAS SIZE: {canvas_width} x {canvas_height}")
 
                 elif resize_mode == 'fill_center_crop':
@@ -898,7 +880,6 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                     print(f"   x_min: {x_min}, x_max: {x_max}")
                     print(f"   y_min: {y_min}, y_max: {y_max}")
                     canvas_width, canvas_height = tw, th
-                    actual_canvas_width, actual_canvas_height = tw, th
                     print(f"🖼️ CANVAS SIZE: {canvas_width} x {canvas_height}")
 
                 else:
@@ -917,7 +898,6 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                     print(f"   x_min: {x_min}, x_max: {x_max}")
                     print(f"   y_min: {y_min}, y_max: {y_max}")
                     canvas_width, canvas_height = tw, th
-                    actual_canvas_width, actual_canvas_height = tw, th
                     print(f"🖼️ CANVAS SIZE: {canvas_width} x {canvas_height}")
 
                 # make the new canvas available to any next transform
@@ -970,43 +950,14 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                     x_min, x_max = min(xs), max(xs)
                     y_min, y_max = min(ys), max(ys)
                     print(f"   new bounds: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}")
-                    
-                    # Calculate new canvas size after rotation
-                    angle_rad = math.radians(angle)
-                    cos_a = abs(math.cos(angle_rad))
-                    sin_a = abs(math.sin(angle_rad))
-                    new_width = current_width * cos_a + current_height * sin_a
-                    new_height = current_width * sin_a + current_height * cos_a
-                    
-                    # Calculate translation to center the rotated content in new canvas
-                    old_center_x, old_center_y = current_width / 2, current_height / 2
-                    new_center_x, new_center_y = new_width / 2, new_height / 2
-                    translate_x = new_center_x - old_center_x
-                    translate_y = new_center_y - old_center_y
-                    
-                    # Apply translation to center rotated bbox in new canvas
-                    x_min += translate_x
-                    x_max += translate_x
-                    y_min += translate_y
-                    y_max += translate_y
-                    
-                    print(f"🔄 ROTATION TRANSLATION:")
-                    print(f"   old_center: ({old_center_x}, {old_center_y})")
-                    print(f"   new_center: ({new_center_x}, {new_center_y})")
-                    print(f"   translation: ({translate_x:.2f}, {translate_y:.2f})")
-                    print(f"   translated bounds: x_min={x_min:.2f}, x_max={x_max:.2f}, y_min={y_min:.2f}, y_max={y_max:.2f}")
-                    
-                    current_width, current_height = new_width, new_height
-                    actual_canvas_width, actual_canvas_height = new_width, new_height
-                    print(f"🖼️ ROTATED CANVAS SIZE: {current_width:.1f} x {current_height:.1f}")
                 else:
                     print(f"   No rotation (angle = 0)")
-                
+                    
                 print(f"📍 FINAL BBOX (after rotation):")
                 print(f"   x_min: {x_min}, y_min: {y_min}")
                 print(f"   x_max: {x_max}, y_max: {y_max}")
                 print(f"   width: {x_max - x_min}, height: {y_max - y_min}")
-                print(f"✅ ROTATION COMPLETE - NEW CANVAS: {current_width:.1f} x {current_height:.1f}")
+                print(f"✅ ROTATION COMPLETE")
                 print(f"=" * 60)
 
 
@@ -1147,30 +1098,21 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
 
     print(f"\n🔧 FINAL CLIPPING AND VALIDATION:")
     print(f"   Before clipping: x_min={x_min}, y_min={y_min}, x_max={x_max}, y_max={y_max}")
-    print(f"   Target dims: width={new_dims[0]}, height={new_dims[1]}")
-    print(f"   Actual canvas: width={actual_canvas_width}, height={actual_canvas_height}")
-    print(f"   Note: Using actual_canvas dimensions for clipping (important for fit_within mode)")
+    print(f"   Canvas bounds: width={final_dims[0]}, height={final_dims[1]}")
+    print(f"   Note: Using final_dims instead of current_width/height for clipping")
     
-    # clip to the ACTUAL final canvas dimensions (not target dims)
-    final_width, final_height = actual_canvas_width, actual_canvas_height
-    print(f"   🔧 CLIPPING DEBUG:")
-    print(f"      final_width={final_width}, final_height={final_height}")
-    print(f"      Before: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}")
-    
+    # clip to the REAL final canvas dimensions
+    final_width, final_height = final_dims
     x_min = _clip(x_min, 0.0, final_width)
     x_max = _clip(x_max, 0.0, final_width)
     y_min = _clip(y_min, 0.0, final_height)
     y_max = _clip(y_max, 0.0, final_height)
     
     print(f"   After clipping: x_min={x_min}, y_min={y_min}, x_max={x_max}, y_max={y_max}")
-    print(f"   🔧 VALIDATION CHECK:")
-    print(f"      x_min >= x_max? {x_min >= x_max} ({x_min} >= {x_max})")
-    print(f"      y_min >= y_max? {y_min >= y_max} ({y_min} >= {y_max})")
 
     if x_min >= x_max or y_min >= y_max:
         print(f"❌ INVALID BBOX: x_min >= x_max or y_min >= y_max")
         print(f"   x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}")
-        print(f"   🚨 RETURNING None - THIS IS WHY TRANSFORMATION FAILS!")
         logger.warning("errors.validation", "Invalid bounding box after transformation, skipping", "invalid_bbox_skipped", {
             'bbox_coords': (x_min, y_min, x_max, y_max),
             'original_dims': original_dims,
@@ -1312,23 +1254,6 @@ def _transform_segmentation_points(segmentation_data, transformation_config: Dic
                     dx, dy = (x - cx), (y - cy)
                     x = cx + dx * cos_a - dy * sin_a
                     y = cy + dx * sin_a + dy * cos_a
-                    
-                    # Update canvas size after rotation (same as bbox rotation)
-                    abs_cos = abs(cos_a); abs_sin = abs(sin_a)
-                    new_w = temp_w * abs_cos + temp_h * abs_sin
-                    new_h = temp_w * abs_sin + temp_h * abs_cos
-                    
-                    # Calculate translation to center the rotated content in new canvas
-                    old_center_x, old_center_y = temp_w / 2.0, temp_h / 2.0
-                    new_center_x, new_center_y = new_w / 2.0, new_h / 2.0
-                    translate_x = new_center_x - old_center_x
-                    translate_y = new_center_y - old_center_y
-                    
-                    # Apply translation to center rotated point in new canvas
-                    x += translate_x
-                    y += translate_y
-                    
-                    temp_w, temp_h = new_w, new_h
 
             elif transform_name == 'random_zoom':
                 z = float(params.get('zoom_factor', 1.0))
