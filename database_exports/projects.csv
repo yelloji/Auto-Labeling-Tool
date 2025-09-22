@@ -1,3 +1,3 @@
 ID,Name,Description,Type,Created,Updated,Datasets,Total Images,Labeled Images,Unlabeled Images,Annotations
-1,gevis,,segmentation,2025-06-17 12:00:38,2025-06-17 12:00:38,4,3,3,0,3
+1,gevis,,segmentation,2025-06-17 12:00:38,2025-06-17 12:00:38,5,4,4,0,10
 2,gevis-1,second check,object_detection,2025-09-08 10:11:25,2025-09-08 10:11:25,1,5,5,0,5

@@ -1735,9 +1735,36 @@ def transform_detection_annotations_to_yolo(
 
     # 🔧 TRANSFORM ANNOTATIONS IF CONFIG PROVIDED
     working_annotations = annotations
+    actual_canvas_w, actual_canvas_h = img_w, img_h  # Default to target dimensions
+    
     if transform_config and original_dims:
         print(f"🔧 TRANSFORMING ANNOTATIONS: {original_dims} → {img_w}x{img_h}")
         print(f"🔧 TRANSFORM CONFIG: {transform_config}")
+        
+        # Calculate actual canvas dimensions based on transform_config
+        if 'resize' in transform_config and transform_config['resize'].get('enabled', True):
+            rz = transform_config['resize']
+            mode = rz.get('resize_mode', 'stretch_to')
+            tw = int(rz.get('width',  img_w))
+            th = int(rz.get('height', img_h))
+            ow, oh = map(float, original_dims)
+            
+            if mode == 'fit_within':
+                s = min(float(tw)/ow, float(th)/oh)
+                actual_canvas_w = int(round(ow * s))
+                actual_canvas_h = int(round(oh * s))
+                print(f"🎯 FIT_WITHIN: Actual canvas {actual_canvas_w}x{actual_canvas_h} (target was {tw}x{th})")
+            elif mode == 'center_crop':
+                # For center_crop, canvas might be different - need to calculate
+                s = max(float(tw)/ow, float(th)/oh)
+                actual_canvas_w = tw
+                actual_canvas_h = th
+                print(f"🎯 CENTER_CROP: Actual canvas {actual_canvas_w}x{actual_canvas_h}")
+            else:
+                # stretch_to, fit_*_edges → canvas is target
+                actual_canvas_w = tw
+                actual_canvas_h = th
+                print(f"🎯 {mode.upper()}: Actual canvas {actual_canvas_w}x{actual_canvas_h}")
         
         # DEBUG: Print original annotations before transformation
         print(f"📦 ORIGINAL ANNOTATIONS ({len(annotations)}):")
@@ -1749,7 +1776,7 @@ def transform_detection_annotations_to_yolo(
             annotations=annotations,
             transformation_config=transform_config,
             original_dims=original_dims,
-            new_dims=(img_w, img_h),
+            new_dims=(actual_canvas_w, actual_canvas_h),
             label_mode=label_mode
         )
         print(f"   Original: {len(annotations)} → Transformed: {len(working_annotations)}")
@@ -1788,11 +1815,11 @@ def transform_detection_annotations_to_yolo(
             })
             continue
 
-        # normalize (no max(1,...) and no clamp here)
-        cx = (x_min + x_max) / 2.0 / img_w
-        cy = (y_min + y_max) / 2.0 / img_h
-        w  = (x_max - x_min) / img_w
-        h  = (y_max - y_min) / img_h
+        # normalize using actual canvas dimensions (important for fit_within, center_crop modes)
+        cx = (x_min + x_max) / 2.0 / actual_canvas_w
+        cy = (y_min + y_max) / 2.0 / actual_canvas_h
+        w  = (x_max - x_min) / actual_canvas_w
+        h  = (y_max - y_min) / actual_canvas_h
 
         # sanity (don't "fix" here—if it fails, upstream clip/canvas is wrong)
         if not (0.0 <= cx <= 1.0 and 0.0 <= cy <= 1.0 and 0.0 < w <= 1.0 and 0.0 < h <= 1.0):
@@ -1864,13 +1891,41 @@ def transform_segmentation_annotations_to_yolo(
 
     # 🔧 TRANSFORM ANNOTATIONS IF CONFIG PROVIDED
     working_annotations = annotations
+    actual_canvas_w, actual_canvas_h = img_w, img_h  # Default to target dimensions
+    
     if transform_config and original_dims:
         print(f"🔧 TRANSFORMING ANNOTATIONS: {original_dims} → {img_w}x{img_h}")
+        
+        # Calculate actual canvas dimensions based on transform_config
+        if 'resize' in transform_config and transform_config['resize'].get('enabled', True):
+            rz = transform_config['resize']
+            mode = rz.get('resize_mode', 'stretch_to')
+            tw = int(rz.get('width',  img_w))
+            th = int(rz.get('height', img_h))
+            ow, oh = map(float, original_dims)
+            
+            if mode == 'fit_within':
+                s = min(float(tw)/ow, float(th)/oh)
+                actual_canvas_w = int(round(ow * s))
+                actual_canvas_h = int(round(oh * s))
+                print(f"🎯 FIT_WITHIN: Actual canvas {actual_canvas_w}x{actual_canvas_h} (target was {tw}x{th})")
+            elif mode == 'center_crop':
+                # For center_crop, canvas might be different - need to calculate
+                s = max(float(tw)/ow, float(th)/oh)
+                actual_canvas_w = tw
+                actual_canvas_h = th
+                print(f"🎯 CENTER_CROP: Actual canvas {actual_canvas_w}x{actual_canvas_h}")
+            else:
+                # stretch_to, fit_*_edges → canvas is target
+                actual_canvas_w = tw
+                actual_canvas_h = th
+                print(f"🎯 {mode.upper()}: Actual canvas {actual_canvas_w}x{actual_canvas_h}")
+        
         working_annotations = update_annotations_for_transformations(
             annotations=annotations,
             transformation_config=transform_config,
             original_dims=original_dims,
-            new_dims=(img_w, img_h),
+            new_dims=(actual_canvas_w, actual_canvas_h),
             label_mode=label_mode
         )
         print(f"   Original: {len(annotations)} → Transformed: {len(working_annotations)}")
@@ -1940,12 +1995,14 @@ def transform_segmentation_annotations_to_yolo(
             ring_ok = True
             ring_vals: List[str] = []
             for (px, py) in pts:
-                nx = px / img_w
-                ny = py / img_h
+                nx = px / actual_canvas_w
+                ny = py / actual_canvas_h
+                if px > actual_canvas_w or py > actual_canvas_h:
+                    print(f"🚨 YOLO NORMALIZATION DEBUG: Point ({px}, {py}) > canvas ({actual_canvas_w}x{actual_canvas_h})")
                 if not (0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0):
                     logger.debug("errors.validation", "Segmentation point OOB; dropping this ring",
                                  "yolo_segmentation_ring_oob",
-                                 {'class_id': class_id, 'px': px, 'py': py, 'img_w': img_w, 'img_h': img_h})
+                                 {'class_id': class_id, 'px': px, 'py': py, 'actual_canvas_w': actual_canvas_w, 'actual_canvas_h': actual_canvas_h})
                     ring_ok = False
                     break
                 ring_vals.append(f"{nx:.6f}")

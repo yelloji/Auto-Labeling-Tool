@@ -662,17 +662,10 @@ class ImageTransformer:
                 
             elif resize_mode == 'fit_within':
                 # Fit within bounds - scale to fit, maintain aspect ratio
-                original_aspect = original_width / original_height
-                target_aspect = target_width / target_height
-                
-                if original_aspect > target_aspect:
-                    # Original is wider - scale by width
-                    new_width = target_width
-                    new_height = int(target_width / original_aspect)
-                else:
-                    # Original is taller - scale by height
-                    new_height = target_height
-                    new_width = int(target_height * original_aspect)
+                # Use same calculation as annotation transformer for consistency
+                scale_factor = min(float(target_width)/original_width, float(target_height)/original_height)
+                new_width = int(round(original_width * scale_factor))
+                new_height = int(round(original_height * scale_factor))
                 
                 result = image.resize((new_width, new_height), resample)
                 

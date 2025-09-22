@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Layout, 
   Button, 
@@ -38,6 +38,84 @@ import ReleaseImageViewerModal from './ReleaseImageViewerModal';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
+
+// GPT-5's Thumbnail component with perfect SVG overlay positioning
+function Thumbnail({ src, children, filename, onLoad, onError }) {
+  const wrapRef = useRef(null);
+  const imgRef = useRef(null);
+  const svgRef = useRef(null);
+
+  // Size & position SVG to the *drawn image* (not the container)
+  const syncOverlay = useCallback(() => {
+    const wrap = wrapRef.current;
+    const img = imgRef.current;
+    const svg = svgRef.current;
+    if (!wrap || !img || !svg || !img.naturalWidth || !img.naturalHeight) return;
+
+    const W = wrap.clientWidth;
+    const H = wrap.clientHeight;
+    const a = img.naturalWidth / img.naturalHeight;
+
+    // displayed image size inside object-fit: contain
+    let w, h;
+    if (W / H > a) { h = H; w = H * a; } else { w = W; h = W / a; }
+
+    // letterbox offsets
+    const x = (W - w) / 2;
+    const y = (H - h) / 2;
+
+    // pin SVG to the drawn image box
+    svg.style.left = `${x}px`;
+    svg.style.top = `${y}px`;
+    svg.style.width = `${w}px`;
+    svg.style.height = `${h}px`;
+    
+    console.log(`🎯 ${filename}: SVG synced to ${w.toFixed(1)}×${h.toFixed(1)} at (${x.toFixed(1)}, ${y.toFixed(1)})`);
+  }, [filename]);
+
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    if (img.complete) syncOverlay();
+    else img.addEventListener('load', syncOverlay, { once: true });
+    window.addEventListener('resize', syncOverlay);
+    return () => window.removeEventListener('resize', syncOverlay);
+  }, [syncOverlay]);
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', width: '100%', paddingBottom: '100%', overflow: 'hidden', backgroundColor: '#f5f5f5' }}>
+      <img
+        ref={imgRef}
+        src={src}
+        alt={filename}
+        style={{ 
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%', 
+          height: '100%', 
+          objectFit: 'contain', 
+          display: 'block',
+          backgroundColor: '#f5f5f5'
+        }}
+        onLoad={(e) => {
+          syncOverlay();
+          if (onLoad) onLoad(e);
+        }}
+        onError={onError}
+      />
+      {/* IMPORTANT: viewBox 0..100 and preserveAspectRatio='none' */}
+      <svg
+        ref={svgRef}
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        style={{ position: 'absolute', pointerEvents: 'none' }}
+      >
+        {children /* draw your YOLO shapes here in 0..100 coords */}
+      </svg>
+    </div>
+  );
+}
 
 const ReleaseDetailsView = ({ 
   release, 
@@ -1202,47 +1280,31 @@ useEffect(() => {
                               setModalVisible(true);
                             }}
                             cover={
-                              <div style={{ 
-                                position: 'relative', 
-                                width: '100%',
-                                paddingBottom: '100%', // Creates square aspect ratio
-                                overflow: 'hidden',
-                                backgroundColor: '#f5f5f5'
-                              }}>
-                                <img
-                                  alt={filename}
-                                  src={thumbnailUrl}
-                                  style={{ 
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    width: '100%', 
-                                    height: '100%',
-                                    objectFit: 'contain', // Maintain original aspect ratio
-                                    backgroundColor: '#f5f5f5'
-                                  }}
-                                  onLoad={() => {
-                                    console.log(`✅ Image loaded successfully: ${filename}`);
-                                    logInfo('app.frontend.ui', 'release_image_loaded', 'Release image loaded successfully', {
-                                      timestamp: new Date().toISOString(),
-                                      filename: filename,
-                                      releaseId: release_id,
-                                      imagePath: path,
-                                      thumbnailUrl: thumbnailUrl
-                                    });
-                                  }}
-                                  onError={(e) => {
-                                    console.error(`❌ Image failed to load: ${filename}`, e);
-                                    logError('app.frontend.ui', 'release_image_load_failed', 'Release image failed to load', {
-                                      timestamp: new Date().toISOString(),
-                                      filename: filename,
-                                      releaseId: release_id,
-                                      imagePath: path,
-                                      thumbnailUrl: thumbnailUrl,
-                                      error: e.message || 'Image load error'
-                                    });
-                                  }}
-                                />
+                              <Thumbnail 
+                                src={thumbnailUrl}
+                                filename={filename}
+                                onLoad={() => {
+                                  console.log(`✅ Image loaded successfully: ${filename}`);
+                                  logInfo('app.frontend.ui', 'release_image_loaded', 'Release image loaded successfully', {
+                                    timestamp: new Date().toISOString(),
+                                    filename: filename,
+                                    releaseId: release_id,
+                                    imagePath: path,
+                                    thumbnailUrl: thumbnailUrl
+                                  });
+                                }}
+                                onError={(e) => {
+                                  console.error(`❌ Image failed to load: ${filename}`, e);
+                                  logError('app.frontend.ui', 'release_image_load_failed', 'Release image failed to load', {
+                                    timestamp: new Date().toISOString(),
+                                    filename: filename,
+                                    releaseId: release_id,
+                                    imagePath: path,
+                                    thumbnailUrl: thumbnailUrl,
+                                    error: e.message || 'Image load error'
+                                  });
+                                }}
+                              >
                                 {console.log(`🔍 Checking annotations for ${path}:`, annotations[path], 'showAnnotations:', showAnnotations)}
                                 {console.log(`🗝️ Available annotation keys:`, Object.keys(annotations))}
                                 {console.log(`🎯 Looking for path: "${path}" in annotations`)}
@@ -1270,152 +1332,135 @@ useEffect(() => {
                                     console.log(`❌ No annotations found for any key variant`);
                                   }
                                   
-                                  return showAnnotations && imageAnnotations && (
-                                      <svg
-                                        style={{
-                                          position: 'absolute',
-                                          top: 0,
-                                          left: 0,
-                                          width: '100%',
-                                          height: '100%',
-                                          pointerEvents: 'none'
-                                        }}
-                                        viewBox="0 0 100 100"
-                                        preserveAspectRatio="xMidYMid meet"
-                                      >
-                                        {imageAnnotations.map((annotation, annIndex) => {
-                                      const { class_id, bbox, polygon, segmentation, type } = annotation;
-                                      const className = classMapping[class_id] || `Class ${class_id}`;
-                                      
-                                      // Generate color based on class_id
-                                      const colors = ['#ff4d4f', '#52c41a', '#1890ff', '#fa8c16', '#eb2f96', '#722ed1'];
-                                      const color = colors[class_id % colors.length];
-                                      
-                                      // Handle polygon annotations (flat array format from your JSON)
-                                      if (polygon && Array.isArray(polygon) && polygon.length > 0) {
-                                        // Convert flat array [x1, y1, x2, y2, ...] to points
-                                        const points = [];
-                                        for (let i = 0; i < polygon.length; i += 2) {
-                                          if (i + 1 < polygon.length) {
-                                            points.push({ x: polygon[i], y: polygon[i + 1] });
-                                          }
-                                        }
-                                        
-                                        if (points.length > 0) {
-                                          // Convert polygon points to SVG path
-                                          const pathData = points.map((point, index) => {
-                                            const x = point.x * 100; // Convert to percentage
-                                            const y = point.y * 100;
-                                            return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-                                          }).join(' ') + ' Z'; // Close the path
-                                          
-                                          // Calculate centroid for text placement
-                                          const centroidX = points.reduce((sum, p) => sum + p.x, 0) / points.length * 100;
-                                          const centroidY = points.reduce((sum, p) => sum + p.y, 0) / points.length * 100;
-                                          
-                                          return (
-                                            <g key={annIndex}>
-                                              <path
-                                                d={pathData}
-                                                fill={color}
-                                                fillOpacity="0.1"
-                                                stroke={color}
-                                                strokeWidth="0.5"
-                                                opacity="0.8"
-                                              />
-                                              <text
-                                                x={centroidX}
-                                                y={centroidY}
-                                                fill={color}
-                                                fontSize="2"
-                                                fontWeight="bold"
-                                                textAnchor="middle"
-                                                dominantBaseline="middle"
-                                              >
-                                                {className}
-                                              </text>
-                                            </g>
-                                          );
+                                  return showAnnotations && imageAnnotations && imageAnnotations.map((annotation, annIndex) => {
+                                    const { class_id, bbox, polygon, segmentation, type } = annotation;
+                                    const className = classMapping[class_id] || `Class ${class_id}`;
+                                    
+                                    // Generate color based on class_id
+                                    const colors = ['#ff4d4f', '#52c41a', '#1890ff', '#fa8c16', '#eb2f96', '#722ed1'];
+                                    const color = colors[class_id % colors.length];
+                                    
+                                    // Handle polygon annotations (flat array format from your JSON)
+                                    if (polygon && Array.isArray(polygon) && polygon.length > 0) {
+                                      // Convert flat array [x1, y1, x2, y2, ...] to points
+                                      const points = [];
+                                      for (let i = 0; i < polygon.length; i += 2) {
+                                        if (i + 1 < polygon.length) {
+                                          points.push({ x: polygon[i], y: polygon[i + 1] });
                                         }
                                       }
                                       
-                                      // Handle polygon annotations
-                                       if (type === 'polygon' && segmentation && Array.isArray(segmentation)) {
-                                         // Convert polygon points to SVG path
-                                         const pathData = segmentation.map((point, index) => {
-                                           const x = (point.x / 1) * 100; // Assuming normalized coordinates
-                                           const y = (point.y / 1) * 100;
-                                           return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-                                         }).join(' ') + ' Z'; // Close the path
-                                         
-                                         // Calculate centroid for text placement
-                                         const centroidX = segmentation.reduce((sum, p) => sum + p.x, 0) / segmentation.length * 100;
-                                         const centroidY = segmentation.reduce((sum, p) => sum + p.y, 0) / segmentation.length * 100;
-                                         
-                                         return (
-                                           <g key={annIndex}>
-                                             <path
-                                               d={pathData}
-                                               fill={color}
-                                               fillOpacity="0.1"
-                                               stroke={color}
-                                               strokeWidth="0.5"
-                                               opacity="0.8"
-                                             />
-                                             <text
-                                               x={centroidX}
-                                               y={centroidY}
-                                               fontSize="3"
-                                               fill={color}
-                                               fontWeight="bold"
-                                               textAnchor="middle"
-                                               style={{ textShadow: '0 0 2px rgba(255,255,255,0.8)' }}
-                                             >
-                                               {className}
-                                             </text>
-                                           </g>
-                                         );
-                                       }
-                                       
-                                       // Handle bounding box annotations
-                                       const bboxCoords = convertYoloBbox(bbox);
-                                       if (bboxCoords) {
-                                         
-                                         return (
-                                           <g key={annIndex}>
-                                             <rect
-                                               x={bboxCoords.x}
-                                               y={bboxCoords.y}
-                                               width={bboxCoords.width}
-                                               height={bboxCoords.height}
-                                               fill={color}
-                                               fillOpacity="0.1"
-                                               stroke={color}
-                                               strokeWidth="0.5"
-                                               opacity="0.8"
-                                             />
-                                             <text
-                                               x={bboxCoords.x + 1}
-                                               y={bboxCoords.y - 1}
-                                               fill={color}
-                                               fontSize="2"
-                                               fontWeight="bold"
-                                               textAnchor="start"
-                                             >
-                                               {className}
-                                             </text>
-                                           </g>
-                                         );
-                                       }
-                                       
-                                       // Return null for unsupported annotation types
-                                       return null;
-                                    })}
-                                       </svg>
-                                     );
-                                   })()}
-                                 )
-                              </div>
+                                      if (points.length > 0) {
+                                        // Convert polygon points to SVG path
+                                        const pathData = points.map((point, index) => {
+                                          const x = point.x * 100; // Convert to percentage
+                                          const y = point.y * 100;
+                                          return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+                                        }).join(' ') + ' Z'; // Close the path
+                                        
+                                        // Calculate centroid for text placement
+                                        const centroidX = points.reduce((sum, p) => sum + p.x, 0) / points.length * 100;
+                                        const centroidY = points.reduce((sum, p) => sum + p.y, 0) / points.length * 100;
+                                        
+                                        return (
+                                          <g key={annIndex}>
+                                            <path
+                                              d={pathData}
+                                              fill={color}
+                                              fillOpacity="0.1"
+                                              stroke={color}
+                                              strokeWidth="0.5"
+                                              opacity="0.8"
+                                            />
+                                            <text
+                                              x={centroidX}
+                                              y={centroidY}
+                                              fill={color}
+                                              fontSize="2"
+                                              fontWeight="bold"
+                                              textAnchor="middle"
+                                              dominantBaseline="middle"
+                                            >
+                                              {className}
+                                            </text>
+                                          </g>
+                                        );
+                                      }
+                                    }
+                                    
+                                    // Handle polygon annotations
+                                    if (type === 'polygon' && segmentation && Array.isArray(segmentation)) {
+                                      // Convert polygon points to SVG path
+                                      const pathData = segmentation.map((point, index) => {
+                                        const x = (point.x / 1) * 100; // Assuming normalized coordinates
+                                        const y = (point.y / 1) * 100;
+                                        return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+                                      }).join(' ') + ' Z'; // Close the path
+                                      
+                                      // Calculate centroid for text placement
+                                      const centroidX = segmentation.reduce((sum, p) => sum + p.x, 0) / segmentation.length * 100;
+                                      const centroidY = segmentation.reduce((sum, p) => sum + p.y, 0) / segmentation.length * 100;
+                                      
+                                      return (
+                                        <g key={annIndex}>
+                                          <path
+                                            d={pathData}
+                                            fill={color}
+                                            fillOpacity="0.1"
+                                            stroke={color}
+                                            strokeWidth="0.5"
+                                            opacity="0.8"
+                                          />
+                                          <text
+                                            x={centroidX}
+                                            y={centroidY}
+                                            fontSize="3"
+                                            fill={color}
+                                            fontWeight="bold"
+                                            textAnchor="middle"
+                                            style={{ textShadow: '0 0 2px rgba(255,255,255,0.8)' }}
+                                          >
+                                            {className}
+                                          </text>
+                                        </g>
+                                      );
+                                    }
+                                    
+                                    // Handle bounding box annotations
+                                    const bboxCoords = convertYoloBbox(bbox);
+                                    if (bboxCoords) {
+                                      return (
+                                        <g key={annIndex}>
+                                          <rect
+                                            x={bboxCoords.x}
+                                            y={bboxCoords.y}
+                                            width={bboxCoords.width}
+                                            height={bboxCoords.height}
+                                            fill={color}
+                                            fillOpacity="0.1"
+                                            stroke={color}
+                                            strokeWidth="0.5"
+                                            opacity="0.8"
+                                          />
+                                          <text
+                                            x={bboxCoords.x + 1}
+                                            y={bboxCoords.y - 1}
+                                            fill={color}
+                                            fontSize="2"
+                                            fontWeight="bold"
+                                            textAnchor="start"
+                                          >
+                                            {className}
+                                          </text>
+                                        </g>
+                                      );
+                                    }
+                                    
+                                    // Return null for unsupported annotation types
+                                    return null;
+                                  });
+                                })()}
+                              </Thumbnail>
                             }
                           >
                             <Card.Meta

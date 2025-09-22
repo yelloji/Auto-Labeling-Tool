@@ -2785,10 +2785,12 @@ def create_complete_release_zip(
                             original_dims = pil_img.size
                             print(f"🖼️ Original image dims: {original_dims}")
                             
-                            # Simple resize - this was working before!
-                            augmented_image = pil_img.resize((target_width, target_height))
+                            # Use proper resize logic that respects resize_mode (same as complex path)
+                            from ..services.image_transformer import ImageTransformer
+                            transformer = ImageTransformer()
+                            augmented_image = transformer._apply_resize(pil_img, resize_config)
                             final_dims = augmented_image.size
-                            print(f"🖼️ Resized image dims: {final_dims}")
+                            print(f"🖼️ Resized to: {final_dims} using mode: {resize_config.get('resize_mode', 'stretch_to')}")
                             
                             # Track transformations for annotation coordinate transformation
                             # Creates transformation matrix for coordinate conversion
@@ -3276,13 +3278,15 @@ def create_complete_release_zip(
                             augmented_image = None
                             transformation_tracking_data = None
                         if augmented_image:
-                                # Safety: if resize target specified, enforce final size
+                                # Safety: if resize target specified, enforce final size (except for fit_within mode)
                                 try:
                                     if resize_params_for_aug:
+                                        resize_mode = resize_params_for_aug.get("resize_mode", "stretch_to")
                                         target_w = int(resize_params_for_aug.get("width") or 0)
                                         target_h = int(resize_params_for_aug.get("height") or 0)
                                         if target_w > 0 and target_h > 0:
-                                            if augmented_image.size != (target_w, target_h):
+                                            # Only enforce exact size for stretch_to mode, not fit_within
+                                            if resize_mode == "stretch_to" and augmented_image.size != (target_w, target_h):
                                                 augmented_image = augmented_image.resize((target_w, target_h))
                                 except Exception:
                                     pass
