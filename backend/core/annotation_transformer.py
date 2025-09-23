@@ -927,7 +927,16 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
 
             
             elif transform_name in ('rotation', 'rotate'):
-                angle = float(params.get('angle', params.get('degrees', params.get('rotation', 0))))
+                # Use actual parameters if available (calculated during image transformation)
+                actual_params = params.get('actual_params', {})
+                if actual_params:
+                    print(f"🎯 Using actual rotation parameters: {actual_params}")
+                    angle = float(actual_params.get('actual_angle', 0))
+                    # Note: actual_params also contains fill_color, expand, original_size, final_size
+                else:
+                    print(f"⚠️ Using fallback rotation parameters: {params}")
+                    angle = float(params.get('angle', params.get('degrees', params.get('rotation', 0))))
+                
                 print(f"\n🔄 ROTATION TRANSFORMATION DEBUG")
                 print(f"=" * 60)
                 print(f"📊 INPUT PARAMETERS:")
@@ -1011,13 +1020,45 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
 
 
             elif transform_name == 'crop':
-                crop_x = params.get('x', 0)
-                crop_y = params.get('y', 0)
+                # Use actual parameters if available (calculated during image transformation)
+                actual_params = params.get('actual_params', {})
+                if actual_params:
+                    print(f"🎯 Using actual crop parameters: {actual_params}")
+                    crop_x = actual_params.get('x', 0)
+                    crop_y = actual_params.get('y', 0)
+                    crop_w = actual_params.get('width', current_width - crop_x)
+                    crop_h = actual_params.get('height', current_height - crop_y)
+                else:
+                    print(f"⚠️ Using fallback crop parameters: {params}")
+                    crop_x = params.get('x', 0)
+                    crop_y = params.get('y', 0)
+                    crop_w = params.get('width',  current_width  - crop_x)
+                    crop_h = params.get('height', current_height - crop_y)
+                
+                print(f"\n🔍 CROP TRANSFORMATION DEBUG:")
+                print(f"   Original bbox: x_min={x_min}, y_min={y_min}, x_max={x_max}, y_max={y_max}")
+                print(f"   Crop area: x={crop_x}, y={crop_y}, width={crop_w}, height={crop_h}")
+                
+                # Apply crop offset
                 x_min -= crop_x; x_max -= crop_x
                 y_min -= crop_y; y_max -= crop_y
                 
-                crop_w = params.get('width',  current_width  - crop_x)
-                crop_h = params.get('height', current_height - crop_y)
+                print(f"   After crop offset: x_min={x_min}, y_min={y_min}, x_max={x_max}, y_max={y_max}")
+                
+                # CRITICAL FIX: Clip coordinates to crop boundaries
+                x_min = max(0, x_min)
+                y_min = max(0, y_min) 
+                x_max = min(crop_w, x_max)
+                y_max = min(crop_h, y_max)
+                
+                print(f"   After clipping: x_min={x_min}, y_min={y_min}, x_max={x_max}, y_max={y_max}")
+                
+                # Check if annotation is still valid after clipping
+                if x_min >= x_max or y_min >= y_max:
+                    print(f"   ❌ ANNOTATION OUTSIDE CROP AREA - REMOVING")
+                    return None
+                
+                print(f"   ✅ CROP APPLIED - New canvas: {crop_w}x{crop_h}")
                 current_width, current_height = float(crop_w), float(crop_h)
 
             elif transform_name == 'random_zoom':
@@ -1058,12 +1099,22 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                     y_min, y_max = min(ys), max(ys)
             
             elif transform_name == 'affine_transform':
-                # Implement basic affine transformation
-                scale_x = params.get('scale_x', 1.0)
-                scale_y = params.get('scale_y', 1.0)
-                translate_x = params.get('translate_x', 0)
-                translate_y = params.get('translate_y', 0)
-                rotation_angle = params.get('rotation', 0)
+                # Use actual parameters if available (calculated during image transformation)
+                actual_params = params.get('actual_params', {})
+                if actual_params:
+                    print(f"🎯 Using actual affine transform parameters: {actual_params}")
+                    scale_x = actual_params.get('actual_scale_factor', 1.0)
+                    scale_y = actual_params.get('actual_scale_factor', 1.0)  # Same scale for both axes
+                    translate_x = actual_params.get('shift_x_factor', 0) * current_width
+                    translate_y = actual_params.get('shift_y_factor', 0) * current_height
+                    rotation_angle = actual_params.get('actual_rotation_angle', 0)
+                else:
+                    print(f"⚠️ Using fallback affine transform parameters: {params}")
+                    scale_x = params.get('scale_x', 1.0)
+                    scale_y = params.get('scale_y', 1.0)
+                    translate_x = params.get('translate_x', 0)
+                    translate_y = params.get('translate_y', 0)
+                    rotation_angle = params.get('rotation', 0)
                 
                 if scale_x != 1.0 or scale_y != 1.0 or translate_x != 0 or translate_y != 0 or rotation_angle != 0:
                     # Apply scaling
@@ -1304,7 +1355,12 @@ def _transform_segmentation_points(segmentation_data, transformation_config: Dic
                     y = temp_h - y
 
             elif transform_name in ('rotation', 'rotate'):
-                angle = float(params.get('angle', params.get('degrees', params.get('rotation', 0))))
+                # Use actual parameters if available (calculated during image transformation)
+                actual_params = params.get('actual_params', {})
+                if actual_params:
+                    angle = float(actual_params.get('actual_angle', 0))
+                else:
+                    angle = float(params.get('angle', params.get('degrees', params.get('rotation', 0))))
                 if angle != 0.0:
                     ang = math.radians(angle)
                     cos_a = math.cos(ang); sin_a = math.sin(ang)
@@ -1338,20 +1394,51 @@ def _transform_segmentation_points(segmentation_data, transformation_config: Dic
                     y = cy + (y - cy) * z
 
             elif transform_name == 'crop':
-                crop_x = float(params.get('x', 0))
-                crop_y = float(params.get('y', 0))
-                crop_w = float(params.get('width',  temp_w - crop_x))
-                crop_h = float(params.get('height', temp_h - crop_y))
+                # Use actual parameters if available (calculated during image transformation)
+                actual_params = params.get('actual_params', {})
+                if actual_params:
+                    crop_x = float(actual_params.get('x', 0))
+                    crop_y = float(actual_params.get('y', 0))
+                    crop_w = float(actual_params.get('width', temp_w - crop_x))
+                    crop_h = float(actual_params.get('height', temp_h - crop_y))
+                    print(f"\n📍 CROP ANNOTATION TRANSFORM - USING ACTUAL PARAMS:")
+                    print(f"   Point before: ({x}, {y})")
+                    print(f"   Using actual crop: x={crop_x}, y={crop_y}, w={crop_w}, h={crop_h}")
+                else:
+                    crop_x = float(params.get('x', 0))
+                    crop_y = float(params.get('y', 0))
+                    crop_w = float(params.get('width',  temp_w - crop_x))
+                    crop_h = float(params.get('height', temp_h - crop_y))
+                    print(f"\n📍 CROP ANNOTATION TRANSFORM - USING INPUT PARAMS:")
+                    print(f"   Point before: ({x}, {y})")
+                    print(f"   Using input crop: x={crop_x}, y={crop_y}, w={crop_w}, h={crop_h}")
+                
+                # Apply crop offset
                 x -= crop_x; y -= crop_y
+                
+                # CRITICAL FIX: Clip point coordinates to crop boundaries
+                x = max(0, min(crop_w, x))
+                y = max(0, min(crop_h, y))
+                
+                print(f"   Point after crop + clipping: ({x}, {y})")
                 # update canvas for subsequent ops
                 temp_w, temp_h = crop_w, crop_h
 
             elif transform_name == 'affine_transform':
-                sx = float(params.get('scale_x', 1.0))
-                sy = float(params.get('scale_y', 1.0))
-                tx = float(params.get('translate_x', 0.0))
-                ty = float(params.get('translate_y', 0.0))
-                rot = float(params.get('rotation', 0.0))
+                # Use actual parameters if available (calculated during image transformation)
+                actual_params = params.get('actual_params', {})
+                if actual_params:
+                    sx = float(actual_params.get('actual_scale_factor', 1.0))
+                    sy = float(actual_params.get('actual_scale_factor', 1.0))  # Same scale for both axes
+                    tx = float(actual_params.get('shift_x_factor', 0.0)) * temp_w
+                    ty = float(actual_params.get('shift_y_factor', 0.0)) * temp_h
+                    rot = float(actual_params.get('actual_rotation_angle', 0.0))
+                else:
+                    sx = float(params.get('scale_x', 1.0))
+                    sy = float(params.get('scale_y', 1.0))
+                    tx = float(params.get('translate_x', 0.0))
+                    ty = float(params.get('translate_y', 0.0))
+                    rot = float(params.get('rotation', 0.0))
                 # scale about center
                 cx, cy = temp_w / 2.0, temp_h / 2.0
                 x = cx + (x - cx) * sx
@@ -1466,9 +1553,12 @@ def _transform_polygon(polygon: Polygon, transformation_config: Dict[str, Any],
                 current_width, current_height = canvas_width, canvas_height
 
             elif transform_name in ('rotation', 'rotate'):
-
-                # Implement rotation coordinate transformation for polygons
-                angle = float(params.get('angle', params.get('degrees', params.get('rotation', 0))))
+                # Use actual parameters if available (calculated during image transformation)
+                actual_params = params.get('actual_params', {})
+                if actual_params:
+                    angle = float(actual_params.get('actual_angle', 0))
+                else:
+                    angle = float(params.get('angle', params.get('degrees', params.get('rotation', 0))))
 
                 if angle != 0:
                     # Convert angle to radians
@@ -1492,12 +1582,35 @@ def _transform_polygon(polygon: Polygon, transformation_config: Dict[str, Any],
                     points = rotated_points
 
             elif transform_name == 'crop':
-                crop_x = params.get('x', 0)
-                crop_y = params.get('y', 0)
-                points = [(x - crop_x, y - crop_y) for x, y in points]
+                # Use actual parameters if available (calculated during image transformation)
+                actual_params = params.get('actual_params', {})
+                if actual_params:
+                    crop_x = actual_params.get('x', 0)
+                    crop_y = actual_params.get('y', 0)
+                    crop_w = actual_params.get('width', current_width - crop_x)
+                    crop_h = actual_params.get('height', current_height - crop_y)
+                    print(f"🎯 POLYGON CROP: Using actual crop parameters: {actual_params}")
+                else:
+                    crop_x = params.get('x', 0)
+                    crop_y = params.get('y', 0)
+                    crop_w = params.get('width',  current_width  - crop_x)
+                    crop_h = params.get('height', current_height - crop_y)
+                    print(f"⚠️ POLYGON CROP: Using fallback crop parameters: {params}")
                 
-                crop_w = params.get('width',  current_width  - crop_x)
-                crop_h = params.get('height', current_height - crop_y)
+                # Apply crop offset and clip coordinates to crop boundaries
+                clipped_points = []
+                for x, y in points:
+                    # Apply crop offset
+                    new_x = x - crop_x
+                    new_y = y - crop_y
+                    
+                    # CRITICAL FIX: Clip to crop boundaries
+                    new_x = max(0, min(crop_w, new_x))
+                    new_y = max(0, min(crop_h, new_y))
+                    
+                    clipped_points.append((new_x, new_y))
+                
+                points = clipped_points
                 current_width, current_height = float(crop_w), float(crop_h)
 
             
@@ -1530,12 +1643,20 @@ def _transform_polygon(polygon: Polygon, transformation_config: Dict[str, Any],
                     points = sheared_points
             
             elif transform_name == 'affine_transform':
-                # Implement basic affine transformation for polygons
-                scale_x = params.get('scale_x', 1.0)
-                scale_y = params.get('scale_y', 1.0)
-                translate_x = params.get('translate_x', 0)
-                translate_y = params.get('translate_y', 0)
-                rotation_angle = params.get('rotation', 0)
+                # Use actual parameters if available (calculated during image transformation)
+                actual_params = params.get('actual_params', {})
+                if actual_params:
+                    scale_x = actual_params.get('actual_scale_factor', 1.0)
+                    scale_y = actual_params.get('actual_scale_factor', 1.0)  # Same scale for both axes
+                    translate_x = actual_params.get('shift_x_factor', 0) * current_width
+                    translate_y = actual_params.get('shift_y_factor', 0) * current_height
+                    rotation_angle = actual_params.get('actual_rotation_angle', 0)
+                else:
+                    scale_x = params.get('scale_x', 1.0)
+                    scale_y = params.get('scale_y', 1.0)
+                    translate_x = params.get('translate_x', 0)
+                    translate_y = params.get('translate_y', 0)
+                    rotation_angle = params.get('rotation', 0)
                 
                 if scale_x != 1.0 or scale_y != 1.0 or translate_x != 0 or translate_y != 0 or rotation_angle != 0:
                     center_x, center_y = current_width / 2, current_height / 2
@@ -1631,7 +1752,7 @@ def _transform_polygon(polygon: Polygon, transformation_config: Dict[str, Any],
 # DEBUG FUNCTION FOR YOLO ISSUES
 # ---------------------------
 
-def _debug_yolo_dump(image_name, anns, final_w, final_h, transform_config=None, original_w=None, original_h=None):
+def _debug_yolo_dump(image_name, anns, final_w, final_h, transform_config=None, original_w=None, original_h=None, class_index_resolver=None):
     """Debug function to trace YOLO conversion issues"""
     print(f"\n=== DEBUG YOLO DUMP :: {image_name} ===")
     print(f"final canvas passed to YOLO: {final_w}x{final_h}")
@@ -1669,8 +1790,21 @@ def _debug_yolo_dump(image_name, anns, final_w, final_h, transform_config=None, 
                   f"max=({max(p[0] for p in a.points):.1f},{max(p[1] for p in a.points):.1f})")
 
     # Convert (now with properly transformed annotations)
-    det_lines = transform_detection_annotations_to_yolo(anns, final_w, final_h)
-    seg_lines = transform_segmentation_annotations_to_yolo(anns, final_w, final_h)
+    # 🎯 CRITICAL FIX: Use class_index_resolver for proper class ID mapping
+    det_lines = transform_detection_annotations_to_yolo(
+        annotations=anns, 
+        img_w=final_w, 
+        img_h=final_h,
+        class_index_resolver=class_index_resolver,
+        label_mode="yolo_detection"
+    )
+    seg_lines = transform_segmentation_annotations_to_yolo(
+        annotations=anns, 
+        img_w=final_w, 
+        img_h=final_h,
+        class_index_resolver=class_index_resolver,
+        label_mode="yolo_segmentation"
+    )
 
     print(f"YOLO DET lines: {len(det_lines)}")
     for L in det_lines[:3]: print("  det:", L)
@@ -1997,8 +2131,6 @@ def transform_segmentation_annotations_to_yolo(
             for (px, py) in pts:
                 nx = px / actual_canvas_w
                 ny = py / actual_canvas_h
-                if px > actual_canvas_w or py > actual_canvas_h:
-                    print(f"🚨 YOLO NORMALIZATION DEBUG: Point ({px}, {py}) > canvas ({actual_canvas_w}x{actual_canvas_h})")
                 if not (0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0):
                     logger.debug("errors.validation", "Segmentation point OOB; dropping this ring",
                                  "yolo_segmentation_ring_oob",

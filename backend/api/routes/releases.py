@@ -2797,7 +2797,8 @@ def create_complete_release_zip(
                             transformation_tracking_data = track_transformations_for_annotations(
                                 transformations=transformations,
                                 original_dims=original_dims,
-                                final_dims=final_dims
+                                final_dims=final_dims,
+                                transformer=transformer
                             )
                             print(f"🎯 RESIZE-ONLY: Using tracking system for annotations!")
                             
@@ -2865,7 +2866,8 @@ def create_complete_release_zip(
                                 transformation_tracking_data = track_transformations_for_annotations(
                                     transformations=transformation_list,
                                     original_dims=original_dims,
-                                    final_dims=final_dims
+                                    final_dims=final_dims,
+                                    transformer=transformer
                                 )
                                 print(f"🎯 ORIGINAL IMAGE BASELINE: Applied resize-only, augmented images will get full combinations!")
                                 
@@ -3265,7 +3267,8 @@ def create_complete_release_zip(
                             transformation_tracking_data = track_transformations_for_annotations(
                                 transformations=transformation_list,
                                 original_dims=original_dims,
-                                final_dims=final_dims
+                                final_dims=final_dims,
+                                transformer=transformer
                             )
                             
                             # Close the original PIL image
@@ -3355,7 +3358,7 @@ def create_complete_release_zip(
                                                 print(f"   First annotation: {type(ann)} - {getattr(ann, 'x_min', 'NO_X_MIN')}")
                                             
                                             # 🔍 DEBUG: Call debug function before YOLO conversion
-                                            det_lines, seg_lines = _debug_yolo_dump(aug_filename, transformed_annotations, img_w, img_h)
+                                            det_lines, seg_lines = _debug_yolo_dump(aug_filename, transformed_annotations, img_w, img_h, class_index_resolver=resolve_class_index)
                                             
                                             print(f"🔍 DEBUG: _debug_yolo_dump returned:")
                                             print(f"   det_lines count: {len(det_lines)}")
@@ -3369,7 +3372,7 @@ def create_complete_release_zip(
                                             from core.annotation_transformer import transform_segmentation_annotations_to_yolo, _debug_yolo_dump
                                             
                                             # 🔍 DEBUG: Call debug function before YOLO conversion
-                                            det_lines, seg_lines = _debug_yolo_dump(aug_filename, transformed_annotations, img_w, img_h)
+                                            det_lines, seg_lines = _debug_yolo_dump(aug_filename, transformed_annotations, img_w, img_h, class_index_resolver=resolve_class_index)
                                             label_content = "\n".join(seg_lines)
                                         with open(aug_label_path, 'w') as f:
                                             f.write(label_content)
@@ -4018,7 +4021,7 @@ def apply_transformations_to_image(image_path: str, transformations: List[dict])
         return None
 
 
-def track_transformations_for_annotations(transformations: List[dict], original_dims: tuple, final_dims: tuple) -> dict:
+def track_transformations_for_annotations(transformations: List[dict], original_dims: tuple, final_dims: tuple, transformer=None) -> dict:
     """
     Track EXACT transformations applied to images for annotation coordinate transformation.
     
@@ -4029,6 +4032,7 @@ def track_transformations_for_annotations(transformations: List[dict], original_
         transformations: List of transformation dicts [{"type": "rotate", "params": {"angle": -26}}, ...]
         original_dims: (width, height) of original image
         final_dims: (width, height) of final transformed image
+        transformer: ImageTransformer instance to collect actual geometry parameters
         
     Returns:
         dict: Complete transformation tracking data for annotation processing
@@ -4039,7 +4043,8 @@ def track_transformations_for_annotations(transformations: List[dict], original_
             "final_dims": (width, height),
             "has_geometric_transforms": bool,
             "geometric_transforms": [...],     # Only geometric transforms that affect coordinates
-            "photometric_transforms": [...]    # Only photometric transforms (for reference)
+            "photometric_transforms": [...],   # Only photometric transforms (for reference)
+            "actual_geometry_params": {...}    # Actual calculated parameters for crop, rotation, affine_transform
         }
     """
     # 🚨 DEBUG: Log INPUT to tracking function
@@ -4208,11 +4213,43 @@ def track_transformations_for_annotations(transformations: List[dict], original_
         "photometric_count": len(photometric_transforms)
     }
     
+    # Collect actual geometry parameters for crop, rotation, and affine_transform tools
+    actual_geometry_params = {}
+    if transformer and hasattr(transformer, 'get_actual_geometry_parameters'):
+        try:
+            actual_geometry_params = transformer.get_actual_geometry_parameters()
+            print(f"\n🎯 COLLECTED ACTUAL GEOMETRY PARAMETERS:")
+            for tool_name, params in actual_geometry_params.items():
+                print(f"   {tool_name}: {params}")
+        except Exception as e:
+            print(f"\n⚠️ Failed to collect actual geometry parameters: {e}")
+            actual_geometry_params = {}
+    
+    # Add actual geometry parameters to tracking data
+    tracking_data["actual_geometry_params"] = actual_geometry_params
+    
+    # Add actual geometry parameters to transformation_config for annotation transformer
+    if actual_geometry_params:
+        for tool_name, actual_params in actual_geometry_params.items():
+            # Handle rotation tool name mismatch: ImageTransformer uses 'rotation', config uses 'rotate'
+            config_tool_name = tool_name
+            if tool_name == 'rotation' and 'rotate' in transformation_config:
+                config_tool_name = 'rotate'
+                print(f"🔄 Mapping rotation tool: '{tool_name}' -> '{config_tool_name}'")
+            
+            if config_tool_name in transformation_config:
+                # Add actual parameters to the existing config
+                transformation_config[config_tool_name]["actual_params"] = actual_params
+                print(f"🎯 Added actual params for {config_tool_name}: {actual_params}")
+            else:
+                print(f"⚠️ Tool {tool_name} not found in transformation_config")
+    
     # 🚨 DEBUG: Log OUTPUT from tracking function
     print(f"\n🎯 TRACKING FUNCTION OUTPUT:")
     print(f"   transformation_config: {transformation_config}")
     print(f"   Has geometric transforms: {tracking_data['has_geometric_transforms']}")
     print(f"   Geometric transforms: {geometric_transforms}")
+    print(f"   Actual geometry params: {actual_geometry_params}")
     
     logger.debug("operations.transformations", f"Transformation tracking completed", "transformation_tracking_complete", {
         'total_transforms': tracking_data["total_transforms"],
