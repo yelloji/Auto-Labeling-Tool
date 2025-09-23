@@ -339,7 +339,7 @@ const AnnotationCanvas = ({
     // Determine canvas size: expand when zoomed in to avoid clipping
     let canvasWidth = containerWidth;
     let canvasHeight = containerHeight;
-    if (zoomLevel >= 50) {
+    if (zoomLevel >= 25) {
       canvasWidth = Math.max(containerWidth, Math.ceil(consistentW) + 40);
       canvasHeight = Math.max(containerHeight, Math.ceil(consistentH) + 40);
     }
@@ -1237,26 +1237,33 @@ const AnnotationCanvas = ({
       )}
 
       {/* Polygon drawing instructions */}
-       {activeTool === 'polygon' && polygonPoints.length > 0 && (
-         <div style={{
-           position: 'absolute',
-           bottom: 20,
-           left: '50%',
-           transform: 'translateX(-50%)',
-           background: 'rgba(0, 0, 0, 0.8)',
-           color: 'white',
-           padding: '8px 16px',
-           borderRadius: '8px',
-           fontSize: '12px',
-           zIndex: 1000,
-           textAlign: 'center'
-         }}>
-           {polygonPoints.length >= 3 
-             ? 'Click first point, double-click, or press Enter to complete • Backspace to undo • Escape to cancel'
-             : `${polygonPoints.length} point${polygonPoints.length === 1 ? '' : 's'} added • Backspace to undo • Escape to cancel`
-           }
-         </div>
-       )}
+       {activeTool === 'polygon' && polygonPoints.length > 0 && (() => {
+         // Calculate average Y position of polygon points to determine message placement
+         const avgY = polygonPoints.reduce((sum, point) => sum + point.y, 0) / polygonPoints.length;
+         const canvasHeight = canvasRef.current?.height || 600;
+         const isDrawingInTopHalf = avgY < canvasHeight / 2;
+         
+         return (
+           <div style={{
+             position: 'absolute',
+             ...(isDrawingInTopHalf ? { bottom: 20 } : { top: 50 }),
+             left: '50%',
+             transform: 'translateX(-50%)',
+             background: 'rgba(0, 0, 0, 0.8)',
+             color: 'white',
+             padding: '8px 16px',
+             borderRadius: '8px',
+             fontSize: '12px',
+             zIndex: 1000,
+             textAlign: 'center'
+           }}>
+             {polygonPoints.length >= 3 
+               ? 'Click first point, double-click, or press Enter to complete • Backspace to undo • Escape to cancel'
+               : `${polygonPoints.length} point${polygonPoints.length === 1 ? '' : 's'} added • Backspace to undo • Escape to cancel`
+             }
+           </div>
+         );
+       })()}
 
       {/* Debug info */}
       <div style={{
