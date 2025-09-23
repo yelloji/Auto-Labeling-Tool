@@ -195,7 +195,6 @@ async def create_project(
         })
         
         try:
-            from core.config import settings
             from pathlib import Path
             
             # Use the PROJECTS_DIR from settings

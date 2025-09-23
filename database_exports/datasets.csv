@@ -2,6 +2,7 @@ ID,Name,Description,Project ID,Project Name,Created,Updated,Total Images,Labeled
 aa17acf7-8689-4b30-842d-712250a4df45,one,Images uploaded to gevis,1,gevis,2025-08-26 13:30:43,2025-08-26 13:30:53.730455,0,0,0,0
 0ad82748-e577-4e29-abd3-b99692f04cff,fh,Images uploaded to gevis,1,gevis,2025-08-26 13:33:25,2025-08-26 13:33:56.170573,0,0,0,0
 d5e70b23-ff2c-46e6-bf4e-fc5dd3f6033b,ko,Images uploaded to gevis,1,gevis,2025-08-26 14:08:14,2025-08-26 14:09:03.742729,0,0,0,0
-7c2978c8-d056-46da-8baa-8d37258021d4,animal,Images uploaded to gevis,1,gevis,2025-09-21 16:42:50,2025-09-21 17:51:33.033037,3,3,0,3
-cb17fee5-e822-4232-a2a7-b1c1a4264b71,Reject,Images uploaded to gevis,1,gevis,2025-09-22 07:07:14,2025-09-22 08:33:59.811402,1,1,0,7
+7c2978c8-d056-46da-8baa-8d37258021d4,animal,Images uploaded to gevis,1,gevis,2025-09-21 16:42:50,2025-09-23 09:19:41.774928,3,3,0,3
+cb17fee5-e822-4232-a2a7-b1c1a4264b71,Reject,Images uploaded to gevis,1,gevis,2025-09-22 07:07:14,2025-09-23 09:57:50.737209,1,1,0,7
 787372d5-6aad-4e7a-b80c-ecdc0ef19c49,car_dataset,Images uploaded to gevis-1,2,gevis-1,2025-09-08 10:11:48,2025-09-08 10:33:57.130548,5,5,0,5
+859a7b3d-1fa0-4bbf-8dbc-f0dee78994f7,Reject,Images uploaded to MASMAC-O-RING,3,MASMAC-O-RING,2025-09-23 10:32:21,2025-09-23 12:51:26.203828,9,3,6,22

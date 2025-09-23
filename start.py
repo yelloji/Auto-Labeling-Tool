@@ -316,25 +316,34 @@ class AutoLabelingToolLauncher:
             python_exe = venv_path / "bin" / "python"
             pip_exe = venv_path / "bin" / "pip"
         
-        # Use system python if venv doesn't work
+        # Use virtual environment if it exists, otherwise use system python
         if not python_exe.exists():
+            self.print_colored("⚠️ Virtual environment not found, using system Python", "yellow")
             python_exe = sys.executable
             pip_exe = "pip"
         else:
-            # Always use system python for now to avoid venv issues
-            python_exe = sys.executable
-            pip_exe = "pip"
+            self.print_colored(f"✅ Using virtual environment: {python_exe}", "green")
         
-        # Check if key dependencies are installed
+        # Check if key dependencies are installed IN THE TARGET ENVIRONMENT
+        self.print_colored("Checking backend dependencies in target environment...", "yellow")
         try:
-            import fastapi
-            import uvicorn
-            self.print_colored("✅ Backend dependencies already installed", "green")
-        except ImportError:
-            # Install dependencies
-            self.print_colored("Installing/updating backend dependencies...", "yellow")
-            subprocess.run([str(pip_exe), "install", "-r", "requirements.txt"], 
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # Check dependencies in the actual environment that will run the server
+            result = subprocess.run([str(python_exe), "-c", "import fastapi, uvicorn"], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                self.print_colored("✅ Backend dependencies already installed in target environment", "green")
+            else:
+                raise ImportError("Dependencies not found in target environment")
+        except (ImportError, subprocess.CalledProcessError, FileNotFoundError):
+            # Install dependencies in the target environment
+            self.print_colored("Installing backend dependencies in target environment...", "yellow")
+            result = subprocess.run([str(pip_exe), "install", "-r", "requirements.txt"], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                self.print_colored("✅ Backend dependencies installed successfully", "green")
+            else:
+                self.print_colored(f"❌ Failed to install dependencies: {result.stderr}", "red")
+                return False
         
         # Start backend
         self.print_colored("Starting FastAPI backend on port 12000...", "green")

@@ -8,7 +8,7 @@ const AnnotationCanvas = ({
   annotations = [],
   selectedAnnotation = null,
   activeTool = 'box',
-  zoomLevel = 100,
+  zoomLevel = 50,
   onShapeComplete,
   onAnnotationSelect,
   onAnnotationDelete,
@@ -330,20 +330,34 @@ const AnnotationCanvas = ({
     displayWidth *= (zoomLevel / 100);
     displayHeight *= (zoomLevel / 100);
 
-    // Center the image in the canvas
-    const x = (containerWidth - displayWidth) / 2;
-    const y = (containerHeight - displayHeight) / 2;
+    // Center the image in the canvas (use the same formula as redraw to avoid drift)
+    const baseW = (imageSize?.width && imageSize?.height) ? imageSize.width : img.width;
+    const baseH = (imageSize?.width && imageSize?.height) ? imageSize.height : img.height;
+    const consistentW = baseW * (zoomLevel / 100);
+    const consistentH = baseH * (zoomLevel / 100);
+    
+    // Determine canvas size: expand when zoomed in to avoid clipping
+    let canvasWidth = containerWidth;
+    let canvasHeight = containerHeight;
+    if (zoomLevel >= 50) {
+      canvasWidth = Math.max(containerWidth, Math.ceil(consistentW) + 40);
+      canvasHeight = Math.max(containerHeight, Math.ceil(consistentH) + 40);
+    }
+
+    // Center within the actual canvas size
+    const x = (canvasWidth - consistentW) / 2;
+    const y = (canvasHeight - consistentH) / 2;
 
     const newPosition = { x, y };
     setImagePosition(newPosition);
     if (onImagePositionChange) {
       onImagePositionChange(newPosition);
     }
-    setCanvasSize({ width: containerWidth, height: containerHeight });
+    setCanvasSize({ width: canvasWidth, height: canvasHeight });
 
-    // Set canvas size to match container
-    canvas.width = containerWidth;
-    canvas.height = containerHeight;
+    // Set canvas size to match actual canvas pixels
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
 
     logInfo('app.frontend.ui', 'canvas_resize_completed', 'Canvas resize operation completed', {
       imageId,
@@ -1140,7 +1154,7 @@ const AnnotationCanvas = ({
         width: '100%',
         height: '100%',
         position: 'relative',
-        overflow: 'hidden',
+        overflow: 'auto',
         backgroundColor: '#001529',
         display: 'flex',
         justifyContent: 'center',
@@ -1155,8 +1169,8 @@ const AnnotationCanvas = ({
         ref={canvasRef}
         style={{
           display: 'block',
-          width: '100%',
-          height: '100%',
+          width: canvasSize.width,
+          height: canvasSize.height,
           backgroundColor: '#001529',
           margin: '0 auto'
         }}
