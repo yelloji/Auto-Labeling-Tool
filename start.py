@@ -316,51 +316,55 @@ class AutoLabelingToolLauncher:
             python_exe = venv_path / "bin" / "python"
             pip_exe = venv_path / "bin" / "pip"
         
-        # Use virtual environment if it exists, otherwise use system python
+        # Use system python if venv doesn't work
         if not python_exe.exists():
-            self.print_colored("⚠️ Virtual environment not found, using system Python", "yellow")
             python_exe = sys.executable
             pip_exe = "pip"
         else:
-            self.print_colored(f"✅ Using virtual environment: {python_exe}", "green")
+            # Use the virtual environment we just created
+            # Leave python_exe and pip_exe as they are (pointing to the venv)
+            pass
         
-        # Check if key dependencies are installed IN THE TARGET ENVIRONMENT
-        self.print_colored("Checking backend dependencies in target environment...", "yellow")
+        # Check if key dependencies are installed
         try:
-            # Check dependencies in the actual environment that will run the server
-            result = subprocess.run([str(python_exe), "-c", "import fastapi, uvicorn"], 
-                                  capture_output=True, text=True)
-            if result.returncode == 0:
-                self.print_colored("✅ Backend dependencies already installed in target environment", "green")
-            else:
-                raise ImportError("Dependencies not found in target environment")
-        except (ImportError, subprocess.CalledProcessError, FileNotFoundError):
-            # Install dependencies in the target environment
-            self.print_colored("Installing backend dependencies in target environment...", "yellow")
-            result = subprocess.run([str(pip_exe), "install", "-r", "requirements.txt"], 
-                                  capture_output=True, text=True)
-            if result.returncode == 0:
-                self.print_colored("✅ Backend dependencies installed successfully", "green")
-            else:
-                self.print_colored(f"❌ Failed to install dependencies: {result.stderr}", "red")
-                return False
+            import fastapi
+            import uvicorn
+            self.print_colored("✅ Backend dependencies already installed", "green")
+        except ImportError:
+            # Install dependencies
+            self.print_colored("Installing/updating backend dependencies...", "yellow")
+            subprocess.run([str(pip_exe), "install", "-r", "requirements.txt"], 
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
-        # Start backend
+        # Start backend and save logs to file for easier debugging
         self.print_colored("Starting FastAPI backend on port 12000...", "green")
+        log_file = backend_dir / "backend_start.log"
+        env_backend = os.environ.copy()
+        if self.is_windows:
+            # Ensure UTF-8 encoding so emoji prints don't crash (cp1252 issue)
+            env_backend["PYTHONIOENCODING"] = "utf-8"
+            env_backend["PYTHONUTF8"] = "1"
         self.backend_process = subprocess.Popen(
             [str(python_exe), "main.py"],
             cwd=str(backend_dir),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stdout=open(log_file, "w"),
+            stderr=subprocess.STDOUT,
+            env=env_backend
         )
         
-        # Wait for backend to start
+        # Wait for backend to start (give it a bit more time on first run)
         self.print_colored("Waiting for backend to start...", "yellow")
-        for i in range(10):
+        for i in range(30):  # increased from 10 to 30 seconds
             time.sleep(1)
             if self.check_port(12000):
                 self.print_colored("✅ Backend started successfully on port 12000", "green")
                 return True
+            # Every 10 seconds remind user where to look if it fails
+            if (i + 1) % 10 == 0:
+                self.print_colored(f"⏳ Still waiting... ({i + 1}/30 seconds)", "yellow")
+                if not self.backend_process.poll() is None:
+                    self.print_colored("❌ Backend process exited early. Check backend_start.log for details.", "red")
+                    return False
         
         self.print_colored("❌ Backend failed to start", "red")
         return False
