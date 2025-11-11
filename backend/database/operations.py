@@ -10,11 +10,13 @@ from datetime import datetime
 import uuid
 import os
 from pathlib import Path
+import json
 
 from .models import (
     Project, Dataset, Image, Annotation, 
     ModelUsage, AutoLabelJob,
-    DatasetSplit, LabelAnalytics
+    DatasetSplit, LabelAnalytics,
+    AiModel
 )
 from core.config import settings
 from logging_system.professional_logger import get_professional_logger
@@ -1465,6 +1467,231 @@ class LabelAnalyticsOperations:
                 "analytics_id": analytics_id
             })
         return analytics
+
+
+class AiModelOperations:
+    """Operations to manage AiModel entries and sync from config."""
+
+    @staticmethod
+    def upsert_ai_model(
+        db: Session,
+        name: str,
+        model_type: str,
+        model_format: str,
+        file_path: str,
+        classes: Optional[List[str]] = None,
+        input_size_default: Optional[List[int]] = None,
+        training_input_size: Optional[List[int]] = None,
+    ) -> AiModel:
+        """Create or update an AiModel by name.
+
+        - Ensures unique name constraint is respected.
+        - Updates existing record if found; otherwise creates a new one.
+        """
+        try:
+            existing = db.query(AiModel).filter(AiModel.name == name).first()
+
+            nc = len(classes) if classes else 0
+            # Normalize sizes to [w, h]
+            def _to_size_list(sz: Optional[Any]) -> Optional[List[int]]:
+                if sz is None:
+                    return None
+                if isinstance(sz, (list, tuple)) and len(sz) >= 2:
+                    return [int(sz[0]), int(sz[1])]
+                if isinstance(sz, dict):
+                    # Support {"width":640,"height":640}
+                    w = sz.get("width") or sz.get("w")
+                    h = sz.get("height") or sz.get("h")
+                    if w and h:
+                        return [int(w), int(h)]
+                return None
+
+            input_size_default = _to_size_list(input_size_default) or [640, 640]
+            training_input_size = _to_size_list(training_input_size)
+
+            if existing:
+                existing.type = model_type
+                existing.format = model_format
+                existing.file_path = str(file_path)
+                existing.nc = nc
+                existing.classes = classes or []
+                existing.input_size_default = input_size_default
+                existing.training_input_size = training_input_size
+                existing.updated_at = datetime.utcnow()
+                db.commit()
+                db.refresh(existing)
+                logger.info("app.database", "AiModel updated", "ai_model_upsert_update", {
+                    "name": name,
+                    "id": existing.id,
+                    "format": existing.format,
+                    "type": existing.type,
+                    "nc": existing.nc
+                })
+                return existing
+            else:
+                ai = AiModel(
+                    name=name,
+                    type=model_type,
+                    format=model_format,
+                    file_path=str(file_path),
+                    nc=nc,
+                    classes=classes or [],
+                    input_size_default=input_size_default,
+                    training_input_size=training_input_size,
+                    created_at=datetime.utcnow(),
+                )
+                db.add(ai)
+                db.commit()
+                db.refresh(ai)
+                logger.info("app.database", "AiModel created", "ai_model_upsert_create", {
+                    "name": name,
+                    "id": ai.id,
+                    "format": ai.format,
+                    "type": ai.type,
+                    "nc": ai.nc
+                })
+                return ai
+        except Exception as e:
+            logger.error("errors.system", f"AiModel upsert failed: {str(e)}", "ai_model_upsert_error", {
+                "name": name,
+                "error": str(e),
+                "error_type": type(e).__name__
+            })
+            raise
+
+    @staticmethod
+    def sync_from_config(db: Session) -> Dict[str, Any]:
+        """Sync AiModel table from models/models_config.json.
+
+        Reads the JSON produced by ModelManager and ensures each model is reflected
+        in the ai_models table. Returns a summary dict with counts.
+        """
+        summary = {"created": 0, "updated": 0, "skipped": 0, "errors": 0}
+        try:
+            config_path = Path(settings.MODELS_DIR) / "models_config.json"
+            if not config_path.exists():
+                logger.warning("app.database", "models_config.json not found; skipping AiModel sync", "ai_model_sync_missing_config", {
+                    "path": str(config_path)
+                })
+                return summary
+
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+
+            # cfg is a dict of {model_id: model_data}
+            for model_id, data in cfg.items():
+                try:
+                    name = data.get("name") or model_id
+                    path = data.get("path") or ""
+                    classes = data.get("classes") or []
+                    input_size = data.get("input_size")
+                    model_type = str(data.get("type") or "object_detection")
+                    # Prefer explicit format, otherwise infer from file extension
+                    fmt = str(data.get("format") or "")
+                    if not fmt:
+                        ext = Path(path).suffix.lower()
+                        if ext == ".pt":
+                            fmt = "pytorch"
+                        elif ext == ".onnx":
+                            fmt = "onnx"
+                        elif ext in (".engine", ".trt"):
+                            fmt = "tensorrt"
+                        else:
+                            fmt = "pytorch"
+
+                    before = db.query(AiModel).filter(AiModel.name == name).first()
+                    AiModelOperations.upsert_ai_model(
+                        db=db,
+                        name=name,
+                        model_type=model_type,
+                        model_format=fmt,
+                        file_path=path,
+                        classes=classes,
+                        input_size_default=input_size,
+                        training_input_size=None,
+                    )
+                    after = db.query(AiModel).filter(AiModel.name == name).first()
+                    if before is None and after is not None:
+                        summary["created"] += 1
+                    else:
+                        summary["updated"] += 1
+                except Exception as ie:
+                    summary["errors"] += 1
+                    logger.error("errors.system", f"AiModel sync entry failed: {str(ie)}", "ai_model_sync_entry_error", {
+                        "model_id": model_id,
+                        "name": data.get("name"),
+                        "error": str(ie),
+                        "error_type": type(ie).__name__
+                    })
+
+            logger.info("app.database", "AiModel sync completed", "ai_model_sync_complete", summary)
+            return summary
+        except Exception as e:
+            logger.error("errors.system", f"AiModel sync failed: {str(e)}", "ai_model_sync_error", {
+                "error": str(e),
+                "error_type": type(e).__name__
+            })
+            raise
+
+    @staticmethod
+    def delete_ai_model_by_name(db: Session, name: str) -> bool:
+        """Delete an AiModel row by its unique name.
+
+        Returns True if a row was deleted, False if not found.
+        """
+        try:
+            model = db.query(AiModel).filter(AiModel.name == name).first()
+            if not model:
+                logger.warning("app.database", "AiModel not found for deletion by name", "ai_model_delete_not_found_by_name", {
+                    "name": name
+                })
+                return False
+
+            model_id = model.id
+            db.delete(model)
+            db.commit()
+            logger.info("app.database", "AiModel deleted by name", "ai_model_delete_by_name", {
+                "name": name,
+                "id": model_id
+            })
+            return True
+        except Exception as e:
+            logger.error("errors.system", f"AiModel deletion by name failed: {str(e)}", "ai_model_delete_by_name_error", {
+                "name": name,
+                "error": str(e),
+                "error_type": type(e).__name__
+            })
+            raise
+
+    @staticmethod
+    def delete_ai_model_by_id(db: Session, model_id: str) -> bool:
+        """Delete an AiModel row by its ID.
+
+        Returns True if a row was deleted, False if not found.
+        """
+        try:
+            model = db.query(AiModel).filter(AiModel.id == model_id).first()
+            if not model:
+                logger.warning("app.database", "AiModel not found for deletion by id", "ai_model_delete_not_found_by_id", {
+                    "id": model_id
+                })
+                return False
+
+            name = model.name
+            db.delete(model)
+            db.commit()
+            logger.info("app.database", "AiModel deleted by id", "ai_model_delete_by_id", {
+                "name": name,
+                "id": model_id
+            })
+            return True
+        except Exception as e:
+            logger.error("errors.system", f"AiModel deletion by id failed: {str(e)}", "ai_model_delete_by_id_error", {
+                "id": model_id,
+                "error": str(e),
+                "error_type": type(e).__name__
+            })
+            raise
 
 
 # Additional helper functions for image operations

@@ -43,14 +43,16 @@ async def init_db():
         logger.info("app.database", "Importing database models", "models_import_start", {})
         
         from .models import (
-            Project, Dataset, Image, Annotation, 
+            Project, Dataset, Image, Annotation,
             ModelUsage, AutoLabelJob,
             Label, DatasetSplit, LabelAnalytics,
-            Release, ImageTransformation, ImageVariant  # Include new models
+            Release, ImageTransformation, ImageVariant,
+            AiModel  # Include new AiModel table
         )
+        from .operations import AiModelOperations
         
         logger.info("app.database", "Database models imported successfully", "models_import_complete", {
-            "models_count": 12  # Total number of models imported
+            "models_count": 13  # Total number of models imported
         })
         
         # Create all tables
@@ -77,6 +79,21 @@ async def init_db():
             "projects_dir": settings.PROJECTS_DIR,
             "models_dir": settings.MODELS_DIR
         })
+        # Sync ai_models from models/models_config.json so defaults and custom models are recorded
+        try:
+            db = SessionLocal()
+            summary = AiModelOperations.sync_from_config(db)
+            logger.info("app.database", "AiModel sync after init_db completed", "ai_model_sync_post_init", summary)
+        except Exception as sync_err:
+            logger.error("errors.system", f"AiModel sync after init_db failed: {str(sync_err)}", "ai_model_sync_post_init_error", {
+                "error": str(sync_err),
+                "error_type": type(sync_err).__name__
+            })
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
         
         logger.info("app.database", "Database initialization completed successfully", "database_init_complete", {})
         

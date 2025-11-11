@@ -252,6 +252,28 @@ const ModelsModern = () => {
     const typeInfo = getModelTypeInfo(model.type);
     const statusInfo = getModelStatus(model);
     
+    const handleDownload = async (m) => {
+      try {
+        logUserClick('ModelsModern', 'download_model');
+        logInfo('app.frontend.interactions', 'Download model requested', 'download_model', { component: 'ModelsModern', modelId: m.id, modelName: m.name });
+        const hide = message.loading({ content: 'Preparing download...', key: `download-${m.id}` });
+        const { blob, filename } = await modelsAPI.downloadModel(m.id);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || `${m.name}.pt`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        hide();
+        message.success({ content: `Downloading \"${filename}\"`, key: `download-${m.id}` });
+      } catch (error) {
+        const info = handleAPIError(error, 'Failed to download model');
+        message.error(info.message || 'Failed to download model');
+      }
+    };
+    
     const moreMenu = (
       <Menu>
         <Menu.Item 
@@ -272,9 +294,7 @@ const ModelsModern = () => {
             key="download" 
             icon={<DownloadOutlined />}
             onClick={() => {
-              logUserClick('ModelsModern', 'download_model');
-              logInfo('app.frontend.interactions', 'Download model requested', 'download_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
-              message.info('Download feature coming soon');
+              handleDownload(model);
             }}
           >
             Download Model
@@ -555,7 +575,7 @@ const ModelsModern = () => {
           <Card>
             <Statistic 
               title="Custom Models" 
-              value={models.filter(m => m.type === 'custom').length} 
+              value={models.filter(m => m.is_custom).length} 
               prefix={<SettingOutlined style={{ color: '#722ed1' }} />}
             />
           </Card>

@@ -235,6 +235,43 @@ class ModelUsage(Base):
         })
         return f"<ModelUsage(model_id='{self.model_id}', inferences={self.total_inferences})>"
 
+class AiModel(Base):
+    """Uploaded AI models metadata
+    Minimal fields required for core model management and autolabeling.
+    """
+    __tablename__ = "ai_models"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False)
+    # Model task type (object_detection, instance_segmentation, semantic_segmentation, classification, pose_estimation)
+    type = Column(String(50), nullable=False, default="object_detection")
+    # Storage format (pytorch, onnx, tensorrt)
+    format = Column(String(20), nullable=False)
+    # Absolute or app-relative path to model file
+    file_path = Column(String(500), nullable=False)
+
+    # Classes and count
+    nc = Column(Integer, nullable=False, default=0)
+    classes = Column(JSON, nullable=True)  # List[str], index defines class_id 0..nc-1
+
+    # Input sizes
+    training_input_size = Column(JSON, nullable=True)  # [w, h] if known
+    input_size_default = Column(JSON, nullable=False, default=[640, 640])  # [w, h]
+
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        sa.Index("ix_ai_models_name", "name", unique=True),
+    )
+
+    def __repr__(self):
+        return (
+            f"<AiModel(id='{self.id}', name='{self.name}', format='{self.format}', "
+            f"type='{self.type}', nc={self.nc})>"
+        )
+
 class Release(Base):
     __tablename__ = "releases"
 

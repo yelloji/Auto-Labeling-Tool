@@ -176,6 +176,8 @@ export const modelsAPI = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      // Large model files and backend processing can exceed 30s
+      timeout: 120000,
     });
     return response.data;
   },
@@ -184,6 +186,23 @@ export const modelsAPI = {
   deleteModel: async (modelId) => {
     const response = await api.delete(`/api/v1/models/${modelId}`);
     return response.data;
+  },
+
+  // Download model file
+  downloadModel: async (modelId) => {
+    const response = await api.get(`/api/v1/models/${modelId}/download`, {
+      responseType: 'blob'
+    });
+    // Try to extract filename from Content-Disposition
+    const contentDisposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+    let filename = `model_${modelId}`;
+    if (contentDisposition) {
+      const match = /filename="?([^";]+)"?/i.exec(contentDisposition);
+      if (match && match[1]) {
+        filename = match[1];
+      }
+    }
+    return { blob: response.data, filename };
   },
 
   // Get supported model types

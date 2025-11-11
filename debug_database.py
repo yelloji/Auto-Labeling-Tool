@@ -734,6 +734,104 @@ class DatabaseDebugger:
                 else:
                     print(f"      ❌ Label '{label['name']}' not used in any annotations")
 
+    def get_ai_models_table(self):
+        """Get detailed information about AI models (ai_models table)"""
+        cursor = self.conn.cursor()
+
+        self.print_header("AI MODELS TABLE")
+
+        # Check if ai_models table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_models'")
+        if not cursor.fetchone():
+            print("❌ ai_models table does not exist!")
+            print("ℹ️  If you just added the model schema, start the backend or run init_database.py to create tables.")
+            return
+
+        # Print table schema
+        print("\n📐 Schema:")
+        cursor.execute("PRAGMA table_info(ai_models);")
+        columns = cursor.fetchall()
+        for col in columns:
+            col_info = f"   - {col[1]} ({col[2]})"
+            if col[3]:  # NOT NULL
+                col_info += " NOT NULL"
+            if col[4] is not None:  # Default value
+                col_info += f" DEFAULT {col[4]}"
+            if col[5]:  # Primary key
+                col_info += " PRIMARY KEY"
+            print(col_info)
+
+        # Print indexes
+        print("\n🔎 Indexes:")
+        cursor.execute("PRAGMA index_list('ai_models');")
+        index_list = cursor.fetchall()
+        if index_list:
+            for idx in index_list:
+                # idx columns: seq, name, unique, origin, partial (SQLite versions may vary)
+                idx_name = idx[1]
+                is_unique = bool(idx[2]) if len(idx) > 2 else False
+                print(f"   - {idx_name} {'(UNIQUE)' if is_unique else ''}")
+                try:
+                    cursor.execute(f"PRAGMA index_info('{idx_name}');")
+                    idx_cols = cursor.fetchall()
+                    cols = ", ".join([c[2] for c in idx_cols]) if idx_cols else "(unknown columns)"
+                    print(f"     Columns: {cols}")
+                except Exception as e:
+                    print(f"     ⚠️  Could not read index columns: {e}")
+        else:
+            print("   (no indexes)")
+
+        # Row count
+        cursor.execute("SELECT COUNT(*) FROM ai_models;")
+        count = cursor.fetchone()[0]
+        print(f"\n📊 Total rows: {count}")
+
+        if count == 0:
+            print("ℹ️  No AI models found in the database yet.")
+            return
+
+        # Fetch and display entries
+        cursor.execute("""
+            SELECT id, name, type, format, file_path, nc, classes, 
+                   training_input_size, input_size_default, created_at, updated_at
+            FROM ai_models
+            ORDER BY created_at
+        """)
+        rows = cursor.fetchall()
+
+        for row in rows:
+            print(f"\n🤖 MODEL: {row['name']} (ID: {row['id']})")
+            print(f"   🔧 Type: {row['type']}")
+            print(f"   📦 Format: {row['format']}")
+            print(f"   💾 File Path: {row['file_path']} {'✅' if os.path.exists(row['file_path']) else '❌'}")
+            print(f"   🎯 Class Count (nc): {row['nc']}")
+
+            # Parse classes JSON
+            classes_raw = row['classes']
+            classes_list = None
+            try:
+                if isinstance(classes_raw, str):
+                    classes_list = json.loads(classes_raw)
+                else:
+                    classes_list = classes_raw
+            except (json.JSONDecodeError, TypeError) as e:
+                print(f"   🏷️  Classes: (could not parse) {classes_raw} — {e}")
+
+            if isinstance(classes_list, list):
+                print(f"   🏷️  Classes ({len(classes_list)}): {', '.join(map(str, classes_list))}")
+            else:
+                print(f"   🏷️  Classes: {classes_raw}")
+
+            # Input sizes
+            tis = row['training_input_size']
+            ids = row['input_size_default']
+            print(f"   📏 Training Input Size: {tis if tis is not None else 'N/A'}")
+            print(f"   📏 Input Size Default: {ids if ids is not None else 'N/A'}")
+
+            # Timestamps
+            print(f"   📅 Created: {row['created_at']}")
+            print(f"   🔄 Updated: {row['updated_at'] if 'updated_at' in row.keys() else 'N/A'}")
+
     def get_image_transformations_table(self):
         """Get detailed information about image transformations"""
         cursor = self.conn.cursor()
@@ -1141,6 +1239,7 @@ class DatabaseDebugger:
             
             self.get_database_statistics()
             self.get_table_info()
+            self.get_ai_models_table()  # Add AI models table analysis
             self.get_projects_overview()
             self.get_datasets_detailed()
             self.get_labels_table()  # Add labels table analysis
@@ -1170,6 +1269,7 @@ def main():
     parser = argparse.ArgumentParser(description='Database debugging tool')
     parser.add_argument('--db', type=str, default='database.db', help='Path to database file')
     parser.add_argument('--labels', action='store_true', help='Show only labels table data')
+    parser.add_argument('--ai-models', action='store_true', help='Show only ai_models table data')
     args = parser.parse_args()
     
     db_path = args.db
@@ -1190,6 +1290,11 @@ def main():
         # Only show labels table
         if debugger.connect():
             debugger.get_labels_table()
+            debugger.close()
+    elif args.ai_models:
+        # Only show ai_models table
+        if debugger.connect():
+            debugger.get_ai_models_table()
             debugger.close()
     else:
         # Run full debug

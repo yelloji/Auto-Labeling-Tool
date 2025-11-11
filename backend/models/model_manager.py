@@ -261,19 +261,22 @@ class ModelManager:
         
         # Try to load model and extract information
         try:
+            # Default input size
+            input_size = (640, 640)
             if model_format == ModelFormat.PYTORCH:
+                # Only load .pt at import time. Avoid loading ONNX/TensorRT to prevent heavy deps and timeouts.
                 model = YOLO(str(custom_model_path))
-                
                 # Auto-detect classes if not provided
                 if classes is None:
-                    classes = list(model.names.values()) if hasattr(model, 'names') else []
-                
-                # Get input size
-                input_size = (640, 640)  # Default YOLO input size
+                    classes = list(getattr(model, 'names', {}).values()) if hasattr(model, 'names') else []
+                # For .pt, attempt to read imgsz from model yaml
                 if hasattr(model.model, 'yaml') and 'imgsz' in model.model.yaml:
                     size = model.model.yaml['imgsz']
                     input_size = (size, size) if isinstance(size, int) else tuple(size)
-                
+            else:
+                # ONNX/TensorRT: skip loading at import. Use provided classes or default to empty.
+                if classes is None:
+                    classes = []
         except Exception as e:
             print(f"Warning: Could not load model for inspection: {e}")
             if classes is None:
@@ -446,7 +449,8 @@ class ModelManager:
         model_id: str,
         confidence_threshold: Optional[float] = None,
         iou_threshold: Optional[float] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        input_size: Optional[tuple] = None
     ) -> bool:
         """Update model settings"""
         if model_id not in self.models_info:
@@ -460,6 +464,18 @@ class ModelManager:
             model_info.iou_threshold = iou_threshold
         if description is not None:
             model_info.description = description
+        if input_size is not None:
+            # Expect (width, height)
+            try:
+                w, h = int(input_size[0]), int(input_size[1])
+                model_info.input_size = (w, h)
+            except Exception:
+                # Fallback: if single int provided, assume square
+                try:
+                    s = int(input_size)
+                    model_info.input_size = (s, s)
+                except Exception:
+                    pass
         
         self._save_models_config()
         return True

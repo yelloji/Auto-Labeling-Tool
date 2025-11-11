@@ -9,10 +9,13 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
 from models.model_manager import model_manager, ModelType, ModelFormat
+from sqlalchemy.orm import Session
+from database.database import get_db
+from database.operations import AiModelOperations
 from core.config import settings
 from logging_system.professional_logger import get_professional_logger
 
@@ -37,6 +40,7 @@ class ModelUpdateRequest(BaseModel):
     confidence_threshold: Optional[float] = None
     iou_threshold: Optional[float] = None
     description: Optional[str] = None
+    input_size: Optional[List[int]] = None
 
 
 class PredictionRequest(BaseModel):
@@ -44,6 +48,7 @@ class PredictionRequest(BaseModel):
     model_id: str
     confidence: Optional[float] = None
     iou_threshold: Optional[float] = None
+    imgsz: Optional[int] = None  # Optional inference image size override
 
 
 @router.get("/", response_model=List[Dict[str, Any]])
@@ -156,7 +161,8 @@ async def import_custom_model(
     classes: Optional[str] = Form(None),  # JSON string of class names
     description: str = Form(""),
     confidence_threshold: float = Form(0.5),
-    iou_threshold: float = Form(0.45)
+    iou_threshold: float = Form(0.45),
+    db: Session = Depends(get_db)
 ):
     """
     Import a custom YOLO model
@@ -256,6 +262,38 @@ async def import_custom_model(
                 confidence_threshold=confidence_threshold,
                 iou_threshold=iou_threshold
             )
+            # Immediately upsert into ai_models so the DB reflects the new model without requiring restart
+            try:
+                model_info = model_manager.models_info.get(model_id)
+                if model_info:
+                    AiModelOperations.upsert_ai_model(
+                        db=db,
+                        name=model_info.name,
+                        model_type=str(model_info.type),
+                        model_format=str(model_info.format),
+                        file_path=model_info.path,
+                        classes=model_info.classes,
+                        input_size_default=list(model_info.input_size) if isinstance(model_info.input_size, tuple) else model_info.input_size,
+                        training_input_size=None,
+                    )
+                    logger.info("operations.operations", "AiModel upserted to DB after import", "model_import_db_upsert_success", {
+                        "model_id": model_id,
+                        "model_name": model_info.name,
+                        "format": str(model_info.format),
+                        "type": str(model_info.type)
+                    })
+                else:
+                    logger.warning("operations.operations", "Model info not found right after import; skipping DB upsert", "model_import_db_upsert_skip", {
+                        "model_id": model_id,
+                        "model_name": name
+                    })
+            except Exception as db_err:
+                logger.error("errors.system", f"Failed to upsert AiModel after import: {str(db_err)}", "model_import_db_upsert_error", {
+                    "model_id": model_id,
+                    "model_name": name,
+                    "error": str(db_err),
+                    "error_type": type(db_err).__name__
+                })
             
             logger.info("operations.operations", f"Model imported successfully", "model_import_success", {
                 "model_id": model_id,
@@ -347,7 +385,15 @@ async def predict_with_model(
                 model_id=request.model_id,
                 image=tmp_file_path,
                 confidence=request.confidence,
-                iou_threshold=request.iou_threshold
+                iou_threshold=request.iou_threshold,
+                **({"imgsz": request.imgsz if request.imgsz is not None else (
+                    model_manager.models_info[request.model_id].input_size[0]
+                    if (request.model_id in model_manager.models_info and 
+                        getattr(model_manager.models_info[request.model_id], "input_size", None)) else None
+                )} if (request.imgsz is not None or (
+                    request.model_id in model_manager.models_info and 
+                    getattr(model_manager.models_info[request.model_id], "input_size", None) is not None
+                )) else {})
             )
             
             logger.info("operations.operations", f"Model prediction completed successfully", "prediction_success", {
@@ -450,7 +496,8 @@ async def update_model_settings(model_id: str, request: ModelUpdateRequest):
         "update_data": {
             "confidence_threshold": request.confidence_threshold,
             "iou_threshold": request.iou_threshold,
-            "description": request.description
+            "description": request.description,
+            "input_size": request.input_size
         },
         "endpoint": "/models/{model_id}"
     })
@@ -470,14 +517,16 @@ async def update_model_settings(model_id: str, request: ModelUpdateRequest):
             "model_id": model_id,
             "confidence_threshold": request.confidence_threshold,
             "iou_threshold": request.iou_threshold,
-            "description": request.description
+            "description": request.description,
+            "input_size": request.input_size
         })
         
         success = model_manager.update_model_settings(
             model_id=model_id,
             confidence_threshold=request.confidence_threshold,
             iou_threshold=request.iou_threshold,
-            description=request.description
+            description=request.description,
+            input_size=tuple(request.input_size) if request.input_size else None
         )
         
         if not success:
@@ -486,7 +535,8 @@ async def update_model_settings(model_id: str, request: ModelUpdateRequest):
                 "update_data": {
                     "confidence_threshold": request.confidence_threshold,
                     "iou_threshold": request.iou_threshold,
-                    "description": request.description
+                    "description": request.description,
+                    "input_size": request.input_size
                 }
             })
             raise HTTPException(status_code=500, detail="Failed to update model settings")
@@ -495,7 +545,8 @@ async def update_model_settings(model_id: str, request: ModelUpdateRequest):
             "model_id": model_id,
             "confidence_threshold": request.confidence_threshold,
             "iou_threshold": request.iou_threshold,
-            "description": request.description
+            "description": request.description,
+            "input_size": request.input_size
         })
         
         return {"success": True, "message": "Model settings updated successfully"}
@@ -518,7 +569,7 @@ async def update_model_settings(model_id: str, request: ModelUpdateRequest):
 
 
 @router.delete("/{model_id}")
-async def delete_model(model_id: str):
+async def delete_model(model_id: str, db: Session = Depends(get_db)):
     """Delete a custom model (pre-trained models cannot be deleted)"""
     logger.info("app.backend", f"Starting delete model operation", "delete_model_start", {
         "model_id": model_id,
@@ -536,10 +587,15 @@ async def delete_model(model_id: str):
             })
             raise HTTPException(status_code=404, detail="Model not found")
         
-        logger.info("operations.operations", f"Deleting model", "model_deletion", {
-            "model_id": model_id
+        # Capture model name before deletion so we can remove the DB row reliably
+        model_info = model_manager.models_info[model_id]
+        model_name = model_info.name
+
+        logger.info("operations.operations", f"Deleting model and corresponding DB record", "model_deletion", {
+            "model_id": model_id,
+            "model_name": model_name
         })
-        
+
         success = model_manager.delete_model(model_id)
         
         if not success:
@@ -548,8 +604,26 @@ async def delete_model(model_id: str):
             })
             raise HTTPException(status_code=500, detail="Failed to delete model")
         
-        logger.info("operations.operations", f"Model deleted successfully", "delete_model_success", {
-            "model_id": model_id
+        # Also remove AiModel record from database if it exists
+        try:
+            db_deleted = AiModelOperations.delete_ai_model_by_name(db, model_name)
+            logger.info("operations.operations", f"AiModel DB record deletion attempted", "delete_model_db_attempt", {
+                "model_id": model_id,
+                "model_name": model_name,
+                "db_deleted": db_deleted
+            })
+        except Exception as db_err:
+            # Log but don't fail the API if DB deletion encounters an error
+            logger.error("errors.system", f"AiModel DB deletion error: {str(db_err)}", "delete_model_db_error", {
+                "model_id": model_id,
+                "model_name": model_name,
+                "error": str(db_err),
+                "error_type": type(db_err).__name__
+            })
+
+        logger.info("operations.operations", f"Model deleted successfully (file/config + DB)", "delete_model_success", {
+            "model_id": model_id,
+            "model_name": model_name
         })
         
         return {"success": True, "message": "Model deleted successfully"}
@@ -570,3 +644,68 @@ async def delete_model(model_id: str):
             "error_type": type(e).__name__
         })
         raise HTTPException(status_code=500, detail=f"Failed to delete model: {str(e)}")
+
+
+@router.get("/{model_id}/download")
+async def download_model(model_id: str):
+    """Download the model file for the given model_id"""
+    logger.info("app.backend", f"Starting model download operation", "download_model_start", {
+        "model_id": model_id,
+        "endpoint": "/models/{model_id}/download"
+    })
+
+    try:
+        # Validate model existence
+        logger.debug("operations.operations", f"Checking if model exists for download", "model_existence_check", {
+            "model_id": model_id
+        })
+
+        if model_id not in model_manager.models_info:
+            logger.warning("errors.validation", f"Model not found for download", "model_not_found", {
+                "model_id": model_id
+            })
+            raise HTTPException(status_code=404, detail="Model not found")
+
+        model_info = model_manager.models_info[model_id]
+        file_path = Path(model_info.path)
+
+        # Ensure file exists
+        logger.debug("operations.operations", f"Validating model file path", "model_file_path_validation", {
+            "model_id": model_id,
+            "file_path": str(file_path)
+        })
+
+        if not file_path.exists():
+            logger.error("errors.system", f"Model file not found for download", "model_file_missing", {
+                "model_id": model_id,
+                "file_path": str(file_path)
+            })
+            raise HTTPException(status_code=404, detail="Model file not found")
+
+        # Build a friendly filename
+        safe_name = model_info.name.replace(" ", "_")
+        filename = f"{safe_name}{file_path.suffix}"
+
+        logger.info("operations.operations", f"Model file ready for download", "download_model_ready", {
+            "model_id": model_id,
+            "filename": filename,
+            "file_size": getattr(model_info, "file_size", 0)
+        })
+
+        # Stream the file to client
+        return FileResponse(
+            path=str(file_path),
+            filename=filename,
+            media_type="application/octet-stream"
+        )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error("errors.system", f"Model download operation failed", "download_model_failure", {
+            "model_id": model_id,
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
+        raise HTTPException(status_code=500, detail=f"Failed to download model: {str(e)}")
