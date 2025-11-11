@@ -26,18 +26,17 @@ import {
   Divider
 } from 'antd';
 import { logInfo, logError, logUserClick } from '../utils/professional_logger';
-import {
-  UploadOutlined,
-  RobotOutlined,
-  DeleteOutlined,
-  EyeOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  CheckCircleOutlined,
-  DownloadOutlined,
-  MoreOutlined,
-  ExperimentOutlined,
-  ThunderboltOutlined,
+  import { 
+    UploadOutlined,
+    RobotOutlined,
+    DeleteOutlined,
+    EyeOutlined,
+    ReloadOutlined,
+    CheckCircleOutlined,
+    DownloadOutlined,
+    MoreOutlined,
+    ExperimentOutlined,
+    ThunderboltOutlined,
   CloudUploadOutlined,
   SettingOutlined,
   BarChartOutlined,
@@ -89,7 +88,12 @@ const ModelsModern = () => {
     }
     
     if (filterType !== 'all') {
-      filtered = filtered.filter(model => model.type === filterType);
+      if (filterType === 'custom') {
+        // Show models that were imported by user, regardless of task type
+        filtered = filtered.filter(model => model.is_custom);
+      } else {
+        filtered = filtered.filter(model => model.type === filterType);
+      }
     }
     
     setFilteredModels(filtered);
@@ -138,9 +142,26 @@ const ModelsModern = () => {
     
     try {
       logUserClick('ModelsModern', 'upload_model');
-      logInfo('app.frontend.interactions', 'Uploading AI model', 'upload_model', { component: 'ModelsModern', modelName: values.name, modelType: values.type });
-      
-      await modelsAPI.uploadModel(values);
+      logInfo('app.frontend.interactions', 'Preparing model upload payload', 'upload_model_prepare', { component: 'ModelsModern', modelName: values.name, modelType: values.type });
+
+      // Validate form values and build multipart/form-data
+      const fileItem = Array.isArray(values.file) ? values.file[0] : null;
+      const rawFile = fileItem?.originFileObj || null;
+      if (!rawFile) {
+        message.error('Please select a model file (.pt, .onnx, or .engine)');
+        throw new Error('No file selected');
+      }
+
+      const formData = new FormData();
+      formData.append('file', rawFile);
+      formData.append('name', values.name);
+      formData.append('type', values.type);
+      if (values.description) formData.append('description', values.description);
+      // Optional: classes as JSON string if you ever support it
+      // if (values.classes) formData.append('classes', JSON.stringify(values.classes));
+
+      // Use the correct API function for multipart import
+      await modelsAPI.importModel(formData);
       
       logInfo('app.frontend.interactions', 'AI model uploaded successfully', 'upload_model', { component: 'ModelsModern', modelName: values.name, modelType: values.type });
       logInfo('app.frontend.ui', 'Upload modal closed', 'modal_close', { component: 'ModelsModern', modal: 'upload_model' });
@@ -182,13 +203,7 @@ const ModelsModern = () => {
     const typeInfo = {
       // Primary types we use in this app
       'object_detection': { color: 'blue', label: 'Object Detection', icon: <BarChartOutlined /> },
-      'instance_segmentation': { color: 'purple', label: 'Instance Segmentation', icon: <ExperimentOutlined /> },
-      'semantic_segmentation': { color: 'magenta', label: 'Semantic Segmentation', icon: <ExperimentOutlined /> },
-      'yolov8n': { color: 'blue', label: 'YOLOv8 Nano', icon: <ThunderboltOutlined /> },
-      'yolov8s': { color: 'green', label: 'YOLOv8 Small', icon: <RobotOutlined /> },
-      'yolov8m': { color: 'orange', label: 'YOLOv8 Medium', icon: <ExperimentOutlined /> },
-      'yolov8l': { color: 'red', label: 'YOLOv8 Large', icon: <BarChartOutlined /> },
-      'yolov8x': { color: 'purple', label: 'YOLOv8 XLarge', icon: <StarOutlined /> },
+      'instance_segmentation': { color: 'purple', label: 'Segmentation', icon: <ExperimentOutlined /> },
       'custom': { color: 'cyan', label: 'Custom Model', icon: <SettingOutlined /> }
     };
     return typeInfo[type] || { color: 'default', label: type, icon: <RobotOutlined /> };
@@ -252,48 +267,43 @@ const ModelsModern = () => {
         >
           View Details
         </Menu.Item>
-        <Menu.Item 
-          key="download" 
-          icon={<DownloadOutlined />}
-          onClick={() => {
-            logUserClick('ModelsModern', 'download_model');
-            logInfo('app.frontend.interactions', 'Download model requested', 'download_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
-            message.info('Download feature coming soon');
-          }}
-        >
-          Download Model
-        </Menu.Item>
-        <Menu.Item 
-          key="duplicate" 
-          icon={<PlusOutlined />}
-          onClick={() => {
-            logUserClick('ModelsModern', 'duplicate_model');
-            logInfo('app.frontend.interactions', 'Duplicate model requested', 'duplicate_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
-            message.info('Duplicate feature coming soon');
-          }}
-        >
-          Duplicate Model
-        </Menu.Item>
-        <Menu.Divider />
-        <Menu.Item 
-          key="delete" 
-          icon={<DeleteOutlined />}
-          danger
-          onClick={() => {
-            logUserClick('ModelsModern', 'confirm_delete_model');
-            logInfo('app.frontend.interactions', 'Delete model confirmation dialog opened', 'confirm_delete', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
-            Modal.confirm({
-              title: 'Delete Model',
-              content: `Are you sure you want to delete "${model.name}"? This action cannot be undone.`,
-              okText: 'Delete',
-              okType: 'danger',
-              cancelText: 'Cancel',
-              onOk: () => handleDelete(model.id),
-            });
-          }}
-        >
-          Delete Model
-        </Menu.Item>
+        {model.is_custom && (
+          <Menu.Item 
+            key="download" 
+            icon={<DownloadOutlined />}
+            onClick={() => {
+              logUserClick('ModelsModern', 'download_model');
+              logInfo('app.frontend.interactions', 'Download model requested', 'download_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
+              message.info('Download feature coming soon');
+            }}
+          >
+            Download Model
+          </Menu.Item>
+        )}
+        {model.is_custom && (
+          <>
+            <Menu.Divider />
+            <Menu.Item 
+              key="delete" 
+              icon={<DeleteOutlined />}
+              danger
+              onClick={() => {
+                logUserClick('ModelsModern', 'confirm_delete_model');
+                logInfo('app.frontend.interactions', 'Delete model confirmation dialog opened', 'confirm_delete', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
+                Modal.confirm({
+                  title: 'Delete Model',
+                  content: `Are you sure you want to delete "${model.name}"? This action cannot be undone.`,
+                  okText: 'Delete',
+                  okType: 'danger',
+                  cancelText: 'Cancel',
+                  onOk: () => handleDelete(model.id),
+                });
+              }}
+            >
+              Delete Model
+            </Menu.Item>
+          </>
+        )}
       </Menu>
     );
 
@@ -330,6 +340,20 @@ const ModelsModern = () => {
                   {typeInfo.label}
                 </span>
               </Tag>
+              {model.is_custom && (
+                <Tag 
+                  color="cyan"
+                  style={{ 
+                    marginBottom: '8px',
+                    marginLeft: '8px',
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    border: 'none'
+                  }}
+                >
+                  Custom
+                </Tag>
+              )}
               
               {/* Model Name */}
               <Title 
@@ -521,7 +545,7 @@ const ModelsModern = () => {
         <Col xs={24} sm={6}>
           <Card>
             <Statistic 
-              title="Training" 
+              title="Training (All Projects)" 
               value={models.filter(m => m.is_training).length} 
               prefix={<ExperimentOutlined style={{ color: '#faad14' }} />}
             />
@@ -563,13 +587,11 @@ const ModelsModern = () => {
               logInfo('app.frontend.ui', 'Model filter type changed', 'filter_change', { component: 'ModelsModern', filterType: value });
               setFilterType(value);
             }}
-            style={{ width: 150 }}
+            style={{ width: 220 }}
           >
             <Option value="all">All Types</Option>
-            <Option value="yolov8n">YOLOv8 Nano</Option>
-            <Option value="yolov8s">YOLOv8 Small</Option>
-            <Option value="yolov8m">YOLOv8 Medium</Option>
-            <Option value="yolov8l">YOLOv8 Large</Option>
+            <Option value="object_detection">Object Detection</Option>
+            <Option value="instance_segmentation">Segmentation</Option>
             <Option value="custom">Custom</Option>
           </Select>
 
@@ -655,15 +677,29 @@ const ModelsModern = () => {
             rules={[{ required: true, message: 'Please select model type' }]}
           >
             <Select placeholder="Select model type">
-              {(supportedTypes || []).map(type => (
-                <Option key={type} value={type}>{type}</Option>
-              ))}
+              {(() => {
+                // Only show the two supported tasks for import; backend expects ModelType, not 'custom'
+                const allowed = ['object_detection', 'instance_segmentation'];
+                const filtered = (supportedTypes || []).filter(t => allowed.includes(t));
+                const typesToShow = filtered.length > 0 ? filtered : allowed;
+                return typesToShow.map(type => (
+                  <Option key={type} value={type}>
+                    {getModelTypeInfo(type).label}
+                  </Option>
+                ));
+              })()}
             </Select>
           </Form.Item>
 
           <Form.Item
             name="file"
             label="Model File"
+            valuePropName="fileList"
+            getValueFromEvent={(e) => {
+              // Normalize Upload event to fileList for Form
+              if (Array.isArray(e)) return e;
+              return e && e.fileList ? e.fileList.slice(-1) : [];
+            }}
             rules={[{ required: true, message: 'Please upload model file' }]}
           >
             <Dragger
@@ -671,7 +707,7 @@ const ModelsModern = () => {
               multiple={false}
               beforeUpload={(file) => {
                 // Validate file type
-                const validTypes = ['.pt', '.onnx', '.pb'];
+                const validTypes = ['.pt', '.onnx', '.engine'];
                 const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
                 if (!validTypes.includes(fileExtension)) {
                   logError('app.frontend.validation', 'Invalid model file type uploaded', null, { 
@@ -680,12 +716,12 @@ const ModelsModern = () => {
                     fileType: fileExtension,
                     validTypes 
                   });
-                  message.error('Invalid file type. Please upload .pt, .onnx, or .pb files only.');
+                  message.error('Invalid file type. Please upload .pt, .onnx, or .engine files only.');
                   return false;
                 }
                 
-                // Validate file size (max 500MB)
-                const maxSize = 500 * 1024 * 1024; // 500MB
+                // Validate file size (max 100MB to match backend)
+                const maxSize = 100 * 1024 * 1024; // 100MB
                 if (file.size > maxSize) {
                   logError('app.frontend.validation', 'Model file too large', null, { 
                     component: 'ModelsModern', 
@@ -693,20 +729,20 @@ const ModelsModern = () => {
                     fileSize: file.size,
                     maxSize 
                   });
-                  message.error('File too large. Maximum size is 500MB.');
+                  message.error('File too large. Maximum size is 100MB.');
                   return false;
                 }
                 
-                return false; // Prevent auto upload
+                return false; // Prevent auto upload; file captured in Form via fileList
               }}
-              accept=".pt,.onnx,.pb"
+              accept=".pt,.onnx,.engine"
             >
               <p className="ant-upload-drag-icon">
                 <UploadOutlined />
               </p>
               <p className="ant-upload-text">Click or drag model file to upload</p>
               <p className="ant-upload-hint">
-                Support .pt, .onnx, .pb formats
+                Support .pt, .onnx, .engine formats
               </p>
             </Dragger>
           </Form.Item>

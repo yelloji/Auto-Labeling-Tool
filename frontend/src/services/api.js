@@ -100,7 +100,21 @@ api.interceptors.response.use(
 
 // Helper function for handling API errors
 export const handleAPIError = (error, defaultMessage = 'API request failed') => {
-  const errorMessage = error.response?.data?.detail || error.message || defaultMessage;
+  let errorMessage = error.response?.data?.detail || error.message || defaultMessage;
+  // Normalize FastAPI 422 validation errors (detail can be an array of error objects)
+  if (Array.isArray(error.response?.data?.detail)) {
+    const details = error.response.data.detail;
+    errorMessage = details
+      .map((d) => {
+        const loc = Array.isArray(d.loc) ? d.loc.join('.') : d.loc;
+        const msg = d.msg || d.message || JSON.stringify(d);
+        return loc ? `${loc}: ${msg}` : msg;
+      })
+      .join('; ');
+  } else if (typeof errorMessage === 'object' && errorMessage !== null) {
+    // If detail is an object, stringify safely
+    try { errorMessage = JSON.stringify(errorMessage); } catch { errorMessage = defaultMessage; }
+  }
   
   // Log API error using professional logger
   logError('app.frontend.validation', 'api_error_handled', `API Error: ${defaultMessage}`, error, {
