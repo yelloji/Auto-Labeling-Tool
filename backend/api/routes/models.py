@@ -162,6 +162,7 @@ async def import_custom_model(
     description: str = Form(""),
     confidence_threshold: float = Form(0.5),
     iou_threshold: float = Form(0.45),
+    training_input_size: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -233,6 +234,36 @@ async def import_custom_model(
                     "class_count": len(class_list) if class_list else 0
                 })
         
+        # Parse training input size if provided
+        logger.debug("operations.operations", f"Parsing training input size", "training_input_size_parsing", {
+            "training_input_size": training_input_size
+        })
+        training_size_list = None
+        if training_input_size:
+            try:
+                import json
+                parsed = json.loads(training_input_size)
+                if isinstance(parsed, dict):
+                    w = parsed.get("width") or parsed.get("w")
+                    h = parsed.get("height") or parsed.get("h")
+                    if w is not None and h is not None:
+                        training_size_list = [int(w), int(h)]
+                elif isinstance(parsed, (list, tuple)) and len(parsed) >= 2:
+                    training_size_list = [int(parsed[0]), int(parsed[1])]
+                logger.debug("operations.operations", f"Training size parsed as JSON", "json_training_size_parsed", {
+                    "training_size": training_size_list
+                })
+            except json.JSONDecodeError:
+                try:
+                    parts = [p.strip() for p in str(training_input_size).split(',')]
+                    if len(parts) >= 2:
+                        training_size_list = [int(parts[0]), int(parts[1])]
+                    logger.debug("operations.operations", f"Training size parsed as comma-separated", "comma_training_size_parsed", {
+                        "training_size": training_size_list
+                    })
+                except Exception:
+                    training_size_list = None
+
         # Save uploaded file to temporary location
         logger.info("operations.operations", f"Saving uploaded file to temporary location", "temp_file_save", {
             "file_name": file.filename,
@@ -253,7 +284,9 @@ async def import_custom_model(
                 "class_count": len(class_list) if class_list else 0
             })
             
-            model_id = model_manager.import_custom_model(
+            # Enforce unique name at backend; return 409 if duplicate
+            try:
+                model_id = model_manager.import_custom_model(
                 model_file=tmp_file_path,
                 model_name=name,
                 model_type=type,
@@ -261,7 +294,14 @@ async def import_custom_model(
                 description=description,
                 confidence_threshold=confidence_threshold,
                 iou_threshold=iou_threshold
-            )
+                )
+            except ValueError as ve:
+                msg = str(ve)
+                logger.warning("errors.validation", f"Import failed due to duplicate name", "model_import_duplicate_name", {
+                    "model_name": name,
+                    "error": msg
+                })
+                raise HTTPException(status_code=409, detail="Model name already exists. Please choose another name.")
             # Immediately upsert into ai_models so the DB reflects the new model without requiring restart
             try:
                 model_info = model_manager.models_info.get(model_id)
@@ -269,18 +309,19 @@ async def import_custom_model(
                     AiModelOperations.upsert_ai_model(
                         db=db,
                         name=model_info.name,
-                        model_type=str(model_info.type),
-                        model_format=str(model_info.format),
+                        model_type=model_info.type.value if hasattr(model_info.type, "value") else str(model_info.type),
+                        model_format=model_info.format.value if hasattr(model_info.format, "value") else str(model_info.format),
                         file_path=model_info.path,
                         classes=model_info.classes,
                         input_size_default=list(model_info.input_size) if isinstance(model_info.input_size, tuple) else model_info.input_size,
-                        training_input_size=None,
+                        training_input_size=training_size_list,
                     )
                     logger.info("operations.operations", "AiModel upserted to DB after import", "model_import_db_upsert_success", {
                         "model_id": model_id,
                         "model_name": model_info.name,
                         "format": str(model_info.format),
-                        "type": str(model_info.type)
+                        "type": str(model_info.type),
+                        "training_input_size": training_size_list
                     })
                 else:
                     logger.warning("operations.operations", "Model info not found right after import; skipping DB upsert", "model_import_db_upsert_skip", {
@@ -693,10 +734,14 @@ async def download_model(model_id: str):
         })
 
         # Stream the file to client
+        # Add CORS expose header so frontend can read Content-Disposition for filename
         return FileResponse(
             path=str(file_path),
             filename=filename,
-            media_type="application/octet-stream"
+            media_type="application/octet-stream",
+            headers={
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
         )
 
     except HTTPException:

@@ -160,6 +160,20 @@ const ModelsModern = () => {
       // Optional: classes as JSON string if you ever support it
       // if (values.classes) formData.append('classes', JSON.stringify(values.classes));
 
+      // If uploading a .pt model, include training input size from UI
+      const fileName = (rawFile.name || '').toLowerCase();
+      const ext = fileName.slice(fileName.lastIndexOf('.'));
+      if (ext === '.pt') {
+        const w = values.training_input_width;
+        const h = values.training_input_height;
+        if (!w || !h) {
+          message.error('Please provide training input width and height for .pt models');
+          throw new Error('Missing training input size for .pt');
+        }
+        const size = [parseInt(w, 10), parseInt(h, 10)];
+        formData.append('training_input_size', JSON.stringify(size));
+      }
+
       // Use the correct API function for multipart import
       await modelsAPI.importModel(formData);
       
@@ -252,28 +266,6 @@ const ModelsModern = () => {
     const typeInfo = getModelTypeInfo(model.type);
     const statusInfo = getModelStatus(model);
     
-    const handleDownload = async (m) => {
-      try {
-        logUserClick('ModelsModern', 'download_model');
-        logInfo('app.frontend.interactions', 'Download model requested', 'download_model', { component: 'ModelsModern', modelId: m.id, modelName: m.name });
-        const hide = message.loading({ content: 'Preparing download...', key: `download-${m.id}` });
-        const { blob, filename } = await modelsAPI.downloadModel(m.id);
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename || `${m.name}.pt`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-        hide();
-        message.success({ content: `Downloading \"${filename}\"`, key: `download-${m.id}` });
-      } catch (error) {
-        const info = handleAPIError(error, 'Failed to download model');
-        message.error(info.message || 'Failed to download model');
-      }
-    };
-    
     const moreMenu = (
       <Menu>
         <Menu.Item 
@@ -294,7 +286,46 @@ const ModelsModern = () => {
             key="download" 
             icon={<DownloadOutlined />}
             onClick={() => {
-              handleDownload(model);
+              logUserClick('ModelsModern', 'download_model');
+              logInfo('app.frontend.interactions', 'Download model requested', 'download_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
+              const hide = message.loading('Preparing download...', 0);
+              modelsAPI.downloadModel(model.id)
+                .then(({ blob, filename }) => {
+                  try {
+                    // Create a temporary link to trigger browser download
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    // Fallback filename if header is not accessible: use model.format to infer extension
+                    const extMap = { pytorch: '.pt', onnx: '.onnx', engine: '.engine' };
+                    const fallbackExt = extMap[(model.format || '').toLowerCase()] || '';
+                    const safeName = (model.name || `model_${model.id || 'download'}`).replace(/\s+/g, '_');
+                    const fallbackFilename = `${safeName}${fallbackExt}`;
+                    link.download = filename || fallbackFilename;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    window.URL.revokeObjectURL(url);
+                    message.success(`Downloading ${filename || fallbackFilename}`);
+                    logInfo('app.frontend.file', 'Model download started', 'download_model_started', {
+                      component: 'ModelsModern',
+                      modelId: model.id,
+                      modelName: model.name,
+                      filename: filename || fallbackFilename,
+                    });
+                  } finally {
+                    hide();
+                  }
+                })
+                .catch((error) => {
+                  hide();
+                  handleAPIError(error, 'Download Model');
+                  logError('app.frontend.errors', 'download_model_failed', 'Download model failed', error, {
+                    component: 'ModelsModern',
+                    modelId: model.id,
+                    modelName: model.name,
+                  });
+                });
             }}
           >
             Download Model
@@ -676,9 +707,38 @@ const ModelsModern = () => {
           <Form.Item
             name="name"
             label="Model Name"
-            rules={[{ required: true, message: 'Please enter model name' }]}
+            rules={[
+              { required: true, message: 'Please enter model name' },
+              ({ getFieldValue }) => ({
+                validator: (_, value) => {
+                  const v = (value || '').trim();
+                  if (!v) return Promise.resolve();
+                  const exists = (models || []).some(m => (m?.is_custom) && (m?.name || '').toLowerCase() === v.toLowerCase());
+                  if (exists) {
+                    return Promise.reject(new Error('Model name already exists. Please choose another name.'));
+                  }
+                  return Promise.resolve();
+                }
+              })
+            ]}
           >
             <Input placeholder="Enter model name" />
+          </Form.Item>
+
+          {/* Name suggestions if duplicate (no automatic 'custom' in suggestions) */}
+          <Form.Item shouldUpdate noStyle>
+            {() => {
+              const v = (form.getFieldValue('name') || '').trim();
+              if (!v) return null;
+              const exists = (models || []).some(m => (m?.is_custom) && (m?.name || '').toLowerCase() === v.toLowerCase());
+              if (!exists) return null;
+              const base = v.replace(/\s+/g, '_');
+              const suggestions = [`${base}_new`, `${base}_alt`, `${base}_v2`];
+              return (
+                <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+                  message={<span>Model name "{v}" already exists. Try: {suggestions.join(', ')}</span>} />
+              );
+            }}
           </Form.Item>
 
           <Form.Item
@@ -765,6 +825,54 @@ const ModelsModern = () => {
                 Support .pt, .onnx, .engine formats
               </p>
             </Dragger>
+          </Form.Item>
+
+          {/* Conditional metadata for .pt models */}
+          <Form.Item shouldUpdate={(prev, cur) => prev.file !== cur.file} noStyle>
+            {() => {
+              const fileList = form.getFieldValue('file') || [];
+              const fileItem = Array.isArray(fileList) ? fileList[0] : null;
+              const name = fileItem?.originFileObj?.name || fileItem?.name || '';
+              const ext = name.toLowerCase().slice(name.lastIndexOf('.'));
+              const isPt = ext === '.pt';
+
+              if (!isPt) return null;
+
+              return (
+                <>
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message={
+                      <span>
+                        For .pt models, classes are auto-detected. Please provide the training input image size used during training.
+                      </span>
+                    }
+                  />
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item
+                        name="training_input_width"
+                        label="Training Input Width"
+                        rules={[{ required: true, message: 'Please enter width (e.g., 640)' }]}
+                      >
+                        <Input type="number" min={16} max={8192} placeholder="e.g., 640" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        name="training_input_height"
+                        label="Training Input Height"
+                        rules={[{ required: true, message: 'Please enter height (e.g., 640)' }]}
+                      >
+                        <Input type="number" min={16} max={8192} placeholder="e.g., 640" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </>
+              );
+            }}
           </Form.Item>
 
           <Form.Item>

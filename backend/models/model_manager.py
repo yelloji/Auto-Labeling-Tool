@@ -252,11 +252,19 @@ class ModelManager:
         else:
             raise ValueError(f"Unsupported model format: {model_file.suffix}")
         
-        # Generate unique model ID
-        model_id = f"custom_{model_name.lower().replace(' ', '_')}_{len(self.models_info)}"
-        
+        # Generate model ID without numeric suffix; enforce uniqueness
+        slug = model_name.lower().strip().replace(' ', '_')
+        slug = ''.join(ch for ch in slug if ch.isalnum() or ch in ['_', '-'])
+        model_id = f"custom_{slug}"
+        if model_id in self.models_info:
+            raise ValueError(f"Model name already exists: {model_name}")
+
         # Copy model to custom models directory
-        custom_model_path = self.models_dir / "custom" / f"{model_id}{model_file.suffix}"
+        # Store the file on disk using the plain slug (no 'custom_' prefix) for a clean filename
+        custom_model_path = self.models_dir / "custom" / f"{slug}{model_file.suffix}"
+        if custom_model_path.exists():
+            # Avoid overwriting existing files when name conflicts
+            raise ValueError(f"Model file already exists for name: {model_name}")
         shutil.copy2(model_file, custom_model_path)
         
         # Try to load model and extract information

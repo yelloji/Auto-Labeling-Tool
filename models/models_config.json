@@ -403,12 +403,12 @@
     "is_ready": true,
     "is_training": false
   },
-  "custom_cuffia-ext_4": {
-    "id": "custom_cuffia-ext_4",
-    "name": "cuffia-ext",
+  "custom_rok": {
+    "id": "custom_rok",
+    "name": "ROK",
     "type": "instance_segmentation",
     "format": "pytorch",
-    "path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\models\\custom\\custom_cuffia-ext_4.pt",
+    "path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\models\\custom\\rok.pt",
     "classes": [
       "item"
     ],
@@ -419,7 +419,7 @@
     "confidence_threshold": 0.5,
     "iou_threshold": 0.45,
     "description": "",
-    "created_at": "2025-11-11T15:14:12.742926",
+    "created_at": "2025-11-11T17:17:36.887348",
     "is_custom": true,
     "file_size": 21007517,
     "is_ready": true,
