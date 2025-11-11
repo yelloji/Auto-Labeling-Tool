@@ -423,7 +423,11 @@ async def get_model_info(model_id: str):
             "iou_threshold": model_info.iou_threshold,
             "description": model_info.description,
             "is_custom": model_info.is_custom,
-            "created_at": model_info.created_at
+            "created_at": model_info.created_at,
+            # Enriched metadata for UI consistency
+            "file_size": getattr(model_info, "file_size", 0),
+            "is_ready": getattr(model_info, "is_ready", False),
+            "is_training": getattr(model_info, "is_training", False)
         }
         
     except HTTPException:

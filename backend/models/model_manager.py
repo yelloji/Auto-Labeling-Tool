@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 
 import torch
@@ -52,6 +53,9 @@ class ModelInfo:
     description: str = ""
     created_at: str = ""
     is_custom: bool = False
+    file_size: int = 0  # in bytes
+    is_ready: bool = False
+    is_training: bool = False
 
 
 class ModelManager:
@@ -98,56 +102,96 @@ class ModelManager:
                 "iou_threshold": model_info.iou_threshold,
                 "description": model_info.description,
                 "created_at": model_info.created_at,
-                "is_custom": model_info.is_custom
+                "is_custom": model_info.is_custom,
+                "file_size": getattr(model_info, "file_size", 0),
+                "is_ready": getattr(model_info, "is_ready", False),
+                "is_training": getattr(model_info, "is_training", False)
             }
         
         with open(self.models_config_file, 'w') as f:
             json.dump(config, f, indent=2)
+
+    def _refresh_model_metadata(self, model_info: ModelInfo) -> None:
+        """Ensure runtime metadata fields like file_size, is_ready, and created_at are populated"""
+        try:
+            path = Path(model_info.path)
+            if path.exists():
+                # File exists => model is ready
+                model_info.is_ready = True
+                # File size
+                model_info.file_size = path.stat().st_size
+                # Backfill created_at from file mtime if missing
+                if not model_info.created_at:
+                    model_info.created_at = datetime.fromtimestamp(path.stat().st_mtime).isoformat()
+            else:
+                model_info.is_ready = False
+                if not model_info.created_at:
+                    model_info.created_at = ""
+                if getattr(model_info, "file_size", 0) == 0:
+                    model_info.file_size = 0
+        except Exception:
+            # Don't let metadata refresh crash the flow
+            if not getattr(model_info, "file_size", 0):
+                model_info.file_size = 0
+            if not getattr(model_info, "is_ready", False):
+                model_info.is_ready = False
     
     def _download_default_models(self):
-        """Download default YOLO models if not present"""
+        """Download default YOLO11 models if not present (nano/small + segmentation)"""
         default_models = [
             {
-                "id": "yolov8n",
-                "name": "YOLOv8 Nano",
+                "id": "yolo11n",
+                "name": "YOLO11 Nano",
                 "type": ModelType.OBJECT_DETECTION,
-                "model_name": "yolov8n.pt"
+                "model_name": "yolo11n.pt",
             },
             {
-                "id": "yolov8s",
-                "name": "YOLOv8 Small", 
+                "id": "yolo11s",
+                "name": "YOLO11 Small",
                 "type": ModelType.OBJECT_DETECTION,
-                "model_name": "yolov8s.pt"
+                "model_name": "yolo11s.pt",
             },
             {
-                "id": "yolov8n-seg",
-                "name": "YOLOv8 Nano Segmentation",
+                "id": "yolo11n-seg",
+                "name": "YOLO11 Nano Segmentation",
                 "type": ModelType.INSTANCE_SEGMENTATION,
-                "model_name": "yolov8n-seg.pt"
+                "model_name": "yolo11n-seg.pt",
             },
             {
-                "id": "yolov8s-seg",
-                "name": "YOLOv8 Small Segmentation",
+                "id": "yolo11s-seg",
+                "name": "YOLO11 Small Segmentation",
                 "type": ModelType.INSTANCE_SEGMENTATION,
-                "model_name": "yolov8s-seg.pt"
-            }
+                "model_name": "yolo11s-seg.pt",
+            },
         ]
-        
+
+        yolo_dir = self.models_dir / "yolo"
+        yolo_dir.mkdir(parents=True, exist_ok=True)
+
         for model_config in default_models:
             if model_config["id"] not in self.models_info:
                 try:
-                    # Download model using ultralytics
-                    model = YOLO(model_config["model_name"])
-                    model_path = self.models_dir / "yolo" / model_config["model_name"]
-                    
-                    # Move downloaded model to our models directory
-                    if hasattr(model, 'ckpt_path') and os.path.exists(model.ckpt_path):
-                        shutil.copy2(model.ckpt_path, model_path)
-                    
-                    # Get model info
-                    classes = list(model.names.values()) if hasattr(model, 'names') else []
-                    
-                    # Create model info
+                    # Use Ultralytics to download by model name; this will fetch from their registry
+                    model = YOLO(model_config["model_name"])  # triggers download if not cached
+
+                    # Where we will store our local copy (directly under models/yolo)
+                    model_path = yolo_dir / model_config["model_name"]
+
+                    # Move/copy downloaded model from Ultralytics cache to our target path
+                    ckpt_path = getattr(model, 'ckpt_path', None)
+                    if ckpt_path and os.path.exists(ckpt_path):
+                        shutil.copy2(ckpt_path, model_path)
+                    elif os.path.exists(model_config["model_name"]):
+                        # Fallback: sometimes YOLO saves in CWD
+                        shutil.copy2(model_config["model_name"], model_path)
+                    else:
+                        # If no file found, skip with warning
+                        print(f"Warning: downloaded file for {model_config['model_name']} not found; skipping copy")
+
+                    # Get model classes (if available)
+                    classes = list(getattr(model, 'names', {}).values()) if hasattr(model, 'names') else []
+
+                    # Register model info
                     model_info = ModelInfo(
                         id=model_config["id"],
                         name=model_config["name"],
@@ -157,14 +201,15 @@ class ModelManager:
                         classes=classes,
                         input_size=(640, 640),
                         description=f"Pre-trained {model_config['name']} model",
-                        is_custom=False
+                        is_custom=False,
+                        created_at=datetime.now().isoformat(),
                     )
-                    
+                    # Populate runtime metadata
+                    self._refresh_model_metadata(model_info)
                     self.models_info[model_config["id"]] = model_info
-                    
                 except Exception as e:
                     print(f"Failed to download {model_config['name']}: {e}")
-        
+
         self._save_models_config()
     
     def import_custom_model(
@@ -247,8 +292,11 @@ class ModelManager:
             confidence_threshold=confidence_threshold,
             iou_threshold=iou_threshold,
             description=description,
-            is_custom=True
+            is_custom=True,
+            created_at=datetime.now().isoformat()
         )
+        # Populate runtime metadata
+        self._refresh_model_metadata(model_info)
         
         # Save model info
         self.models_info[model_id] = model_info
@@ -347,6 +395,8 @@ class ModelManager:
         """Get list of all available models"""
         models_list = []
         for model_id, model_info in self.models_info.items():
+            # Ensure metadata is up to date for UI display
+            self._refresh_model_metadata(model_info)
             models_list.append({
                 "id": model_info.id,
                 "name": model_info.name,
@@ -356,7 +406,12 @@ class ModelManager:
                 "num_classes": len(model_info.classes),
                 "input_size": model_info.input_size,
                 "is_custom": model_info.is_custom,
-                "description": model_info.description
+                "description": model_info.description,
+                # Enriched fields for UI status display
+                "created_at": model_info.created_at,
+                "file_size": getattr(model_info, "file_size", 0),
+                "is_ready": getattr(model_info, "is_ready", False),
+                "is_training": getattr(model_info, "is_training", False)
             })
         return models_list
     

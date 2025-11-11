@@ -180,6 +180,10 @@ const ModelsModern = () => {
   // Get model type info for styling
   const getModelTypeInfo = (type) => {
     const typeInfo = {
+      // Primary types we use in this app
+      'object_detection': { color: 'blue', label: 'Object Detection', icon: <BarChartOutlined /> },
+      'instance_segmentation': { color: 'purple', label: 'Instance Segmentation', icon: <ExperimentOutlined /> },
+      'semantic_segmentation': { color: 'magenta', label: 'Semantic Segmentation', icon: <ExperimentOutlined /> },
       'yolov8n': { color: 'blue', label: 'YOLOv8 Nano', icon: <ThunderboltOutlined /> },
       'yolov8s': { color: 'green', label: 'YOLOv8 Small', icon: <RobotOutlined /> },
       'yolov8m': { color: 'orange', label: 'YOLOv8 Medium', icon: <ExperimentOutlined /> },
@@ -321,7 +325,10 @@ const ModelsModern = () => {
                   border: 'none'
                 }}
               >
-                {typeInfo.label}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ display: 'inline-flex' }}>{typeInfo.icon}</span>
+                  {typeInfo.label}
+                </span>
               </Tag>
               
               {/* Model Name */}
@@ -361,10 +368,12 @@ const ModelsModern = () => {
                 fontSize: '13px',
                 color: '#666'
               }}>
-                <span>
-                  <BarChartOutlined style={{ marginRight: '4px' }} />
-                  {model.accuracy ? `${model.accuracy}% mAP` : 'No metrics'}
-                </span>
+                {model.accuracy && (
+                  <span>
+                    <BarChartOutlined style={{ marginRight: '4px' }} />
+                    {`${model.accuracy}% mAP`}
+                  </span>
+                )}
                 <span>
                   <ClockCircleOutlined style={{ marginRight: '4px' }} />
                   {model.file_size ? `${(model.file_size / 1024 / 1024).toFixed(1)} MB` : 'Unknown'}
