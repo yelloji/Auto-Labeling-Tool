@@ -156,7 +156,20 @@ const Dashboard = () => {
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <Title level={2} style={{ color: '#C0C0C0' }}>Dashboard</Title>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Title level={2} style={{ color: '#C0C0C0', margin: 0 }}>Dashboard</Title>
+            <span 
+              title="Backend Connected"
+              style={{
+                display: 'inline-block',
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                backgroundColor: '#52c41a',
+                boxShadow: '0 0 0 2px rgba(82, 196, 26, 0.2)'
+              }}
+            />
+          </div>
           <Paragraph style={{ color: '#C0C0C0' }}>
             Welcome to Auto-Labeling-Tool - Your local computer vision dataset labeling solution
           </Paragraph>
@@ -173,14 +186,7 @@ const Dashboard = () => {
         </Button>
       </div>
       
-      {/* Backend Status */}
-      <Alert
-        message="Backend Connected"
-        description="Successfully connected to Auto-Labeling backend"
-        type="success"
-        showIcon
-        style={{ marginBottom: '24px' }}
-      />
+      {/* Backend Status indicator moved next to title; removed large success Alert */}
       
       {/* Statistics Cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
