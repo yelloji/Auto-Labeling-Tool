@@ -48,7 +48,7 @@ LOGGING_CONFIG: Dict[str, Any] = {
     # ========================================================================
     # DUAL LOGGING SYSTEM SETTINGS
     # ========================================================================
-    "logging_mode": "developer",     # "developer" or "user" - controls which mode to use
+    "logging_mode": "user",          # "developer" or "user" - controls which mode to use
     "async_logging": True,           # Use async logging for performance
     "log_rotation_size_mb": 100,     # Log rotation size in MB
     "log_rotation_backup_count": 5,  # Number of backup files to keep

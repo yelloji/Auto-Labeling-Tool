@@ -13,12 +13,16 @@ alembic==1.12.1
 # Computer Vision and ML - YOLO11 Latest
 ultralytics>=8.3.0  # YOLO11 support
 opencv-python>=4.8.0
+# Image processing for transformation preview
+opencv-contrib-python>=4.8.0  # Additional OpenCV modules for advanced transformations
+scikit-image>=0.21.0  # Additional image processing utilities
 
 # PyTorch with CUDA 12.1 support
 --index-url https://download.pytorch.org/whl/cu121
-torch>=2.2.0
-torchvision>=0.17.0
-torchaudio>=2.2.0
+--extra-index-url https://pypi.org/simple
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.2
 
 numpy>=1.24.0,<1.27.0  # OpenCV compatible range
 pillow>=10.0.0

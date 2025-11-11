@@ -609,7 +609,7 @@ const ManualLabeling = () => {
         datasetId,
         timestamp: new Date().toISOString()
       });
-      const response = await AnnotationAPI.getDatasetImages(datasetId);
+      const response = await AnnotationAPI.getDatasetImages(datasetId, 0, 1000);
       setImageList(response.images);
       setDatasetProgress({
         total: response.images.length,

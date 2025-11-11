@@ -128,9 +128,8 @@ class ImageTransformer:
             applied_transformations = []
             failed_transformations = []
             
-            # 🔍 DEBUG: Show image transformation order
+            # Show image transformation order
             transformation_order = list(config.keys())
-            print(f"\n🖼️ IMAGE GENERATION ORDER: {transformation_order}")
             logger.info("operations.transformations", f"Image generation order: {transformation_order}")
             
             # Apply transformations in order
@@ -803,15 +802,7 @@ class ImageTransformer:
             }
             self._actual_geometry_params['rotation'] = actual_rotation_params
             
-            print(f"\n🎯 ROTATION TOOL - ACTUAL PARAMETERS STORED:")
-            print(f"   Original image size: {original_size}")
-            print(f"   Input angle: {angle} degrees")
-            print(f"   Fill color: {fill_color}")
-            print(f"   Expand canvas: True")
-            print(f"   Final image size: {result.size}")
-            print(f"   Size change factor: {((result.size[0] * result.size[1]) / (original_size[0] * original_size[1])):.2f}x")
-            print(f"   🔥 STORED ACTUAL PARAMS: {actual_rotation_params}")
-            print(f"=" * 60)
+
             
             logger.info("operations.transformations", f"Rotate transformation completed", "rotate_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
@@ -955,16 +946,7 @@ class ImageTransformer:
             }
             self._actual_geometry_params['crop'] = actual_crop_params
             
-            print(f"\n🎯 CROP TOOL - ACTUAL PARAMETERS STORED:")
-            print(f"   Original image size: {image.size}")
-            print(f"   Input crop_percentage: {crop_percentage}%")
-            print(f"   Input crop_mode: {crop_mode}")
-            print(f"   CALCULATED crop coordinates: x={left}, y={top}")
-            print(f"   CALCULATED crop dimensions: width={new_width}, height={new_height}")
-            print(f"   Scale factor: {scale}")
-            print(f"   Final image size after resize: {width}x{height}")
-            print(f"   🔥 STORED ACTUAL PARAMS: {actual_crop_params}")
-            print(f"=" * 60)
+
             
             cropped = image.crop((left, top, left + new_width, top + new_height))
             result = cropped.resize((width, height), Image.Resampling.LANCZOS)
@@ -1540,16 +1522,7 @@ class ImageTransformer:
             }
             self._actual_geometry_params['affine_transform'] = actual_affine_params
             
-            print(f"\n🎯 AFFINE TRANSFORM TOOL - ACTUAL PARAMETERS STORED:")
-            print(f"   Original image size: {original_size}")
-            print(f"   Input rotation: {rotation_angle} degrees")
-            print(f"   Input scale: {scale_factor}")
-            print(f"   Input horizontal shift: {horizontal_shift}")
-            print(f"   Input vertical shift: {vertical_shift}")
-            print(f"   CALCULATED shift factors: x={shift_x_factor:.3f}, y={shift_y_factor:.3f}")
-            print(f"   Final image size: {result.size}")
-            print(f"   🔥 STORED ACTUAL PARAMS: {actual_affine_params}")
-            print(f"=" * 60)
+
             
             logger.info("operations.transformations", f"Affine transformation completed", "affine_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",

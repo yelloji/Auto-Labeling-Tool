@@ -25,7 +25,8 @@ import {
   DeploymentUnitOutlined,
   BulbOutlined,
   HistoryOutlined,
-  PieChartOutlined
+  PieChartOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons';
 import { projectsAPI, handleAPIError } from '../../services/api';
 import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
@@ -38,6 +39,7 @@ import {
   ReleaseSection,
   AnalyticsSection,
   ModelsSection,
+  ModelTrainingSection,
   VisualizeSection,
   DeploymentsSection,
   ActiveLearningSection
@@ -210,13 +212,18 @@ const ProjectWorkspace = () => {
     },
     {
       key: 'models',
-      label: 'MODELS',
+      label: 'AI TRAINING',
       type: 'group',
       children: [
         {
           key: 'models',
           icon: <RobotOutlined />,
           label: 'Models',
+        },
+        {
+          key: 'model-training',
+          icon: <ThunderboltOutlined />,
+          label: 'Model Training',
         },
         {
           key: 'visualize',
@@ -305,6 +312,16 @@ const ProjectWorkspace = () => {
             setSelectedKey={setSelectedKey} 
             project={project} 
             loadProject={loadProject} 
+            navigate={navigate}
+          />
+        );
+      case 'model-training':
+        return (
+          <ModelTrainingSection 
+            projectId={projectId}
+            setSelectedKey={setSelectedKey}
+            project={project}
+            loadProject={loadProject}
             navigate={navigate}
           />
         );

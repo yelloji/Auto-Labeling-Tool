@@ -276,17 +276,10 @@ class AutoLabelingToolLauncher:
                     self.print_colored("⚠️ Node.js installed but not in PATH. Please restart terminal.", "yellow")
                     all_good = False
         
-        # Check Git (optional, mainly for development)
+        # Git is useful for development but not required for end-users.
+        # We only emit an informational warning and skip installation.
         if not self.is_git_installed():
-            self.print_colored("📦 Git not found. Installing automatically...", "yellow")
-            
-            if self.is_windows:
-                success = self.install_git_windows()
-            else:
-                success = self.install_git_unix()
-            
-            if not success:
-                self.print_colored("⚠️ Git installation failed, but it's optional for running the app.", "yellow")
+            self.print_colored("⚠️ Git not detected. This is fine for normal usage.", "yellow")
         
         if not all_good:
             self.print_colored("❌ Some prerequisites failed to install automatically.", "red")
@@ -306,61 +299,97 @@ class AutoLabelingToolLauncher:
         venv_path = backend_dir / "venv"
         if not venv_path.exists():
             self.print_colored("Creating virtual environment...", "yellow")
-            subprocess.run([sys.executable, "-m", "venv", "venv"])
+            subprocess.run([sys.executable, "-m", "venv", "venv"])  # create venv
         
         # Determine python executable
         if self.is_windows:
             python_exe = venv_path / "Scripts" / "python.exe"
-            pip_exe = venv_path / "Scripts" / "pip.exe"
         else:
             python_exe = venv_path / "bin" / "python"
-            pip_exe = venv_path / "bin" / "pip"
         
-        # Use virtual environment if it exists, otherwise use system python
+        # Ensure we have a working Python in venv; fallback to system Python only if absolutely necessary
         if not python_exe.exists():
-            self.print_colored("⚠️ Virtual environment not found, using system Python", "yellow")
-            python_exe = sys.executable
-            pip_exe = "pip"
+            self.print_colored("⚠️ Venv python not found, falling back to system Python (not recommended)", "yellow")
+            python_exe = Path(sys.executable)
+        
+        # 1) Make sure pip exists inside the venv and is up-to-date
+        self.print_colored("Bootstrapping pip in backend venv...", "yellow")
+        subprocess.run([str(python_exe), "-m", "ensurepip", "--upgrade"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([str(python_exe), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # 2) Choose the correct requirements file (prefer CUDA 12.1 if present)
+        req_cuda = backend_dir / "requirements-cuda121.txt"
+        req_cpu = backend_dir / "requirements.txt"
+        if req_cuda.exists():
+            req_file = req_cuda
+            self.print_colored(f"Installing backend dependencies (CUDA 12.1) from {req_file.name}...", "yellow")
+            install_result = subprocess.run([str(python_exe), "-m", "pip", "install", "-r", str(req_file)], capture_output=True, text=True)
+            if install_result.returncode != 0:
+                # Fallback to CPU requirements if CUDA installation fails
+                self.print_colored("⚠️ CUDA requirements installation failed. Falling back to CPU requirements...", "yellow")
+                snippet = install_result.stderr[-300:] if install_result.stderr else install_result.stdout[-300:]
+                if snippet:
+                    self.print_colored(snippet, "yellow")
+                req_file = req_cpu
+                self.print_colored(f"Installing backend dependencies (CPU) from {req_file.name}...", "yellow")
+                install_result = subprocess.run([str(python_exe), "-m", "pip", "install", "-r", str(req_file)], capture_output=True, text=True)
         else:
-            self.print_colored(f"✅ Using virtual environment: {python_exe}", "green")
+            req_file = req_cpu
+            self.print_colored(f"Installing backend dependencies (CPU) from {req_file.name}...", "yellow")
+            install_result = subprocess.run([str(python_exe), "-m", "pip", "install", "-r", str(req_file)], capture_output=True, text=True)
+
+        # Check final install result
+        if install_result.returncode != 0:
+            self.print_colored("❌ Failed to install backend dependencies", "red")
+            snippet = install_result.stderr[-400:] if install_result.stderr else install_result.stdout[-400:]
+            if snippet:
+                self.print_colored(snippet, "red")
+            return False
+        self.print_colored("✅ Backend dependencies installed", "green")
+
+        # 4) Verify that FastAPI and Uvicorn are importable in the venv
+        verify_code = "import fastapi, uvicorn; print('OK')"
+        verify = subprocess.run([str(python_exe), "-c", verify_code], capture_output=True, text=True)
+        if verify.returncode != 0:
+            self.print_colored("❌ Backend verification failed (FastAPI/Uvicorn not importable)", "red")
+            err = verify.stderr or verify.stdout
+            if err:
+                self.print_colored(err[-400:], "red")
+            return False
+        else:
+            self.print_colored("✅ Verified FastAPI and Uvicorn in backend venv", "green")
         
-        # Check if key dependencies are installed IN THE TARGET ENVIRONMENT
-        self.print_colored("Checking backend dependencies in target environment...", "yellow")
-        try:
-            # Check dependencies in the actual environment that will run the server
-            result = subprocess.run([str(python_exe), "-c", "import fastapi, uvicorn"], 
-                                  capture_output=True, text=True)
-            if result.returncode == 0:
-                self.print_colored("✅ Backend dependencies already installed in target environment", "green")
-            else:
-                raise ImportError("Dependencies not found in target environment")
-        except (ImportError, subprocess.CalledProcessError, FileNotFoundError):
-            # Install dependencies in the target environment
-            self.print_colored("Installing backend dependencies in target environment...", "yellow")
-            result = subprocess.run([str(pip_exe), "install", "-r", "requirements.txt"], 
-                                  capture_output=True, text=True)
-            if result.returncode == 0:
-                self.print_colored("✅ Backend dependencies installed successfully", "green")
-            else:
-                self.print_colored(f"❌ Failed to install dependencies: {result.stderr}", "red")
-                return False
         
-        # Start backend
+        
+        # Start backend and save logs to file for easier debugging
         self.print_colored("Starting FastAPI backend on port 12000...", "green")
+        log_file = backend_dir / "backend_start.log"
+        env_backend = os.environ.copy()
+        if self.is_windows:
+            # Ensure UTF-8 encoding so emoji prints don't crash (cp1252 issue)
+            env_backend["PYTHONIOENCODING"] = "utf-8"
+            env_backend["PYTHONUTF8"] = "1"
         self.backend_process = subprocess.Popen(
             [str(python_exe), "main.py"],
             cwd=str(backend_dir),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stdout=open(log_file, "w"),
+            stderr=subprocess.STDOUT,
+            env=env_backend
         )
         
-        # Wait for backend to start
+        # Wait for backend to start (give it a bit more time on first run)
         self.print_colored("Waiting for backend to start...", "yellow")
-        for i in range(10):
+        for i in range(30):  # increased from 10 to 30 seconds
             time.sleep(1)
             if self.check_port(12000):
                 self.print_colored("✅ Backend started successfully on port 12000", "green")
                 return True
+            # Every 10 seconds remind user where to look if it fails
+            if (i + 1) % 10 == 0:
+                self.print_colored(f"⏳ Still waiting... ({i + 1}/30 seconds)", "yellow")
+                if not self.backend_process.poll() is None:
+                    self.print_colored("❌ Backend process exited early. Check backend_start.log for details.", "red")
+                    return False
         
         self.print_colored("❌ Backend failed to start", "red")
         return False
@@ -412,6 +441,9 @@ class AutoLabelingToolLauncher:
                 except Exception as e:
                     self.print_colored(f"❌ npm install error: {str(e)}", "red")
                     return False
+            else:
+                # Inform user that dependencies are already present
+                self.print_colored("✅ Frontend dependencies already installed", "green")
             
             # Start frontend
             self.print_colored("Starting React frontend on port 12001...", "green")
