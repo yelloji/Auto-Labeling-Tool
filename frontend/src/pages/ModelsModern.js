@@ -479,10 +479,10 @@ const ModelsModern = () => {
         marginBottom: '32px'
       }}>
         <div>
-          <Title level={2} style={{ margin: 0, fontSize: '28px', fontWeight: 600 }}>
+          <Title level={2} style={{ margin: 0, fontSize: '28px', fontWeight: 600, color: '#C0C0C0' }}>
             🤖 AI Models
           </Title>
-          <Text type="secondary" style={{ fontSize: '16px' }}>
+          <Text type="secondary" style={{ fontSize: '16px', color: '#C0C0C0' }}>
             Manage your machine learning models for auto-labeling
           </Text>
         </div>

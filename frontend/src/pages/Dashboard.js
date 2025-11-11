@@ -156,8 +156,8 @@ const Dashboard = () => {
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <Title level={2}>Dashboard</Title>
-          <Paragraph>
+          <Title level={2} style={{ color: '#C0C0C0' }}>Dashboard</Title>
+          <Paragraph style={{ color: '#C0C0C0' }}>
             Welcome to Auto-Labeling-Tool - Your local computer vision dataset labeling solution
           </Paragraph>
         </div>

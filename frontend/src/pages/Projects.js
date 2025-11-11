@@ -528,7 +528,7 @@ const Projects = () => {
         alignItems: 'center', 
         marginBottom: '32px'
       }}>
-        <Title level={2} style={{ margin: 0, fontSize: '28px', fontWeight: 600 }}>
+        <Title level={2} style={{ margin: 0, fontSize: '28px', fontWeight: 600, color: '#C0C0C0' }}>
           Projects
         </Title>
         <Space size="middle">
