@@ -1,0 +1,83 @@
+/* Navy & Silver themed sidebar for Project Workspace */
+
+:root {
+  --navy: #001529; /* match Dashboard/App background */
+  --silver: #C0C0C0;
+  --silver-dim: #A3A7AD;
+  --silver-hover: #D8D8D8;
+  --silver-strong: #E6E6E6;
+  --silver-disabled: #8E8E8E;
+}
+
+.workspace-sider {
+  background-color: var(--navy) !important;
+  color: var(--silver) !important;
+  border-right: 1px solid #002140; /* subtle divider to match app theme */
+}
+
+/* Ensure AntD menu inherits transparent background and silver text */
+.workspace-sider .ant-menu {
+  background: transparent !important;
+  color: var(--silver) !important;
+}
+
+.workspace-sider .ant-menu-item,
+.workspace-sider .ant-menu-submenu-title {
+  color: var(--silver) !important;
+}
+
+.workspace-sider .ant-menu-item-group-title {
+  color: var(--silver-dim) !important;
+}
+
+/* Selected and hover states for readability on navy */
+.workspace-sider .ant-menu-item-selected {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+.workspace-sider .ant-menu-item:hover,
+.workspace-sider .ant-menu-submenu-title:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  color: var(--silver-hover) !important;
+}
+
+/* Back button label and icons */
+.workspace-sider .ant-btn.ant-btn-text,
+.workspace-sider .ant-btn.ant-btn-text span,
+.workspace-sider .anticon {
+  color: var(--silver) !important;
+}
+
+.workspace-sider .ant-btn.ant-btn-text:hover {
+  color: var(--silver-hover) !important;
+}
+
+/* Typography: project name and secondary text */
+.workspace-sider .ant-typography {
+  color: var(--silver) !important;
+}
+
+.workspace-sider .ant-typography-secondary {
+  color: var(--silver) !important;
+}
+
+/* Statistics titles and numbers */
+.workspace-sider .ant-statistic-title {
+  color: var(--silver-dim) !important;
+}
+
+.workspace-sider .ant-statistic-content,
+.workspace-sider .ant-statistic-content-value {
+  color: var(--silver-strong) !important;
+}
+
+/* Progress text */
+.workspace-sider .ant-progress-text {
+  color: var(--silver) !important;
+}
+
+/* Keep tags’ own colors; just ensure text remains legible on navy */
+.workspace-sider .ant-tag {
+  /* no background override; AntD handles contrast */
+}

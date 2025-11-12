@@ -30,6 +30,8 @@ import {
 } from '@ant-design/icons';
 import { projectsAPI, handleAPIError } from '../../services/api';
 import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
+// Sidebar theme styles (keep imports at the top)
+import './ProjectWorkspace.css';
 
 // Import components (these will be created later)
 import {
@@ -396,10 +398,11 @@ const ProjectWorkspace = () => {
     <Layout style={{ minHeight: '100vh' }}>
       {/* Project Sidebar */}
       <Sider 
-        width={280} 
+        width={280}
+        className="workspace-sider"
         style={{ 
-          background: '#fff',
-          borderRight: '1px solid #f0f0f0',
+          background: '#0C2132',
+          borderRight: '1px solid rgba(255,255,255,0.08)',
           overflow: 'auto',
           height: '100vh',
           position: 'fixed',
