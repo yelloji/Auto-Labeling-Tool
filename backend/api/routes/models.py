@@ -11,6 +11,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
+import yaml
 
 from models.model_manager import model_manager, ModelType, ModelFormat
 from sqlalchemy.orm import Session
@@ -159,6 +160,8 @@ async def import_custom_model(
     name: str = Form(...),
     type: ModelType = Form(...),
     classes: Optional[str] = Form(None),  # JSON string of class names
+    nc: Optional[int] = Form(None),
+    classes_yaml: Optional[UploadFile] = File(None),
     description: str = Form(""),
     confidence_threshold: float = Form(0.5),
     iou_threshold: float = Form(0.45),
@@ -233,6 +236,49 @@ async def import_custom_model(
                 logger.debug("operations.operations", f"Classes parsed as comma-separated", "comma_classes_parsed", {
                     "class_count": len(class_list) if class_list else 0
                 })
+
+        # Parse classes from YAML if provided (Ultralytics-style data.yaml)
+        parsed_nc = None
+        if classes_yaml is not None:
+            try:
+                yaml_bytes = await classes_yaml.read()
+                yaml_data = yaml.safe_load(yaml_bytes) if yaml_bytes else None
+                names_value = yaml_data.get('names') if isinstance(yaml_data, dict) else None
+                if isinstance(names_value, dict):
+                    # Sort by numeric key
+                    class_list_yaml = [names_value[k] for k in sorted(names_value.keys(), key=lambda x: int(x))]
+                elif isinstance(names_value, list):
+                    class_list_yaml = [str(n) for n in names_value]
+                else:
+                    class_list_yaml = None
+
+                parsed_nc = yaml_data.get('nc') if isinstance(yaml_data, dict) else None
+                if class_list_yaml and parsed_nc is None:
+                    parsed_nc = len(class_list_yaml)
+
+                logger.info("operations.operations", "Parsed classes from YAML", "yaml_classes_parsed", {
+                    "class_count": len(class_list_yaml) if class_list_yaml else 0,
+                    "parsed_nc": parsed_nc
+                })
+
+                # If user also provided classes, ensure they match YAML; otherwise use YAML-derived classes
+                if class_list_yaml:
+                    if class_list and class_list != class_list_yaml:
+                        raise HTTPException(status_code=422, detail="Classes in YAML do not match provided classes")
+                    class_list = class_list_yaml
+                # If user provided nc and YAML has nc, ensure match
+                if parsed_nc is not None and nc is not None and int(nc) != int(parsed_nc):
+                    raise HTTPException(status_code=422, detail="nc in YAML does not match provided nc")
+                # If nc not provided, use YAML nc
+                if nc is None and parsed_nc is not None:
+                    nc = int(parsed_nc)
+            except HTTPException:
+                raise
+            except Exception as ye:
+                logger.warning("errors.validation", f"Failed to parse classes YAML: {str(ye)}", "yaml_parse_failed", {
+                    "file_name": classes_yaml.filename if hasattr(classes_yaml, 'filename') else None,
+                    "error_type": type(ye).__name__
+                })
         
         # Parse training input size if provided
         logger.debug("operations.operations", f"Parsing training input size", "training_input_size_parsing", {
@@ -254,15 +300,54 @@ async def import_custom_model(
                     "training_size": training_size_list
                 })
             except json.JSONDecodeError:
+                # Fallbacks for common string formats: "W,H", "W H", "WxH"
+                raw = str(training_input_size).strip()
+                parts = None
                 try:
-                    parts = [p.strip() for p in str(training_input_size).split(',')]
-                    if len(parts) >= 2:
+                    if "," in raw:
+                        parts = [p.strip() for p in raw.split(",")]
+                    elif " " in raw:
+                        parts = [p.strip() for p in raw.split()]
+                    elif "x" in raw.lower():
+                        parts = [p.strip() for p in raw.lower().split("x")]
+                    if parts and len(parts) >= 2:
                         training_size_list = [int(parts[0]), int(parts[1])]
-                    logger.debug("operations.operations", f"Training size parsed as comma-separated", "comma_training_size_parsed", {
-                        "training_size": training_size_list
+                        logger.debug("operations.operations", f"Training size parsed from string", "string_training_size_parsed", {
+                            "training_size": training_size_list,
+                            "raw": raw
+                        })
+                except Exception as se:
+                    logger.warning("errors.validation", f"Failed to parse training_input_size string: {str(se)}", "training_size_string_parse_failed", {
+                        "raw": raw,
+                        "error_type": type(se).__name__
                     })
-                except Exception:
                     training_size_list = None
+
+        # Strict validation for ONNX: require training_input_size and classes; validate nc if provided
+        ext = Path(file.filename).suffix.lower()
+        if ext == ".onnx":
+            if not class_list or len(class_list) == 0:
+                logger.warning("errors.validation", "ONNX import missing classes", "onnx_missing_classes", {
+                    "file_name": file.filename,
+                    "name": name
+                })
+                raise HTTPException(status_code=422, detail="ONNX import requires classes (list of class names)")
+            if not training_size_list:
+                logger.warning("errors.validation", "ONNX import missing training_input_size", "onnx_missing_training_size", {
+                    "file_name": file.filename,
+                    "name": name
+                })
+                raise HTTPException(status_code=422, detail="ONNX import requires training_input_size (width,height)")
+            if nc is not None and int(nc) != len(class_list):
+                logger.warning("errors.validation", "ONNX import nc mismatch", "onnx_nc_mismatch", {
+                    "provided_nc": nc,
+                    "computed_nc": len(class_list),
+                    "name": name
+                })
+                raise HTTPException(status_code=422, detail="nc must equal the number of provided class names")
+            # If nc wasn't provided anywhere, derive from classes
+            if nc is None:
+                nc = len(class_list)
 
         # Save uploaded file to temporary location
         logger.info("operations.operations", f"Saving uploaded file to temporary location", "temp_file_save", {
@@ -291,6 +376,7 @@ async def import_custom_model(
                 model_name=name,
                 model_type=type,
                 classes=class_list,
+                training_input_size=training_size_list,
                 description=description,
                 confidence_threshold=confidence_threshold,
                 iou_threshold=iou_threshold
@@ -302,6 +388,25 @@ async def import_custom_model(
                     "error": msg
                 })
                 raise HTTPException(status_code=409, detail="Model name already exists. Please choose another name.")
+            # If user provided training_input_size, update in-memory ModelInfo.input_size for UI consistency
+            try:
+                if training_size_list:
+                    mi = model_manager.models_info.get(model_id)
+                    if mi:
+                        mi.input_size = tuple(training_size_list)
+                        model_manager.models_info[model_id] = mi
+                        # Persist to models_config.json
+                        model_manager._save_models_config()
+                        logger.info("operations.operations", "ModelInfo.input_size updated from training_input_size", "model_info_training_size_override", {
+                            "model_id": model_id,
+                            "training_input_size": training_size_list
+                        })
+            except Exception as mem_err:
+                logger.error("errors.system", f"Failed to update in-memory input_size: {str(mem_err)}", "model_info_training_size_override_error", {
+                    "model_id": model_id,
+                    "error": str(mem_err),
+                    "error_type": type(mem_err).__name__
+                })
             # Immediately upsert into ai_models so the DB reflects the new model without requiring restart
             try:
                 model_info = model_manager.models_info.get(model_id)

@@ -37,18 +37,20 @@ import { logInfo, logError, logUserClick } from '../utils/professional_logger';
     MoreOutlined,
     ExperimentOutlined,
     ThunderboltOutlined,
-  CloudUploadOutlined,
-  SettingOutlined,
-  BarChartOutlined,
-  SearchOutlined,
-  FilterOutlined,
-  StarOutlined,
-  ClockCircleOutlined
-} from '@ant-design/icons';
+    CloudUploadOutlined,
+    SettingOutlined,
+    BarChartOutlined,
+    SearchOutlined,
+    FilterOutlined,
+    StarOutlined,
+    ClockCircleOutlined,
+    QuestionCircleOutlined
+  } from '@ant-design/icons';
 import { modelsAPI, handleAPIError } from '../services/api';
+import YAML from 'yaml';
 
 const { Title, Paragraph, Text } = Typography;
-const { Dragger } = Upload;
+  const { Dragger } = Upload;
 const { Option } = Select;
 const { Search } = Input;
 
@@ -172,6 +174,53 @@ const ModelsModern = () => {
         }
         const size = [parseInt(w, 10), parseInt(h, 10)];
         formData.append('training_input_size', JSON.stringify(size));
+      } else if (ext === '.onnx') {
+        const w = values.training_input_width;
+        const h = values.training_input_height;
+        if (!w || !h) {
+          message.error('Please provide training input width and height for .onnx models');
+          throw new Error('Missing training input size for .onnx');
+        }
+        const yamlList = values.classes_yaml || [];
+        const hasYaml = Array.isArray(yamlList) && yamlList.length > 0;
+        let classList = null;
+        let ncVal = null;
+        if (!hasYaml) {
+          const classesCsv = (values.onnx_classes_csv || '').trim();
+          if (!classesCsv) {
+            message.error('Please provide classes (comma-separated) for .onnx models');
+            throw new Error('Missing classes for .onnx');
+          }
+          classList = classesCsv.split(',').map(s => s.trim()).filter(s => s.length > 0);
+          ncVal = parseInt(values.onnx_nc, 10);
+          if (!ncVal || ncVal <= 0) {
+            message.error('Please provide a valid number of classes (nc) for .onnx models');
+            throw new Error('Invalid nc for .onnx');
+          }
+          if (classList.length !== ncVal) {
+            message.error(`nc (${ncVal}) must match classes length (${classList.length})`);
+            throw new Error('nc mismatch with classes length');
+          }
+        }
+        const size = [parseInt(w, 10), parseInt(h, 10)];
+        formData.append('training_input_size', JSON.stringify(size));
+        if (hasYaml) {
+          const yamlFile = yamlList[0]?.originFileObj || yamlList[0]?.file || yamlList[0]?.originFileObj;
+          if (yamlFile) formData.append('classes_yaml', yamlFile);
+          // If user also typed classes/nc, include them for cross-checking on backend
+          const classesCsvOpt = (values.onnx_classes_csv || '').trim();
+          const ncOpt = values.onnx_nc;
+          if (classesCsvOpt) {
+            const classListOpt = classesCsvOpt.split(',').map(s => s.trim()).filter(s => s.length > 0);
+            formData.append('classes', JSON.stringify(classListOpt));
+          }
+          if (ncOpt) {
+            formData.append('nc', String(parseInt(ncOpt, 10)));
+          }
+        } else {
+          formData.append('classes', JSON.stringify(classList));
+          formData.append('nc', String(ncVal));
+        }
       }
 
       // Use the correct API function for multipart import
@@ -835,6 +884,7 @@ const ModelsModern = () => {
               const name = fileItem?.originFileObj?.name || fileItem?.name || '';
               const ext = name.toLowerCase().slice(name.lastIndexOf('.'));
               const isPt = ext === '.pt';
+              const isOnnx = ext === '.onnx';
 
               if (!isPt) return null;
 
@@ -870,6 +920,152 @@ const ModelsModern = () => {
                       </Form.Item>
                     </Col>
                   </Row>
+                </>
+              );
+            }}
+          </Form.Item>
+
+          {/* Conditional metadata for .onnx models */}
+          <Form.Item shouldUpdate={(prev, cur) => prev.file !== cur.file} noStyle>
+            {() => {
+              const fileList = form.getFieldValue('file') || [];
+              const fileItem = Array.isArray(fileList) ? fileList[0] : null;
+              const name = fileItem?.originFileObj?.name || fileItem?.name || '';
+              const ext = name.toLowerCase().slice(name.lastIndexOf('.'));
+              const isOnnx = ext === '.onnx';
+
+              if (!isOnnx) return null;
+
+              return (
+                <>
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message={
+                      <span>
+                        For .onnx models, please provide training input size, classes (comma-separated), and number of classes (nc).
+                      </span>
+                    }
+                  />
+                  <Form.Item
+                    name="classes_yaml"
+                    label="Classes YAML (optional)"
+                    valuePropName="fileList"
+                    getValueFromEvent={(e) => {
+                      if (Array.isArray(e)) return e;
+                      return e && e.fileList ? e.fileList.slice(-1) : [];
+                    }}
+                    extra="Upload Ultralytics-style data.yaml to auto-fill classes and nc"
+                  >
+                    <Upload
+                      name="classes_yaml"
+                      multiple={false}
+                      beforeUpload={() => false}
+                      accept=".yaml,.yml"
+                      onChange={async ({ file }) => {
+                        try {
+                          const origin = file?.originFileObj || file;
+                          if (!origin) return;
+                          const text = await origin.text();
+                          const data = YAML.parse(text);
+                          let names = [];
+                          const rawNames = data && data.names;
+                          if (Array.isArray(rawNames)) {
+                            names = rawNames.map((n) => String(n));
+                          } else if (rawNames && typeof rawNames === 'object') {
+                            names = Object.entries(rawNames)
+                              .sort((a, b) => Number(a[0]) - Number(b[0]))
+                              .map(([, v]) => String(v));
+                          }
+                          const parsedNc = data && (typeof data.nc !== 'undefined') ? Number(data.nc) : (names.length || null);
+                          if (!names || names.length === 0) {
+                            message.warning('YAML parsed but no names found. Please fill classes and nc manually.');
+                            return;
+                          }
+                          if (!parsedNc || parsedNc <= 0) {
+                            message.warning('YAML parsed but nc missing/invalid. Please enter nc manually.');
+                          }
+                          if (parsedNc && parsedNc !== names.length) {
+                            message.warning(`YAML nc (${parsedNc}) does not match names length (${names.length}). Using names length.`);
+                          }
+                          // Auto-fill the form fields
+                          form.setFieldsValue({
+                            onnx_classes_csv: names.join(','),
+                            onnx_nc: String(names.length)
+                          });
+                          message.success('Classes and nc auto-filled from YAML');
+                        } catch (err) {
+                          message.error(`Failed to parse YAML: ${err?.message || 'Unknown error'}`);
+                        }
+                      }}
+                    >
+                      <Button icon={<UploadOutlined />}>Select YAML</Button>
+                    </Upload>
+                  </Form.Item>
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item
+                        name="training_input_width"
+                        label="Training Input Width"
+                        rules={[{ required: true, message: 'Please enter width (e.g., 640)' }]}
+                      >
+                        <Input type="number" min={16} max={8192} placeholder="e.g., 640" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        name="training_input_height"
+                        label="Training Input Height"
+                        rules={[{ required: true, message: 'Please enter height (e.g., 640)' }]}
+                      >
+                        <Input type="number" min={16} max={8192} placeholder="e.g., 640" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Form.Item
+                    name="onnx_classes_csv"
+                    label={
+                      <span>
+                        Classes (comma-separated)
+                        <Tooltip title="Order defines class IDs (0-based). Keep the same order as used during training/yaml.">
+                          <QuestionCircleOutlined style={{ marginLeft: 6 }} />
+                        </Tooltip>
+                      </span>
+                    }
+                    rules={[({ getFieldValue }) => ({
+                      validator: (_, value) => {
+                        const yamlList = getFieldValue('classes_yaml') || [];
+                        const hasYaml = Array.isArray(yamlList) && yamlList.length > 0;
+                        if (hasYaml) return Promise.resolve();
+                        if (!value || !String(value).trim()) {
+                          return Promise.reject(new Error('Please enter class names (comma-separated)'));
+                        }
+                        return Promise.resolve();
+                      }
+                    })]}
+                    extra="Example: person, car, dog → IDs: person(0), car(1), dog(2). nc must equal classes count."
+                  >
+                    <Input placeholder="e.g., person,car,dog" />
+                  </Form.Item>
+                  <Form.Item
+                    name="onnx_nc"
+                    label="Number of Classes (nc)"
+                    rules={[({ getFieldValue }) => ({
+                      validator: (_, value) => {
+                        const yamlList = getFieldValue('classes_yaml') || [];
+                        const hasYaml = Array.isArray(yamlList) && yamlList.length > 0;
+                        if (hasYaml) return Promise.resolve();
+                        if (!value || parseInt(value, 10) <= 0) {
+                          return Promise.reject(new Error('Please enter number of classes'));
+                        }
+                        return Promise.resolve();
+                      }
+                    })]}
+                    extra="Must equal the number of classes provided above."
+                  >
+                    <Input type="number" min={1} max={1024} placeholder="e.g., 3" />
+                  </Form.Item>
                 </>
               );
             }}

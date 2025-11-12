@@ -218,6 +218,7 @@ class ModelManager:
         model_name: str,
         model_type: ModelType,
         classes: Optional[List[str]] = None,
+        training_input_size: Optional[List[int]] = None,
         description: str = "",
         confidence_threshold: float = 0.5,
         iou_threshold: float = 0.45
@@ -281,15 +282,25 @@ class ModelManager:
                 if hasattr(model.model, 'yaml') and 'imgsz' in model.model.yaml:
                     size = model.model.yaml['imgsz']
                     input_size = (size, size) if isinstance(size, int) else tuple(size)
+                # If user provided training_input_size, prefer it for UI consistency
+                if training_input_size and len(training_input_size) >= 2:
+                    input_size = (int(training_input_size[0]), int(training_input_size[1]))
             else:
-                # ONNX/TensorRT: skip loading at import. Use provided classes or default to empty.
+                # ONNX/TensorRT: skip heavy loading at import. Use provided classes or default to empty.
                 if classes is None:
                     classes = []
+                # If user provided training_input_size, use it; otherwise keep default 640x640
+                if training_input_size and len(training_input_size) >= 2:
+                    input_size = (int(training_input_size[0]), int(training_input_size[1]))
         except Exception as e:
             print(f"Warning: Could not load model for inspection: {e}")
             if classes is None:
                 classes = []
-            input_size = (640, 640)
+            # Fallback to user-provided training_input_size if available; else default
+            if training_input_size and len(training_input_size) >= 2:
+                input_size = (int(training_input_size[0]), int(training_input_size[1]))
+            else:
+                input_size = (640, 640)
         
         # Create model info
         model_info = ModelInfo(

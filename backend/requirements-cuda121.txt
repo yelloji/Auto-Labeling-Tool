@@ -45,6 +45,7 @@ requests>=2.31.0
 tqdm>=4.66.0
 PyYAML>=6.0.0
 
+onnx>=1.14.0  # Optional but recommended: enables ONNX input-size metadata parsing
 # Development and testing
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
