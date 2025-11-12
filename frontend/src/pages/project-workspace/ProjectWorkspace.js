@@ -147,7 +147,8 @@ const ProjectWorkspace = () => {
   // Log project type validation when project loads
   useEffect(() => {
     if (project && project.project_type) {
-      const validTypes = ['object_detection', 'classification', 'segmentation'];
+      // Classification task is not supported in the app; keep only supported tasks
+      const validTypes = ['object_detection', 'segmentation'];
       if (!validTypes.includes(project.project_type)) {
         logInfo('app.frontend.validation', 'Unknown project type encountered', { 
           projectId, 
@@ -172,7 +173,6 @@ const ProjectWorkspace = () => {
   const getProjectTypeInfo = (type) => {
     const typeInfo = {
       'object_detection': { color: 'blue', label: 'Object Detection' },
-      'classification': { color: 'green', label: 'Classification' },
       'segmentation': { color: 'purple', label: 'Instance Segmentation' }
     };
     return typeInfo[type] || { color: 'default', label: type };

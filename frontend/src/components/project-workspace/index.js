@@ -5,10 +5,10 @@ import DatasetSection from './DatasetSection';
 import ReleaseSection from './ReleaseSection';
 import AnalyticsSection from './AnalyticsSection';
 import ModelsSection from './ModelsSection';
+import ModelTrainingSection from './ModelTrainingSection/ModelTrainingSection.jsx';
 import VisualizeSection from './VisualizeSection';
 import DeploymentsSection from './DeploymentsSection';
 import ActiveLearningSection from './ActiveLearningSection';
-import ModelTrainingSection from './ModelTrainingSection/ModelTrainingSection.jsx';
 
 // Log module loading
 logInfo('app.frontend.ui', 'project_workspace_module_loaded', 'Project workspace module loaded', {

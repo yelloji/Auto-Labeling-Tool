@@ -283,7 +283,6 @@ const ProjectDetail = () => {
 
   const projectTypeColors = {
     'object_detection': 'blue',
-    'classification': 'green',
     'segmentation': 'purple'
   };
 

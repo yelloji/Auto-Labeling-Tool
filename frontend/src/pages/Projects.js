@@ -126,7 +126,6 @@ const Projects = () => {
   const getProjectTypeInfo = (type) => {
     const typeInfo = {
       'object_detection': { color: 'blue', label: 'Object Detection', icon: <BarChartOutlined /> },
-      'classification': { color: 'green', label: 'Classification', icon: <PictureOutlined /> },
       'segmentation': { color: 'purple', label: 'Segmentation', icon: <SettingOutlined /> }
     };
     return typeInfo[type] || { color: 'default', label: type, icon: <ProjectOutlined /> };
@@ -698,7 +697,6 @@ const Projects = () => {
           >
             <Select placeholder="Select project type">
               <Option value="object_detection">Object Detection</Option>
-              <Option value="classification">Image Classification</Option>
               <Option value="segmentation">Image Segmentation</Option>
             </Select>
           </Form.Item>
