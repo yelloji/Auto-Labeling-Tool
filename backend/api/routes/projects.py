@@ -18,6 +18,8 @@ from pathlib import Path
 
 from database.database import get_db
 from database.operations import ProjectOperations, DatasetOperations, ImageOperations, AnnotationOperations
+from database.operations import AiModelOperations
+from api.services.model_serialization import serialize_ai_model
 from models.model_manager import model_manager
 from core.config import settings
 from logging_system.professional_logger import get_professional_logger
@@ -71,6 +73,50 @@ class ProjectResponse(BaseModel):
     total_datasets: int = 0
     total_images: int = 0
     labeled_images: int = 0
+
+
+@router.get("/{project_id}/models")
+async def get_project_models(
+    project_id: int,
+    include_global: bool = True,
+    db: Session = Depends(get_db)
+):
+    """List models scoped to a project. Optionally include global models (project_id is NULL).
+
+    Returns a lightweight list suitable for selection UIs.
+    """
+    logger.info("app.backend", "Starting get project models operation", "get_project_models_start", {
+        "project_id": project_id,
+        "include_global": include_global,
+        "endpoint": "/projects/{project_id}/models"
+    })
+
+    try:
+        # Verify project exists
+        proj = ProjectOperations.get_project(db, project_id)
+        if not proj:
+            logger.warning("errors.validation", "Project not found for models listing", "project_models_not_found", {
+                "project_id": project_id
+            })
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        models = AiModelOperations.list_models_by_project(db, project_id=project_id, include_global=include_global)
+        # Use centralized serialization with authoritative flags for UI consumption
+        result = [serialize_ai_model(db, m) for m in models]
+        logger.info("operations.operations", "Project models retrieved successfully", "get_project_models_success", {
+            "project_id": project_id,
+            "models_count": len(result)
+        })
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("errors.system", f"Get project models operation failed: {str(e)}", "get_project_models_failure", {
+            "project_id": project_id,
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
+        raise HTTPException(status_code=500, detail=f"Failed to get project models: {str(e)}")
 
 
 @router.get("/", response_model=List[ProjectResponse])

@@ -69,11 +69,11 @@ class ProjectOperations:
             # Create project folder structure
             logger.info("app.database", "Creating project folder structure", "project_folders_creation", {
                 "project_name": name,
-                "folders": ["unassigned", "annotating", "dataset"]
+                "folders": ["unassigned", "annotating", "dataset", "model"]
             })
             
             project_dir = settings.PROJECTS_DIR / name
-            for folder in ["unassigned", "annotating", "dataset"]:
+            for folder in ["unassigned", "annotating", "dataset", "model"]:
                 folder_path = project_dir / folder
                 folder_path.mkdir(parents=True, exist_ok=True)
             
@@ -1479,17 +1479,22 @@ class AiModelOperations:
         model_type: str,
         model_format: str,
         file_path: str,
+        project_id: Optional[int] = None,
         classes: Optional[List[str]] = None,
         input_size_default: Optional[List[int]] = None,
         training_input_size: Optional[List[int]] = None,
     ) -> AiModel:
         """Create or update an AiModel by name.
 
-        - Ensures unique name constraint is respected.
+        - Ensures unique (name, project_id) constraint is respected.
         - Updates existing record if found; otherwise creates a new one.
         """
         try:
-            existing = db.query(AiModel).filter(AiModel.name == name).first()
+            existing = (
+                db.query(AiModel)
+                .filter(AiModel.name == name, AiModel.project_id == project_id)
+                .first()
+            )
 
             nc = len(classes) if classes else 0
             # Normalize sizes to [w, h]
@@ -1518,10 +1523,12 @@ class AiModelOperations:
                 existing.input_size_default = input_size_default
                 existing.training_input_size = training_input_size
                 existing.updated_at = datetime.utcnow()
+                # project_id remains the same scope
                 db.commit()
                 db.refresh(existing)
                 logger.info("app.database", "AiModel updated", "ai_model_upsert_update", {
                     "name": name,
+                    "project_id": project_id,
                     "id": existing.id,
                     "format": existing.format,
                     "type": existing.type,
@@ -1531,6 +1538,7 @@ class AiModelOperations:
             else:
                 ai = AiModel(
                     name=name,
+                    project_id=project_id,
                     type=model_type,
                     format=model_format,
                     file_path=str(file_path),
@@ -1545,6 +1553,7 @@ class AiModelOperations:
                 db.refresh(ai)
                 logger.info("app.database", "AiModel created", "ai_model_upsert_create", {
                     "name": name,
+                    "project_id": project_id,
                     "id": ai.id,
                     "format": ai.format,
                     "type": ai.type,
@@ -1599,10 +1608,15 @@ class AiModelOperations:
                         else:
                             fmt = "pytorch"
 
-                    before = db.query(AiModel).filter(AiModel.name == name).first()
+                    before = (
+                        db.query(AiModel)
+                        .filter(AiModel.name == name, AiModel.project_id == None)
+                        .first()
+                    )
                     AiModelOperations.upsert_ai_model(
                         db=db,
                         name=name,
+                        project_id=None,
                         model_type=model_type,
                         model_format=fmt,
                         file_path=path,
@@ -1610,7 +1624,11 @@ class AiModelOperations:
                         input_size_default=input_size,
                         training_input_size=None,
                     )
-                    after = db.query(AiModel).filter(AiModel.name == name).first()
+                    after = (
+                        db.query(AiModel)
+                        .filter(AiModel.name == name, AiModel.project_id == None)
+                        .first()
+                    )
                     if before is None and after is not None:
                         summary["created"] += 1
                     else:
@@ -1688,6 +1706,32 @@ class AiModelOperations:
         except Exception as e:
             logger.error("errors.system", f"AiModel deletion by id failed: {str(e)}", "ai_model_delete_by_id_error", {
                 "id": model_id,
+                "error": str(e),
+                "error_type": type(e).__name__
+            })
+            raise
+
+    @staticmethod
+    def list_models_by_project(db: Session, project_id: Optional[int], include_global: bool = True) -> List[AiModel]:
+        """Return AiModel rows scoped to a project. Optionally include global models (project_id is NULL).
+
+        - If project_id is None, returns only global models when include_global=True, otherwise empty list.
+        - If project_id is provided, returns models with that project_id; if include_global=True, also include global ones.
+        """
+        try:
+            q = db.query(AiModel)
+            if project_id is None:
+                if include_global:
+                    return q.filter(AiModel.project_id == None).all()
+                return []
+            else:
+                if include_global:
+                    return q.filter(or_(AiModel.project_id == project_id, AiModel.project_id == None)).all()
+                return q.filter(AiModel.project_id == project_id).all()
+        except Exception as e:
+            logger.error("errors.system", f"List AiModels by project failed: {str(e)}", "ai_model_list_by_project_error", {
+                "project_id": project_id,
+                "include_global": include_global,
                 "error": str(e),
                 "error_type": type(e).__name__
             })

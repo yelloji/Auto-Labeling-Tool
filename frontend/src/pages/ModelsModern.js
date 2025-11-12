@@ -47,6 +47,7 @@ import { logInfo, logError, logUserClick } from '../utils/professional_logger';
     QuestionCircleOutlined
   } from '@ant-design/icons';
 import { modelsAPI, handleAPIError } from '../services/api';
+import { buildClassesCSV, copyTextToClipboard } from '../utils/modelDetailsHelpers';
 import YAML from 'yaml';
 
 const { Title, Paragraph, Text } = Typography;
@@ -66,6 +67,8 @@ const ModelsModern = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [form] = Form.useForm();
+  const [classesExpanded, setClassesExpanded] = useState(false);
+  const [enrichingDetails, setEnrichingDetails] = useState(false);
 
   useEffect(() => {
     logInfo('app.frontend.navigation', 'ModelsModern page loaded', 'page_view', { component: 'ModelsModern' });
@@ -134,6 +137,22 @@ const ModelsModern = () => {
     } finally {
       setLoading(false);
       logInfo('app.frontend.ui', 'ModelsModern loading state changed', 'state_change', { component: 'ModelsModern', newState: 'loading_finished' });
+    }
+  };
+
+  const openModelDetails = async (model) => {
+    try {
+      setViewModalVisible(true);
+      setSelectedModel(model);
+      setEnrichingDetails(true);
+      const id = model.manager_id || model.id;
+      const response = await modelsAPI.getModel(id);
+      const data = response; // modelsAPI.getModel returns response.data
+      setSelectedModel({ ...model, ...data });
+    } catch (error) {
+      handleAPIError(error, 'Failed to load model details');
+    } finally {
+      setEnrichingDetails(false);
     }
   };
 
@@ -324,8 +343,7 @@ const ModelsModern = () => {
             logUserClick('ModelsModern', 'view_model_details');
             logInfo('app.frontend.interactions', 'Viewing model details', 'view_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name, modelType: model.type });
             logInfo('app.frontend.ui', 'View modal opened', 'modal_open', { component: 'ModelsModern', modal: 'view_model', modelId: model.id });
-            setSelectedModel(model);
-            setViewModalVisible(true);
+            openModelDetails(model);
           }}
         >
           View Details
@@ -338,7 +356,7 @@ const ModelsModern = () => {
               logUserClick('ModelsModern', 'download_model');
               logInfo('app.frontend.interactions', 'Download model requested', 'download_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
               const hide = message.loading('Preparing download...', 0);
-              modelsAPI.downloadModel(model.id)
+              modelsAPI.downloadModel(model.manager_id || model.id)
                 .then(({ blob, filename }) => {
                   try {
                     // Create a temporary link to trigger browser download
@@ -396,7 +414,7 @@ const ModelsModern = () => {
                   okText: 'Delete',
                   okType: 'danger',
                   cancelText: 'Cancel',
-                  onOk: () => handleDelete(model.id),
+                  onOk: () => handleDelete(model.manager_id || model.id),
                 });
               }}
             >
@@ -1101,12 +1119,14 @@ const ModelsModern = () => {
           logUserClick('ModelsModern', 'close_view_modal');
           logInfo('app.frontend.ui', 'View modal closed', 'modal_close', { component: 'ModelsModern', modal: 'view_model' });
           setViewModalVisible(false);
+          setClassesExpanded(false);
         }}
         footer={[
           <Button key="close" onClick={() => {
             logUserClick('ModelsModern', 'close_view_modal_button');
             logInfo('app.frontend.ui', 'View modal closed from button', 'modal_close', { component: 'ModelsModern', modal: 'view_model' });
             setViewModalVisible(false);
+            setClassesExpanded(false);
           }}>
             Close
           </Button>
@@ -1155,6 +1175,36 @@ const ModelsModern = () => {
                       </div>
                     </Col>
                   </Row>
+                  <Divider />
+                  <Text strong>Model Metadata:</Text>
+                  <Row gutter={[16, 8]} style={{ marginTop: 8 }}>
+                    <Col span={12}>
+                      <Text type="secondary">Format</Text>
+                      <div>{selectedModel.format || 'Unknown'}</div>
+                    </Col>
+                    <Col span={12}>
+                      <Text type="secondary">Number of Classes (nc)</Text>
+                      <div>{(selectedModel.nc ?? selectedModel.num_classes ?? (Array.isArray(selectedModel.classes) ? selectedModel.classes.length : 'Unknown'))}</div>
+                    </Col>
+                    <Col span={12}>
+                      <Text type="secondary">Training Input Size</Text>
+                      <div>
+                        {(() => {
+                          const tis = selectedModel.training_input_size ?? selectedModel.input_size;
+                          if (!tis) return 'Unknown';
+                          if (Array.isArray(tis)) {
+                            return tis.length === 2 ? `${tis[0]} x ${tis[1]}` : tis.join(', ');
+                          }
+                          if (typeof tis === 'object') {
+                            const w = tis.width || tis.w || tis[0];
+                            const h = tis.height || tis.h || tis[1];
+                            return (w && h) ? `${w} x ${h}` : JSON.stringify(tis);
+                          }
+                          return String(tis);
+                        })()}
+                      </div>
+                    </Col>
+                  </Row>
                   
                   {selectedModel.accuracy && (
                     <>
@@ -1173,6 +1223,56 @@ const ModelsModern = () => {
                       </Row>
                     </>
                   )}
+                  <Divider />
+                  <Text strong>Classes:</Text>
+                  <div style={{ marginTop: 8 }}>
+                    {(() => {
+                      const classes = Array.isArray(selectedModel.classes) ? selectedModel.classes : [];
+                      const count = classes.length;
+                      const displayList = classesExpanded ? classes : classes.slice(0, 20);
+                      return (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <Text type="secondary">Total: {count}</Text>
+                            <Space>
+                              <Button size="small" onClick={() => {
+                                const csv = buildClassesCSV(classes);
+                                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${(selectedModel.name || 'model')}_classes.csv`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(url);
+                                message.success('Classes CSV downloaded');
+                              }}>Download CSV</Button>
+                              <Button size="small" onClick={() => {
+                                copyTextToClipboard(classes.join(', '));
+                                message.success('Classes copied to clipboard');
+                              }}>Copy</Button>
+                              {count > 20 && (
+                                <Button size="small" type="link" onClick={() => setClassesExpanded(!classesExpanded)}>
+                                  {classesExpanded ? 'Show less' : 'Show all'}
+                                </Button>
+                              )}
+                            </Space>
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: classesExpanded ? 260 : 120, overflowY: 'auto', paddingRight: 4 }}>
+                            {displayList.map((name, idx) => (
+                              <Tooltip key={`${name}-${idx}`} title={name}>
+                                <Tag>
+                                  <span style={{ opacity: 0.7, marginRight: 6 }}>{idx}</span>
+                                  <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>{name}</span>
+                                </Tag>
+                              </Tooltip>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </Card>
               </Col>
             </Row>

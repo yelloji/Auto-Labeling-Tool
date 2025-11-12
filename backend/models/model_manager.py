@@ -221,7 +221,8 @@ class ModelManager:
         training_input_size: Optional[List[int]] = None,
         description: str = "",
         confidence_threshold: float = 0.5,
-        iou_threshold: float = 0.45
+        iou_threshold: float = 0.45,
+        dest_dir: Optional[Union[str, Path]] = None
     ) -> str:
         """
         Import a custom YOLO model
@@ -260,9 +261,16 @@ class ModelManager:
         if model_id in self.models_info:
             raise ValueError(f"Model name already exists: {model_name}")
 
-        # Copy model to custom models directory
+        # Determine destination directory for storage
+        # Default to models/custom unless a specific dest_dir is provided (e.g., projects/<ProjectName>/model)
+        if dest_dir is not None:
+            target_base = Path(dest_dir)
+        else:
+            target_base = self.models_dir / "custom"
+        target_base.mkdir(parents=True, exist_ok=True)
+
         # Store the file on disk using the plain slug (no 'custom_' prefix) for a clean filename
-        custom_model_path = self.models_dir / "custom" / f"{slug}{model_file.suffix}"
+        custom_model_path = target_base / f"{slug}{model_file.suffix}"
         if custom_model_path.exists():
             # Avoid overwriting existing files when name conflicts
             raise ValueError(f"Model file already exists for name: {model_name}")

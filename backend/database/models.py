@@ -243,6 +243,8 @@ class AiModel(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False)
+    # Optional project association. Null => global model visible to all projects.
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
     # Model task type (object_detection, instance_segmentation, semantic_segmentation, classification, pose_estimation)
     type = Column(String(50), nullable=False, default="object_detection")
     # Storage format (pytorch, onnx, tensorrt)
@@ -263,7 +265,8 @@ class AiModel(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     __table_args__ = (
-        sa.Index("ix_ai_models_name", "name", unique=True),
+        # Allow same model name across different projects; enforce uniqueness per project scope
+        sa.Index("ix_ai_models_name_project", "name", "project_id", unique=True),
     )
 
     def __repr__(self):

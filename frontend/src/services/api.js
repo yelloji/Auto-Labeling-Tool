@@ -170,16 +170,32 @@ export const modelsAPI = {
     return response.data;
   },
 
-  // Import custom model
-  importModel: async (formData) => {
-    const response = await api.post('/api/v1/models/import', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      // Large model files and backend processing can exceed 30s
-      timeout: 120000,
-    });
-    return response.data;
+  // Import custom model (optionally scoped to a project)
+  importModel: async (formData, projectId = null) => {
+    try {
+      // Create a new FormData and copy entries to avoid mutating the original reference
+      const fd = new FormData();
+      if (formData && formData instanceof FormData) {
+        for (const [key, value] of formData.entries()) {
+          fd.append(key, value);
+        }
+      }
+      if (projectId) {
+        fd.append('project_id', String(projectId));
+      }
+
+      const response = await api.post('/api/v1/models/import', fd, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        // Large model files and backend processing can exceed 30s
+        timeout: 120000,
+      });
+      return response.data;
+    } catch (error) {
+      handleAPIError(error, 'Failed to import model');
+      throw error;
+    }
   },
 
   // Delete model
@@ -257,6 +273,92 @@ export const projectsAPI = {
   getProjectStats: async (projectId) => {
     const response = await api.get(`/api/v1/projects/${projectId}/stats`);
     return response.data;
+  },
+
+  // Get models associated with a project (optionally include global models)
+  getProjectModels: async (projectId, includeGlobal = false) => {
+    const params = { include_global: includeGlobal };
+    const response = await api.get(`/api/v1/projects/${projectId}/models`, { params });
+
+    // Normalize model fields so the Project Models UI can consistently classify
+    // readiness, training, and custom-vs-pretrained across different backends.
+    const normalizeProjectModel = (m) => {
+      const statusStr = String(m?.status || m?.state || m?.phase || m?.training_status || '').toLowerCase();
+      const src = String(m?.source || m?.origin || '').toLowerCase();
+      const scope = String(m?.scope || (m?.project_id ? 'project' : 'global')).toLowerCase();
+      const isProjectScoped = String(m?.project_id || '') === String(projectId);
+      const isPretrained = typeof m?.is_pretrained !== 'undefined' ? Boolean(m?.is_pretrained) : null;
+      // Minimal, safe normalization to match Global Models UI behavior:
+      // trust backend flags when present; only fallback to strict status values.
+      const is_training = (typeof m?.is_training !== 'undefined')
+        ? Boolean(m?.is_training)
+        : (statusStr === 'training' || statusStr === 'running');
+      const is_ready = (typeof m?.is_ready !== 'undefined')
+        ? Boolean(m?.is_ready)
+        : (statusStr === 'ready');
+
+      // If backend omitted flags for pretrained models (global or linked to project),
+      // surface them as Ready consistently.
+      const isPretrainedLike = (isPretrained === true) || (src === 'pretrained');
+      const final_is_ready = is_ready || isPretrainedLike;
+      const final_is_training = isPretrainedLike ? false : is_training;
+      const is_custom = Boolean(m?.is_custom)
+        || src === 'custom' || src === 'user' || src === 'uploaded'
+        || scope === 'project'
+        || (isProjectScoped && isPretrained === false);
+
+      return {
+        ...m,
+        status: m?.status || statusStr, // keep original if present
+        scope,
+        is_training: final_is_training,
+        is_ready: final_is_ready,
+        is_custom,
+      };
+    };
+
+    let data = response?.data;
+    if (Array.isArray(data)) {
+      let models = data.map(normalizeProjectModel);
+      // If global models are included, enrich global items with authoritative flags
+      // from the global models endpoint to ensure Ready/Training status matches
+      // the Global Models UI.
+      if (includeGlobal) {
+        try {
+          const globalList = await modelsAPI.getModels();
+          const gmap = new Map();
+          if (Array.isArray(globalList)) {
+            globalList.forEach(g => {
+              if (g && typeof g.id !== 'undefined') {
+                gmap.set(String(g.id), g);
+              }
+            });
+          }
+          models = models.map(m => {
+            if (gmap.has(String(m?.id))) {
+              const g = gmap.get(String(m.id));
+              const merged_is_ready = (typeof m?.is_ready !== 'undefined') ? Boolean(m.is_ready) : Boolean(g?.is_ready);
+              const merged_is_training = (typeof m?.is_training !== 'undefined') ? Boolean(m.is_training) : Boolean(g?.is_training);
+              const merged_is_pretrained = (typeof m?.is_pretrained !== 'undefined') ? Boolean(m.is_pretrained) : Boolean(g?.is_pretrained);
+              const merged_source = m?.source || m?.origin || g?.source || g?.origin || (merged_is_pretrained ? 'pretrained' : undefined);
+              return {
+                ...m,
+                is_ready: merged_is_ready,
+                is_training: merged_is_training,
+                is_pretrained: merged_is_pretrained,
+                source: merged_source,
+              };
+            }
+            return m;
+          });
+        } catch (e) {
+          // If enrichment fails, proceed with normalized models
+          logError('app.frontend.validation', 'enrich_global_models_failed', e, { component: 'api.projectsAPI', endpoint: '/api/v1/models/' });
+        }
+      }
+      return models;
+    }
+    return data;
   },
 
   // Duplicate project with all datasets, images, and annotations

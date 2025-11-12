@@ -16,7 +16,7 @@ import yaml
 from models.model_manager import model_manager, ModelType, ModelFormat
 from sqlalchemy.orm import Session
 from database.database import get_db
-from database.operations import AiModelOperations
+from database.operations import AiModelOperations, ProjectOperations
 from core.config import settings
 from logging_system.professional_logger import get_professional_logger
 
@@ -53,8 +53,12 @@ class PredictionRequest(BaseModel):
 
 
 @router.get("/", response_model=List[Dict[str, Any]])
-async def get_models():
-    """Get list of all available models"""
+async def get_models(db: Session = Depends(get_db)):
+    """Get list of global models only.
+
+    Global = AiModel.project_id is NULL in DB, plus all pre-trained models (is_custom == False).
+    This prevents project-scoped custom models from appearing at global level.
+    """
     logger.info("app.backend", f"Starting get models operation", "get_models_start", {
         "endpoint": "/models"
     })
@@ -62,13 +66,53 @@ async def get_models():
     try:
         logger.debug("operations.operations", f"Fetching models list", "models_fetch", {})
         
-        models = model_manager.get_models_list()
-        
-        logger.info("operations.operations", f"Models retrieved successfully", "get_models_success", {
-            "models_count": len(models)
+        all_models = model_manager.get_models_list()
+        filtered: List[Dict[str, Any]] = []
+
+        # Lazy import to avoid circulars
+        from database.models import AiModel  # type: ignore
+
+        for m in all_models:
+            try:
+                # Always include pre-trained models
+                if not bool(m.get("is_custom", False)):
+                    filtered.append(m)
+                    continue
+
+                # For custom models, include only if DB scope is global (project_id is NULL)
+                name = m.get("name")
+                ai_row = db.query(AiModel).filter(AiModel.name == name).first()
+                if ai_row is not None:
+                    if ai_row.project_id is None:
+                        filtered.append(m)
+                    # else: project-scoped -> skip
+                    continue
+
+                # If no DB record exists (legacy), infer by path: project-scoped models live under projects/<name>/model
+                mi = model_manager.models_info.get(m.get("id"))
+                if mi is not None:
+                    proj_dir = str(settings.PROJECTS_DIR).replace("\\", "/").lower()
+                    model_path = str(getattr(mi, "path", "")).replace("\\", "/").lower()
+                    if proj_dir and proj_dir in model_path:
+                        # project-scoped -> skip
+                        continue
+                # Otherwise treat as global custom
+                filtered.append(m)
+            except Exception as fe:
+                # If filtering fails for any reason, be conservative and include only pre-trained
+                if not bool(m.get("is_custom", False)):
+                    filtered.append(m)
+                logger.warning("errors.validation", f"Filter check failed for model '{m.get('name')}', defaulting behavior: {str(fe)}", "global_models_filter_warning", {
+                    "model_id": m.get("id"),
+                    "model_name": m.get("name"),
+                    "error_type": type(fe).__name__
+                })
+
+        logger.info("operations.operations", f"Global models retrieved successfully", "get_models_success", {
+            "models_count": len(filtered)
         })
         
-        return models
+        return filtered
         
     except Exception as e:
         logger.error("errors.system", f"Get models operation failed", "get_models_failure", {
@@ -166,6 +210,7 @@ async def import_custom_model(
     confidence_threshold: float = Form(0.5),
     iou_threshold: float = Form(0.45),
     training_input_size: Optional[str] = Form(None),
+    project_id: Optional[int] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -371,15 +416,27 @@ async def import_custom_model(
             
             # Enforce unique name at backend; return 409 if duplicate
             try:
+                # Determine destination directory: global (models/custom) or project-scoped (projects/<ProjectName>/model)
+                dest_dir = None
+                project_name = None
+                if project_id is not None:
+                    proj = ProjectOperations.get_project(db, project_id)
+                    if not proj:
+                        raise HTTPException(status_code=404, detail="Project not found")
+                    project_name = proj.name
+                    dest_dir = Path(settings.PROJECTS_DIR) / project_name / "model"
+                    dest_dir.mkdir(parents=True, exist_ok=True)
+
                 model_id = model_manager.import_custom_model(
-                model_file=tmp_file_path,
-                model_name=name,
-                model_type=type,
-                classes=class_list,
-                training_input_size=training_size_list,
-                description=description,
-                confidence_threshold=confidence_threshold,
-                iou_threshold=iou_threshold
+                    model_file=tmp_file_path,
+                    model_name=name,
+                    model_type=type,
+                    classes=class_list,
+                    training_input_size=training_size_list,
+                    description=description,
+                    confidence_threshold=confidence_threshold,
+                    iou_threshold=iou_threshold,
+                    dest_dir=dest_dir
                 )
             except ValueError as ve:
                 msg = str(ve)
@@ -411,12 +468,22 @@ async def import_custom_model(
             try:
                 model_info = model_manager.models_info.get(model_id)
                 if model_info:
+                    # Compute file_path for DB. If project-scoped, store a projects-relative path.
+                    db_file_path = model_info.path
+                    try:
+                        if project_id is not None and project_name is not None:
+                            rel_path = Path(model_info.path).relative_to(settings.BASE_DIR)
+                            db_file_path = str(rel_path).replace('\\', '/')
+                    except Exception:
+                        # Fallback to original path if relative computation fails
+                        db_file_path = model_info.path
                     AiModelOperations.upsert_ai_model(
                         db=db,
                         name=model_info.name,
+                        project_id=project_id,
                         model_type=model_info.type.value if hasattr(model_info.type, "value") else str(model_info.type),
                         model_format=model_info.format.value if hasattr(model_info.format, "value") else str(model_info.format),
-                        file_path=model_info.path,
+                        file_path=db_file_path,
                         classes=model_info.classes,
                         input_size_default=list(model_info.input_size) if isinstance(model_info.input_size, tuple) else model_info.input_size,
                         training_input_size=training_size_list,
@@ -571,7 +638,7 @@ async def predict_with_model(
 
 
 @router.get("/{model_id}")
-async def get_model_info(model_id: str):
+async def get_model_info(model_id: str, db: Session = Depends(get_db)):
     """Get detailed information about a specific model"""
     logger.info("app.backend", f"Starting get model info operation", "get_model_info_start", {
         "model_id": model_id,
@@ -594,6 +661,33 @@ async def get_model_info(model_id: str):
         })
         
         model_info = model_manager.models_info[model_id]
+
+        # Optional enrichment from database (AiModel) to include training_input_size and scope
+        # We try to map by name; if multiple projects have same name, prefer a global (project_id is NULL)
+        from database.models import AiModel  # type: ignore
+        ai_row = None
+        try:
+            ai_row = (
+                db.query(AiModel)
+                .filter(AiModel.name == model_info.name)
+                .order_by(AiModel.project_id.isnot(None))
+                .first()
+            )
+        except Exception:
+            ai_row = None
+
+        training_input_size = None
+        project_id = None
+        created_at_db = None
+        nc_db = None
+        try:
+            if ai_row is not None:
+                training_input_size = getattr(ai_row, "training_input_size", None)
+                project_id = getattr(ai_row, "project_id", None)
+                created_at_db = getattr(ai_row, "created_at", None)
+                nc_db = getattr(ai_row, "nc", None)
+        except Exception:
+            pass
         
         logger.info("operations.operations", f"Model information retrieved successfully", "get_model_info_success", {
             "model_id": model_id,
@@ -610,12 +704,16 @@ async def get_model_info(model_id: str):
             "format": model_info.format,
             "classes": model_info.classes,
             "num_classes": len(model_info.classes),
+            "nc": nc_db if isinstance(nc_db, int) and nc_db > 0 else len(model_info.classes),
             "input_size": model_info.input_size,
+            # Enriched from DB when available
+            "training_input_size": training_input_size,
+            "project_id": project_id,
             "confidence_threshold": model_info.confidence_threshold,
             "iou_threshold": model_info.iou_threshold,
             "description": model_info.description,
             "is_custom": model_info.is_custom,
-            "created_at": model_info.created_at,
+            "created_at": created_at_db if created_at_db is not None else model_info.created_at,
             # Enriched metadata for UI consistency
             "file_size": getattr(model_info, "file_size", 0),
             "is_ready": getattr(model_info, "is_ready", False),

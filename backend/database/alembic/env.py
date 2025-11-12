@@ -4,10 +4,26 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+import sys
+from pathlib import Path
+
+# Ensure project root and backend/ are on sys.path so imports like 'core' and 'logging_system' resolve
+_HERE = Path(__file__).resolve()
+_PROJECT_ROOT = _HERE.parents[3]  # .../backend/database/alembic/env.py -> project root
+_BACKEND_DIR = _PROJECT_ROOT / "backend"
+for p in [str(_PROJECT_ROOT), str(_BACKEND_DIR)]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+from core.config import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Ensure Alembic uses the application's database URL
+if settings and getattr(settings, "DATABASE_URL", None):
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
