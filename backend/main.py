@@ -320,7 +320,9 @@ async def system_hardware():
 
 # Include Smart Segmentation routes
 from api import smart_segmentation
+from api.routes import training_models
 app.include_router(smart_segmentation.router, prefix="/api", tags=["smart-segmentation"])
+app.include_router(training_models.router, prefix="/api/v1", tags=["training-models"])
 
 # Serve static files (for uploaded images, etc.)
 static_dir = Path(settings.STATIC_FILES_DIR)

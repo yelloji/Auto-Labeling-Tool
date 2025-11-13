@@ -1,28 +1,58 @@
-import React, { useMemo } from 'react';
-import { Form, Select } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Form, Select, Tag, Spin } from 'antd';
+import { trainingAPI } from '../../../../services/api';
 
-const YOLO_DET = ['yolov8n.pt','yolov8s.pt','yolov8m.pt','yolov8l.pt','yolov8x.pt'];
-const YOLO_SEG = ['yolov8n-seg.pt','yolov8s-seg.pt','yolov8m-seg.pt','yolov8l-seg.pt','yolov8x-seg.pt'];
-const YOLO_CLS = ['yolov8n-cls.pt','yolov8s-cls.pt','yolov8m-cls.pt','yolov8l-cls.pt','yolov8x-cls.pt'];
 
-export default function PretrainedModelSelect({ framework, taskType, value, onChange }) {
-  const options = useMemo(() => {
-    if (framework !== 'ultralytics') return [];
-    let list = YOLO_DET;
-    if (taskType === 'segmentation') list = YOLO_SEG;
-    if (taskType === 'classification') list = YOLO_CLS;
-    return list.map((m) => ({ label: m, value: m }));
-  }, [framework, taskType]);
+export default function PretrainedModelSelect({ framework, taskType, projectId, value, onChange }) {
+  const [loading, setLoading] = useState(false);
+  const [modelOptions, setModelOptions] = useState([]);
+
+  useEffect(() => {
+    const load = async () => {
+      if (framework !== 'ultralytics') { setModelOptions([]); return; }
+      setLoading(true);
+      try {
+        const list = await trainingAPI.getTrainableModels(projectId, framework, taskType);
+        const items = [];
+        const sizeTag = (name) => name?.includes('n') ? 'n' : name?.includes('s') ? 's' : name?.includes('m') ? 'm' : name?.includes('l') ? 'l' : 'x';
+        for (const m of Array.isArray(list) ? list : []) {
+          const filePath = String(m?.file_path || '');
+          const name = String(m?.name || filePath || '').split(/[\\/]/).pop();
+          const scope = m?.project_id ? (m?.project_name || 'project') : 'global';
+          if (!filePath.toLowerCase().endsWith('.pt')) continue;
+          const size = sizeTag(name.toLowerCase());
+          const label = (
+            <span>
+              {name} <Tag style={{ marginLeft: 6 }}>{scope}</Tag> <Tag color="blue" style={{ marginLeft: 6 }}>{size}</Tag>
+            </span>
+          );
+          items.push({ label, value: filePath });
+        }
+        setModelOptions(items);
+      } catch {
+        setModelOptions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [framework, taskType, projectId]);
 
   return (
     <Form layout="vertical">
       <Form.Item label="Pretrained Model" required>
-        <Select
-          value={value}
-          placeholder="Select a pretrained model"
-          options={options}
-          onChange={onChange}
-        />
+        {loading ? (
+          <Spin />
+        ) : (
+          <Select
+            value={value}
+            placeholder={modelOptions.length ? 'Select a pretrained model' : 'No compatible models found'}
+            options={modelOptions}
+            onChange={onChange}
+            showSearch
+            disabled={!modelOptions.length}
+          />
+        )}
       </Form.Item>
     </Form>
   );

@@ -1100,4 +1100,20 @@ export const systemAPI = {
   }
 };
 
+export const trainingAPI = {
+  getTrainableModels: async (projectId, framework, task) => {
+    try {
+      const params = { framework, task };
+      if (projectId !== null && projectId !== undefined && String(projectId).trim() !== '') {
+        params.project_id = projectId;
+      }
+      const response = await api.get('/api/v1/training/models', { params });
+      return response.data || [];
+    } catch (error) {
+      handleAPIError(error, 'Failed to load trainable models');
+      throw error;
+    }
+  }
+};
+
 export default api;

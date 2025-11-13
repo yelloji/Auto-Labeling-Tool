@@ -792,7 +792,7 @@ class DatabaseDebugger:
 
         # Fetch and display entries
         cursor.execute("""
-            SELECT id, name, type, format, file_path, nc, classes, 
+            SELECT id, name, type, format, file_path, project_id, project_name, nc, classes, 
                    training_input_size, input_size_default, created_at, updated_at
             FROM ai_models
             ORDER BY created_at
@@ -804,6 +804,8 @@ class DatabaseDebugger:
             print(f"   🔧 Type: {row['type']}")
             print(f"   📦 Format: {row['format']}")
             print(f"   💾 File Path: {row['file_path']} {'✅' if os.path.exists(row['file_path']) else '❌'}")
+            print(f"   🏗️  Project ID: {row['project_id']}")
+            print(f"   🏷️  Project Name: {row['project_name']}")
             print(f"   🎯 Class Count (nc): {row['nc']}")
 
             # Parse classes JSON

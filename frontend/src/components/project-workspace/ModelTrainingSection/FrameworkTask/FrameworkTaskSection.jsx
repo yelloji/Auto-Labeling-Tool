@@ -7,9 +7,8 @@ const frameworkOptions = [
 ];
 
 const taskOptions = [
-  { label: 'Detection', value: 'detection' },
+  { label: 'Object Detection', value: 'detection' },
   { label: 'Segmentation', value: 'segmentation' },
-  { label: 'Classification', value: 'classification' },
 ];
 
 export default function FrameworkTaskSection({ framework, taskType, onChange }) {

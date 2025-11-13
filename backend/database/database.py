@@ -84,6 +84,25 @@ async def init_db():
             logger.warning("errors.system", f"Legacy table drop attempt failed: {drop_err}", "legacy_tables_drop_failed", {
                 "error": str(drop_err)
             })
+
+        try:
+            with engine.begin() as conn:
+                idx_list = conn.execute(text("PRAGMA index_list('ai_models')")).fetchall()
+                for idx in idx_list:
+                    idx_name = idx[1]
+                    if idx_name == 'ix_ai_models_name':
+                        conn.execute(text("DROP INDEX IF EXISTS ix_ai_models_name"))
+                        logger.info("app.database", "Dropped global unique index ix_ai_models_name", "ai_models_drop_global_name_index")
+        except Exception as idx_err:
+            logger.warning("errors.system", f"Index drop attempt failed: {idx_err}", "ai_models_drop_global_name_index_failed", {"error": str(idx_err)})
+
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("UPDATE ai_models SET project_name='global' WHERE project_id IS NULL AND (project_name IS NULL OR project_name='')"))
+                conn.execute(text("UPDATE ai_models SET project_name=(SELECT name FROM projects WHERE projects.id=ai_models.project_id) WHERE project_id IS NOT NULL AND (project_name IS NULL OR project_name='')"))
+                logger.info("app.database", "Backfilled ai_models.project_name", "ai_models_project_name_backfill")
+        except Exception as bf_err:
+            logger.warning("errors.system", f"Project name backfill failed: {bf_err}", "ai_models_project_name_backfill_failed", {"error": str(bf_err)})
         
         # Create directories if they don't exist
         logger.info("app.database", "Creating required directories", "directories_creation_start", {
@@ -145,3 +164,13 @@ def get_db():
         logger.info("app.database", "Closing database session", "database_session_close", {})
         db.close()
         logger.info("app.database", "Database session closed successfully", "database_session_closed", {})
+        # Schema migration: add project_name to ai_models if missing
+        try:
+            with engine.begin() as conn:
+                cols = conn.execute(text("PRAGMA table_info(ai_models)")).fetchall()
+                col_names = {c[1] for c in cols}
+                if "project_name" not in col_names:
+                    conn.execute(text("ALTER TABLE ai_models ADD COLUMN project_name TEXT"))
+                    logger.info("app.database", "Added column project_name to ai_models", "ai_models_add_project_name")
+        except Exception as mig_err:
+            logger.warning("errors.system", f"Schema migration for ai_models project_name failed: {mig_err}", "ai_models_add_project_name_failed", {"error": str(mig_err)})

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin } from 'antd';
+import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space } from 'antd';
 import { systemAPI } from '../../../../services/api';
 
 export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, saveBestOnly, device, gpuIndex, onChange }) {
@@ -22,6 +22,13 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
   };
   return (
     <Form layout="vertical">
+      <Form.Item label="Presets">
+        <Space>
+          <Button size="small" onClick={() => onChange({ epochs: 20, imgSize: 640, batchSize: 'auto', mixedPrecision: true })}>Fast</Button>
+          <Button size="small" onClick={() => onChange({ epochs: 50, imgSize: 640, batchSize: 'auto', mixedPrecision: true })}>Balanced</Button>
+          <Button size="small" onClick={() => onChange({ epochs: 100, imgSize: 1024, batchSize: 'auto', mixedPrecision: false })}>Accurate</Button>
+        </Space>
+      </Form.Item>
       <Form.Item label="Epochs" required>
         <InputNumber min={1} max={500} value={epochs} onChange={(v) => onChange({ epochs: v })} />
       </Form.Item>

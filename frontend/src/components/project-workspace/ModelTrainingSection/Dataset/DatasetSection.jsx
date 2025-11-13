@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Form, Radio, Input, Alert, Tag, Space, Select, Spin } from 'antd';
+import { Form, Alert, Tag, Space, Select, Spin, Card, Typography } from 'antd';
 import { releasesAPI } from '../../../../services/api';
 
 export default function DatasetSection({ projectId, datasetSource, datasetZipPath, classes, isDeveloper, onChange }) {
@@ -32,8 +32,7 @@ export default function DatasetSection({ projectId, datasetSource, datasetZipPat
 
   return (
     <Form layout="vertical">
-      {true && (
-        <Form.Item label="Release ZIP file" required tooltip="Pick a release ZIP from DB or type a path. Exactly one .zip.">
+      <Form.Item label="Release" required>
           <Select
             showSearch
             style={{ width: '100%' }}
@@ -56,13 +55,20 @@ export default function DatasetSection({ projectId, datasetSource, datasetZipPat
                 );
               })}
           </Select>
-          {!isZip && datasetZipPath && (
-            <div style={{ marginTop: 6, color: 'var(--ant-color-error)' }}>
-              Please provide a .zip file path.
-            </div>
-          )}
-        </Form.Item>
-      )}
+      </Form.Item>
+
+      <Card size="small" style={{ marginTop: 8 }} bodyStyle={{ padding: 12 }}>
+        <Typography.Text strong>Release Summary</Typography.Text>
+        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+          <div>
+            <div>File: <code>{zipName || '—'}</code></div>
+            <div>Classes: <code>{Array.isArray(classes) && classes.length ? classes.length : 'auto from data.yaml'}</code></div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <Tag color={isZip ? 'blue' : 'red'}>{isZip ? 'ZIP selected' : 'Select .zip'}</Tag>
+          </div>
+        </div>
+      </Card>
 
       <Alert
         type="info"

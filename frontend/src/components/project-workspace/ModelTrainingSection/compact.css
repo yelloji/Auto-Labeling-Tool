@@ -18,3 +18,13 @@
 .compact-mts pre {
   font-size: 12px;
 }
+.compact-mts .ant-card-head-title {
+  display: flex;
+  align-items: center;
+}
+.compact-mts .ant-steps-item-title {
+  font-size: 12px;
+}
+.compact-mts .ant-tabs-tab {
+  font-size: 12px;
+}

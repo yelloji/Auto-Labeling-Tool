@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Typography, Card, Button, Row, Col, ConfigProvider, Affix } from 'antd';
+import { Typography, Card, Button, Row, Col, ConfigProvider, Affix, Steps, Tabs, Tag } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
 import { logInfo } from '../../../utils/professional_logger';
 import ModeToggle from './ModeToggle/ModeToggle';
@@ -68,6 +68,18 @@ const ModelTrainingSection = ({ projectId, project }) => {
     }
   }), [form]);
 
+  const readiness = useMemo(() => ({
+    nameReady: Boolean(form.trainingName),
+    datasetReady: Boolean(form.datasetZipPath),
+    modelReady: Boolean(form.pretrainedModel)
+  }), [form]);
+
+  const currentStep = useMemo(() => {
+    if (!readiness.nameReady) return 0;
+    if (!readiness.datasetReady) return 1;
+    return 2;
+  }, [readiness]);
+
   return (
     <div className="compact-mts" style={{ padding: 16 }}>
       <ConfigProvider
@@ -86,6 +98,13 @@ const ModelTrainingSection = ({ projectId, project }) => {
             Model Training
           </Title>
           <ModeToggle mode={form.mode} onChange={(mode) => handleChange({ mode })} />
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <Steps size="small" current={currentStep} items={[
+            { title: 'Identity' },
+            { title: 'Dataset' },
+            { title: 'Train' },
+          ]} />
         </div>
         {project && (
           <Text type="secondary" style={{ display: 'block', marginTop: 4 }}>Project: {project.name}</Text>
@@ -109,6 +128,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
               <PretrainedModelSelect
                 framework={form.framework}
                 taskType={form.taskType}
+                projectId={form.projectId}
                 value={form.pretrainedModel}
                 onChange={(value) => handleChange({ pretrainedModel: value })}
               />
@@ -141,20 +161,42 @@ const ModelTrainingSection = ({ projectId, project }) => {
           </Col>
 
           <Col span={8}>
-            <Card size="small" title="Config Preview" bodyStyle={{ padding: 12 }}>
-              <pre style={{ background: '#f7f7f7', padding: 12, borderRadius: 4, maxHeight: 300, overflow: 'auto', margin: 0 }}>
-                {JSON.stringify(resolvedConfig, null, 2)}
-              </pre>
-            </Card>
-            <Affix offsetBottom={16}>
-              <Card size="small" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}>
-                <Button type="primary" block disabled={!form.trainingName || !form.datasetZipPath}>
-                  Start Training (MVP)
-                </Button>
-                <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-                  MVP — backend wiring for ZIP extraction, logs, checkpoints and export will be added later.
-                </Text>
-              </Card>
+            <Affix offsetTop={16}>
+              <div>
+                <Card size="small" bodyStyle={{ padding: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <Tag color={readiness.nameReady ? 'green' : 'red'}>Name</Tag>
+                      <Tag color={readiness.datasetReady ? 'green' : 'red'}>Dataset</Tag>
+                      <Tag color={readiness.modelReady ? 'green' : 'red'}>Model</Tag>
+                    </div>
+                    <Button type="default" size="small" disabled={!readiness.datasetReady || !readiness.modelReady}>Preflight</Button>
+                  </div>
+                  <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady)}>
+                    Start Training
+                  </Button>
+                </Card>
+                <Card size="small" style={{ marginTop: 12 }} bodyStyle={{ padding: 12 }}>
+                  <Tabs defaultActiveKey="config" items={[
+                    {
+                      key: 'config',
+                      label: 'Config Preview',
+                      children: (
+                        <pre style={{ background: '#f7f7f7', padding: 12, borderRadius: 4, maxHeight: 300, overflow: 'auto', margin: 0 }}>
+                          {JSON.stringify(resolvedConfig, null, 2)}
+                        </pre>
+                      )
+                    },
+                    {
+                      key: 'status',
+                      label: 'Status',
+                      children: (
+                        <div style={{ color: '#888' }}>Training status will appear here (progress, logs)</div>
+                      )
+                    }
+                  ]} />
+                </Card>
+              </div>
             </Affix>
           </Col>
         </Row>

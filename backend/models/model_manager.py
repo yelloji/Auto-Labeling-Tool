@@ -222,7 +222,8 @@ class ModelManager:
         description: str = "",
         confidence_threshold: float = 0.5,
         iou_threshold: float = 0.45,
-        dest_dir: Optional[Union[str, Path]] = None
+        dest_dir: Optional[Union[str, Path]] = None,
+        id_prefix: Optional[str] = None
     ) -> str:
         """
         Import a custom YOLO model
@@ -257,9 +258,10 @@ class ModelManager:
         # Generate model ID without numeric suffix; enforce uniqueness
         slug = model_name.lower().strip().replace(' ', '_')
         slug = ''.join(ch for ch in slug if ch.isalnum() or ch in ['_', '-'])
-        model_id = f"custom_{slug}"
-        if model_id in self.models_info:
-            raise ValueError(f"Model name already exists: {model_name}")
+        if id_prefix:
+            model_id = f"custom_{id_prefix}_{slug}"
+        else:
+            model_id = f"custom_{slug}"
 
         # Determine destination directory for storage
         # Default to models/custom unless a specific dest_dir is provided (e.g., projects/<ProjectName>/model)
@@ -270,10 +272,16 @@ class ModelManager:
         target_base.mkdir(parents=True, exist_ok=True)
 
         # Store the file on disk using the plain slug (no 'custom_' prefix) for a clean filename
-        custom_model_path = target_base / f"{slug}{model_file.suffix}"
+        base_name = f"{slug}{model_file.suffix}"
+        custom_model_path = target_base / base_name
         if custom_model_path.exists():
-            # Avoid overwriting existing files when name conflicts
-            raise ValueError(f"Model file already exists for name: {model_name}")
+            idx = 1
+            while True:
+                candidate = target_base / f"{slug}-{idx}{model_file.suffix}"
+                if not candidate.exists():
+                    custom_model_path = candidate
+                    break
+                idx += 1
         shutil.copy2(model_file, custom_model_path)
         
         # Try to load model and extract information

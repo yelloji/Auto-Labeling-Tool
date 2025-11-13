@@ -1439,6 +1439,16 @@ class AiModelOperations:
                 existing.type = model_type
                 existing.format = model_format
                 existing.file_path = str(file_path)
+                if hasattr(existing, "project_name"):
+                    if project_id is None:
+                        existing.project_name = "global"
+                    else:
+                        try:
+                            from .models import Project as DBProject
+                            proj = db.query(DBProject).filter(DBProject.id == project_id).first()
+                            existing.project_name = proj.name if proj else None
+                        except Exception:
+                            existing.project_name = None
                 existing.nc = nc
                 existing.classes = classes or []
                 existing.input_size_default = input_size_default
@@ -1469,6 +1479,16 @@ class AiModelOperations:
                     training_input_size=training_input_size,
                     created_at=datetime.utcnow(),
                 )
+                if hasattr(ai, "project_name"):
+                    if project_id is None:
+                        ai.project_name = "global"
+                    else:
+                        try:
+                            from .models import Project as DBProject
+                            proj = db.query(DBProject).filter(DBProject.id == project_id).first()
+                            ai.project_name = proj.name if proj else None
+                        except Exception:
+                            ai.project_name = None
                 db.add(ai)
                 db.commit()
                 db.refresh(ai)
@@ -1485,7 +1505,7 @@ class AiModelOperations:
             logger.error("errors.system", f"AiModel upsert failed: {str(e)}", "ai_model_upsert_error", {
                 "name": name,
                 "error": str(e),
-                "error_type": type(e).__name__
+                "error_type": e.__class__.__name__
             })
             raise
 

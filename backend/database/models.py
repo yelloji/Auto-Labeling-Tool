@@ -89,6 +89,8 @@ class Image(Base):
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)
+    # Convenience text for scope: 'global' or actual project name
+    project_name = Column(String(255), nullable=True)
     file_size = Column(Integer)  # in bytes
     
     # Image properties
