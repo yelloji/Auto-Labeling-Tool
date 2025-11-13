@@ -7,6 +7,8 @@ export default function DatasetSection({ projectId, datasetSource, datasetZipPat
   const [projectReleases, setProjectReleases] = useState([]);
   const zipName = datasetZipPath ? datasetZipPath.split(/[\\/]/).pop() : '';
   const isZip = datasetZipPath?.toLowerCase().endsWith('.zip');
+  const getZipPath = (r) => String(r?.model_path || r?.path || r?.release_zip || r?.zip_path || '').trim();
+  const hasZip = (projectReleases || []).some((r) => getZipPath(r).toLowerCase().endsWith('.zip'));
 
   useEffect(() => {
     const loadReleases = async () => {
@@ -36,24 +38,22 @@ export default function DatasetSection({ projectId, datasetSource, datasetZipPat
           <Select
             showSearch
             style={{ width: '100%' }}
-            placeholder={loadingReleases ? 'Loading releases…' : (projectReleases && projectReleases.length ? 'Select a release ZIP from this project' : 'No releases available for this project')}
+            placeholder={loadingReleases ? 'Loading releases…' : ((projectReleases && projectReleases.length) ? 'Select a release' : 'No releases available for this project')}
             value={datasetZipPath || undefined}
             onChange={(val) => onChange({ datasetZipPath: val })}
             optionFilterProp="label"
             disabled={loadingReleases || !(projectReleases && projectReleases.length)}
           >
-            {(projectReleases || [])
-              .filter((r) => String(r?.model_path || '').toLowerCase().endsWith('.zip'))
-              .map((r) => {
-                const filename = String(r?.model_path || '').split(/[\\/]/).pop();
-                const label = `${r?.name || r?.release_version || filename || 'Release'} — ${filename || ''}`;
-                const value = r?.model_path || '';
-                return (
-                  <Select.Option key={r?.id || value} value={value} label={label}>
-                    {label}
-                  </Select.Option>
-                );
-              })}
+            {(projectReleases || []).map((r) => {
+              const label = r?.name || r?.release_version || 'Release';
+              const value = getZipPath(r);
+              const isItemZip = value.toLowerCase().endsWith('.zip');
+              return (
+                <Select.Option key={r?.id || value || label} value={isItemZip ? value : undefined} label={label} disabled={!isItemZip}>
+                  {label}
+                </Select.Option>
+              );
+            })}
           </Select>
       </Form.Item>
 

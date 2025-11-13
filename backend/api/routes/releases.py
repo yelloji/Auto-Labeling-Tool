@@ -910,9 +910,9 @@ def get_project_releases(project_id: str, db: Session = Depends(get_db)):
         ).order_by(Release.created_at.desc()).all()
         
         logger.info("operations.releases", f"Project releases retrieved successfully", "project_releases_success", {
-            "project_id": project_id,
-            "total_releases": len(releases)
-        })
+                "project_id": project_id,
+                "total_releases": len(releases)
+            })
         
         return [
             {

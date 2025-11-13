@@ -42,9 +42,17 @@ const ModelTrainingSection = ({ projectId, project }) => {
     });
   }, [projectId]);
 
+  
+
   const [form, setForm] = useState({ ...initialFormState, projectId });
   const isDeveloper = form.mode === 'developer';
   const handleChange = (patch) => setForm((prev) => ({ ...prev, ...patch }));
+
+  useEffect(() => {
+    if (projectId && projectId !== form.projectId) {
+      setForm((prev) => ({ ...prev, projectId }));
+    }
+  }, [projectId, form.projectId]);
 
   const resolvedConfig = useMemo(() => ({
     project_id: form.projectId,
@@ -136,7 +144,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
             <Card size="small" title="Dataset" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}>
               <DatasetSection
-                projectId={form.projectId}
+                projectId={project?.id || projectId || form.projectId}
                 datasetSource={form.datasetSource}
                 datasetZipPath={form.datasetZipPath}
                 classes={form.classes}

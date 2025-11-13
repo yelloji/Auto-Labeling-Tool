@@ -653,9 +653,9 @@ export const releasesAPI = {
   // Get all releases for a project
   getProjectReleases: async (projectId) => {
     try {
-      const response = await api.get(`/projects/${projectId}/releases`);
-      // Backend returns { releases: [...] }
-      return response.data?.releases || [];
+      const response = await api.get(`/api/v1/projects/${projectId}/releases`);
+      const data = response.data;
+      return Array.isArray(data) ? data : (data?.releases || []);
     } catch (error) {
       handleAPIError(error, 'Failed to get project releases');
       throw error;
