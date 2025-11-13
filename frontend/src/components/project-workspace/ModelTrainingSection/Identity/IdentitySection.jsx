@@ -1,12 +1,10 @@
 import React from 'react';
 import { Form, Input } from 'antd';
 
-export default function IdentitySection({ projectId, trainingName, onChange }) {
+// Project ID is kept internally by the parent and sent to backend; no need to display here.
+export default function IdentitySection({ trainingName, onChange }) {
   return (
     <Form layout="vertical">
-      <Form.Item label="Project ID">
-        <Input value={projectId} readOnly />
-      </Form.Item>
       <Form.Item
         label="Training Name"
         tooltip="Unique per project. Use letters, numbers, dashes '-' and underscores '_' only. Spaces will be converted to underscores."

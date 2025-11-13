@@ -1,5 +1,5 @@
 {
-  "export_timestamp": "2025-11-11T11:30:15.044744",
+  "export_timestamp": "2025-11-13T09:30:50.156101",
   "database_path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\database.db",
   "projects": [
     {
@@ -136,7 +136,7 @@
           "name": "Reject",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-22 07:07:14",
-          "updated_at": "2025-09-23 09:57:50.737209",
+          "updated_at": "2025-11-12 08:22:17.287771",
           "statistics": {
             "total_images": 1,
             "labeled_images": 1,
@@ -148,19 +148,19 @@
               "id": "a83adae8-ae9f-480a-b7ee-7845b77c4054",
               "filename": "0-1.bmp",
               "original_filename": "0-1.bmp",
-              "file_path": "projects/gevis/annotating/Reject/0-1.bmp",
+              "file_path": "projects/gevis/dataset/Reject/train/0-1.bmp",
               "width": 1468,
               "height": 1468,
               "format": "BMP",
               "file_size": 2156102,
-              "split_type": "annotating",
+              "split_type": "dataset",
               "split_section": "train",
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-22 07:07:14",
-              "updated_at": "2025-09-23 09:57:50.730209",
+              "updated_at": "2025-11-12 08:22:17.271337",
               "file_exists": false
             }
           ]

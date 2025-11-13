@@ -209,31 +209,6 @@ class Annotation(Base):
         return f"<Annotation(id='{self.id}', class='{self.class_name}', confidence={self.confidence})>"
 
 
-class ModelUsage(Base):
-    """Track model usage and performance"""
-    __tablename__ = "model_usage"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    model_id = Column(String, nullable=False)
-    model_name = Column(String(255), nullable=False)
-    
-    # Usage statistics
-    total_inferences = Column(Integer, default=0)
-    total_images_processed = Column(Integer, default=0)
-    average_confidence = Column(Float, default=0.0)
-    average_processing_time = Column(Float, default=0.0)  # seconds
-    
-    # Performance tracking
-    last_used = Column(DateTime, default=func.now())
-    created_at = Column(DateTime, default=func.now())
-    
-    def __repr__(self):
-        logger.debug("app.database", "ModelUsage model representation", "model_usage_repr", {
-            "model_usage_id": self.id,
-            "model_id": self.model_id,
-            "total_inferences": self.total_inferences
-        })
-        return f"<ModelUsage(model_id='{self.model_id}', inferences={self.total_inferences})>"
 
 class AiModel(Base):
     """Uploaded AI models metadata

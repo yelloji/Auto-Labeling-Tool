@@ -3,7 +3,7 @@ Database configuration and initialization
 """
 
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from core.config import settings
 from .base import Base
@@ -44,10 +44,10 @@ async def init_db():
         
         from .models import (
             Project, Dataset, Image, Annotation,
-            ModelUsage, AutoLabelJob,
+            AutoLabelJob,
             Label, DatasetSplit, LabelAnalytics,
             Release, ImageTransformation, ImageVariant,
-            AiModel  # Include new AiModel table
+            AiModel
         )
         from .operations import AiModelOperations
         
@@ -62,6 +62,28 @@ async def init_db():
         
         logger.info("app.database", "Database tables created successfully", "tables_creation_complete", {})
         print("Database initialized successfully")
+        # Legacy cleanup: drop removed tables if they exist
+        try:
+            with engine.begin() as conn:
+                for tbl in [
+                    "training_iterations",
+                    "uncertain_samples",
+                    "model_versions",
+                    "model_usage"
+                ]:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {tbl}"))
+            logger.info("app.database", "Dropped legacy tables if present", "legacy_tables_drop", {
+                "dropped": [
+                    "training_iterations",
+                    "uncertain_samples",
+                    "model_versions",
+                    "model_usage"
+                ]
+            })
+        except Exception as drop_err:
+            logger.warning("errors.system", f"Legacy table drop attempt failed: {drop_err}", "legacy_tables_drop_failed", {
+                "error": str(drop_err)
+            })
         
         # Create directories if they don't exist
         logger.info("app.database", "Creating required directories", "directories_creation_start", {

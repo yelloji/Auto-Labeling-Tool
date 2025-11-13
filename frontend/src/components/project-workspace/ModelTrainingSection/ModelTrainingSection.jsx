@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Typography, Card, Space, Divider, Button } from 'antd';
+import { Typography, Card, Button, Row, Col, ConfigProvider, Affix } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
 import { logInfo } from '../../../utils/professional_logger';
 import ModeToggle from './ModeToggle/ModeToggle';
@@ -8,6 +8,7 @@ import FrameworkTaskSection from './FrameworkTask/FrameworkTaskSection';
 import PretrainedModelSelect from './PretrainedModel/PretrainedModelSelect';
 import DatasetSection from './Dataset/DatasetSection';
 import PresetSection from './Preset/PresetSection';
+import './compact.css';
 
 const { Title, Text } = Typography;
 
@@ -65,74 +66,94 @@ const ModelTrainingSection = ({ projectId, project }) => {
   }), [form]);
 
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={3} style={{ margin: 0 }}>
-        <ThunderboltOutlined style={{ marginRight: 8 }} />
-        Model Training
-      </Title>
-      {project && (
-        <Text type="secondary" style={{ marginLeft: 0 }}>Project: {project.name}</Text>
-      )}
-
-      <Card style={{ marginTop: 12 }}>
-        <Space direction="vertical" style={{ width: '100%' }} size="large">
+    <div className="compact-mts" style={{ padding: 16 }}>
+      <ConfigProvider
+        size="small"
+        theme={{
+          token: {
+            controlHeight: 28,
+            fontSize: 13,
+            paddingSM: 8,
+          },
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Title level={4} style={{ margin: 0 }}>
+            <ThunderboltOutlined style={{ marginRight: 8 }} />
+            Model Training
+          </Title>
           <ModeToggle mode={form.mode} onChange={(mode) => handleChange({ mode })} />
+        </div>
+        {project && (
+          <Text type="secondary" style={{ display: 'block', marginTop: 4 }}>Project: {project.name}</Text>
+        )}
 
-          <IdentitySection
-            projectId={form.projectId}
-            trainingName={form.trainingName}
-            onChange={(patch) => handleChange(patch)}
-          />
+        <Row gutter={12} style={{ marginTop: 12 }}>
+          <Col span={16}>
+            <Card size="small" title="Identity" bodyStyle={{ padding: 12 }}>
+              <IdentitySection
+                trainingName={form.trainingName}
+                onChange={(patch) => handleChange(patch)}
+              />
+            </Card>
 
-          <Divider />
-          <Title level={4}>Setup</Title>
-          <FrameworkTaskSection
-            framework={form.framework}
-            taskType={form.taskType}
-            onChange={(patch) => handleChange(patch)}
-          />
-          <PretrainedModelSelect
-            framework={form.framework}
-            taskType={form.taskType}
-            value={form.pretrainedModel}
-            onChange={(value) => handleChange({ pretrainedModel: value })}
-          />
-          <DatasetSection
-            projectId={form.projectId}
-            datasetSource={form.datasetSource}
-            datasetZipPath={form.datasetZipPath}
-            classes={form.classes}
-            isDeveloper={isDeveloper}
-            onChange={(patch) => handleChange(patch)}
-          />
+            <Card size="small" title="Framework & Task" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}>
+              <FrameworkTaskSection
+                framework={form.framework}
+                taskType={form.taskType}
+                onChange={(patch) => handleChange(patch)}
+              />
+              <PretrainedModelSelect
+                framework={form.framework}
+                taskType={form.taskType}
+                value={form.pretrainedModel}
+                onChange={(value) => handleChange({ pretrainedModel: value })}
+              />
+            </Card>
 
-          <Divider />
-          <Title level={4}>Training Preset</Title>
-          <PresetSection
-            epochs={form.epochs}
-            imgSize={form.imgSize}
-            batchSize={form.batchSize}
-            mixedPrecision={form.mixedPrecision}
-            earlyStop={form.earlyStop}
-            saveBestOnly={form.saveBestOnly}
-            onChange={(patch) => handleChange(patch)}
-          />
+            <Card size="small" title="Dataset" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}>
+              <DatasetSection
+                projectId={form.projectId}
+                datasetSource={form.datasetSource}
+                datasetZipPath={form.datasetZipPath}
+                classes={form.classes}
+                isDeveloper={isDeveloper}
+                onChange={(patch) => handleChange(patch)}
+              />
+            </Card>
 
-          <Divider />
-          <Title level={4}>Config Preview</Title>
-          <pre style={{ background: '#f7f7f7', padding: 12, borderRadius: 4, maxHeight: 240, overflow: 'auto' }}>
-            {JSON.stringify(resolvedConfig, null, 2)}
-          </pre>
+            <Card size="small" title="Training Preset" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}>
+              <PresetSection
+                epochs={form.epochs}
+                imgSize={form.imgSize}
+                batchSize={form.batchSize}
+                mixedPrecision={form.mixedPrecision}
+                earlyStop={form.earlyStop}
+                saveBestOnly={form.saveBestOnly}
+                onChange={(patch) => handleChange(patch)}
+              />
+            </Card>
+          </Col>
 
-          <Divider />
-          <Title level={4}>Run</Title>
-          <Button type="primary" disabled={!form.trainingName || !form.datasetZipPath}>
-            Start Training (MVP)
-          </Button>
-
-          <Text type="secondary">MVP — backend wiring for ZIP extraction, logs, checkpoints and export will be added later.</Text>
-        </Space>
-      </Card>
+          <Col span={8}>
+            <Card size="small" title="Config Preview" bodyStyle={{ padding: 12 }}>
+              <pre style={{ background: '#f7f7f7', padding: 12, borderRadius: 4, maxHeight: 300, overflow: 'auto', margin: 0 }}>
+                {JSON.stringify(resolvedConfig, null, 2)}
+              </pre>
+            </Card>
+            <Affix offsetBottom={16}>
+              <Card size="small" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}>
+                <Button type="primary" block disabled={!form.trainingName || !form.datasetZipPath}>
+                  Start Training (MVP)
+                </Button>
+                <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+                  MVP — backend wiring for ZIP extraction, logs, checkpoints and export will be added later.
+                </Text>
+              </Card>
+            </Affix>
+          </Col>
+        </Row>
+      </ConfigProvider>
     </div>
   );
 };

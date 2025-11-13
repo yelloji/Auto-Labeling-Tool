@@ -13,8 +13,8 @@ from pathlib import Path
 import json
 
 from .models import (
-    Project, Dataset, Image, Annotation, 
-    ModelUsage, AutoLabelJob,
+    Project, Dataset, Image, Annotation,
+    AutoLabelJob,
     DatasetSplit, LabelAnalytics,
     AiModel
 )
@@ -1181,85 +1181,6 @@ class AutoLabelJobOperations:
         return job
 
 
-class ModelUsageOperations:
-    """CRUD operations for ModelUsage model"""
-    
-    @staticmethod
-    def update_model_usage(
-        db: Session,
-        model_id: str,
-        model_name: str,
-        images_processed: int = 1,
-        processing_time: float = 0.0,
-        average_confidence: float = 0.0
-    ):
-        """Update or create model usage statistics"""
-        logger.info("app.database", "Updating or creating model usage statistics", "model_usage_update", {
-            "model_id": model_id,
-            "model_name": model_name,
-            "images_processed": images_processed,
-            "processing_time": processing_time,
-            "average_confidence": average_confidence
-        })
-        
-        usage = db.query(ModelUsage).filter(ModelUsage.model_id == model_id).first()
-        
-        if not usage:
-            usage = ModelUsage(
-                model_id=model_id,
-                model_name=model_name,
-                total_inferences=1,
-                total_images_processed=images_processed,
-                average_confidence=average_confidence,
-                average_processing_time=processing_time
-            )
-            db.add(usage)
-        else:
-            # Update running averages
-            total_inferences = usage.total_inferences + 1
-            total_images = usage.total_images_processed + images_processed
-            
-            # Update averages
-            usage.average_confidence = (
-                (usage.average_confidence * usage.total_inferences + average_confidence) / 
-                total_inferences
-            )
-            usage.average_processing_time = (
-                (usage.average_processing_time * usage.total_inferences + processing_time) / 
-                total_inferences
-            )
-            
-            usage.total_inferences = total_inferences
-            usage.total_images_processed = total_images
-            usage.last_used = datetime.utcnow()
-        
-        db.commit()
-        db.refresh(usage)
-        
-        logger.info("app.database", "Model usage statistics updated successfully", "model_usage_update_complete", {
-            "model_id": model_id,
-            "model_name": model_name,
-            "total_inferences": usage.total_inferences,
-            "total_images_processed": usage.total_images_processed,
-            "average_confidence": usage.average_confidence,
-            "average_processing_time": usage.average_processing_time
-        })
-        return usage
-    
-    @staticmethod
-    def get_model_usage_stats(db: Session) -> List[ModelUsage]:
-        """Get usage statistics for all models"""
-        logger.info("app.database", "Retrieving all model usage statistics", "model_usage_stats_retrieval", {
-            "all_models": True
-        })
-        
-        model_usages = db.query(ModelUsage).order_by(desc(ModelUsage.last_used)).all()
-        
-        logger.info("app.database", "Model usage statistics retrieved successfully", "model_usage_stats_retrieved", {
-            "model_usages_count": len(model_usages)
-        })
-        
-        return model_usages
 
 
 

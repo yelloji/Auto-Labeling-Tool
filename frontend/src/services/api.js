@@ -650,6 +650,17 @@ export const imageTransformationsAPI = {
 // ==================== RELEASES API ====================
 
 export const releasesAPI = {
+  // Get all releases for a project
+  getProjectReleases: async (projectId) => {
+    try {
+      const response = await api.get(`/projects/${projectId}/releases`);
+      // Backend returns { releases: [...] }
+      return response.data?.releases || [];
+    } catch (error) {
+      handleAPIError(error, 'Failed to get project releases');
+      throw error;
+    }
+  },
   // Create a new release
   createRelease: async (releaseData) => {
     try {

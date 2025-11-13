@@ -23,7 +23,6 @@ from api.routes import labels
 from api.routes import projects, datasets, annotations, models, enhanced_export, releases
 from api.routes import analytics, augmentation, dataset_management
 from api.routes import image_transformations, logs, frontend_logs, release_detail_view
-from api import active_learning
 from core.config import settings
 from database.database import init_db
 # Import professional logging system
@@ -156,7 +155,6 @@ from api.routes import dataset_splits
 app.include_router(dataset_splits.router, prefix="/api/v1", tags=["dataset-splits"])
 
 # Include Active Learning routes
-app.include_router(active_learning.router, tags=["active-learning"])
 
 # EMERGENCY CLEANUP ENDPOINTS
 
