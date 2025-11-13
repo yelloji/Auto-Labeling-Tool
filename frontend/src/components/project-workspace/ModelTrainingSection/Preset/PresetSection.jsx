@@ -1,7 +1,25 @@
-import React from 'react';
-import { Form, InputNumber, Switch } from 'antd';
+import React, { useState } from 'react';
+import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin } from 'antd';
+import { systemAPI } from '../../../../services/api';
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, saveBestOnly, onChange }) {
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, saveBestOnly, device, gpuIndex, onChange }) {
+  const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const [loadingHW, setLoadingHW] = useState(false);
+  const [hw, setHW] = useState(null);
+
+  const openDeviceModal = async () => {
+    setShowDeviceModal(true);
+    setLoadingHW(true);
+    try {
+      const info = await systemAPI.getHardware();
+      setHW(info);
+      if (!info?.torch_cuda_available || !info?.gpus?.length) {
+        onChange({ device: 'cpu', gpuIndex: null });
+      }
+    } finally {
+      setLoadingHW(false);
+    }
+  };
   return (
     <Form layout="vertical">
       <Form.Item label="Epochs" required>
@@ -22,6 +40,63 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
       <Form.Item label="Save Best Only">
         <Switch checked={saveBestOnly} onChange={(v) => onChange({ saveBestOnly: v })} />
       </Form.Item>
+      <Form.Item label="Device">
+        <Radio.Group
+          value={device}
+          onChange={(e) => {
+            const val = e.target.value;
+            if (val === 'gpu') {
+              openDeviceModal();
+            } else {
+              onChange({ device: 'cpu', gpuIndex: null });
+            }
+          }}
+        >
+          <Radio.Button value="cpu">CPU</Radio.Button>
+          <Radio.Button value="gpu">GPU</Radio.Button>
+        </Radio.Group>
+        {device === 'gpu' && typeof gpuIndex === 'number' && (
+          <Tag style={{ marginLeft: 8 }}>GPU #{gpuIndex}</Tag>
+        )}
+      </Form.Item>
+      <Modal
+        title="Select GPU"
+        open={showDeviceModal}
+        onCancel={() => setShowDeviceModal(false)}
+        onOk={() => setShowDeviceModal(false)}
+        okButtonProps={{ disabled: !hw?.gpus?.length }}
+      >
+        {loadingHW ? (
+          <Spin />
+        ) : hw ? (
+          <div>
+            <div style={{ marginBottom: 8 }}>
+              <Tag color={hw.torch_cuda_available ? 'green' : 'red'}>
+                CUDA {hw.torch_cuda_available ? `available${hw.cuda_version ? ` (${hw.cuda_version})` : ''}` : 'not available'}
+              </Tag>
+              {hw.torch_version && <Tag>torch {hw.torch_version}</Tag>}
+            </div>
+            <Select
+              style={{ width: '100%' }}
+              placeholder={hw.gpus?.length ? 'Choose a GPU' : 'No GPUs found'}
+              value={typeof gpuIndex === 'number' ? gpuIndex : undefined}
+              onChange={(val) => onChange({ device: 'gpu', gpuIndex: val })}
+              disabled={!hw.gpus?.length}
+            >
+              {(hw.gpus || []).map((g) => (
+                <Select.Option key={g.id} value={g.id}>
+                  #{g.id} • {g.name} • {g.memory_mb ? `${g.memory_mb} MB` : ''}
+                </Select.Option>
+              ))}
+            </Select>
+            {!hw.gpus?.length && (
+              <div style={{ marginTop: 8 }}>No compatible GPUs detected. Using CPU.</div>
+            )}
+          </div>
+        ) : (
+          <div>Error loading hardware info</div>
+        )}
+      </Modal>
     </Form>
   );
 }

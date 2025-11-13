@@ -28,7 +28,9 @@ const initialFormState = {
   batchSize: 'auto',
   mixedPrecision: true,
   earlyStop: true,
-  saveBestOnly: true
+  saveBestOnly: true,
+  device: 'cpu',
+  gpuIndex: null
 };
 
 const ModelTrainingSection = ({ projectId, project }) => {
@@ -61,7 +63,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
       amp: form.mixedPrecision,
       early_stop: form.earlyStop,
       save_best: form.saveBestOnly,
-      model: form.pretrainedModel
+      model: form.pretrainedModel,
+      device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu'
     }
   }), [form]);
 
@@ -130,6 +133,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 mixedPrecision={form.mixedPrecision}
                 earlyStop={form.earlyStop}
                 saveBestOnly={form.saveBestOnly}
+                device={form.device}
+                gpuIndex={form.gpuIndex}
                 onChange={(patch) => handleChange(patch)}
               />
             </Card>

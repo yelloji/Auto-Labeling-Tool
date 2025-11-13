@@ -1088,4 +1088,16 @@ export const checkBackendHealth = async () => {
   }
 };
 
+export const systemAPI = {
+  getHardware: async () => {
+    try {
+      const response = await api.get('/api/v1/system/hardware');
+      return response.data;
+    } catch (error) {
+      handleAPIError(error, 'Failed to get hardware info');
+      throw error;
+    }
+  }
+};
+
 export default api;

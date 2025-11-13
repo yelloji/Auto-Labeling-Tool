@@ -15,6 +15,11 @@ export default function DatasetSection({ projectId, datasetSource, datasetZipPat
       try {
         const releases = await releasesAPI.getProjectReleases(projectId);
         setProjectReleases(Array.isArray(releases) ? releases : []);
+        const firstZip = (Array.isArray(releases) ? releases : [])
+          .find((r) => String(r?.model_path || '').toLowerCase().endsWith('.zip'));
+        if (firstZip && !datasetZipPath) {
+          onChange({ datasetZipPath: firstZip.model_path });
+        }
       } catch (e) {
         // swallow error, keep manual input
         setProjectReleases([]);
@@ -27,30 +32,20 @@ export default function DatasetSection({ projectId, datasetSource, datasetZipPat
 
   return (
     <Form layout="vertical">
-      <Form.Item label="Dataset Source" required>
-        <Radio.Group
-          value={datasetSource}
-          onChange={(e) => onChange({ datasetSource: e.target.value })}
-        >
-          <Radio.Button value="release_zip">Release ZIP (recommended)</Radio.Button>
-          <Radio.Button value="custom_path" disabled>Custom Path (developer)</Radio.Button>
-        </Radio.Group>
-      </Form.Item>
-
-      {datasetSource === 'release_zip' && (
+      {true && (
         <Form.Item label="Release ZIP file" required tooltip="Pick a release ZIP from DB or type a path. Exactly one .zip.">
-          {loadingReleases ? (
-            <Spin size="small" />
-          ) : projectReleases && projectReleases.length > 0 ? (
-            <Select
-              showSearch
-              style={{ width: '100%' }}
-              placeholder="Select a release ZIP from this project"
-              value={datasetZipPath || undefined}
-              onChange={(val) => onChange({ datasetZipPath: val })}
-              optionFilterProp="label"
-            >
-              {projectReleases.map((r) => {
+          <Select
+            showSearch
+            style={{ width: '100%' }}
+            placeholder={loadingReleases ? 'Loading releases…' : (projectReleases && projectReleases.length ? 'Select a release ZIP from this project' : 'No releases available for this project')}
+            value={datasetZipPath || undefined}
+            onChange={(val) => onChange({ datasetZipPath: val })}
+            optionFilterProp="label"
+            disabled={loadingReleases || !(projectReleases && projectReleases.length)}
+          >
+            {(projectReleases || [])
+              .filter((r) => String(r?.model_path || '').toLowerCase().endsWith('.zip'))
+              .map((r) => {
                 const filename = String(r?.model_path || '').split(/[\\/]/).pop();
                 const label = `${r?.name || r?.release_version || filename || 'Release'} — ${filename || ''}`;
                 const value = r?.model_path || '';
@@ -60,26 +55,7 @@ export default function DatasetSection({ projectId, datasetSource, datasetZipPat
                   </Select.Option>
                 );
               })}
-              {/* Manual entry option */}
-              <Select.Option key="__manual__" value={datasetZipPath || ''} label="Type manual path">
-                Type manual path…
-              </Select.Option>
-            </Select>
-          ) : (
-            <Space.Compact style={{ width: '100%' }}>
-              <Input
-                allowClear
-                value={datasetZipPath}
-                placeholder={`e.g., V:/.../projects/${projectId}/releases/RELEASE-2-CUFFIA-EXT_yolo_segmentation.zip`}
-                onChange={(e) => onChange({ datasetZipPath: e.target.value })}
-              />
-              {zipName && (
-                <Tag color={isZip ? 'blue' : 'red'} style={{ alignSelf: 'center' }}>
-                  {zipName}
-                </Tag>
-              )}
-            </Space.Compact>
-          )}
+          </Select>
           {!isZip && datasetZipPath && (
             <div style={{ marginTop: 6, color: 'var(--ant-color-error)' }}>
               Please provide a .zip file path.

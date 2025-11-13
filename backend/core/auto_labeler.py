@@ -20,7 +20,7 @@ from logging_system.professional_logger import get_professional_logger
 from models.model_manager import ModelManager, ModelInfo
 from database.operations import (
     AnnotationOperations, ImageOperations, AutoLabelJobOperations,
-    ModelUsageOperations, DatasetOperations
+     DatasetOperations
 )
 from database.database import SessionLocal
 from core.config import settings
@@ -449,21 +449,6 @@ class AutoLabeler:
                 'confidence_count': confidence_count
             })
             
-            # Update model usage statistics
-            ModelUsageOperations.update_model_usage(
-                db, model_id, model_info.name,
-                images_processed=successful_count,
-                processing_time=avg_processing_time,
-                average_confidence=avg_confidence
-            )
-            logger.info("operations.operations", f"Updated model usage statistics: {model_id}", "model_usage_updated", {
-                'job_id': job_id,
-                'model_id': model_id,
-                'model_name': model_info.name,
-                'images_processed': successful_count,
-                'avg_processing_time': avg_processing_time,
-                'avg_confidence': avg_confidence
-            })
             
             # Update dataset statistics
             DatasetOperations.update_dataset_stats(db, dataset_id)
