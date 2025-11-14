@@ -6,7 +6,7 @@ import ModeToggle from './ModeToggle/ModeToggle';
 import IdentitySection from './Identity/IdentitySection';
 import FrameworkTaskSection from './FrameworkTask/FrameworkTaskSection';
 import PretrainedModelSelect from './PretrainedModel/PretrainedModelSelect';
-import DatasetSection from './Dataset/DatasetSection';
+import TrainingDatasetSection from './TrainingDataset/TrainingDatasetSection';
 import PresetSection from './Preset/PresetSection';
 import './compact.css';
 
@@ -143,7 +143,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
             </Card>
 
             <Card size="small" title="Dataset" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}>
-              <DatasetSection
+              <TrainingDatasetSection
                 projectId={project?.id || projectId || form.projectId}
                 datasetSource={form.datasetSource}
                 datasetZipPath={form.datasetZipPath}

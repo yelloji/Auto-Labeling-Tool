@@ -475,14 +475,29 @@ async def import_custom_model(
             try:
                 model_info = model_manager.models_info.get(model_id)
                 if model_info:
-                    # Compute file_path for DB. If project-scoped, store a projects-relative path.
+                    # Compute file_path for DB as app-relative when under BASE_DIR (global or project)
                     db_file_path = model_info.path
                     try:
-                        if project_id is not None and project_name is not None:
-                            rel_path = Path(model_info.path).relative_to(settings.BASE_DIR)
+                        abs_path = Path(model_info.path).resolve()
+                        parts = list(abs_path.parts)
+                        idx = None
+                        for i, p in enumerate(parts):
+                            q = p.lower()
+                            if q == 'models' or q == 'projects':
+                                idx = i
+                                break
+                        if idx is not None:
+                            rel_path = Path(*parts[idx:])
                             db_file_path = str(rel_path).replace('\\', '/')
+                        else:
+                            from core.config import settings as core_settings
+                            base = Path(core_settings.BASE_DIR).resolve()
+                            if str(abs_path).startswith(str(base)):
+                                rel_path = abs_path.relative_to(base)
+                                db_file_path = str(rel_path).replace('\\', '/')
+                            else:
+                                db_file_path = str(abs_path).replace('\\', '/')
                     except Exception:
-                        # Fallback to original path if relative computation fails
                         db_file_path = model_info.path
                     AiModelOperations.upsert_ai_model(
                         db=db,

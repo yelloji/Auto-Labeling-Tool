@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Form, Alert, Tag, Space, Select, Spin, Card, Typography } from 'antd';
 import { releasesAPI } from '../../../../services/api';
 
-export default function DatasetSection({ projectId, datasetSource, datasetZipPath, classes, isDeveloper, onChange }) {
+export default function TrainingDatasetSection({ projectId, datasetSource, datasetZipPath, classes, isDeveloper, onChange }) {
   const [loadingReleases, setLoadingReleases] = useState(false);
   const [projectReleases, setProjectReleases] = useState([]);
   const zipName = datasetZipPath ? datasetZipPath.split(/[\\/]/).pop() : '';

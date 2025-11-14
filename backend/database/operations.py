@@ -1435,10 +1435,12 @@ class AiModelOperations:
             input_size_default = _to_size_list(input_size_default) or [640, 640]
             training_input_size = _to_size_list(training_input_size)
 
+            normalized_path = str(file_path)
+
             if existing:
                 existing.type = model_type
                 existing.format = model_format
-                existing.file_path = str(file_path)
+                existing.file_path = normalized_path
                 if hasattr(existing, "project_name"):
                     if project_id is None:
                         existing.project_name = "global"
@@ -1472,7 +1474,7 @@ class AiModelOperations:
                     project_id=project_id,
                     type=model_type,
                     format=model_format,
-                    file_path=str(file_path),
+                    file_path=normalized_path,
                     nc=nc,
                     classes=classes or [],
                     input_size_default=input_size_default,

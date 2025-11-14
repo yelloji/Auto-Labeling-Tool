@@ -103,6 +103,8 @@ async def init_db():
                 logger.info("app.database", "Backfilled ai_models.project_name", "ai_models_project_name_backfill")
         except Exception as bf_err:
             logger.warning("errors.system", f"Project name backfill failed: {bf_err}", "ai_models_project_name_backfill_failed", {"error": str(bf_err)})
+
+        
         
         # Create directories if they don't exist
         logger.info("app.database", "Creating required directories", "directories_creation_start", {
