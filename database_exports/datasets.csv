@@ -2,8 +2,8 @@ ID,Name,Description,Project ID,Project Name,Created,Updated,Total Images,Labeled
 aa17acf7-8689-4b30-842d-712250a4df45,one,Images uploaded to gevis,1,gevis,2025-08-26 13:30:43,2025-08-26 13:30:53.730455,0,0,0,0
 0ad82748-e577-4e29-abd3-b99692f04cff,fh,Images uploaded to gevis,1,gevis,2025-08-26 13:33:25,2025-08-26 13:33:56.170573,0,0,0,0
 d5e70b23-ff2c-46e6-bf4e-fc5dd3f6033b,ko,Images uploaded to gevis,1,gevis,2025-08-26 14:08:14,2025-08-26 14:09:03.742729,0,0,0,0
-7c2978c8-d056-46da-8baa-8d37258021d4,animal,Images uploaded to gevis,1,gevis,2025-09-21 16:42:50,2025-09-24 13:37:10.481046,3,3,0,3
-cb17fee5-e822-4232-a2a7-b1c1a4264b71,Reject,Images uploaded to gevis,1,gevis,2025-09-22 07:07:14,2025-11-12 08:22:17.287771,1,1,0,7
+7c2978c8-d056-46da-8baa-8d37258021d4,animal,Images uploaded to gevis,1,gevis,2025-09-21 16:42:50,2025-11-17 07:58:26.189259,3,3,0,4
+cb17fee5-e822-4232-a2a7-b1c1a4264b71,Reject,Images uploaded to gevis,1,gevis,2025-09-22 07:07:14,2025-11-17 07:58:19.365138,1,1,0,7
 859a7b3d-1fa0-4bbf-8dbc-f0dee78994f7,Reject,Images uploaded to MASMAC-O-RING,3,MASMAC-O-RING,2025-09-23 10:32:21,2025-09-30 15:28:47.702206,9,9,0,82
 70b93505-ee97-4374-abea-117769200707,rejects,Images uploaded to cuffia-ext,5,cuffia-ext,2025-09-25 07:24:30,2025-09-27 07:47:19.144652,6,6,0,28
 38ffde84-e9b2-4445-91f7-9df234238d14,rejects,Images uploaded to cuffia-int,6,cuffia-int,2025-09-25 10:15:49,2025-09-28 08:03:56.651915,6,6,0,41
