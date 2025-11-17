@@ -90,7 +90,8 @@ LOGGING_CONFIG: Dict[str, Any] = {
                 "operations": {"enabled": True, "level": "INFO"},
                 "annotations": {"enabled": True, "level": "INFO"},
                 "releases": {"enabled": True, "level": "INFO"},
-                "transformations": {"enabled": True, "level": "INFO"}
+                "transformations": {"enabled": True, "level": "INFO"},
+                "training": {"enabled": True, "level": "INFO"}
             }
         },
         
