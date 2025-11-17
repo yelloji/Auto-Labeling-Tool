@@ -7,6 +7,8 @@ from api.services.model_serialization import serialize_ai_model
 from models.training.model_selector import get_trainable_models
 from models.training.training_extraction import is_extracted, extract_release_zip
 from models.training.config import load_base_config, resolve_config, build_args_preview
+from models.training.dataset_summary import summarize_dataset, find_and_summarize
+from pathlib import Path
 
 router = APIRouter()
 
@@ -67,5 +69,19 @@ async def resolve_training_config(payload: ResolveRequest):
         resolved = resolve_config(payload.framework, payload.task, payload.overrides or {})
         preview = build_args_preview(payload.framework, payload.task, resolved)
         return {"framework": payload.framework, "task": payload.task, "resolved": resolved, "preview": preview}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/training/dataset/summary")
+async def dataset_summary(release_dir: Optional[str] = None, data_yaml_path: Optional[str] = None):
+    try:
+        if data_yaml_path:
+            return summarize_dataset(Path(data_yaml_path))
+        if release_dir:
+            return find_and_summarize(Path(release_dir))
+        raise HTTPException(status_code=400, detail="release_dir or data_yaml_path required")
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

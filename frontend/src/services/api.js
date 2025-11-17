@@ -735,6 +735,13 @@ export const trainingAPI = {
     const response = await api.post('/api/v1/training/config/resolve', { framework, task, overrides });
     return response.data;
   },
+  datasetSummary: async ({ releaseDir, dataYamlPath }) => {
+    const params = new URLSearchParams();
+    if (releaseDir) params.append('release_dir', releaseDir);
+    if (dataYamlPath) params.append('data_yaml_path', dataYamlPath);
+    const response = await api.get(`/api/v1/training/dataset/summary?${params.toString()}`);
+    return response.data;
+  },
   getTrainableModels: async (projectId, framework, task) => {
     try {
       const params = { framework, task };

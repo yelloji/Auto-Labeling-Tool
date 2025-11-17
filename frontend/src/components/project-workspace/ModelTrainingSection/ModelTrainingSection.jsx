@@ -90,6 +90,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     return 2;
   }, [readiness]);
 
+
   return (
     <div className="compact-mts" style={{ padding: 16 }}>
       <ConfigProvider
