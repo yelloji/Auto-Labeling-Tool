@@ -34,12 +34,11 @@ def file_is_ready(path_str: Optional[str]) -> bool:
         path_s = str(path_str)
         # If the DB stored a projects-relative path, resolve to absolute first
         try:
-            # path_manager.is_relative_project_path is robust and safe
-            if path_manager.is_relative_project_path(path_s):
-                abs_path = path_manager.get_absolute_path(path_s)
+            ps = path_s.replace("\\", "/")
+            if path_manager.is_relative_project_path(ps) or ps.startswith("models/"):
+                abs_path = path_manager.get_absolute_path(ps)
                 return Path(abs_path).exists()
         except Exception:
-            # Fall back to direct Path check
             pass
         return Path(path_s).exists()
     except Exception:
@@ -95,8 +94,9 @@ def serialize_ai_model(db: Session, m: AiModel) -> Dict[str, Any]:
     try:
         if m.file_path:
             path_s = str(m.file_path)
-            if path_manager.is_relative_project_path(path_s):
-                abs_path = path_manager.get_absolute_path(path_s)
+            ps = path_s.replace("\\", "/")
+            if path_manager.is_relative_project_path(ps) or ps.startswith("models/"):
+                abs_path = path_manager.get_absolute_path(ps)
             else:
                 abs_path = path_s
     except Exception:
