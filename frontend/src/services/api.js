@@ -731,6 +731,10 @@ export const trainingAPI = {
       throw error;
     }
   },
+  resolveConfig: async (framework, task, overrides) => {
+    const response = await api.post('/api/v1/training/config/resolve', { framework, task, overrides });
+    return response.data;
+  },
   getTrainableModels: async (projectId, framework, task) => {
     try {
       const params = { framework, task };

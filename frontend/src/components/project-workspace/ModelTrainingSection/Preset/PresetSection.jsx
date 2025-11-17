@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space } from 'antd';
+import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space, Row, Col, Collapse } from 'antd';
 import { systemAPI } from '../../../../services/api';
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, saveBestOnly, device, gpuIndex, onChange }) {
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, saveBestOnly, device, gpuIndex, isDeveloper, onChange }) {
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [loadingHW, setLoadingHW] = useState(false);
   const [hw, setHW] = useState(null);
@@ -47,6 +47,97 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
       <Form.Item label="Save Best Only">
         <Switch checked={saveBestOnly} onChange={(v) => onChange({ saveBestOnly: v })} />
       </Form.Item>
+      {isDeveloper && (
+        <Collapse defaultActiveKey={["opt","loss","aug"]}>
+          <Collapse.Panel header="Optimization" key="opt">
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item label="Optimizer">
+                  <Select value={undefined} placeholder="Select optimizer" onChange={(v) => onChange({ optimizer: v })}>
+                    <Select.Option value="SGD">SGD</Select.Option>
+                    <Select.Option value="Adam">Adam</Select.Option>
+                    <Select.Option value="AdamW">AdamW</Select.Option>
+                    <Select.Option value="RMSProp">RMSProp</Select.Option>
+                  </Select>
+                </Form.Item>
+          <Form.Item label="Learning Rate (lr0)">
+            <InputNumber min={0} step={0.0001} onChange={(v) => onChange({ lr0: v })} />
+          </Form.Item>
+          <Form.Item label="Final LR Factor (lrf)">
+            <InputNumber min={0} max={1} step={0.001} onChange={(v) => onChange({ lrf: v })} />
+          </Form.Item>
+                <Form.Item label="Momentum">
+                  <InputNumber min={0} max={1} step={0.001} onChange={(v) => onChange({ momentum: v })} />
+                </Form.Item>
+                <Form.Item label="Weight Decay">
+                  <InputNumber min={0} step={0.0001} onChange={(v) => onChange({ weight_decay: v })} />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Cosine LR Scheduler">
+                  <Switch onChange={(v) => onChange({ cos_lr: v })} />
+                </Form.Item>
+                <Form.Item label="Patience (Early Stop)">
+                  <InputNumber min={0} onChange={(v) => onChange({ patience: v })} />
+                </Form.Item>
+                <Form.Item label="Save Period (epochs)">
+                  <InputNumber min={-1} onChange={(v) => onChange({ save_period: v })} />
+                </Form.Item>
+                <Form.Item label="Workers">
+                  <InputNumber min={0} onChange={(v) => onChange({ workers: v })} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={12}>
+              <Col span={8}><Form.Item label="Warmup Epochs"><InputNumber min={0} step={0.1} onChange={(v) => onChange({ warmup_epochs: v })} /></Form.Item></Col>
+              <Col span={8}><Form.Item label="Warmup Momentum"><InputNumber min={0} max={1} step={0.01} onChange={(v) => onChange({ warmup_momentum: v })} /></Form.Item></Col>
+              <Col span={8}><Form.Item label="Warmup Bias LR"><InputNumber min={0} step={0.001} onChange={(v) => onChange({ warmup_bias_lr: v })} /></Form.Item></Col>
+            </Row>
+          </Collapse.Panel>
+          <Collapse.Panel header="Loss Weights" key="loss">
+            <Row gutter={12}>
+              <Col span={8}><Form.Item label="Box"><InputNumber min={0} step={0.1} onChange={(v) => onChange({ box: v })} /></Form.Item></Col>
+              <Col span={8}><Form.Item label="Cls"><InputNumber min={0} step={0.1} onChange={(v) => onChange({ cls: v })} /></Form.Item></Col>
+              <Col span={8}><Form.Item label="DFL"><InputNumber min={0} step={0.1} onChange={(v) => onChange({ dfl: v })} /></Form.Item></Col>
+            </Row>
+          </Collapse.Panel>
+          <Collapse.Panel header="Augmentation" key="aug">
+            <Row gutter={12}>
+              <Col span={6}><Form.Item label="Mosaic"><InputNumber min={0} max={1} step={0.01} onChange={(v) => onChange({ mosaic: v })} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Mixup"><InputNumber min={0} max={1} step={0.01} onChange={(v) => onChange({ mixup: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="HSV H"><InputNumber min={0} max={1} step={0.001} onChange={(v) => onChange({ hsv_h: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="HSV S"><InputNumber min={0} max={1} step={0.01} onChange={(v) => onChange({ hsv_s: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="HSV V"><InputNumber min={0} max={1} step={0.01} onChange={(v) => onChange({ hsv_v: v })} /></Form.Item></Col>
+            </Row>
+            <Row gutter={12}>
+              <Col span={4}><Form.Item label="FlipUD"><InputNumber min={0} max={1} step={0.01} onChange={(v) => onChange({ flipud: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="FlipLR"><InputNumber min={0} max={1} step={0.01} onChange={(v) => onChange({ fliplr: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="Degrees"><InputNumber min={0} max={180} step={0.5} onChange={(v) => onChange({ degrees: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="Translate"><InputNumber min={0} max={1} step={0.01} onChange={(v) => onChange({ translate: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="Scale"><InputNumber min={0} max={2} step={0.01} onChange={(v) => onChange({ scale: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="Shear"><InputNumber min={0} max={1} step={0.01} onChange={(v) => onChange({ shear: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="Perspective"><InputNumber min={0} max={1} step={0.001} onChange={(v) => onChange({ perspective: v })} /></Form.Item></Col>
+            </Row>
+          </Collapse.Panel>
+          <Collapse.Panel header="Task & Segmentation" key="task">
+            <Row gutter={12}>
+              <Col span={6}><Form.Item label="Single Class"><Switch onChange={(v) => onChange({ single_cls: v })} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Rectangular"><Switch onChange={(v) => onChange({ rect: v })} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Overlap Mask"><Switch onChange={(v) => onChange({ overlap_mask: v })} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Mask Ratio"><InputNumber min={1} step={1} onChange={(v) => onChange({ mask_ratio: v })} /></Form.Item></Col>
+            </Row>
+            <Row gutter={12}>
+              <Col span={6}><Form.Item label="Freeze Layers"><InputNumber min={0} step={1} onChange={(v) => onChange({ freeze: v })} /></Form.Item></Col>
+            </Row>
+          </Collapse.Panel>
+          <Collapse.Panel header="Validation" key="val">
+            <Row gutter={12}>
+              <Col span={12}><Form.Item label="Val IoU"><InputNumber min={0} max={1} step={0.01} onChange={(v) => onChange({ val_iou: v })} /></Form.Item></Col>
+              <Col span={12}><Form.Item label="Val Plots"><Switch onChange={(v) => onChange({ val_plots: v })} /></Form.Item></Col>
+            </Row>
+          </Collapse.Panel>
+        </Collapse>
+      )}
       <Form.Item label="Device">
         <Radio.Group
           value={device}

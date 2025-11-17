@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -6,6 +6,7 @@ from database.database import get_db
 from api.services.model_serialization import serialize_ai_model
 from models.training.model_selector import get_trainable_models
 from models.training.training_extraction import is_extracted, extract_release_zip
+from models.training.config import load_base_config, resolve_config, build_args_preview
 
 router = APIRouter()
 
@@ -41,5 +42,30 @@ async def extract_release(payload: ExtractRequest):
         return {"target_dir": rel_dir}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/training/config/default")
+async def get_default_config(framework: str = "ultralytics", task: str = "segmentation"):
+    try:
+        cfg = load_base_config(framework, task)
+        return {"framework": framework, "task": task, "config": cfg}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class ResolveRequest(BaseModel):
+    framework: str = "ultralytics"
+    task: str = "segmentation"
+    overrides: Dict[str, Any]
+
+
+@router.post("/training/config/resolve")
+async def resolve_training_config(payload: ResolveRequest):
+    try:
+        resolved = resolve_config(payload.framework, payload.task, payload.overrides or {})
+        preview = build_args_preview(payload.framework, payload.task, resolved)
+        return {"framework": payload.framework, "task": payload.task, "resolved": resolved, "preview": preview}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

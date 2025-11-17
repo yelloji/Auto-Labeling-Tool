@@ -46,6 +46,16 @@ def _deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
 def resolve_config(framework: str, task: str, overrides: Dict[str, Any]) -> Dict[str, Any]:
     base = load_base_config(framework, task)
     resolved = _deep_merge(base, overrides or {})
+    # Auto-bind data.yaml into train.data if provided
+    try:
+        ds = resolved.get("dataset", {})
+        dy = ds.get("data_yaml_path")
+        if dy:
+            tr = resolved.get("train", {})
+            tr["data"] = dy
+            resolved["train"] = tr
+    except Exception:
+        pass
     logger.info("operations.training", "Resolved training config", "training_resolve_config", {"framework": framework, "task": task})
     return resolved
 

@@ -9,6 +9,7 @@ import PretrainedModelSelect from './PretrainedModel/PretrainedModelSelect';
 import TrainingDatasetSection from './TrainingDataset/TrainingDatasetSection';
 import PresetSection from './Preset/PresetSection';
 import './compact.css';
+import { trainingAPI } from '../../../services/api';
 
 const { Title, Text } = Typography;
 
@@ -163,6 +164,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 saveBestOnly={form.saveBestOnly}
                 device={form.device}
                 gpuIndex={form.gpuIndex}
+                isDeveloper={isDeveloper}
                 onChange={(patch) => handleChange(patch)}
               />
             </Card>
@@ -178,7 +180,73 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       <Tag color={readiness.datasetReady ? 'green' : 'red'}>Dataset</Tag>
                       <Tag color={readiness.modelReady ? 'green' : 'red'}>Model</Tag>
                     </div>
-                    <Button type="default" size="small" disabled={!readiness.datasetReady || !readiness.modelReady}>Preflight</Button>
+                    <Button type="default" size="small" disabled={!readiness.datasetReady || !readiness.modelReady}
+                      onClick={async () => {
+                        try {
+                          const overrides = {
+                            train: {
+                              model: form.pretrainedModel,
+                              epochs: form.epochs,
+                              imgsz: form.imgSize,
+                              batch: form.batchSize,
+                              amp: form.mixedPrecision,
+                              early_stop: form.earlyStop,
+                              save_best: form.saveBestOnly,
+                              device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
+                              optimizer: form.optimizer,
+                              momentum: form.momentum,
+                              weight_decay: form.weight_decay,
+                              cos_lr: form.cos_lr,
+                              patience: form.patience,
+                              save_period: form.save_period,
+                              workers: form.workers,
+                              overlap_mask: form.overlap_mask,
+                              mask_ratio: form.mask_ratio,
+                              single_cls: form.single_cls,
+                              rect: form.rect,
+                              freeze: form.freeze
+                            },
+                            hyperparameters: {
+                              lr0: form.lr0,
+                              lrf: form.lrf,
+                              warmup_epochs: form.warmup_epochs,
+                              warmup_momentum: form.warmup_momentum,
+                              warmup_bias_lr: form.warmup_bias_lr,
+                              box: form.box,
+                              cls: form.cls,
+                              dfl: form.dfl
+                            },
+                            augmentation: {
+                              mosaic: form.mosaic,
+                              mixup: form.mixup,
+                              hsv_h: form.hsv_h,
+                              hsv_s: form.hsv_s,
+                              hsv_v: form.hsv_v,
+                              flipud: form.flipud,
+                              fliplr: form.fliplr,
+                              degrees: form.degrees,
+                              translate: form.translate,
+                              scale: form.scale,
+                              shear: form.shear,
+                              perspective: form.perspective
+                            },
+                            val: {
+                              iou: form.val_iou,
+                              plots: form.val_plots
+                            },
+                            dataset: {
+                              zip_path: form.datasetZipPath
+                            }
+                          };
+                          const res = await trainingAPI.resolveConfig(form.framework, form.taskType, overrides);
+                          const resolved = res?.resolved || resolvedConfig;
+                          // Update preview by temporarily overriding resolvedConfig output
+                          // We don't change the memo; we show server-resolved in the preview below
+                          window.__resolvedServerConfig = resolved;
+                          window.__argsPreview = (res?.preview?.args || []);
+                        } catch (e) {}
+                      }}
+                    >Preflight</Button>
                   </div>
                   <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady)}>
                     Start Training
@@ -190,9 +258,18 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       key: 'config',
                       label: 'Config Preview',
                       children: (
-                        <pre style={{ background: '#f7f7f7', padding: 12, borderRadius: 4, maxHeight: 300, overflow: 'auto', margin: 0 }}>
-                          {JSON.stringify(resolvedConfig, null, 2)}
-                        </pre>
+                        <div>
+                          <pre style={{ background: '#f7f7f7', padding: 12, borderRadius: 4, maxHeight: 220, overflow: 'auto', margin: 0 }}>
+                            {JSON.stringify(window.__resolvedServerConfig || resolvedConfig, null, 2)}
+                          </pre>
+                          {Array.isArray(window.__argsPreview) && window.__argsPreview.length > 0 && (
+                            <div style={{ marginTop: 8 }}>
+                              <pre style={{ background: '#fafafa', padding: 8, borderRadius: 4, maxHeight: 100, overflow: 'auto', margin: 0 }}>
+                                {window.__argsPreview.join(' ')}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
                       )
                     },
                     {
