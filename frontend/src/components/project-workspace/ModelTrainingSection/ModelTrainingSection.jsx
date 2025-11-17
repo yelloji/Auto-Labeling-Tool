@@ -31,7 +31,8 @@ const initialFormState = {
   earlyStop: true,
   saveBestOnly: true,
   device: 'cpu',
-  gpuIndex: null
+  gpuIndex: null,
+  optimizerMode: 'smart-auto'
 };
 
 const ModelTrainingSection = ({ projectId, project }) => {
@@ -164,6 +165,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 device={form.device}
                 gpuIndex={form.gpuIndex}
                 taskType={form.taskType}
+                optimizerMode={form.optimizerMode}
                 optimizer={form.optimizer}
                 lr0={form.lr0}
                 lrf={form.lrf}
@@ -225,7 +227,16 @@ const ModelTrainingSection = ({ projectId, project }) => {
                               amp: form.mixedPrecision,
                               early_stop: form.earlyStop,
                               device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
-                              optimizer: form.optimizer,
+                              optimizer: (() => {
+                                if (form.optimizerMode === 'smart-auto') {
+                                  const isGPU = form.device === 'gpu';
+                                  const bsz = typeof form.batchSize === 'number' ? form.batchSize : 0;
+                                  if (!isGPU) return 'Adam';
+                                  if (bsz >= 32) return 'SGD';
+                                  return 'AdamW';
+                                }
+                                return form.optimizer;
+                              })(),
                               momentum: form.momentum,
                               weight_decay: form.weight_decay,
                               cos_lr: form.cos_lr,

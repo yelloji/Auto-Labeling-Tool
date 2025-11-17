@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space, Row, Col, Collapse } from 'antd';
 import { systemAPI } from '../../../../services/api';
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, device, gpuIndex, isDeveloper, onChange, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, box, cls, dfl, mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_plots, taskType }) {
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, box, cls, dfl, mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_plots, taskType }) {
   const OPTIMIZER_PRESETS = {
     SGD: { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 },
     Adam: { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 },
@@ -32,85 +32,150 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
   };
   return (
     <Form layout="vertical">
-      <Form.Item label="Presets" tooltip="Quick presets to populate core training fields">
-        <Space>
-          <Button size="small" onClick={() => onChange({ epochs: 20, imgSize: 640, batchSize: 'auto', mixedPrecision: true })}>Fast</Button>
-          <Button size="small" onClick={() => onChange({ epochs: 50, imgSize: 640, batchSize: 'auto', mixedPrecision: true })}>Balanced</Button>
-          <Button size="small" onClick={() => onChange({ epochs: 100, imgSize: 1024, batchSize: 'auto', mixedPrecision: false })}>Accurate</Button>
-        </Space>
-      </Form.Item>
-      <Form.Item label="Device">
-        <Radio.Group
-          value={device}
-          onChange={(e) => {
-            const val = e.target.value;
-            if (val === 'gpu') {
-              openDeviceModal();
-            } else {
-              onChange({ device: 'cpu', gpuIndex: null });
-            }
-          }}
-        >
-          <Radio.Button value="cpu">CPU</Radio.Button>
-          <Radio.Button value="gpu">GPU</Radio.Button>
-        </Radio.Group>
-        {device === 'gpu' && typeof gpuIndex === 'number' && (
-          <Tag style={{ marginLeft: 8 }}>GPU #{gpuIndex}</Tag>
-        )}
-      </Form.Item>
-      <Modal
-        title="Select GPU"
-        open={showDeviceModal}
-        onCancel={() => setShowDeviceModal(false)}
-        onOk={() => setShowDeviceModal(false)}
-        okButtonProps={{ disabled: !hw?.gpus?.length }}
-      >
-        {loadingHW ? (
-          <Spin />
-        ) : hw ? (
-          <div>
-            <div style={{ marginBottom: 8 }}>
-              <Tag color={hw.torch_cuda_available ? 'green' : 'red'}>
-                CUDA {hw.torch_cuda_available ? `available${hw.cuda_version ? ` (${hw.cuda_version})` : ''}` : 'not available'}
-              </Tag>
-              {hw.torch_version && <Tag>torch {hw.torch_version}</Tag>}
-            </div>
-            <Select
-              style={{ width: '100%' }}
-              placeholder={hw.gpus?.length ? 'Choose a GPU' : 'No GPUs found'}
-              value={typeof gpuIndex === 'number' ? gpuIndex : undefined}
-              onChange={(val) => onChange({ device: 'gpu', gpuIndex: val })}
-              disabled={!hw.gpus?.length}
-            >
-              {(hw.gpus || []).map((g) => (
-                <Select.Option key={g.id} value={g.id}>
-                  #{g.id} • {g.name} • {g.memory_mb ? `${g.memory_mb} MB` : ''}
-                </Select.Option>
-              ))}
-            </Select>
-            {!hw.gpus?.length && (
-              <div style={{ marginTop: 8 }}>No compatible GPUs detected. Using CPU.</div>
-            )}
-          </div>
-        ) : (
-          <div>Error loading hardware info</div>
-        )}
-      </Modal>
-      <Form.Item label="Epochs" tooltip="Maximum number of training epochs" required>
-        <InputNumber min={1} max={500} value={epochs} onChange={(v) => onChange({ epochs: v })} />
-      </Form.Item>
-      <Form.Item label="Image Size" tooltip="Input image size (px)" required>
-        <InputNumber min={64} max={2048} step={64} value={imgSize} onChange={(v) => onChange({ imgSize: v })} />
-      </Form.Item>
-      <Form.Item label="Batch Size" tooltip="Images per batch; 'auto' selects based on GPU memory">
-        <InputNumber min={1} placeholder={2} value={typeof batchSize === 'number' ? batchSize : undefined} onChange={(v) => onChange({ batchSize: v })} />
-      </Form.Item>
-      <Form.Item label="Mixed Precision (AMP)" tooltip="Enable automatic mixed precision for speed">
-        <Switch checked={mixedPrecision} onChange={(v) => onChange({ mixedPrecision: v })} />
-      </Form.Item>
-      <Form.Item label="Early Stop" tooltip="Allow stopping when no improvement for patience epochs">
-        <Switch checked={earlyStop} onChange={(v) => onChange({ earlyStop: v })} />
-      </Form.Item>
+      {isDeveloper ? (
+        <>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="Presets" tooltip="Quick presets to populate core training fields">
+                <Space>
+                  <Button size="small" onClick={() => onChange({ epochs: 20, imgSize: 640, batchSize: 2, mixedPrecision: true })}>Quick</Button>
+                  <Button size="small" onClick={() => onChange({ epochs: 50, imgSize: 640, batchSize: 2, mixedPrecision: true })}>Standard</Button>
+                  <Button size="small" onClick={() => onChange({ epochs: 100, imgSize: 1024, batchSize: 2, mixedPrecision: false })}>High-Accuracy</Button>
+                </Space>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Mixed Precision (AMP)" tooltip="Enable automatic mixed precision for speed">
+                <Switch checked={mixedPrecision} onChange={(v) => onChange({ mixedPrecision: v })} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="Device">
+                <Radio.Group
+                  value={device}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'gpu') {
+                      openDeviceModal();
+                    } else {
+                      onChange({ device: 'cpu', gpuIndex: null });
+                    }
+                  }}
+                >
+                  <Radio.Button value="cpu">CPU</Radio.Button>
+                  <Radio.Button value="gpu">GPU</Radio.Button>
+                </Radio.Group>
+                {device === 'gpu' && typeof gpuIndex === 'number' && (
+                  <Tag style={{ marginLeft: 8 }}>GPU #{gpuIndex}</Tag>
+                )}
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Early Stop" tooltip="Allow stopping when no improvement for patience epochs">
+                <Switch checked={earlyStop} onChange={(v) => onChange({ earlyStop: v })} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="Epochs" tooltip="Maximum number of training epochs" required>
+                <InputNumber min={1} max={500} value={epochs} onChange={(v) => onChange({ epochs: v })} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Batch Size" tooltip="Images per batch">
+                <InputNumber min={1} placeholder={2} value={typeof batchSize === 'number' ? batchSize : undefined} onChange={(v) => onChange({ batchSize: v })} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="Image Size" tooltip="Input image size (px)" required>
+                <InputNumber min={64} max={2048} step={64} value={imgSize} onChange={(v) => onChange({ imgSize: v })} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+            </Col>
+          </Row>
+        </>
+      ) : (
+        <>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="Presets" tooltip="Quick presets to populate core training fields">
+                <Space>
+                  <Button size="small" onClick={() => onChange({ epochs: 20, imgSize: 640, batchSize: 2, mixedPrecision: true })}>Quick</Button>
+                  <Button size="small" onClick={() => onChange({ epochs: 50, imgSize: 640, batchSize: 2, mixedPrecision: true })}>Standard</Button>
+                  <Button size="small" onClick={() => onChange({ epochs: 100, imgSize: 1024, batchSize: 2, mixedPrecision: false })}>High-Accuracy</Button>
+                </Space>
+              </Form.Item>
+              <Form.Item label="Device">
+                <Radio.Group
+                  value={device}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'gpu') {
+                      openDeviceModal();
+                    } else {
+                      onChange({ device: 'cpu', gpuIndex: null });
+                    }
+                  }}
+                >
+                  <Radio.Button value="cpu">CPU</Radio.Button>
+                  <Radio.Button value="gpu">GPU</Radio.Button>
+                </Radio.Group>
+                {device === 'gpu' && typeof gpuIndex === 'number' && (
+                  <Tag style={{ marginLeft: 8 }}>GPU #{gpuIndex}</Tag>
+                )}
+              </Form.Item>
+              <Form.Item label="Epochs" tooltip="Maximum number of training epochs" required>
+                <InputNumber min={1} max={500} value={epochs} onChange={(v) => onChange({ epochs: v })} />
+              </Form.Item>
+              <Form.Item label="Image Size" tooltip="Input image size (px)" required>
+                <InputNumber min={64} max={2048} step={64} value={imgSize} onChange={(v) => onChange({ imgSize: v })} />
+              </Form.Item>
+              <Form.Item label="Batch Size" tooltip="Images per batch">
+                <InputNumber min={1} placeholder={2} value={typeof batchSize === 'number' ? batchSize : undefined} onChange={(v) => onChange({ batchSize: v })} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Mixed Precision (AMP)" tooltip="Enable automatic mixed precision for speed">
+                <Switch checked={mixedPrecision} onChange={(v) => onChange({ mixedPrecision: v })} />
+              </Form.Item>
+              <Form.Item label="Early Stop" tooltip="Allow stopping when no improvement for patience epochs">
+                <Switch checked={earlyStop} onChange={(v) => onChange({ earlyStop: v })} />
+              </Form.Item>
+              <Form.Item label="Optimizer" tooltip="Smart auto picks based on device and batch size">
+                <Select value={optimizerMode === 'smart-auto' ? 'smart-auto' : (optimizer || undefined)} placeholder="Select">
+                  <Select.Option value="smart-auto" onClick={() => {
+                    const isGPU = device === 'gpu';
+                    const bsz = typeof batchSize === 'number' ? batchSize : 0;
+                    let picked = 'AdamW';
+                    let rec = { lr0: 0.0007, lrf: 0.01, momentum: 0.937, weight_decay: 0.0005 };
+                    if (!isGPU) { picked = 'Adam'; rec = { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 }; }
+                    else if (bsz >= 32) { picked = 'SGD'; rec = { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 }; }
+                    onChange({ optimizerMode: 'smart-auto', ...rec });
+                  }}>smart auto</Select.Option>
+                  <Select.Option value="AdamW" onClick={() => {
+                    const preset = OPTIMIZER_PRESETS['AdamW'];
+                    onChange({ optimizerMode: null, optimizer: 'AdamW', ...preset });
+                  }}>AdamW</Select.Option>
+                  <Select.Option value="SGD" onClick={() => {
+                    const preset = OPTIMIZER_PRESETS['SGD'];
+                    onChange({ optimizerMode: null, optimizer: 'SGD', ...preset });
+                  }}>SGD</Select.Option>
+                </Select>
+              </Form.Item>
+              <Form.Item label="Single Class" tooltip="Treat data as single class (industrial setups)">
+                <Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+        </>
+      )}
       {/* Save Best Only is enforced by backend default; use save_period to keep extra checkpoints */}
       {isDeveloper && (
         <Collapse defaultActiveKey={["opt","loss","aug"]}>
@@ -118,7 +183,7 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
             <Row gutter={12}>
               <Col span={12}>
                 <Form.Item label="Optimizer" tooltip="Training optimizer">
-                  <Select value={optimizer || undefined} placeholder="Default: AdamW" onChange={(v) => {
+                  <Select value={optimizerMode === 'smart-auto' ? 'smart-auto' : (optimizer || undefined)} placeholder="Default: AdamW" onChange={(v) => {
                     if (v === 'smart-auto') {
                       const isGPU = device === 'gpu';
                       const bsz = typeof batchSize === 'number' ? batchSize : 0;
@@ -135,10 +200,10 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                         picked = 'AdamW';
                         rec = { lr0: 0.0007, lrf: 0.01, momentum: 0.937, weight_decay: 0.0005 };
                       }
-                      onChange({ optimizer: picked, ...rec });
+                      onChange({ optimizerMode: 'smart-auto', ...rec });
                     } else {
                       const preset = OPTIMIZER_PRESETS[v] || {};
-                      onChange({ optimizer: v, ...preset });
+                      onChange({ optimizerMode: null, optimizer: v, ...preset });
                     }
                   }}>
                     <Select.Option value="SGD">SGD</Select.Option>
@@ -148,9 +213,17 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                     <Select.Option value="NAdam">NAdam</Select.Option>
                     <Select.Option value="RAdam">RAdam</Select.Option>
                     <Select.Option value="RMSProp">RMSProp</Select.Option>
-                    <Select.Option value="auto">auto</Select.Option>
                     <Select.Option value="smart-auto">smart auto</Select.Option>
                   </Select>
+                  {optimizerMode === 'smart-auto' && (
+                    (() => {
+                      const isGPU = device === 'gpu';
+                      const bsz = typeof batchSize === 'number' ? batchSize : 0;
+                      const heavyAug = (Number(mosaic) || 0) >= 0.3 || (Number(mixup) || 0) >= 0.03;
+                      const resolved = !isGPU ? 'Adam' : (bsz >= 32 || heavyAug) ? 'SGD' : ((taskType || '') === 'segmentation' ? 'AdamW' : 'AdamW');
+                      return <span style={{ marginLeft: 8, color: '#888' }}>({resolved})</span>;
+                    })()
+                  )}
                 </Form.Item>
                 <Form.Item label="Learning Rate (lr0)" tooltip="Initial learning rate">
                   <InputNumber min={0} step={0.0001} placeholder={0.0007} value={lr0} onChange={(v) => onChange({ lr0: v })} />
@@ -230,6 +303,44 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
           </Collapse.Panel>
         </Collapse>
       )}
+      <Modal
+        title="Select GPU"
+        open={showDeviceModal}
+        onCancel={() => setShowDeviceModal(false)}
+        onOk={() => setShowDeviceModal(false)}
+        okButtonProps={{ disabled: !hw?.gpus?.length }}
+      >
+        {loadingHW ? (
+          <Spin />
+        ) : hw ? (
+          <div>
+            <div style={{ marginBottom: 8 }}>
+              <Tag color={hw.torch_cuda_available ? 'green' : 'red'}>
+                CUDA {hw.torch_cuda_available ? `available${hw.cuda_version ? ` (${hw.cuda_version})` : ''}` : 'not available'}
+              </Tag>
+              {hw.torch_version && <Tag>torch {hw.torch_version}</Tag>}
+            </div>
+            <Select
+              style={{ width: '100%' }}
+              placeholder={hw.gpus?.length ? 'Choose a GPU' : 'No GPUs found'}
+              value={typeof gpuIndex === 'number' ? gpuIndex : undefined}
+              onChange={(val) => onChange({ device: 'gpu', gpuIndex: val })}
+              disabled={!hw.gpus?.length}
+            >
+              {(hw.gpus || []).map((g) => (
+                <Select.Option key={g.id} value={g.id}>
+                  #{g.id} • {g.name} • {g.memory_mb ? `${g.memory_mb} MB` : ''}
+                </Select.Option>
+              ))}
+            </Select>
+            {!hw.gpus?.length && (
+              <div style={{ marginTop: 8 }}>No compatible GPUs detected. Using CPU.</div>
+            )}
+          </div>
+        ) : (
+          <div>Error loading hardware info</div>
+        )}
+      </Modal>
     </Form>
   );
 }
