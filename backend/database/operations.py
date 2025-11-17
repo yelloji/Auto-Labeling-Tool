@@ -1551,15 +1551,43 @@ class AiModelOperations:
                         else:
                             fmt = "pytorch"
 
+                    # Determine scope from path: project-scoped under projects/<name>/model, otherwise global
+                    project_id_for_sync = None
+                    try:
+                        p = Path(path)
+                        parts = [str(s) for s in p.parts]
+                        # Normalize case and separators
+                        parts_lower = [s.lower() for s in parts]
+                        if "projects" in parts_lower:
+                            idx = parts_lower.index("projects")
+                            # Expect projects/<project_name>/model/...
+                            if len(parts) >= idx + 3 and parts_lower[idx + 2] == "model":
+                                project_name = parts[idx + 1]
+                                from .models import Project as DBProject
+                                proj_row = db.query(DBProject).filter(DBProject.name == project_name).first()
+                                if proj_row:
+                                    project_id_for_sync = proj_row.id
+                                else:
+                                    # If project is unknown, skip instead of creating a global duplicate
+                                    summary["skipped"] += 1
+                                    logger.warning("app.database", "Skipping model sync: project not found for path", "ai_model_sync_skip_unknown_project", {
+                                        "name": name,
+                                        "path": path,
+                                        "project_name": project_name
+                                    })
+                                    continue
+                    except Exception:
+                        project_id_for_sync = None
+
                     before = (
                         db.query(AiModel)
-                        .filter(AiModel.name == name, AiModel.project_id == None)
+                        .filter(AiModel.name == name, AiModel.project_id == project_id_for_sync)
                         .first()
                     )
                     AiModelOperations.upsert_ai_model(
                         db=db,
                         name=name,
-                        project_id=None,
+                        project_id=project_id_for_sync,
                         model_type=model_type,
                         model_format=fmt,
                         file_path=path,
@@ -1569,7 +1597,7 @@ class AiModelOperations:
                     )
                     after = (
                         db.query(AiModel)
-                        .filter(AiModel.name == name, AiModel.project_id == None)
+                        .filter(AiModel.name == name, AiModel.project_id == project_id_for_sync)
                         .first()
                     )
                     if before is None and after is not None:
