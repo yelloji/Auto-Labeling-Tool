@@ -1537,6 +1537,7 @@ class AiModelOperations:
                     path = data.get("path") or ""
                     classes = data.get("classes") or []
                     input_size = data.get("input_size")
+                    training_size = data.get("training_input_size")
                     model_type = str(data.get("type") or "object_detection")
                     # Prefer explicit format, otherwise infer from file extension
                     fmt = str(data.get("format") or "")
@@ -1558,6 +1559,27 @@ class AiModelOperations:
                         parts = [str(s) for s in p.parts]
                         # Normalize case and separators
                         parts_lower = [s.lower() for s in parts]
+                        # Normalize file_path to app-relative
+                        normalized_path = path
+                        try:
+                            if "models" in parts_lower:
+                                idx_models = parts_lower.index("models")
+                                rel = Path(*parts[idx_models:])
+                                normalized_path = str(rel).replace('\\', '/')
+                            elif "projects" in parts_lower:
+                                idx_projects = parts_lower.index("projects")
+                                rel = Path(*parts[idx_projects:])
+                                normalized_path = str(rel).replace('\\', '/')
+                            else:
+                                base = Path(settings.BASE_DIR).resolve()
+                                abs_path = Path(path).resolve()
+                                if str(abs_path).startswith(str(base)):
+                                    rel = abs_path.relative_to(base)
+                                    normalized_path = str(rel).replace('\\', '/')
+                                else:
+                                    normalized_path = str(abs_path).replace('\\', '/')
+                        except Exception:
+                            normalized_path = str(path).replace('\\', '/')
                         if "projects" in parts_lower:
                             idx = parts_lower.index("projects")
                             # Expect projects/<project_name>/model/...
@@ -1584,16 +1606,22 @@ class AiModelOperations:
                         .filter(AiModel.name == name, AiModel.project_id == project_id_for_sync)
                         .first()
                     )
+                    # Preserve training_input_size if config does not provide it
+                    if training_size is None and before is not None:
+                        training_size_to_use = before.training_input_size
+                    else:
+                        training_size_to_use = training_size
+
                     AiModelOperations.upsert_ai_model(
                         db=db,
                         name=name,
                         project_id=project_id_for_sync,
                         model_type=model_type,
                         model_format=fmt,
-                        file_path=path,
+                        file_path=normalized_path,
                         classes=classes,
                         input_size_default=input_size,
-                        training_input_size=None,
+                        training_input_size=training_size_to_use,
                     )
                     after = (
                         db.query(AiModel)
