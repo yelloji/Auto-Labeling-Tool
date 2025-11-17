@@ -706,6 +706,46 @@ export const releasesAPI = {
   }
 };
 
+// ==================== TRAINING API ====================
+
+export const trainingAPI = {
+  checkExtracted: async (zipPath) => {
+    try {
+      const response = await api.get('/api/v1/training/check-extracted', {
+        params: { zip_path: zipPath }
+      });
+      return response.data;
+    } catch (error) {
+      handleAPIError(error, 'Failed to check extraction');
+      throw error;
+    }
+  },
+  extractRelease: async (zipPath) => {
+    try {
+      const response = await api.post('/api/v1/training/extract-release', {
+        zip_path: zipPath
+      });
+      return response.data;
+    } catch (error) {
+      handleAPIError(error, 'Failed to extract release');
+      throw error;
+    }
+  },
+  getTrainableModels: async (projectId, framework, task) => {
+    try {
+      const params = { framework, task };
+      if (projectId !== null && projectId !== undefined && String(projectId).trim() !== '') {
+        params.project_id = projectId;
+      }
+      const response = await api.get('/api/v1/training/models', { params });
+      return response.data || [];
+    } catch (error) {
+      handleAPIError(error, 'Failed to load trainable models');
+      throw error;
+    }
+  }
+};
+
 // ==================== DATA AUGMENTATION API ====================
 
 export const augmentationAPI = {
@@ -1100,20 +1140,5 @@ export const systemAPI = {
   }
 };
 
-export const trainingAPI = {
-  getTrainableModels: async (projectId, framework, task) => {
-    try {
-      const params = { framework, task };
-      if (projectId !== null && projectId !== undefined && String(projectId).trim() !== '') {
-        params.project_id = projectId;
-      }
-      const response = await api.get('/api/v1/training/models', { params });
-      return response.data || [];
-    } catch (error) {
-      handleAPIError(error, 'Failed to load trainable models');
-      throw error;
-    }
-  }
-};
 
 export default api;

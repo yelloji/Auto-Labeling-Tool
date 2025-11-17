@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Form, Alert, Tag, Space, Select, Spin, Card, Typography } from 'antd';
-import { releasesAPI } from '../../../../services/api';
+import { Form, Alert, Tag, Space, Select, Button, Card, Typography } from 'antd';
+import { releasesAPI, trainingAPI } from '../../../../services/api';
 
 export default function TrainingDatasetSection({ projectId, datasetSource, datasetZipPath, classes, isDeveloper, onChange }) {
   const [loadingReleases, setLoadingReleases] = useState(false);
   const [projectReleases, setProjectReleases] = useState([]);
+  const [checkingExtract, setCheckingExtract] = useState(false);
+  const [extractedInfo, setExtractedInfo] = useState({ extracted: false, target_dir: '' });
   const zipName = datasetZipPath ? datasetZipPath.split(/[\\/]/).pop() : '';
   const isZip = datasetZipPath?.toLowerCase().endsWith('.zip');
   const getZipPath = (r) => String(r?.model_path || r?.path || r?.release_zip || r?.zip_path || '').trim();
@@ -31,6 +33,26 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
     };
     loadReleases();
   }, [projectId]);
+
+  useEffect(() => {
+    const check = async () => {
+      const zp = (datasetZipPath || '').trim();
+      if (!zp || !zp.toLowerCase().endsWith('.zip')) {
+        setExtractedInfo({ extracted: false, target_dir: '' });
+        return;
+      }
+      setCheckingExtract(true);
+      try {
+        const info = await trainingAPI.checkExtracted(zp);
+        setExtractedInfo({ extracted: Boolean(info?.extracted), target_dir: String(info?.target_dir || '') });
+      } catch (e) {
+        setExtractedInfo({ extracted: false, target_dir: '' });
+      } finally {
+        setCheckingExtract(false);
+      }
+    };
+    check();
+  }, [datasetZipPath]);
 
   return (
     <Form layout="vertical">
@@ -63,9 +85,28 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
           <div>
             <div>File: <code>{zipName || '—'}</code></div>
             <div>Classes: <code>{Array.isArray(classes) && classes.length ? classes.length : 'auto from data.yaml'}</code></div>
+            {extractedInfo?.target_dir && (
+              <div>Target: <code>{extractedInfo.target_dir}</code></div>
+            )}
           </div>
           <div style={{ textAlign: 'right' }}>
             <Tag color={isZip ? 'blue' : 'red'}>{isZip ? 'ZIP selected' : 'Select .zip'}</Tag>
+            {isZip && (
+              <div style={{ marginTop: 6 }}>
+                {extractedInfo.extracted ? (
+                  <Tag color="green">Extracted</Tag>
+                ) : (
+                  <Button size="small" type="primary" loading={checkingExtract}
+                    onClick={async () => {
+                      try {
+                        const res = await trainingAPI.extractRelease(datasetZipPath);
+                        if (res?.target_dir) setExtractedInfo({ extracted: true, target_dir: res.target_dir });
+                      } catch (e) {}
+                    }}
+                  >Extract</Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </Card>
