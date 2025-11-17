@@ -22,7 +22,8 @@ from core.image_generator import ImageAugmentationEngine, create_augmentation_en
 from database.database import get_db
 from database.models import ImageTransformation, Release, Image, Dataset, Project
 from sqlalchemy.orm import Session
-
+from typing import Union
+from core.annotation_transformer import BoundingBox, Polygon
 # Import export system
 from api.routes.enhanced_export import ExportFormats, ExportRequest
 
@@ -30,8 +31,141 @@ from api.routes.enhanced_export import ExportFormats, ExportRequest
 from logging_system.professional_logger import get_professional_logger
 from utils.path_utils import PathManager
 
+from database.operations import ImageOperations, AnnotationOperations
 # Initialize professional logger
 logger = get_professional_logger()
+def _get_pixel_annotations_from_db(db, image_id: str) -> List[Union[BoundingBox, Polygon]]: 
+    """ 
+    Read annotations for an image in *pixels* and return engine-ready objects. 
+    No normalization/scaling here (your DB already stores pixels). 
+    """ 
+    out: List[Union[BoundingBox, Polygon]] = [] 
+
+    # Optional: confirm the image exists / fetch W,H if you need them later 
+    img = ImageOperations.get_image(db, image_id) 
+    if not img: 
+        logger.warning("operations.annotations", 
+                       f"Image not found while fetching annotations: {image_id}", 
+                       "release_fetch_image_not_found", 
+                       {"image_id": image_id}) 
+        return out 
+
+    anns = AnnotationOperations.get_annotations_by_image(db, image_id) 
+
+    for a in anns: 
+        try: 
+            if getattr(a, "segmentation", None): 
+                seg = a.segmentation 
+                # seg can be JSON text or a python list 
+                if isinstance(seg, str): 
+                    try: 
+                        seg = json.loads(seg) 
+                    except Exception: 
+                        logger.warning("operations.annotations", 
+                                       "Segmentation JSON parse failed; skipping segmentation", 
+                                       "release_segmentation_json_parse_failed", 
+                                       {"image_id": image_id}) 
+                        seg = [] 
+
+                pts = [] 
+                for pt in (seg or []): 
+                    if isinstance(pt, dict) and ("x" in pt and "y" in pt): 
+                        pts.append((float(pt["x"]), float(pt["y"]))) 
+                    elif isinstance(pt, (list, tuple)) and len(pt) >= 2: 
+                        pts.append((float(pt[0]), float(pt[1]))) 
+
+                if len(pts) >= 3: 
+                    out.append( 
+                        Polygon( 
+                            points=pts, 
+                            class_name=a.class_name, 
+                            class_id=int(a.class_id or 0), 
+                            confidence=float(getattr(a, "confidence", 1.0) or 1.0), 
+                        ) 
+                    ) 
+                    continue  # done with this annotation; go next 
+
+            # Fallback / plain bbox (also pixels) 
+            out.append( 
+                BoundingBox( 
+                    x_min=float(a.x_min), 
+                    y_min=float(a.y_min), 
+                    x_max=float(a.x_max), 
+                    y_max=float(a.y_max), 
+                    class_name=a.class_name, 
+                    class_id=int(a.class_id or 0), 
+                    confidence=float(getattr(a, "confidence", 1.0) or 1.0), 
+                ) 
+            ) 
+        except Exception as ex: 
+            logger.warning("operations.annotations", 
+                           f"Failed to convert annotation to pixel object: {ex}", 
+                           "release_annotation_convert_failed", 
+                           {"image_id": image_id}) 
+            continue 
+
+    logger.info("operations.annotations", 
+                f"Fetched {len(out)} pixel annotations for image {image_id}", 
+                "release_annotations_pixel_ready", 
+                {"image_id": image_id, "count": len(out)}) 
+    return out
+# >>> NEW: serialize engine results into plain dicts the exporter expects
+def _serialize_aug_result(
+    r,
+    split_section: str,
+    source_dataset: str
+) -> dict:
+    def _bbox_to_dict(b: BoundingBox) -> dict:
+        return {
+            "type": "bbox",
+            "x_min": b.x_min, "y_min": b.y_min,
+            "x_max": b.x_max, "y_max": b.y_max,
+            "class_name": b.class_name,
+            "class_id": b.class_id,
+            "confidence": b.confidence,
+        }
+
+    def _poly_to_dict(p: Polygon) -> dict:
+        return {
+            "type": "polygon",
+            "points": p.points,
+            "class_name": p.class_name,
+            "class_id": p.class_id,
+            "confidence": p.confidence,
+        }
+
+    out_path = r.augmented_image_path
+    name = Path(out_path).name
+    w, h = r.augmented_dimensions
+
+    return {
+        # where the image actually is
+        "output_path": out_path,
+        "output_filename": name,
+
+        # dims for normalization at export
+        "image_width": w,
+        "image_height": h,
+
+        # which split & dataset (used by zip/export layout & stats)
+        "split_section": split_section,
+        "source_dataset": source_dataset,
+
+        # this is an augmented image, not the untouched original
+        "is_original": False,
+
+        # transformed labels as simple dicts
+        "annotations": [
+            _bbox_to_dict(a) if isinstance(a, BoundingBox) else _poly_to_dict(a)
+            for a in (r.updated_annotations or [])
+        ],
+
+        # optional: keep the applied config for traceability
+        "transformations_applied": r.transformation_applied,
+        "config_id": r.config_id,
+    }
+
+
 
 @dataclass
 class ReleaseConfig:
@@ -347,23 +481,66 @@ class ReleaseController:
                 'transformation_ids': transformation_ids
             })
     
+    
+
     def generate_release(self, config: ReleaseConfig, release_version: str) -> str:
         """
         Generate a complete release with transformations and export
-        
-        Args:
-            config: Release configuration
-            release_version: Version identifier for transformations
-            
-        Returns:
-            Release ID
         """
+        # local imports (safe even if already imported at module level)
+        import os, shutil, json
+        from pathlib import Path
+        from datetime import datetime
+        from PIL import Image
+        from typing import Dict, List
+
         release_id = None
-        
+
+        # --- helper: serialize engine result objects to plain dicts for exporter ---
+        def _serialize_aug_result(r, split_section: str, source_dataset: str) -> dict:
+            # local helpers for shapes
+            def _bbox_to_dict(b):
+                return {
+                    "type": "bbox",
+                    "x_min": b.x_min, "y_min": b.y_min,
+                    "x_max": b.x_max, "y_max": b.y_max,
+                    "class_name": b.class_name,
+                    "class_id": b.class_id,
+                    "confidence": b.confidence,
+                }
+            def _poly_to_dict(p):
+                return {
+                    "type": "polygon",
+                    "points": p.points,
+                    "class_name": p.class_name,
+                    "class_id": p.class_id,
+                    "confidence": p.confidence,
+                }
+
+            out_path = r.augmented_image_path
+            name = Path(out_path).name
+            w, h = r.augmented_dimensions
+
+            return {
+                "output_path": out_path,
+                "output_filename": name,
+                "image_width": w,
+                "image_height": h,
+                "split_section": split_section,
+                "source_dataset": source_dataset,
+                "is_original": False,
+                "annotations": [
+                    _bbox_to_dict(a) if hasattr(a, "x_min") else _poly_to_dict(a)
+                    for a in (r.updated_annotations or [])
+                ],
+                "transformations_applied": r.transformation_applied,
+                "config_id": r.config_id,
+            }
+
         try:
             # Create release record
             release_id = self.create_release_record(config)
-            
+
             # Initialize progress tracking
             self.update_release_progress(
                 release_id,
@@ -371,24 +548,24 @@ class ReleaseController:
                 current_step="loading_data",
                 started_at=datetime.utcnow()
             )
-            
+
             # Load pending transformations
             transformation_records = self.load_pending_transformations(release_version)
             if not transformation_records:
                 raise ValueError(f"No pending transformations found for version {release_version}")
-            
+
             # Get dataset images with split section filtering
             image_records = self.get_dataset_images(config.dataset_ids, config.split_sections)
             if not image_records:
                 raise ValueError(f"No images found in datasets: {config.dataset_ids}")
-            
+
             # Update progress
             self.update_release_progress(
                 release_id,
                 total_images=len(image_records),
                 current_step="generating_configurations"
             )
-            
+
             # Generate transformation configurations
             image_ids = [img["id"] for img in image_records]
             transformation_configs = generate_release_configurations(
@@ -396,153 +573,230 @@ class ReleaseController:
                 image_ids,
                 config.images_per_original
             )
-            
+
             # Update progress
             self.update_release_progress(
                 release_id,
                 current_step="processing_images"
             )
-            
+
             # Initialize augmentation engine with project-specific path
             project = self.db.query(Project).filter(Project.id == config.project_id).first()
             project_name = project.name if project else f"project_{config.project_id}"
             output_dir = os.path.join("projects", project_name, "releases", release_id)
             self.augmentation_engine = create_augmentation_engine(output_dir)
-            
+
             # Prepare image paths and dataset splits with multi-dataset support
-            image_paths = []
-            dataset_splits = {}
-            dataset_sources = {}  # Track source dataset for each image
-            
+            image_paths: List[str] = []
+            dataset_splits: Dict[str, str] = {}
+            dataset_sources: Dict[str, Dict[str, str]] = {}  # Track source dataset for each image
+
+            # Build annotations_map as we stage each image
+            annotations_map: Dict[str, List[Union[BoundingBox, Polygon]]] = {}
+
             # Create staging directory for copied images
             staging_dir = f"{output_dir}/staging"
             os.makedirs(staging_dir, exist_ok=True)
-            
-            logger.info("operations.releases", f"🔄 COPYING IMAGES FROM MULTIPLE DATASETS:", "image_copying_start", {
-                'dataset_count': len(set(img['dataset_name'] for img in image_records)),
-                'total_images': len(image_paths),
-                'output_format': config.output_format
-            })
-            
+
+            logger.info(
+                "operations.releases",
+                "🔄 COPYING IMAGES FROM MULTIPLE DATASETS:",
+                "image_copying_start",
+                {
+                    'dataset_count': len(set(img['dataset_name'] for img in image_records)),
+                    'total_images': len(image_records),
+                    'output_format': config.output_format
+                }
+            )
+
             for img_record in image_records:
+                # DB identity of the original image
+                source_image_id = img_record["id"]
+
                 # Get source image path
                 source_path = self._resolve_image_path(img_record["file_path"])
-                
                 if not os.path.exists(source_path):
-                    logger.warning("errors.validation", f"Source image not found: {source_path}", "source_image_missing", {
-                    'source_path': source_path,
-                    'dataset_name': img_record['dataset_name'],
-                    'filename': img_record['filename']
-                })
+                    logger.warning(
+                        "errors.validation",
+                        f"Source image not found: {source_path}",
+                        "source_image_missing",
+                        {
+                            'source_path': source_path,
+                            'dataset_name': img_record['dataset_name'],
+                            'filename': img_record['filename']
+                        }
+                    )
                     continue
-                
+
                 # Create unique filename to avoid conflicts between datasets
                 dataset_name = img_record["dataset_name"]
-                original_filename = img_record["filename"]
+                original_filename = img_record["filename"]  # e.g., "car.jpg"
                 unique_filename = f"{dataset_name}_{original_filename}"
-                
-                # Copy image to staging directory with format conversion if needed
+
+                # Copy / convert into staging
                 try:
-                    # Check if we need to convert the format
                     if config.output_format.lower() == "original":
-                        # Just copy the file as-is if using original format
                         staging_path = os.path.join(staging_dir, unique_filename)
                         shutil.copy2(source_path, staging_path)
-                        logger.info("operations.images", f"   Copied (original format): {source_path} → {staging_path}", "image_copied_original", {
-                        'source_path': source_path,
-                        'staging_path': staging_path,
-                        'dataset_name': img_record['dataset_name']
-                    })
-                    else:
-                        # Ensure the filename has the correct extension for the target format
-                        base_name = Path(unique_filename).stem
-                        extension = config.output_format.lower()
-                        # Handle jpeg -> jpg
-                        if extension == "jpeg":
-                            extension = "jpg"
-                        
-                        # Create filename with correct extension
-                        converted_filename = f"{base_name}.{extension}"
-                        staging_path = os.path.join(staging_dir, converted_filename)
-                        
-                        # Load and convert the image to the selected format
-                        try:
-                            # Open the image with PIL
-                            original_image = Image.open(source_path)
-                            
-                            # Use the augmentation engine to save with proper format
-                            self.augmentation_engine._save_image_with_format(
-                                original_image, 
-                                staging_path, 
-                                config.output_format
-                            )
-                            logger.info("operations.images", f"   Copied and converted to {config.output_format}: {source_path} → {staging_path}", "image_converted", {
+                        logger.info(
+                            "operations.images",
+                            f"   Copied (original format): {source_path} → {staging_path}",
+                            "image_copied_original",
+                            {
                                 'source_path': source_path,
                                 'staging_path': staging_path,
-                                'output_format': config.output_format,
                                 'dataset_name': img_record['dataset_name']
-                            })
+                            }
+                        )
+                    else:
+                        base_name = Path(unique_filename).stem
+                        extension = config.output_format.lower()
+                        if extension == "jpeg":
+                            extension = "jpg"
+                        converted_filename = f"{base_name}.{extension}"
+                        staging_path = os.path.join(staging_dir, converted_filename)
+
+                        try:
+                            original_image = Image.open(source_path)
+                            self.augmentation_engine._save_image_with_format(
+                                original_image,
+                                staging_path,
+                                config.output_format
+                            )
+                            logger.info(
+                                "operations.images",
+                                f"   Copied and converted to {config.output_format}: {source_path} → {staging_path}",
+                                "image_converted",
+                                {
+                                    'source_path': source_path,
+                                    'staging_path': staging_path,
+                                    'output_format': config.output_format,
+                                    'dataset_name': img_record['dataset_name']
+                                }
+                            )
                         except Exception as format_error:
-                            # Fallback to regular copy if conversion fails
-                            logger.warning("errors.validation", f"   Format conversion failed for {source_path}: {format_error}", "format_conversion_failed", {
-                                'source_path': source_path,
-                                'format_error': str(format_error),
-                                'output_format': config.output_format,
-                                'dataset_name': img_record['dataset_name']
-                            })
-                            logger.warning("operations.images", f"   Falling back to original format copy", "format_fallback", {
-                                'source_path': source_path,
-                                'dataset_name': img_record['dataset_name']
-                            })
+                            logger.warning(
+                                "errors.validation",
+                                f"   Format conversion failed for {source_path}: {format_error}",
+                                "format_conversion_failed",
+                                {
+                                    'source_path': source_path,
+                                    'format_error': str(format_error),
+                                    'output_format': config.output_format,
+                                    'dataset_name': img_record['dataset_name']
+                                }
+                            )
+                            logger.warning(
+                                "operations.images",
+                                "   Falling back to original format copy",
+                                "format_fallback",
+                                {
+                                    'source_path': source_path,
+                                    'dataset_name': img_record['dataset_name']
+                                }
+                            )
                             staging_path = os.path.join(staging_dir, unique_filename)
                             shutil.copy2(source_path, staging_path)
-                    
-                    # Add to processing lists
+
+                    # Register for processing
                     image_paths.append(staging_path)
                     dataset_splits[staging_path] = img_record["split_section"]
                     dataset_sources[staging_path] = {
                         "dataset_name": dataset_name,
                         "dataset_id": img_record["dataset_id"],
                         "source_path": img_record["source_path"],
-                        "original_filename": original_filename
+                        "original_filename": original_filename,   # for deriving stem if needed
+                        "source_image_id": source_image_id,       # DB image id for lookups
                     }
-                    
+
+                    # Fetch pixel annotations by DB id and map under multiple keys
+                    anns_px = _get_pixel_annotations_from_db(self.db, source_image_id)
+
+                    # map by the exact path we’ll send to the engine
+                    annotations_map[staging_path] = anns_px
+
+                    # also map by original filename stem (engine may compute id this way)
+                    original_stem = Path(original_filename).stem
+                    annotations_map[original_stem] = anns_px
+
+                    # also map by DB id as string
+                    annotations_map[str(source_image_id)] = anns_px
+                    logger.info(
+                        "operations.annotations",
+                        "Registered annotations in map",
+                        "annotations_map_register",
+                        {
+                            "staging_path_key": staging_path,
+                            "original_stem_key": original_stem,
+                            "db_id_key": str(source_image_id),
+                            "count": len(anns_px)
+                        }
+                    )
+
                 except Exception as e:
-                    logger.error("errors.system", f"Failed to copy {source_path}: {e}", "image_copy_error", {
-                        'source_path': source_path,
-                        'error': str(e),
-                        'dataset_name': img_record['dataset_name'],
-                        'filename': img_record['filename']
-                    })
+                    logger.error(
+                        "errors.system",
+                        f"Failed to copy {source_path}: {e}",
+                        "image_copy_error",
+                        {
+                            'source_path': source_path,
+                            'error': str(e),
+                            'dataset_name': img_record['dataset_name'],
+                            'filename': img_record['filename']
+                        }
+                    )
                     continue
-            
+
             # Log format conversion information
             if config.output_format.lower() == "original":
-                logger.info("operations.images", f"✅ Successfully copied {len(image_paths)} images from {len(set(img['dataset_name'] for img in image_records))} datasets (preserving original formats)", "images_copied_success", {
-                'image_count': len(image_paths),
-                'dataset_count': len(set(img['dataset_name'] for img in image_records)),
-                'output_format': 'original'
-            })
+                logger.info(
+                    "operations.images",
+                    f"✅ Successfully copied {len(image_paths)} images from {len(set(img['dataset_name'] for img in image_records))} datasets (preserving original formats)",
+                    "images_copied_success",
+                    {
+                        'image_count': len(image_paths),
+                        'dataset_count': len(set(img['dataset_name'] for img in image_records)),
+                        'output_format': 'original'
+                    }
+                )
             else:
-                logger.info("operations.images", f"✅ Successfully copied and converted {len(image_paths)} images to {config.output_format.upper()} format from {len(set(img['dataset_name'] for img in image_records))} datasets", "images_converted_success", {
-                    'image_count': len(image_paths),
-                    'dataset_count': len(set(img['dataset_name'] for img in image_records)),
-                    'output_format': config.output_format.upper()
-                })
-            
-            # Process all images with multi-dataset support
+                logger.info(
+                    "operations.images",
+                    f"✅ Successfully copied and converted {len(image_paths)} images to {config.output_format.upper()} format from {len(set(img['dataset_name'] for img in image_records))} datasets",
+                    "images_converted_success",
+                    {
+                        'image_count': len(image_paths),
+                        'dataset_count': len(set(img['dataset_name'] for img in image_records)),
+                        'output_format': config.output_format.upper()
+                    }
+                )
+
+            # Process all images with multi-dataset support (pass annotations_map)
             all_results = process_release_images(
                 image_paths=image_paths,
                 transformation_configs=transformation_configs,
                 dataset_splits=dataset_splits,
                 output_dir=output_dir,
                 output_format=config.output_format,
-                dataset_sources=dataset_sources  # Pass dataset source information
+                dataset_sources=dataset_sources,
+                annotations_map=annotations_map    # labels travel with the same affine
             )
-            
+
+            # Convert AugmentationResult objects -> plain dicts for exporter
+            serialized_results: Dict[str, List[dict]] = {}
+            for img_path, results in (all_results or {}).items():
+                split = dataset_splits.get(img_path, "train")
+                src_ds = (dataset_sources.get(img_path) or {}).get("dataset_name", "unknown")
+                serialized_results[img_path] = [
+                    _serialize_aug_result(r, split, src_ds) for r in (results or [])
+                ]
+
+            # IMPORTANT: from here on, downstream code works with dicts
+            all_results = serialized_results
+
             # Count generated images
             total_generated = sum(len(results) for results in all_results.values())
-            
+
             # Update progress
             self.update_release_progress(
                 release_id,
@@ -550,11 +804,10 @@ class ReleaseController:
                 generated_images=total_generated,
                 current_step="finalizing"
             )
-            
+
             # Update release record with results
             release = self.db.query(Release).filter(Release.id == release_id).first()
             if release:
-                # Persist overall image statistics
                 release.total_original_images = len(image_paths)
                 release.total_augmented_images = total_generated
                 release.final_image_count = total_generated + (len(image_paths) if config.include_original else 0)
@@ -567,74 +820,81 @@ class ReleaseController:
                 release.test_image_count = split_counts.get("test", 0)
 
                 self.db.commit()
-            
+
             # Mark transformations as completed
             transformation_ids = [t["id"] for t in transformation_records]
             self.mark_transformations_completed(transformation_ids, release_id)
-            
-            # Intelligently select export format based on task type and annotations
+
+            # Choose export format
             optimal_export_format = self._select_optimal_export_format(
-                all_results, 
-                config.export_format, 
-                config.task_type if hasattr(config, 'task_type') else 'object_detection'
+                all_results,
+                config.export_format,
+                getattr(config, 'task_type', 'object_detection')
             )
-            
+
             # Generate export files with transformed annotations
             export_path = self._generate_export_files(
-                release_id, 
-                all_results, 
+                release_id,
+                all_results,
                 optimal_export_format,
-                config.task_type if hasattr(config, 'task_type') else 'object_detection'
+                getattr(config, 'task_type', 'object_detection')
             )
-            
+
             # Update progress
             self.update_release_progress(
                 release_id,
                 current_step="creating_zip_package",
                 progress_percentage=90.0
             )
-            
+
             # Create comprehensive ZIP package with organized structure
             try:
-                # Update config with optimal export format
                 config.export_format = optimal_export_format
-                
-                # Create ZIP package
                 zip_path = self.create_zip_package(
                     release_id,
                     all_results,
                     config,
                     transformation_records
                 )
-                
+
                 # Update release with ZIP path
                 if release and zip_path:
                     relative_zip_path = PathManager().get_project_relative_path(zip_path)
                     release.model_path = relative_zip_path
                     release.export_format = optimal_export_format
-                    release.task_type = config.task_type if hasattr(config, 'task_type') else 'object_detection'
+                    release.task_type = getattr(config, 'task_type', 'object_detection')
                     self.db.commit()
-                    logger.info("operations.releases", f"✅ ZIP package created successfully: {zip_path}", "zip_created_success", {
-                        'zip_path': zip_path,
-                        'release_id': release_id,
-                        'file_size': os.path.getsize(zip_path) if os.path.exists(zip_path) else 0
-                    })
+                    logger.info(
+                        "operations.releases",
+                        f"✅ ZIP package created successfully: {zip_path}",
+                        "zip_created_success",
+                        {
+                            'zip_path': zip_path,
+                            'release_id': release_id,
+                            'file_size': os.path.getsize(zip_path) if os.path.exists(zip_path) else 0
+                        }
+                    )
             except Exception as e:
-                logger.error("errors.system", f"Failed to create ZIP package: {str(e)}", "zip_creation_error", {
-                    'error': str(e),
-                    'release_id': release_id,
-                    'zip_path': zip_path
-                })
+                logger.error(
+                    "errors.system",
+                    f"Failed to create ZIP package: {str(e)}",
+                    "zip_creation_error",
+                    {
+                        'error': str(e),
+                        'release_id': release_id,
+                        'zip_path': locals().get("zip_path")
+                    }
+                )
                 # Fall back to regular export path if ZIP creation fails
                 if release and export_path:
                     release.model_path = PathManager().get_project_relative_path(export_path)
                     release.export_format = optimal_export_format
-                    release.task_type = config.task_type if hasattr(config, 'task_type') else 'object_detection'
+                    release.task_type = getattr(config, 'task_type', 'object_detection')
                     self.db.commit()
-            
+
             # Cleanup staging directory (images were copied, not moved)
             self._cleanup_staging_directory(staging_dir)
-            
+
             # Update final progress
             self.update_release_progress(
                 release_id,
@@ -643,31 +903,36 @@ class ReleaseController:
                 current_step="completed",
                 completed_at=datetime.utcnow()
             )
-            
+
             # Log multi-dataset statistics
             dataset_counts = {}
             for img_record in image_records:
                 dataset_name = img_record["dataset_name"]
                 dataset_counts[dataset_name] = dataset_counts.get(dataset_name, 0) + 1
-            
-            logger.info("operations.releases", f"✅ MULTI-DATASET RELEASE GENERATION COMPLETED: {release_id}", "release_generation_complete", {
-                'release_id': release_id,
-                'dataset_counts': dataset_counts,
-                'total_original_images': len(image_paths),
-                'total_generated_images': total_generated,
-                'image_format': config.output_format.upper() if config.output_format.lower() != 'original' else 'Original (preserved)',
-                'export_path': export_path
-            })
-            
+
+            logger.info(
+                "operations.releases",
+                f"✅ MULTI-DATASET RELEASE GENERATION COMPLETED: {release_id}",
+                "release_generation_complete",
+                {
+                    'release_id': release_id,
+                    'dataset_counts': dataset_counts,
+                    'total_original_images': len(image_paths),
+                    'total_generated_images': total_generated,
+                    'image_format': config.output_format.upper() if config.output_format.lower() != 'original' else 'Original (preserved)',
+                    'export_path': export_path
+                }
+            )
+
             return release_id
-            
+
         except Exception as e:
             error_msg = f"Failed to generate release: {str(e)}"
             logger.error("errors.system", error_msg, "release_generation_error", {
                 'error': str(e),
                 'release_id': release_id
             })
-            
+
             if release_id:
                 self.update_release_progress(
                     release_id,
@@ -675,8 +940,9 @@ class ReleaseController:
                     error_message=error_msg,
                     completed_at=datetime.utcnow()
                 )
-            
+
             raise
+
     
     def _cleanup_staging_directory(self, staging_dir: str) -> None:
         """
@@ -744,8 +1010,9 @@ class ReleaseController:
                     for ann in result['annotations']:
                         if ann.get('type') == 'polygon' and 'points' in ann:
                             has_polygons = True
-                        elif ann.get('type') == 'bbox' or 'bbox' in ann:
+                        elif ann.get('type') == 'bbox':
                             has_bboxes = True
+
         
         # Smart format selection logic
         if task_type == "segmentation":
@@ -877,9 +1144,15 @@ class ReleaseController:
                         # Add geometry based on type
                         if ann.get('type') == 'polygon' and 'points' in ann:
                             annotation['points'] = ann['points']
-                        elif 'bbox' in ann:
-                            annotation['bbox'] = ann['bbox']
-                        
+                        elif ann.get('type') == 'bbox':
+                            # Convert flat fields into a bbox array for downstream exporters
+                            annotation['bbox'] = [
+                                float(ann.get('x_min', 0.0)),
+                                float(ann.get('y_min', 0.0)),
+                                float(ann.get('x_max', 0.0)),
+                                float(ann.get('y_max', 0.0)),
+                            ]
+
                         annotations.append(annotation)
                         annotation_id += 1
         
@@ -1015,8 +1288,7 @@ class ReleaseController:
         """
         try:
             logger.info("operations.releases", f"Creating ZIP package for release {release_id}", "zip_package_creation_start", {
-                'release_id': release_id,
-                'output_path': output_path
+                'release_id': release_id
             })
             
             # Get release record from database
@@ -1297,10 +1569,11 @@ class ReleaseController:
                     "total_original_images": release.total_original_images,
                     "total_augmented_images": release.total_augmented_images,
                     "final_image_count": release.final_image_count,
+                    "total_images": release.final_image_count or 0,  # Frontend expects this field
+                    "total_classes": release.class_count or 0,
+                    "status": "completed",  # Default status for existing releases
                     "created_at": release.created_at.isoformat() if release.created_at else None,
-                    "model_path": release.model_path,
-                    "class_count": release.class_count,
-                    "total_classes": release.class_count
+                    "model_path": release.model_path
                 }
                 history.append(record)
             
@@ -1588,6 +1861,9 @@ def quick_release_generation(project_id: int, dataset_ids: List[str],
     return controller.generate_release(config, release_version)
 
 
+
+
+
 if __name__ == "__main__":
     # Example usage and testing
     # Initialize professional logger
@@ -1608,4 +1884,3 @@ if __name__ == "__main__":
     print("Release Controller initialized successfully!")
     print(f"Test configuration: {test_config}")
     print("Ready for release generation!")
-

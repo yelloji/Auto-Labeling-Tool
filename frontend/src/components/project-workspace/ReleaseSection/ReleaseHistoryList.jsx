@@ -99,17 +99,6 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
             model_path: '/api/v1/releases/1/download'
           },
           {
-            id: '2',
-            name: 'Dataset-2024-01',
-            created_at: '2024-01-10T14:20:00Z',
-            total_images: 800,
-            total_classes: 4,
-            task_type: 'classification',
-            export_format: 'csv',
-            status: 'completed',
-            model_path: '/api/v1/releases/2/download'
-          },
-          {
             id: '3',
             name: 'Augmented Release',
             created_at: '2024-01-05T09:15:00Z',
@@ -400,7 +389,6 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
 
   const getTaskIcon = (taskType) => {
     const icons = {
-      'classification': '🏷️',
       'object_detection': '📦',
       'segmentation': '🎨'
     };

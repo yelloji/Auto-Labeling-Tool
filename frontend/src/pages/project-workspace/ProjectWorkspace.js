@@ -25,10 +25,13 @@ import {
   DeploymentUnitOutlined,
   BulbOutlined,
   HistoryOutlined,
-  PieChartOutlined
+  PieChartOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons';
 import { projectsAPI, handleAPIError } from '../../services/api';
 import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
+// Sidebar theme styles (keep imports at the top)
+import './ProjectWorkspace.css';
 
 // Import components (these will be created later)
 import {
@@ -38,6 +41,7 @@ import {
   ReleaseSection,
   AnalyticsSection,
   ModelsSection,
+  ModelTrainingSection,
   VisualizeSection,
   DeploymentsSection,
   ActiveLearningSection
@@ -143,7 +147,8 @@ const ProjectWorkspace = () => {
   // Log project type validation when project loads
   useEffect(() => {
     if (project && project.project_type) {
-      const validTypes = ['object_detection', 'classification', 'segmentation'];
+      // Classification task is not supported in the app; keep only supported tasks
+      const validTypes = ['object_detection', 'segmentation'];
       if (!validTypes.includes(project.project_type)) {
         logInfo('app.frontend.validation', 'Unknown project type encountered', { 
           projectId, 
@@ -168,7 +173,6 @@ const ProjectWorkspace = () => {
   const getProjectTypeInfo = (type) => {
     const typeInfo = {
       'object_detection': { color: 'blue', label: 'Object Detection' },
-      'classification': { color: 'green', label: 'Classification' },
       'segmentation': { color: 'purple', label: 'Instance Segmentation' }
     };
     return typeInfo[type] || { color: 'default', label: type };
@@ -210,13 +214,18 @@ const ProjectWorkspace = () => {
     },
     {
       key: 'models',
-      label: 'MODELS',
+      label: 'AI TRAINING',
       type: 'group',
       children: [
         {
           key: 'models',
           icon: <RobotOutlined />,
           label: 'Models',
+        },
+        {
+          key: 'model-training',
+          icon: <ThunderboltOutlined />,
+          label: 'Model Training',
         },
         {
           key: 'visualize',
@@ -308,6 +317,16 @@ const ProjectWorkspace = () => {
             navigate={navigate}
           />
         );
+      case 'model-training':
+        return (
+          <ModelTrainingSection 
+            projectId={projectId}
+            setSelectedKey={setSelectedKey}
+            project={project}
+            loadProject={loadProject}
+            navigate={navigate}
+          />
+        );
       case 'visualize':
         return (
           <VisualizeSection 
@@ -379,10 +398,11 @@ const ProjectWorkspace = () => {
     <Layout style={{ minHeight: '100vh' }}>
       {/* Project Sidebar */}
       <Sider 
-        width={280} 
+        width={280}
+        className="workspace-sider"
         style={{ 
-          background: '#fff',
-          borderRight: '1px solid #f0f0f0',
+          background: '#0C2132',
+          borderRight: '1px solid rgba(255,255,255,0.08)',
           overflow: 'auto',
           height: '100vh',
           position: 'fixed',

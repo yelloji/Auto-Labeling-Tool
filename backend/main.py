@@ -23,7 +23,6 @@ from api.routes import labels
 from api.routes import projects, datasets, annotations, models, enhanced_export, releases
 from api.routes import analytics, augmentation, dataset_management
 from api.routes import image_transformations, logs, frontend_logs, release_detail_view
-from api import active_learning
 from core.config import settings
 from database.database import init_db
 # Import professional logging system
@@ -156,7 +155,6 @@ from api.routes import dataset_splits
 app.include_router(dataset_splits.router, prefix="/api/v1", tags=["dataset-splits"])
 
 # Include Active Learning routes
-app.include_router(active_learning.router, tags=["active-learning"])
 
 # EMERGENCY CLEANUP ENDPOINTS
 
@@ -281,9 +279,50 @@ async def list_all_labels():
         db.close()
         logger.info("app.database", "Database connection closed", "db_connection_closed")
 
+@app.get("/api/v1/system/hardware")
+async def system_hardware():
+    try:
+        import torch
+        torch_cuda_available = bool(torch.cuda.is_available())
+        cuda_version = getattr(torch.version, "cuda", None)
+        torch_version = getattr(torch, "__version__", None)
+        gpus = []
+        if torch_cuda_available:
+            count = torch.cuda.device_count()
+            for i in range(count):
+                name = torch.cuda.get_device_name(i)
+                props = torch.cuda.get_device_properties(i)
+                mem_mb = int(props.total_memory / (1024 * 1024)) if hasattr(props, "total_memory") else None
+                gpus.append({"id": i, "name": name, "memory_mb": mem_mb})
+        device = "gpu" if torch_cuda_available and len(gpus) > 0 else "cpu"
+        logger.info("app.api", "Hardware info retrieved", "system_hardware", {
+            "device": device,
+            "torch_cuda_available": torch_cuda_available,
+            "cuda_version": cuda_version,
+            "gpu_count": len(gpus)
+        })
+        return {
+            "device": device,
+            "torch_cuda_available": torch_cuda_available,
+            "cuda_version": cuda_version,
+            "torch_version": torch_version,
+            "gpus": gpus
+        }
+    except Exception as e:
+        logger.error("errors.system", f"Failed to get hardware info: {str(e)}", "system_hardware_error", {"error": str(e)})
+        return {
+            "device": "cpu",
+            "torch_cuda_available": False,
+            "cuda_version": None,
+            "torch_version": None,
+            "gpus": []
+        }
+
 # Include Smart Segmentation routes
 from api import smart_segmentation
+from api.routes import training_models
 app.include_router(smart_segmentation.router, prefix="/api", tags=["smart-segmentation"])
+app.include_router(training_models.router, prefix="/api/v1", tags=["training-models"])
 
 # Serve static files (for uploaded images, etc.)
 static_dir = Path(settings.STATIC_FILES_DIR)

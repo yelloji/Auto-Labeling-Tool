@@ -100,7 +100,21 @@ api.interceptors.response.use(
 
 // Helper function for handling API errors
 export const handleAPIError = (error, defaultMessage = 'API request failed') => {
-  const errorMessage = error.response?.data?.detail || error.message || defaultMessage;
+  let errorMessage = error.response?.data?.detail || error.message || defaultMessage;
+  // Normalize FastAPI 422 validation errors (detail can be an array of error objects)
+  if (Array.isArray(error.response?.data?.detail)) {
+    const details = error.response.data.detail;
+    errorMessage = details
+      .map((d) => {
+        const loc = Array.isArray(d.loc) ? d.loc.join('.') : d.loc;
+        const msg = d.msg || d.message || JSON.stringify(d);
+        return loc ? `${loc}: ${msg}` : msg;
+      })
+      .join('; ');
+  } else if (typeof errorMessage === 'object' && errorMessage !== null) {
+    // If detail is an object, stringify safely
+    try { errorMessage = JSON.stringify(errorMessage); } catch { errorMessage = defaultMessage; }
+  }
   
   // Log API error using professional logger
   logError('app.frontend.validation', 'api_error_handled', `API Error: ${defaultMessage}`, error, {
@@ -156,20 +170,55 @@ export const modelsAPI = {
     return response.data;
   },
 
-  // Import custom model
-  importModel: async (formData) => {
-    const response = await api.post('/api/v1/models/import', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
+  // Import custom model (optionally scoped to a project)
+  importModel: async (formData, projectId = null) => {
+    try {
+      // Create a new FormData and copy entries to avoid mutating the original reference
+      const fd = new FormData();
+      if (formData && formData instanceof FormData) {
+        for (const [key, value] of formData.entries()) {
+          fd.append(key, value);
+        }
+      }
+      if (projectId) {
+        fd.append('project_id', String(projectId));
+      }
+
+      const response = await api.post('/api/v1/models/import', fd, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        // Large model files and backend processing can exceed 30s
+        timeout: 120000,
+      });
+      return response.data;
+    } catch (error) {
+      handleAPIError(error, 'Failed to import model');
+      throw error;
+    }
   },
 
   // Delete model
   deleteModel: async (modelId) => {
     const response = await api.delete(`/api/v1/models/${modelId}`);
     return response.data;
+  },
+
+  // Download model file
+  downloadModel: async (modelId) => {
+    const response = await api.get(`/api/v1/models/${modelId}/download`, {
+      responseType: 'blob'
+    });
+    // Try to extract filename from Content-Disposition
+    const contentDisposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+    let filename = `model_${modelId}`;
+    if (contentDisposition) {
+      const match = /filename="?([^";]+)"?/i.exec(contentDisposition);
+      if (match && match[1]) {
+        filename = match[1];
+      }
+    }
+    return { blob: response.data, filename };
   },
 
   // Get supported model types
@@ -224,6 +273,92 @@ export const projectsAPI = {
   getProjectStats: async (projectId) => {
     const response = await api.get(`/api/v1/projects/${projectId}/stats`);
     return response.data;
+  },
+
+  // Get models associated with a project (optionally include global models)
+  getProjectModels: async (projectId, includeGlobal = false) => {
+    const params = { include_global: includeGlobal };
+    const response = await api.get(`/api/v1/projects/${projectId}/models`, { params });
+
+    // Normalize model fields so the Project Models UI can consistently classify
+    // readiness, training, and custom-vs-pretrained across different backends.
+    const normalizeProjectModel = (m) => {
+      const statusStr = String(m?.status || m?.state || m?.phase || m?.training_status || '').toLowerCase();
+      const src = String(m?.source || m?.origin || '').toLowerCase();
+      const scope = String(m?.scope || (m?.project_id ? 'project' : 'global')).toLowerCase();
+      const isProjectScoped = String(m?.project_id || '') === String(projectId);
+      const isPretrained = typeof m?.is_pretrained !== 'undefined' ? Boolean(m?.is_pretrained) : null;
+      // Minimal, safe normalization to match Global Models UI behavior:
+      // trust backend flags when present; only fallback to strict status values.
+      const is_training = (typeof m?.is_training !== 'undefined')
+        ? Boolean(m?.is_training)
+        : (statusStr === 'training' || statusStr === 'running');
+      const is_ready = (typeof m?.is_ready !== 'undefined')
+        ? Boolean(m?.is_ready)
+        : (statusStr === 'ready');
+
+      // If backend omitted flags for pretrained models (global or linked to project),
+      // surface them as Ready consistently.
+      const isPretrainedLike = (isPretrained === true) || (src === 'pretrained');
+      const final_is_ready = is_ready || isPretrainedLike;
+      const final_is_training = isPretrainedLike ? false : is_training;
+      const is_custom = Boolean(m?.is_custom)
+        || src === 'custom' || src === 'user' || src === 'uploaded'
+        || scope === 'project'
+        || (isProjectScoped && isPretrained === false);
+
+      return {
+        ...m,
+        status: m?.status || statusStr, // keep original if present
+        scope,
+        is_training: final_is_training,
+        is_ready: final_is_ready,
+        is_custom,
+      };
+    };
+
+    let data = response?.data;
+    if (Array.isArray(data)) {
+      let models = data.map(normalizeProjectModel);
+      // If global models are included, enrich global items with authoritative flags
+      // from the global models endpoint to ensure Ready/Training status matches
+      // the Global Models UI.
+      if (includeGlobal) {
+        try {
+          const globalList = await modelsAPI.getModels();
+          const gmap = new Map();
+          if (Array.isArray(globalList)) {
+            globalList.forEach(g => {
+              if (g && typeof g.id !== 'undefined') {
+                gmap.set(String(g.id), g);
+              }
+            });
+          }
+          models = models.map(m => {
+            if (gmap.has(String(m?.id))) {
+              const g = gmap.get(String(m.id));
+              const merged_is_ready = (typeof m?.is_ready !== 'undefined') ? Boolean(m.is_ready) : Boolean(g?.is_ready);
+              const merged_is_training = (typeof m?.is_training !== 'undefined') ? Boolean(m.is_training) : Boolean(g?.is_training);
+              const merged_is_pretrained = (typeof m?.is_pretrained !== 'undefined') ? Boolean(m.is_pretrained) : Boolean(g?.is_pretrained);
+              const merged_source = m?.source || m?.origin || g?.source || g?.origin || (merged_is_pretrained ? 'pretrained' : undefined);
+              return {
+                ...m,
+                is_ready: merged_is_ready,
+                is_training: merged_is_training,
+                is_pretrained: merged_is_pretrained,
+                source: merged_source,
+              };
+            }
+            return m;
+          });
+        } catch (e) {
+          // If enrichment fails, proceed with normalized models
+          logError('app.frontend.validation', 'enrich_global_models_failed', e, { component: 'api.projectsAPI', endpoint: '/api/v1/models/' });
+        }
+      }
+      return models;
+    }
+    return data;
   },
 
   // Duplicate project with all datasets, images, and annotations
@@ -515,6 +650,17 @@ export const imageTransformationsAPI = {
 // ==================== RELEASES API ====================
 
 export const releasesAPI = {
+  // Get all releases for a project
+  getProjectReleases: async (projectId) => {
+    try {
+      const response = await api.get(`/api/v1/projects/${projectId}/releases`);
+      const data = response.data;
+      return Array.isArray(data) ? data : (data?.releases || []);
+    } catch (error) {
+      handleAPIError(error, 'Failed to get project releases');
+      throw error;
+    }
+  },
   // Create a new release
   createRelease: async (releaseData) => {
     try {
@@ -939,6 +1085,34 @@ export const checkBackendHealth = async () => {
       available: false, 
       error: handleAPIError(error) 
     };
+  }
+};
+
+export const systemAPI = {
+  getHardware: async () => {
+    try {
+      const response = await api.get('/api/v1/system/hardware');
+      return response.data;
+    } catch (error) {
+      handleAPIError(error, 'Failed to get hardware info');
+      throw error;
+    }
+  }
+};
+
+export const trainingAPI = {
+  getTrainableModels: async (projectId, framework, task) => {
+    try {
+      const params = { framework, task };
+      if (projectId !== null && projectId !== undefined && String(projectId).trim() !== '') {
+        params.project_id = projectId;
+      }
+      const response = await api.get('/api/v1/training/models', { params });
+      return response.data || [];
+    } catch (error) {
+      handleAPIError(error, 'Failed to load trainable models');
+      throw error;
+    }
   }
 };
 

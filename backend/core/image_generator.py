@@ -1,21 +1,35 @@
-"""
-Image Augmentation Engine for Auto-Labeling Tool Release Pipeline
+"""Image Augmentation Engine for Auto-Labeling Tool Release Pipeline
 Integrates with existing ImageTransformer service and handles annotation updates
 """
 
 import os
 import json
+import numpy as np
 from typing import List, Dict, Any, Tuple, Optional, Union
 from dataclasses import dataclass
 from pathlib import Path
 from PIL import Image
 import uuid
 
+# Pillow 9/10 compatibility for resampling
+RESAMPLING = getattr(Image, "Resampling", Image)
+
+# Whitelist of photometric adjustments to be applied post-geometry
+PHOTOMETRIC_KEYS = {
+    "brightness", "contrast", "blur", "noise",
+    "color_jitter", "gamma_correction", "clahe",
+    "equalize", "grayscale", "cutout"
+}
+
 # Import existing transformation service
 from api.services.image_transformer import ImageTransformer
 
 # Import dual-value transformation functions
-from core.transformation_config import is_dual_value_transformation, generate_auto_value
+#from core.transformation_config import is_dual_value_transformation, generate_auto_value
+
+# Import variant generation function
+# NOTE: transform_resolver and affine_builder were removed - functionality moved to annotation_transformer.py
+# Removed: ImageVariantRepository - not using any DB table for variants
 
 # Import professional logging system - CORRECT UNIFORM PATTERN
 from logging_system.professional_logger import get_professional_logger
@@ -23,24 +37,8 @@ from logging_system.professional_logger import get_professional_logger
 # Initialize professional logger
 logger = get_professional_logger()
 
-@dataclass
-class BoundingBox:
-    """Bounding box representation"""
-    x_min: float
-    y_min: float
-    x_max: float
-    y_max: float
-    class_name: str
-    class_id: int
-    confidence: float = 1.0
-
-@dataclass
-class Polygon:
-    """Polygon representation for segmentation"""
-    points: List[Tuple[float, float]]
-    class_name: str
-    class_id: int
-    confidence: float = 1.0
+# Centralized annotation utilities
+from core.annotation_transformer import BoundingBox, Polygon, update_annotations_for_transformations
 
 @dataclass
 class AugmentationResult:
@@ -61,7 +59,7 @@ class ImageAugmentationEngine:
     def __init__(self, output_base_dir: str = "augmented"):
         self.output_base_dir = Path(output_base_dir)
         self.transformer = ImageTransformer()
-        self.supported_formats = ['.jpg', '.jpeg', '.png', '.bmp']
+        self.supported_formats = ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff']
         
         # Create output directories
         for split in ['train', 'val', 'test']:
@@ -233,15 +231,18 @@ class ImageAugmentationEngine:
         })
         return resolved_config
     
+# REMOVED: _split_config_into_geometry_and_photometric - no longer needed with sequential approach
+    
     def apply_transformations_to_image(self, image: Image.Image, 
                                      transformation_config: Dict[str, Any]) -> Image.Image:
-        """Apply transformations using existing ImageTransformer service with dual-value support"""
+        """Apply transformations to image - KEEP WORKING AS-IS"""
         try:
             # Resolve dual-value parameters before applying transformations
             resolved_config = self._resolve_dual_value_parameters(transformation_config)
             
-            # Use the existing ImageTransformer service
+            # Use ImageTransformer for all transformations (working approach)
             transformed_image = self.transformer.apply_transformations(image, resolved_config)
+            
             logger.info("operations.transformations", f"Applied transformations: {list(resolved_config.keys())}", "transformations_applied", {
                 'transformation_types': list(resolved_config.keys()),
                 'config_count': len(resolved_config)
@@ -256,229 +257,68 @@ class ImageAugmentationEngine:
             # Return original image if transformation fails
             return image
     
-    def update_annotations_for_transformations(self, annotations: List[Union[BoundingBox, Polygon]], 
-                                             transformation_config: Dict[str, Any],
-                                             original_dims: Tuple[int, int],
-                                             new_dims: Tuple[int, int]) -> List[Union[BoundingBox, Polygon]]:
-        """
-        Update annotations based on applied transformations with dual-value support
-        Phase 1: Basic annotation updates for common transformations
-        """
-        if not annotations:
-            return []
-        
-        # Resolve dual-value parameters for annotation processing
-        resolved_config = self._resolve_dual_value_parameters(transformation_config)
-        
-        updated_annotations = []
-        
-        for annotation in annotations:
-            try:
-                updated_annotation = self._transform_single_annotation(
-                    annotation, resolved_config, original_dims, new_dims
-                )
-                if updated_annotation:
-                    updated_annotations.append(updated_annotation)
-            except Exception as e:
-                logger.warning("errors.validation", f"Failed to update annotation: {str(e)}", "annotation_update_failed", {
-                    'error': str(e),
-                    'annotation_type': type(annotation).__name__
-                })
-                # Keep original annotation if update fails
-                updated_annotations.append(annotation)
-        
-        logger.info("operations.transformations", f"Updated {len(updated_annotations)} annotations", "annotations_updated", {
-            'annotation_count': len(updated_annotations),
-            'original_count': len(annotations)
-        })
-        return updated_annotations
-    
-    def _transform_single_annotation(self, annotation: Union[BoundingBox, Polygon],
-                                   transformation_config: Dict[str, Any],
-                                   original_dims: Tuple[int, int],
-                                   new_dims: Tuple[int, int]) -> Optional[Union[BoundingBox, Polygon]]:
-        """Transform a single annotation based on transformations applied"""
-        
-        # For Phase 1, we'll handle basic transformations that don't change coordinates
-        # More complex transformations will be added in later phases
-        
-        if isinstance(annotation, BoundingBox):
-            return self._transform_bbox(annotation, transformation_config, original_dims, new_dims)
-        elif isinstance(annotation, Polygon):
-            return self._transform_polygon(annotation, transformation_config, original_dims, new_dims)
-        else:
-            return annotation
-    
-    def _transform_bbox(self, bbox: BoundingBox, transformation_config: Dict[str, Any],
-                       original_dims: Tuple[int, int], new_dims: Tuple[int, int]) -> Optional[BoundingBox]:
-        """Transform bounding box coordinates"""
-        
-        # Start with original coordinates
-        x_min, y_min, x_max, y_max = bbox.x_min, bbox.y_min, bbox.x_max, bbox.y_max
-        orig_width, orig_height = original_dims
-        new_width, new_height = new_dims
-        
-        # Handle transformations that affect coordinates
-        for transform_name, params in transformation_config.items():
-            if not params.get('enabled', True):
-                continue
-                
-            if transform_name == 'flip':
-                if params.get('horizontal', False):
-                    # Flip horizontally
-                    x_min, x_max = orig_width - x_max, orig_width - x_min
-                if params.get('vertical', False):
-                    # Flip vertically
-                    y_min, y_max = orig_height - y_max, orig_height - y_min
-            
-            elif transform_name == 'resize':
-                # Scale coordinates based on resize
-                width_ratio = new_width / orig_width
-                height_ratio = new_height / orig_height
-                
-                x_min *= width_ratio
-                x_max *= width_ratio
-                y_min *= height_ratio
-                y_max *= height_ratio
-                
-                # Update original dimensions for subsequent transformations
-                orig_width, orig_height = new_width, new_height
-        
-        # Ensure coordinates are within bounds
-        x_min = max(0, min(x_min, new_width))
-        x_max = max(0, min(x_max, new_width))
-        y_min = max(0, min(y_min, new_height))
-        y_max = max(0, min(y_max, new_height))
-        
-        # Ensure min < max
-        if x_min >= x_max or y_min >= y_max:
-            logger.warning("errors.validation", "Invalid bounding box after transformation, skipping", "invalid_bbox_skipped", {
-                'bbox_coords': (x_min, y_min, x_max, y_max),
-                'original_dims': original_dims,
-                'new_dims': new_dims
-            })
-            return None
-        
-        return BoundingBox(x_min, y_min, x_max, y_max, bbox.class_name, bbox.class_id, bbox.confidence)
-    
-    def _transform_polygon(self, polygon: Polygon, transformation_config: Dict[str, Any],
-                          original_dims: Tuple[int, int], new_dims: Tuple[int, int]) -> Optional[Polygon]:
-        """Transform polygon coordinates"""
-        
-        # Start with original points
-        points = polygon.points.copy()
-        orig_width, orig_height = original_dims
-        new_width, new_height = new_dims
-        
-        # Handle transformations that affect coordinates
-        for transform_name, params in transformation_config.items():
-            if not params.get('enabled', True):
-                continue
-                
-            if transform_name == 'flip':
-                if params.get('horizontal', False):
-                    # Flip horizontally
-                    points = [(orig_width - x, y) for x, y in points]
-                if params.get('vertical', False):
-                    # Flip vertically
-                    points = [(x, orig_height - y) for x, y in points]
-            
-            elif transform_name == 'resize':
-                # Scale coordinates based on resize
-                width_ratio = new_width / orig_width
-                height_ratio = new_height / orig_height
-                
-                points = [(x * width_ratio, y * height_ratio) for x, y in points]
-                
-                # Update original dimensions for subsequent transformations
-                orig_width, orig_height = new_width, new_height
-        
-        # Ensure all points are within bounds
-        valid_points = []
-        for x, y in points:
-            x = max(0, min(x, new_width))
-            y = max(0, min(y, new_height))
-            valid_points.append((x, y))
-        
-        if len(valid_points) < 3:
-            logger.warning("errors.validation", "Polygon has less than 3 valid points after transformation, skipping", "invalid_polygon_skipped", {
-                'valid_points': len(valid_points),
-                'original_points': len(polygon.points)
-            })
-            return None
-        
-        return Polygon(valid_points, polygon.class_name, polygon.class_id, polygon.confidence)
-    
-    def generate_augmented_image(self, image_path: str, transformation_config: Dict[str, Any],
-                               config_id: str, dataset_split: str = "train",
-                               output_format: str = "jpg",
-                               annotations: Optional[List[Union[BoundingBox, Polygon]]] = None) -> AugmentationResult:
-        """
-        Generate augmented image with updated annotations and dual-value support
-        
-        Args:
-            image_path: Path to original image
-            transformation_config: Dictionary of transformations to apply (supports dual-value format)
-            config_id: Unique identifier for this configuration
-            dataset_split: Dataset split (train/val/test)
-            output_format: Output image format
-            annotations: List of annotations to update
-            
-        Returns:
-            AugmentationResult with paths and updated annotations
-        """
-        try:
-            # Validate transformation config
-            if not transformation_config:
-                logger.warning("errors.validation", f"Empty transformation config for image: {image_path}", "empty_transformation_config", {
-                    'image_path': image_path
-                })
-                transformation_config = {}
-            
-            # Load original image
-            original_image, original_dims = self.load_image_from_path(image_path)
-            
-            # Apply transformations with dual-value support
-            augmented_image = self.apply_transformations_to_image(original_image, transformation_config)
-            augmented_dims = augmented_image.size
-            
-            # Generate output filename and path
-            original_filename = os.path.basename(image_path)
-            augmented_filename = self.generate_augmented_filename(original_filename, config_id, output_format)
-            output_path = self.output_base_dir / dataset_split / augmented_filename
-            
-            # Save augmented image with proper format conversion
-            self._save_image_with_format(augmented_image, output_path, output_format)
-            
-            # Update annotations if provided
-            updated_annotations = []
-            if annotations:
-                updated_annotations = self.update_annotations_for_transformations(
-                    annotations, transformation_config, original_dims, augmented_dims
-                )
-            
-            result = AugmentationResult(
-                augmented_image_path=str(output_path),
-                updated_annotations=updated_annotations,
-                transformation_applied=transformation_config,
-                original_dimensions=original_dims,
-                augmented_dimensions=augmented_dims,
-                config_id=config_id
-            )
-            
-            logger.info("operations.transformations", f"Generated augmented image: {augmented_filename}", "augmented_image_generated", {
-                'augmented_filename': augmented_filename,
-                'config_id': config_id,
-                'output_path': str(output_path)
-            })
-            return result
-            
-        except Exception as e:
-            logger.error("errors.system", f"Failed to generate augmented image: {str(e)}", "augmented_image_generation_error", {
-                'error': str(e),
-                'image_path': image_path,
-                'config_id': config_id
-            })
+    def generate_augmented_image(self, image_path: str, transformation_config: Dict[str, Any], 
+                              config_id: str, dataset_split: str = "train", 
+                              output_format: str = "jpg", 
+                              annotations: Optional[List[Union[BoundingBox, Polygon]]] = None) -> AugmentationResult: 
+        """ 
+        Generate augmented image with updated annotations and dual-value support: 
+        geometry via single affine, then optional photometric pass. 
+        """ 
+        try: 
+            # 0) basic guard 
+            if not transformation_config: 
+                logger.warning("errors.validation", f"Empty transformation config for image: {image_path}", "empty_transformation_config", { 
+                    'image_path': image_path 
+                }) 
+                transformation_config = {} 
+ 
+            # 1) load source 
+            original_image, original_dims = self.load_image_from_path(image_path) 
+ 
+            # 2) resolve dual-value params once 
+            resolved_config = self._resolve_dual_value_parameters(transformation_config) 
+ 
+            # 3) Apply transformations using simple sequential approach (same as releases.py)
+            augmented_image = self.transformer.apply_transformations(original_image, resolved_config)
+            augmented_dims = augmented_image.size 
+ 
+            # 6) save with requested format and name 
+            original_filename = os.path.basename(image_path) 
+            augmented_filename = self.generate_augmented_filename(original_filename, config_id, output_format) 
+            output_path = self.output_base_dir / dataset_split / augmented_filename 
+            self._save_image_with_format(augmented_image, output_path, output_format) 
+ 
+            # 7) update annotations (using sequential transformations - same as releases.py) 
+            updated_annotations: List[Union[BoundingBox, Polygon]] = [] 
+            if annotations: 
+                # Use the centralized annotation transformer with sequential approach (no matrix)
+                updated_annotations = update_annotations_for_transformations( 
+                    annotations, resolved_config, original_dims, augmented_dims, affine_matrix=None 
+                ) 
+ 
+            result = AugmentationResult( 
+                augmented_image_path=str(output_path), 
+                updated_annotations=updated_annotations, 
+                transformation_applied=resolved_config, 
+                original_dimensions=original_dims, 
+                augmented_dimensions=augmented_dims, 
+                config_id=config_id 
+            ) 
+ 
+            logger.info("operations.transformations", f"Generated augmented image: {augmented_filename}", "augmented_image_generated", { 
+                'augmented_filename': augmented_filename, 
+                'config_id': config_id, 
+                'output_path': str(output_path) 
+            }) 
+            return result 
+ 
+        except Exception as e: 
+            logger.error("errors.system", f"Failed to generate augmented image: {str(e)}", "augmented_image_generation_error", { 
+                'error': str(e), 
+                'image_path': image_path, 
+                'config_id': config_id 
+            }) 
             raise
     
     def process_image_with_multiple_configs(self, image_path: str, 
@@ -535,6 +375,8 @@ class ImageAugmentationEngine:
         """Get available transformations from ImageTransformer service"""
         return self.transformer.get_available_transformations()
     
+
+    
     def cleanup_output_directory(self, dataset_split: Optional[str] = None) -> None:
         """Clean up output directory"""
         if dataset_split:
@@ -554,96 +396,147 @@ class ImageAugmentationEngine:
                 self.cleanup_output_directory(split)
 
 
-# Utility functions for easy usage
 def create_augmentation_engine(output_dir: str = "augmented") -> ImageAugmentationEngine:
     """Create and configure augmentation engine"""
     return ImageAugmentationEngine(output_dir)
 
 
 def process_release_images(image_paths: List[str], 
-                         transformation_configs: Dict[str, List[Dict[str, Any]]],
-                         dataset_splits: Dict[str, str],
-                         output_dir: str = "augmented",
-                         output_format: str = "jpg",
-                         dataset_sources: Dict[str, Dict[str, Any]] = None) -> Dict[str, List[AugmentationResult]]:
+                           transformation_configs: Dict[str, List[Dict[str, Any]]],
+                           dataset_splits: Dict[str, str],
+                           output_dir: str = "augmented",
+                           output_format: str = "jpg",
+                           dataset_sources: Dict[str, Dict[str, Any]] = None,
+                           annotations_map: Optional[Dict[str, List[Union[BoundingBox, Polygon]]]] = None
+                           ) -> Dict[str, List[AugmentationResult]]:
     """
     Process multiple images for release generation with multi-dataset support
-    
+
     Args:
-        image_paths: List of image file paths
-        transformation_configs: Dict mapping image_id to list of transformation configs
-        dataset_splits: Dict mapping image_path to dataset split (train/val/test)
+        image_paths: List of absolute image file paths (source images)
+        transformation_configs: Dict mapping image_id -> list of transformation configs
+        dataset_splits: Dict mapping image_path -> dataset split (train/val/test)
         output_dir: Output directory for augmented images
-        output_format: Output image format
-        dataset_sources: Dict mapping image_path to dataset source information
-        
-    Returns:
-        Dictionary mapping image_path to list of AugmentationResult objects
+        output_format: Output image format ("jpg"|"png"|"webp"|"tiff"|"original")
+        dataset_sources: Dict mapping image_path -> {"dataset_name": ..., "original_filename": ...}
+        annotations_map: OPTIONAL. Dict keyed by image_path and/or image_id -> List[BoundingBox|Polygon] in **pixels**
     """
     engine = create_augmentation_engine(output_dir)
-    all_results = {}
+    all_results: Dict[str, List[AugmentationResult]] = {}
     dataset_sources = dataset_sources or {}
-    
-    logger.info("operations.transformations", f"🎨 PROCESSING {len(image_paths)} IMAGES FROM MULTIPLE DATASETS", "multi_dataset_processing_start", {
-        'total_images': len(image_paths),
-        'dataset_count': len(set(img['dataset_name'] for img in image_paths))
-    })
-    
+    annotations_map = annotations_map or {}
+
+    logger.info("operations.transformations",
+                f"🎨 PROCESSING {len(image_paths)} IMAGES FROM MULTIPLE DATASETS",
+                "multi_dataset_processing_start",
+                {
+                    'total_images': len(image_paths),
+                    'dataset_count': len(set(
+                        (dataset_sources[p].get('dataset_name', 'unknown')
+                         if (dataset_sources and p in dataset_sources) else 'unknown')
+                        for p in image_paths
+                    ))
+                })
+
     for image_path in image_paths:
         try:
-            # Get image ID from path - handle multi-dataset naming
             image_filename = Path(image_path).stem
-            
-            # Extract original image ID (remove dataset prefix if present)
+
+            # Use the actual database image_id that matches transformation_configs keys
             if dataset_sources and image_path in dataset_sources:
                 source_info = dataset_sources[image_path]
                 original_filename = source_info.get("original_filename", image_filename)
-                image_id = Path(original_filename).stem
+                # FIXED: Use the actual database image ID instead of filename stem
+                image_id = source_info.get("source_image_id", image_filename)
                 dataset_name = source_info.get("dataset_name", "unknown")
-                logger.info("operations.transformations", f"   Processing {dataset_name}/{original_filename}", "image_processing_start", {
-                    'dataset_name': dataset_name,
-                    'original_filename': original_filename,
-                    'image_path': image_path
-                })
+                logger.info("operations.transformations",
+                            f"   Processing {dataset_name}/{original_filename} (ID: {image_id})",
+                            "image_processing_start",
+                            {
+                                'dataset_name': dataset_name,
+                                'original_filename': original_filename,
+                                'image_path': image_path,
+                                'image_id': image_id
+                            })
             else:
                 image_id = image_filename
                 dataset_name = "unknown"
-            
-            # Get transformation configs for this image
+
+            # Get transformation configs for this image_id
             configs = transformation_configs.get(image_id, [])
             if not configs:
-                logger.warning("errors.validation", f"No transformation configs found for image: {image_id} (from {dataset_name})", "no_transformation_configs", {
-                    'image_id': image_id,
-                    'dataset_name': dataset_name,
-                    'image_path': image_path
-                })
+                logger.warning("errors.validation",
+                               f"No transformation configs found for image: {image_id} (from {dataset_name})",
+                               "no_transformation_configs",
+                               {
+                                   'image_id': image_id,
+                                   'dataset_name': dataset_name,
+                                   'image_path': image_path
+                               })
                 continue
-            
-            # Get dataset split for this image
+
+            # Resolve dataset split
             split = dataset_splits.get(image_path, "train")
+
+            # ----- FIXED: pull pixel annotations with robust fallback keys -----
             
-            # Process image with all configurations
+# Pull pixel-space annotations for this image, if provided by caller
+            annotations_for_this_image: Optional[List[Union[BoundingBox, Polygon]]] = None
+            if annotations_map:
+                # 1) exact key by absolute path
+                annotations_for_this_image = annotations_map.get(image_path)
+                if annotations_for_this_image is None:
+                    # 2) key by image_id (stem of original filename)
+                    annotations_for_this_image = annotations_map.get(image_id)
+
+            # Log how many we’re using for this image (safe even if None)
+            logger.info("operations.annotations",
+                f"Using {len(annotations_for_this_image or [])} annotations for {image_id}",
+                "release_annotations_selected",
+                {"image_path": image_path, "image_id": image_id}, 
+            )
+            if not annotations_for_this_image:
+                logger.warning(
+                    "operations.annotations",
+                    "No annotations found for this image; labels will NOT be transformed",
+                    "release_annotations_missing",
+                    {"image_path": image_path, "image_id": image_id}
+                )  
+            # Optional: normalize to empty list
+            if annotations_for_this_image is None:
+                annotations_for_this_image = []
+             # Process with all configurations (now passing annotations)
             results = engine.process_image_with_multiple_configs(
                 image_path=image_path,
                 transformation_configs=configs,
                 dataset_split=split,
-                output_format=output_format
+                output_format=output_format,
+                annotations=annotations_for_this_image
             )
-            
+
             all_results[image_path] = results
-            
+
+
         except Exception as e:
-            logger.error("errors.system", f"Failed to process image {image_path}: {str(e)}", "image_processing_error", {
-                'error': str(e),
-                'image_path': image_path
-            })
+            logger.error("errors.system",
+                         f"Failed to process image {image_path}: {str(e)}",
+                         "image_processing_error",
+                         {
+                             'error': str(e),
+                             'image_path': image_path
+                         })
             continue
-    
-    logger.info("operations.transformations", f"Processed {len(all_results)} images for release generation", "release_images_processed", {
-        'processed_images': len(all_results),
-        'total_images': len(image_paths)
-    })
+
+    logger.info("operations.transformations",
+                f"Processed {len(all_results)} images for release generation",
+                "release_images_processed",
+                {
+                    'processed_images': len(all_results),
+                    'total_images': len(image_paths)
+                })
     return all_results
+
+
 
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
 {
-  "yolov8n": {
-    "id": "yolov8n",
-    "name": "YOLOv8 Nano",
+  "yolo11n": {
+    "id": "yolo11n",
+    "name": "YOLO11 Nano",
     "type": "object_detection",
     "format": "pytorch",
-    "path": "/workspace/Auto-Labeling-Tool/models/yolo/yolov8n.pt",
+    "path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\models\\yolo\\yolo11n.pt",
     "classes": [
       "person",
       "bicycle",
@@ -93,16 +93,19 @@
     ],
     "confidence_threshold": 0.5,
     "iou_threshold": 0.45,
-    "description": "Pre-trained YOLOv8 Nano model",
-    "created_at": "",
-    "is_custom": false
+    "description": "Pre-trained YOLO11 Nano model",
+    "created_at": "2025-11-11T10:23:03.983265",
+    "is_custom": false,
+    "file_size": 5613764,
+    "is_ready": true,
+    "is_training": false
   },
-  "yolov8s": {
-    "id": "yolov8s",
-    "name": "YOLOv8 Small",
+  "yolo11s": {
+    "id": "yolo11s",
+    "name": "YOLO11 Small",
     "type": "object_detection",
     "format": "pytorch",
-    "path": "/workspace/Auto-Labeling-Tool/models/yolo/yolov8s.pt",
+    "path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\models\\yolo\\yolo11s.pt",
     "classes": [
       "person",
       "bicycle",
@@ -191,16 +194,19 @@
     ],
     "confidence_threshold": 0.5,
     "iou_threshold": 0.45,
-    "description": "Pre-trained YOLOv8 Small model",
-    "created_at": "",
-    "is_custom": false
+    "description": "Pre-trained YOLO11 Small model",
+    "created_at": "2025-11-11T10:23:06.735667",
+    "is_custom": false,
+    "file_size": 19313732,
+    "is_ready": true,
+    "is_training": false
   },
-  "yolov8n-seg": {
-    "id": "yolov8n-seg",
-    "name": "YOLOv8 Nano Segmentation",
+  "yolo11n-seg": {
+    "id": "yolo11n-seg",
+    "name": "YOLO11 Nano Segmentation",
     "type": "instance_segmentation",
     "format": "pytorch",
-    "path": "/workspace/Auto-Labeling-Tool/models/yolo/yolov8n-seg.pt",
+    "path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\models\\yolo\\yolo11n-seg.pt",
     "classes": [
       "person",
       "bicycle",
@@ -289,16 +295,19 @@
     ],
     "confidence_threshold": 0.5,
     "iou_threshold": 0.45,
-    "description": "Pre-trained YOLOv8 Nano Segmentation model",
-    "created_at": "",
-    "is_custom": false
+    "description": "Pre-trained YOLO11 Nano Segmentation model",
+    "created_at": "2025-11-11T10:23:07.958555",
+    "is_custom": false,
+    "file_size": 6182636,
+    "is_ready": true,
+    "is_training": false
   },
-  "yolov8s-seg": {
-    "id": "yolov8s-seg",
-    "name": "YOLOv8 Small Segmentation",
+  "yolo11s-seg": {
+    "id": "yolo11s-seg",
+    "name": "YOLO11 Small Segmentation",
     "type": "instance_segmentation",
     "format": "pytorch",
-    "path": "/workspace/Auto-Labeling-Tool/models/yolo/yolov8s-seg.pt",
+    "path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\models\\yolo\\yolo11s-seg.pt",
     "classes": [
       "person",
       "bicycle",
@@ -387,8 +396,33 @@
     ],
     "confidence_threshold": 0.5,
     "iou_threshold": 0.45,
-    "description": "Pre-trained YOLOv8 Small Segmentation model",
-    "created_at": "",
-    "is_custom": false
+    "description": "Pre-trained YOLO11 Small Segmentation model",
+    "created_at": "2025-11-11T10:23:10.930146",
+    "is_custom": false,
+    "file_size": 20669228,
+    "is_ready": true,
+    "is_training": false
+  },
+  "custom_gevis_new": {
+    "id": "custom_gevis_new",
+    "name": "new",
+    "type": "instance_segmentation",
+    "format": "pytorch",
+    "path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\projects\\gevis\\model\\new.pt",
+    "classes": [
+      "item"
+    ],
+    "input_size": [
+      1024,
+      1024
+    ],
+    "confidence_threshold": 0.5,
+    "iou_threshold": 0.45,
+    "description": "",
+    "created_at": "2025-11-17T09:03:38.273040",
+    "is_custom": true,
+    "file_size": 45205103,
+    "is_ready": true,
+    "is_training": false
   }
 }

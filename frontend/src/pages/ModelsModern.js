@@ -26,30 +26,32 @@ import {
   Divider
 } from 'antd';
 import { logInfo, logError, logUserClick } from '../utils/professional_logger';
-import {
-  UploadOutlined,
-  RobotOutlined,
-  DeleteOutlined,
-  EyeOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  CheckCircleOutlined,
-  DownloadOutlined,
-  MoreOutlined,
-  ExperimentOutlined,
-  ThunderboltOutlined,
-  CloudUploadOutlined,
-  SettingOutlined,
-  BarChartOutlined,
-  SearchOutlined,
-  FilterOutlined,
-  StarOutlined,
-  ClockCircleOutlined
-} from '@ant-design/icons';
+  import { 
+    UploadOutlined,
+    RobotOutlined,
+    DeleteOutlined,
+    EyeOutlined,
+    ReloadOutlined,
+    CheckCircleOutlined,
+    DownloadOutlined,
+    MoreOutlined,
+    ExperimentOutlined,
+    ThunderboltOutlined,
+    CloudUploadOutlined,
+    SettingOutlined,
+    BarChartOutlined,
+    SearchOutlined,
+    FilterOutlined,
+    StarOutlined,
+    ClockCircleOutlined,
+    QuestionCircleOutlined
+  } from '@ant-design/icons';
 import { modelsAPI, handleAPIError } from '../services/api';
+import { buildClassesCSV, copyTextToClipboard } from '../utils/modelDetailsHelpers';
+import YAML from 'yaml';
 
 const { Title, Paragraph, Text } = Typography;
-const { Dragger } = Upload;
+  const { Dragger } = Upload;
 const { Option } = Select;
 const { Search } = Input;
 
@@ -65,6 +67,8 @@ const ModelsModern = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [form] = Form.useForm();
+  const [classesExpanded, setClassesExpanded] = useState(false);
+  const [enrichingDetails, setEnrichingDetails] = useState(false);
 
   useEffect(() => {
     logInfo('app.frontend.navigation', 'ModelsModern page loaded', 'page_view', { component: 'ModelsModern' });
@@ -89,7 +93,12 @@ const ModelsModern = () => {
     }
     
     if (filterType !== 'all') {
-      filtered = filtered.filter(model => model.type === filterType);
+      if (filterType === 'custom') {
+        // Show models that were imported by user, regardless of task type
+        filtered = filtered.filter(model => model.is_custom);
+      } else {
+        filtered = filtered.filter(model => model.type === filterType);
+      }
     }
     
     setFilteredModels(filtered);
@@ -131,6 +140,22 @@ const ModelsModern = () => {
     }
   };
 
+  const openModelDetails = async (model) => {
+    try {
+      setViewModalVisible(true);
+      setSelectedModel(model);
+      setEnrichingDetails(true);
+      const id = model.manager_id || model.id;
+      const response = await modelsAPI.getModel(id);
+      const data = response; // modelsAPI.getModel returns response.data
+      setSelectedModel({ ...model, ...data });
+    } catch (error) {
+      handleAPIError(error, 'Failed to load model details');
+    } finally {
+      setEnrichingDetails(false);
+    }
+  };
+
   // Upload model
   const handleUpload = async (values) => {
     setUploading(true);
@@ -138,9 +163,87 @@ const ModelsModern = () => {
     
     try {
       logUserClick('ModelsModern', 'upload_model');
-      logInfo('app.frontend.interactions', 'Uploading AI model', 'upload_model', { component: 'ModelsModern', modelName: values.name, modelType: values.type });
-      
-      await modelsAPI.uploadModel(values);
+      logInfo('app.frontend.interactions', 'Preparing model upload payload', 'upload_model_prepare', { component: 'ModelsModern', modelName: values.name, modelType: values.type });
+
+      // Validate form values and build multipart/form-data
+      const fileItem = Array.isArray(values.file) ? values.file[0] : null;
+      const rawFile = fileItem?.originFileObj || null;
+      if (!rawFile) {
+        message.error('Please select a model file (.pt, .onnx, or .engine)');
+        throw new Error('No file selected');
+      }
+
+      const formData = new FormData();
+      formData.append('file', rawFile);
+      formData.append('name', values.name);
+      formData.append('type', values.type);
+      if (values.description) formData.append('description', values.description);
+      // Optional: classes as JSON string if you ever support it
+      // if (values.classes) formData.append('classes', JSON.stringify(values.classes));
+
+      // If uploading a .pt model, include training input size from UI
+      const fileName = (rawFile.name || '').toLowerCase();
+      const ext = fileName.slice(fileName.lastIndexOf('.'));
+      if (ext === '.pt') {
+        const w = values.training_input_width;
+        const h = values.training_input_height;
+        if (!w || !h) {
+          message.error('Please provide training input width and height for .pt models');
+          throw new Error('Missing training input size for .pt');
+        }
+        const size = [parseInt(w, 10), parseInt(h, 10)];
+        formData.append('training_input_size', JSON.stringify(size));
+      } else if (ext === '.onnx') {
+        const w = values.training_input_width;
+        const h = values.training_input_height;
+        if (!w || !h) {
+          message.error('Please provide training input width and height for .onnx models');
+          throw new Error('Missing training input size for .onnx');
+        }
+        const yamlList = values.classes_yaml || [];
+        const hasYaml = Array.isArray(yamlList) && yamlList.length > 0;
+        let classList = null;
+        let ncVal = null;
+        if (!hasYaml) {
+          const classesCsv = (values.onnx_classes_csv || '').trim();
+          if (!classesCsv) {
+            message.error('Please provide classes (comma-separated) for .onnx models');
+            throw new Error('Missing classes for .onnx');
+          }
+          classList = classesCsv.split(',').map(s => s.trim()).filter(s => s.length > 0);
+          ncVal = parseInt(values.onnx_nc, 10);
+          if (!ncVal || ncVal <= 0) {
+            message.error('Please provide a valid number of classes (nc) for .onnx models');
+            throw new Error('Invalid nc for .onnx');
+          }
+          if (classList.length !== ncVal) {
+            message.error(`nc (${ncVal}) must match classes length (${classList.length})`);
+            throw new Error('nc mismatch with classes length');
+          }
+        }
+        const size = [parseInt(w, 10), parseInt(h, 10)];
+        formData.append('training_input_size', JSON.stringify(size));
+        if (hasYaml) {
+          const yamlFile = yamlList[0]?.originFileObj || yamlList[0]?.file || yamlList[0]?.originFileObj;
+          if (yamlFile) formData.append('classes_yaml', yamlFile);
+          // If user also typed classes/nc, include them for cross-checking on backend
+          const classesCsvOpt = (values.onnx_classes_csv || '').trim();
+          const ncOpt = values.onnx_nc;
+          if (classesCsvOpt) {
+            const classListOpt = classesCsvOpt.split(',').map(s => s.trim()).filter(s => s.length > 0);
+            formData.append('classes', JSON.stringify(classListOpt));
+          }
+          if (ncOpt) {
+            formData.append('nc', String(parseInt(ncOpt, 10)));
+          }
+        } else {
+          formData.append('classes', JSON.stringify(classList));
+          formData.append('nc', String(ncVal));
+        }
+      }
+
+      // Use the correct API function for multipart import
+      await modelsAPI.importModel(formData);
       
       logInfo('app.frontend.interactions', 'AI model uploaded successfully', 'upload_model', { component: 'ModelsModern', modelName: values.name, modelType: values.type });
       logInfo('app.frontend.ui', 'Upload modal closed', 'modal_close', { component: 'ModelsModern', modal: 'upload_model' });
@@ -180,11 +283,9 @@ const ModelsModern = () => {
   // Get model type info for styling
   const getModelTypeInfo = (type) => {
     const typeInfo = {
-      'yolov8n': { color: 'blue', label: 'YOLOv8 Nano', icon: <ThunderboltOutlined /> },
-      'yolov8s': { color: 'green', label: 'YOLOv8 Small', icon: <RobotOutlined /> },
-      'yolov8m': { color: 'orange', label: 'YOLOv8 Medium', icon: <ExperimentOutlined /> },
-      'yolov8l': { color: 'red', label: 'YOLOv8 Large', icon: <BarChartOutlined /> },
-      'yolov8x': { color: 'purple', label: 'YOLOv8 XLarge', icon: <StarOutlined /> },
+      // Primary types we use in this app
+      'object_detection': { color: 'blue', label: 'Object Detection', icon: <BarChartOutlined /> },
+      'instance_segmentation': { color: 'purple', label: 'Segmentation', icon: <ExperimentOutlined /> },
       'custom': { color: 'cyan', label: 'Custom Model', icon: <SettingOutlined /> }
     };
     return typeInfo[type] || { color: 'default', label: type, icon: <RobotOutlined /> };
@@ -242,54 +343,85 @@ const ModelsModern = () => {
             logUserClick('ModelsModern', 'view_model_details');
             logInfo('app.frontend.interactions', 'Viewing model details', 'view_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name, modelType: model.type });
             logInfo('app.frontend.ui', 'View modal opened', 'modal_open', { component: 'ModelsModern', modal: 'view_model', modelId: model.id });
-            setSelectedModel(model);
-            setViewModalVisible(true);
+            openModelDetails(model);
           }}
         >
           View Details
         </Menu.Item>
-        <Menu.Item 
-          key="download" 
-          icon={<DownloadOutlined />}
-          onClick={() => {
-            logUserClick('ModelsModern', 'download_model');
-            logInfo('app.frontend.interactions', 'Download model requested', 'download_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
-            message.info('Download feature coming soon');
-          }}
-        >
-          Download Model
-        </Menu.Item>
-        <Menu.Item 
-          key="duplicate" 
-          icon={<PlusOutlined />}
-          onClick={() => {
-            logUserClick('ModelsModern', 'duplicate_model');
-            logInfo('app.frontend.interactions', 'Duplicate model requested', 'duplicate_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
-            message.info('Duplicate feature coming soon');
-          }}
-        >
-          Duplicate Model
-        </Menu.Item>
-        <Menu.Divider />
-        <Menu.Item 
-          key="delete" 
-          icon={<DeleteOutlined />}
-          danger
-          onClick={() => {
-            logUserClick('ModelsModern', 'confirm_delete_model');
-            logInfo('app.frontend.interactions', 'Delete model confirmation dialog opened', 'confirm_delete', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
-            Modal.confirm({
-              title: 'Delete Model',
-              content: `Are you sure you want to delete "${model.name}"? This action cannot be undone.`,
-              okText: 'Delete',
-              okType: 'danger',
-              cancelText: 'Cancel',
-              onOk: () => handleDelete(model.id),
-            });
-          }}
-        >
-          Delete Model
-        </Menu.Item>
+        {model.is_custom && (
+          <Menu.Item 
+            key="download" 
+            icon={<DownloadOutlined />}
+            onClick={() => {
+              logUserClick('ModelsModern', 'download_model');
+              logInfo('app.frontend.interactions', 'Download model requested', 'download_model', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
+              const hide = message.loading('Preparing download...', 0);
+              modelsAPI.downloadModel(model.manager_id || model.id)
+                .then(({ blob, filename }) => {
+                  try {
+                    // Create a temporary link to trigger browser download
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    // Fallback filename if header is not accessible: use model.format to infer extension
+                    const extMap = { pytorch: '.pt', onnx: '.onnx', engine: '.engine' };
+                    const fallbackExt = extMap[(model.format || '').toLowerCase()] || '';
+                    const safeName = (model.name || `model_${model.id || 'download'}`).replace(/\s+/g, '_');
+                    const fallbackFilename = `${safeName}${fallbackExt}`;
+                    link.download = filename || fallbackFilename;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    window.URL.revokeObjectURL(url);
+                    message.success(`Downloading ${filename || fallbackFilename}`);
+                    logInfo('app.frontend.file', 'Model download started', 'download_model_started', {
+                      component: 'ModelsModern',
+                      modelId: model.id,
+                      modelName: model.name,
+                      filename: filename || fallbackFilename,
+                    });
+                  } finally {
+                    hide();
+                  }
+                })
+                .catch((error) => {
+                  hide();
+                  handleAPIError(error, 'Download Model');
+                  logError('app.frontend.errors', 'download_model_failed', 'Download model failed', error, {
+                    component: 'ModelsModern',
+                    modelId: model.id,
+                    modelName: model.name,
+                  });
+                });
+            }}
+          >
+            Download Model
+          </Menu.Item>
+        )}
+        {model.is_custom && (
+          <>
+            <Menu.Divider />
+            <Menu.Item 
+              key="delete" 
+              icon={<DeleteOutlined />}
+              danger
+              onClick={() => {
+                logUserClick('ModelsModern', 'confirm_delete_model');
+                logInfo('app.frontend.interactions', 'Delete model confirmation dialog opened', 'confirm_delete', { component: 'ModelsModern', modelId: model.id, modelName: model.name });
+                Modal.confirm({
+                  title: 'Delete Model',
+                  content: `Are you sure you want to delete "${model.name}"? This action cannot be undone.`,
+                  okText: 'Delete',
+                  okType: 'danger',
+                  cancelText: 'Cancel',
+                  onOk: () => handleDelete(model.manager_id || model.id),
+                });
+              }}
+            >
+              Delete Model
+            </Menu.Item>
+          </>
+        )}
       </Menu>
     );
 
@@ -321,8 +453,25 @@ const ModelsModern = () => {
                   border: 'none'
                 }}
               >
-                {typeInfo.label}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ display: 'inline-flex' }}>{typeInfo.icon}</span>
+                  {typeInfo.label}
+                </span>
               </Tag>
+              {model.is_custom && (
+                <Tag 
+                  color="cyan"
+                  style={{ 
+                    marginBottom: '8px',
+                    marginLeft: '8px',
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    border: 'none'
+                  }}
+                >
+                  Custom
+                </Tag>
+              )}
               
               {/* Model Name */}
               <Title 
@@ -361,10 +510,12 @@ const ModelsModern = () => {
                 fontSize: '13px',
                 color: '#666'
               }}>
-                <span>
-                  <BarChartOutlined style={{ marginRight: '4px' }} />
-                  {model.accuracy ? `${model.accuracy}% mAP` : 'No metrics'}
-                </span>
+                {model.accuracy && (
+                  <span>
+                    <BarChartOutlined style={{ marginRight: '4px' }} />
+                    {`${model.accuracy}% mAP`}
+                  </span>
+                )}
                 <span>
                   <ClockCircleOutlined style={{ marginRight: '4px' }} />
                   {model.file_size ? `${(model.file_size / 1024 / 1024).toFixed(1)} MB` : 'Unknown'}
@@ -446,10 +597,10 @@ const ModelsModern = () => {
         marginBottom: '32px'
       }}>
         <div>
-          <Title level={2} style={{ margin: 0, fontSize: '28px', fontWeight: 600 }}>
+          <Title level={2} style={{ margin: 0, fontSize: '28px', fontWeight: 600, color: '#C0C0C0' }}>
             🤖 AI Models
           </Title>
-          <Text type="secondary" style={{ fontSize: '16px' }}>
+          <Text type="secondary" style={{ fontSize: '16px', color: '#C0C0C0' }}>
             Manage your machine learning models for auto-labeling
           </Text>
         </div>
@@ -512,7 +663,7 @@ const ModelsModern = () => {
         <Col xs={24} sm={6}>
           <Card>
             <Statistic 
-              title="Training" 
+              title="Training (All Projects)" 
               value={models.filter(m => m.is_training).length} 
               prefix={<ExperimentOutlined style={{ color: '#faad14' }} />}
             />
@@ -522,7 +673,7 @@ const ModelsModern = () => {
           <Card>
             <Statistic 
               title="Custom Models" 
-              value={models.filter(m => m.type === 'custom').length} 
+              value={models.filter(m => m.is_custom).length} 
               prefix={<SettingOutlined style={{ color: '#722ed1' }} />}
             />
           </Card>
@@ -554,13 +705,11 @@ const ModelsModern = () => {
               logInfo('app.frontend.ui', 'Model filter type changed', 'filter_change', { component: 'ModelsModern', filterType: value });
               setFilterType(value);
             }}
-            style={{ width: 150 }}
+            style={{ width: 220 }}
           >
             <Option value="all">All Types</Option>
-            <Option value="yolov8n">YOLOv8 Nano</Option>
-            <Option value="yolov8s">YOLOv8 Small</Option>
-            <Option value="yolov8m">YOLOv8 Medium</Option>
-            <Option value="yolov8l">YOLOv8 Large</Option>
+            <Option value="object_detection">Object Detection</Option>
+            <Option value="instance_segmentation">Segmentation</Option>
             <Option value="custom">Custom</Option>
           </Select>
 
@@ -625,9 +774,38 @@ const ModelsModern = () => {
           <Form.Item
             name="name"
             label="Model Name"
-            rules={[{ required: true, message: 'Please enter model name' }]}
+            rules={[
+              { required: true, message: 'Please enter model name' },
+              ({ getFieldValue }) => ({
+                validator: (_, value) => {
+                  const v = (value || '').trim();
+                  if (!v) return Promise.resolve();
+                  const exists = (models || []).some(m => (m?.is_custom) && (m?.name || '').toLowerCase() === v.toLowerCase());
+                  if (exists) {
+                    return Promise.reject(new Error('Model name already exists. Please choose another name.'));
+                  }
+                  return Promise.resolve();
+                }
+              })
+            ]}
           >
             <Input placeholder="Enter model name" />
+          </Form.Item>
+
+          {/* Name suggestions if duplicate (no automatic 'custom' in suggestions) */}
+          <Form.Item shouldUpdate noStyle>
+            {() => {
+              const v = (form.getFieldValue('name') || '').trim();
+              if (!v) return null;
+              const exists = (models || []).some(m => (m?.is_custom) && (m?.name || '').toLowerCase() === v.toLowerCase());
+              if (!exists) return null;
+              const base = v.replace(/\s+/g, '_');
+              const suggestions = [`${base}_new`, `${base}_alt`, `${base}_v2`];
+              return (
+                <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+                  message={<span>Model name "{v}" already exists. Try: {suggestions.join(', ')}</span>} />
+              );
+            }}
           </Form.Item>
 
           <Form.Item
@@ -646,15 +824,29 @@ const ModelsModern = () => {
             rules={[{ required: true, message: 'Please select model type' }]}
           >
             <Select placeholder="Select model type">
-              {(supportedTypes || []).map(type => (
-                <Option key={type} value={type}>{type}</Option>
-              ))}
+              {(() => {
+                // Only show the two supported tasks for import; backend expects ModelType, not 'custom'
+                const allowed = ['object_detection', 'instance_segmentation'];
+                const filtered = (supportedTypes || []).filter(t => allowed.includes(t));
+                const typesToShow = filtered.length > 0 ? filtered : allowed;
+                return typesToShow.map(type => (
+                  <Option key={type} value={type}>
+                    {getModelTypeInfo(type).label}
+                  </Option>
+                ));
+              })()}
             </Select>
           </Form.Item>
 
           <Form.Item
             name="file"
             label="Model File"
+            valuePropName="fileList"
+            getValueFromEvent={(e) => {
+              // Normalize Upload event to fileList for Form
+              if (Array.isArray(e)) return e;
+              return e && e.fileList ? e.fileList.slice(-1) : [];
+            }}
             rules={[{ required: true, message: 'Please upload model file' }]}
           >
             <Dragger
@@ -662,7 +854,7 @@ const ModelsModern = () => {
               multiple={false}
               beforeUpload={(file) => {
                 // Validate file type
-                const validTypes = ['.pt', '.onnx', '.pb'];
+                const validTypes = ['.pt', '.onnx', '.engine'];
                 const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
                 if (!validTypes.includes(fileExtension)) {
                   logError('app.frontend.validation', 'Invalid model file type uploaded', null, { 
@@ -671,12 +863,12 @@ const ModelsModern = () => {
                     fileType: fileExtension,
                     validTypes 
                   });
-                  message.error('Invalid file type. Please upload .pt, .onnx, or .pb files only.');
+                  message.error('Invalid file type. Please upload .pt, .onnx, or .engine files only.');
                   return false;
                 }
                 
-                // Validate file size (max 500MB)
-                const maxSize = 500 * 1024 * 1024; // 500MB
+                // Validate file size (max 100MB to match backend)
+                const maxSize = 100 * 1024 * 1024; // 100MB
                 if (file.size > maxSize) {
                   logError('app.frontend.validation', 'Model file too large', null, { 
                     component: 'ModelsModern', 
@@ -684,22 +876,217 @@ const ModelsModern = () => {
                     fileSize: file.size,
                     maxSize 
                   });
-                  message.error('File too large. Maximum size is 500MB.');
+                  message.error('File too large. Maximum size is 100MB.');
                   return false;
                 }
                 
-                return false; // Prevent auto upload
+                return false; // Prevent auto upload; file captured in Form via fileList
               }}
-              accept=".pt,.onnx,.pb"
+              accept=".pt,.onnx,.engine"
             >
               <p className="ant-upload-drag-icon">
                 <UploadOutlined />
               </p>
               <p className="ant-upload-text">Click or drag model file to upload</p>
               <p className="ant-upload-hint">
-                Support .pt, .onnx, .pb formats
+                Support .pt, .onnx, .engine formats
               </p>
             </Dragger>
+          </Form.Item>
+
+          {/* Conditional metadata for .pt models */}
+          <Form.Item shouldUpdate={(prev, cur) => prev.file !== cur.file} noStyle>
+            {() => {
+              const fileList = form.getFieldValue('file') || [];
+              const fileItem = Array.isArray(fileList) ? fileList[0] : null;
+              const name = fileItem?.originFileObj?.name || fileItem?.name || '';
+              const ext = name.toLowerCase().slice(name.lastIndexOf('.'));
+              const isPt = ext === '.pt';
+              const isOnnx = ext === '.onnx';
+
+              if (!isPt) return null;
+
+              return (
+                <>
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message={
+                      <span>
+                        For .pt models, classes are auto-detected. Please provide the training input image size used during training.
+                      </span>
+                    }
+                  />
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item
+                        name="training_input_width"
+                        label="Training Input Width"
+                        rules={[{ required: true, message: 'Please enter width (e.g., 640)' }]}
+                      >
+                        <Input type="number" min={16} max={8192} placeholder="e.g., 640" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        name="training_input_height"
+                        label="Training Input Height"
+                        rules={[{ required: true, message: 'Please enter height (e.g., 640)' }]}
+                      >
+                        <Input type="number" min={16} max={8192} placeholder="e.g., 640" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </>
+              );
+            }}
+          </Form.Item>
+
+          {/* Conditional metadata for .onnx models */}
+          <Form.Item shouldUpdate={(prev, cur) => prev.file !== cur.file} noStyle>
+            {() => {
+              const fileList = form.getFieldValue('file') || [];
+              const fileItem = Array.isArray(fileList) ? fileList[0] : null;
+              const name = fileItem?.originFileObj?.name || fileItem?.name || '';
+              const ext = name.toLowerCase().slice(name.lastIndexOf('.'));
+              const isOnnx = ext === '.onnx';
+
+              if (!isOnnx) return null;
+
+              return (
+                <>
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message={
+                      <span>
+                        For .onnx models, please provide training input size, classes (comma-separated), and number of classes (nc).
+                      </span>
+                    }
+                  />
+                  <Form.Item
+                    name="classes_yaml"
+                    label="Classes YAML (optional)"
+                    valuePropName="fileList"
+                    getValueFromEvent={(e) => {
+                      if (Array.isArray(e)) return e;
+                      return e && e.fileList ? e.fileList.slice(-1) : [];
+                    }}
+                    extra="Upload Ultralytics-style data.yaml to auto-fill classes and nc"
+                  >
+                    <Upload
+                      name="classes_yaml"
+                      multiple={false}
+                      beforeUpload={() => false}
+                      accept=".yaml,.yml"
+                      onChange={async ({ file }) => {
+                        try {
+                          const origin = file?.originFileObj || file;
+                          if (!origin) return;
+                          const text = await origin.text();
+                          const data = YAML.parse(text);
+                          let names = [];
+                          const rawNames = data && data.names;
+                          if (Array.isArray(rawNames)) {
+                            names = rawNames.map((n) => String(n));
+                          } else if (rawNames && typeof rawNames === 'object') {
+                            names = Object.entries(rawNames)
+                              .sort((a, b) => Number(a[0]) - Number(b[0]))
+                              .map(([, v]) => String(v));
+                          }
+                          const parsedNc = data && (typeof data.nc !== 'undefined') ? Number(data.nc) : (names.length || null);
+                          if (!names || names.length === 0) {
+                            message.warning('YAML parsed but no names found. Please fill classes and nc manually.');
+                            return;
+                          }
+                          if (!parsedNc || parsedNc <= 0) {
+                            message.warning('YAML parsed but nc missing/invalid. Please enter nc manually.');
+                          }
+                          if (parsedNc && parsedNc !== names.length) {
+                            message.warning(`YAML nc (${parsedNc}) does not match names length (${names.length}). Using names length.`);
+                          }
+                          // Auto-fill the form fields
+                          form.setFieldsValue({
+                            onnx_classes_csv: names.join(','),
+                            onnx_nc: String(names.length)
+                          });
+                          message.success('Classes and nc auto-filled from YAML');
+                        } catch (err) {
+                          message.error(`Failed to parse YAML: ${err?.message || 'Unknown error'}`);
+                        }
+                      }}
+                    >
+                      <Button icon={<UploadOutlined />}>Select YAML</Button>
+                    </Upload>
+                  </Form.Item>
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item
+                        name="training_input_width"
+                        label="Training Input Width"
+                        rules={[{ required: true, message: 'Please enter width (e.g., 640)' }]}
+                      >
+                        <Input type="number" min={16} max={8192} placeholder="e.g., 640" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        name="training_input_height"
+                        label="Training Input Height"
+                        rules={[{ required: true, message: 'Please enter height (e.g., 640)' }]}
+                      >
+                        <Input type="number" min={16} max={8192} placeholder="e.g., 640" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Form.Item
+                    name="onnx_classes_csv"
+                    label={
+                      <span>
+                        Classes (comma-separated)
+                        <Tooltip title="Order defines class IDs (0-based). Keep the same order as used during training/yaml.">
+                          <QuestionCircleOutlined style={{ marginLeft: 6 }} />
+                        </Tooltip>
+                      </span>
+                    }
+                    rules={[({ getFieldValue }) => ({
+                      validator: (_, value) => {
+                        const yamlList = getFieldValue('classes_yaml') || [];
+                        const hasYaml = Array.isArray(yamlList) && yamlList.length > 0;
+                        if (hasYaml) return Promise.resolve();
+                        if (!value || !String(value).trim()) {
+                          return Promise.reject(new Error('Please enter class names (comma-separated)'));
+                        }
+                        return Promise.resolve();
+                      }
+                    })]}
+                    extra="Example: person, car, dog → IDs: person(0), car(1), dog(2). nc must equal classes count."
+                  >
+                    <Input placeholder="e.g., person,car,dog" />
+                  </Form.Item>
+                  <Form.Item
+                    name="onnx_nc"
+                    label="Number of Classes (nc)"
+                    rules={[({ getFieldValue }) => ({
+                      validator: (_, value) => {
+                        const yamlList = getFieldValue('classes_yaml') || [];
+                        const hasYaml = Array.isArray(yamlList) && yamlList.length > 0;
+                        if (hasYaml) return Promise.resolve();
+                        if (!value || parseInt(value, 10) <= 0) {
+                          return Promise.reject(new Error('Please enter number of classes'));
+                        }
+                        return Promise.resolve();
+                      }
+                    })]}
+                    extra="Must equal the number of classes provided above."
+                  >
+                    <Input type="number" min={1} max={1024} placeholder="e.g., 3" />
+                  </Form.Item>
+                </>
+              );
+            }}
           </Form.Item>
 
           <Form.Item>
@@ -732,12 +1119,14 @@ const ModelsModern = () => {
           logUserClick('ModelsModern', 'close_view_modal');
           logInfo('app.frontend.ui', 'View modal closed', 'modal_close', { component: 'ModelsModern', modal: 'view_model' });
           setViewModalVisible(false);
+          setClassesExpanded(false);
         }}
         footer={[
           <Button key="close" onClick={() => {
             logUserClick('ModelsModern', 'close_view_modal_button');
             logInfo('app.frontend.ui', 'View modal closed from button', 'modal_close', { component: 'ModelsModern', modal: 'view_model' });
             setViewModalVisible(false);
+            setClassesExpanded(false);
           }}>
             Close
           </Button>
@@ -786,6 +1175,36 @@ const ModelsModern = () => {
                       </div>
                     </Col>
                   </Row>
+                  <Divider />
+                  <Text strong>Model Metadata:</Text>
+                  <Row gutter={[16, 8]} style={{ marginTop: 8 }}>
+                    <Col span={12}>
+                      <Text type="secondary">Format</Text>
+                      <div>{selectedModel.format || 'Unknown'}</div>
+                    </Col>
+                    <Col span={12}>
+                      <Text type="secondary">Number of Classes (nc)</Text>
+                      <div>{(selectedModel.nc ?? selectedModel.num_classes ?? (Array.isArray(selectedModel.classes) ? selectedModel.classes.length : 'Unknown'))}</div>
+                    </Col>
+                    <Col span={12}>
+                      <Text type="secondary">Training Input Size</Text>
+                      <div>
+                        {(() => {
+                          const tis = selectedModel.training_input_size ?? selectedModel.input_size;
+                          if (!tis) return 'Unknown';
+                          if (Array.isArray(tis)) {
+                            return tis.length === 2 ? `${tis[0]} x ${tis[1]}` : tis.join(', ');
+                          }
+                          if (typeof tis === 'object') {
+                            const w = tis.width || tis.w || tis[0];
+                            const h = tis.height || tis.h || tis[1];
+                            return (w && h) ? `${w} x ${h}` : JSON.stringify(tis);
+                          }
+                          return String(tis);
+                        })()}
+                      </div>
+                    </Col>
+                  </Row>
                   
                   {selectedModel.accuracy && (
                     <>
@@ -804,6 +1223,56 @@ const ModelsModern = () => {
                       </Row>
                     </>
                   )}
+                  <Divider />
+                  <Text strong>Classes:</Text>
+                  <div style={{ marginTop: 8 }}>
+                    {(() => {
+                      const classes = Array.isArray(selectedModel.classes) ? selectedModel.classes : [];
+                      const count = classes.length;
+                      const displayList = classesExpanded ? classes : classes.slice(0, 20);
+                      return (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <Text type="secondary">Total: {count}</Text>
+                            <Space>
+                              <Button size="small" onClick={() => {
+                                const csv = buildClassesCSV(classes);
+                                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${(selectedModel.name || 'model')}_classes.csv`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(url);
+                                message.success('Classes CSV downloaded');
+                              }}>Download CSV</Button>
+                              <Button size="small" onClick={() => {
+                                copyTextToClipboard(classes.join(', '));
+                                message.success('Classes copied to clipboard');
+                              }}>Copy</Button>
+                              {count > 20 && (
+                                <Button size="small" type="link" onClick={() => setClassesExpanded(!classesExpanded)}>
+                                  {classesExpanded ? 'Show less' : 'Show all'}
+                                </Button>
+                              )}
+                            </Space>
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: classesExpanded ? 260 : 120, overflowY: 'auto', paddingRight: 4 }}>
+                            {displayList.map((name, idx) => (
+                              <Tooltip key={`${name}-${idx}`} title={name}>
+                                <Tag>
+                                  <span style={{ opacity: 0.7, marginRight: 6 }}>{idx}</span>
+                                  <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>{name}</span>
+                                </Tag>
+                              </Tooltip>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </Card>
               </Col>
             </Row>

@@ -49,6 +49,9 @@ class ImageTransformer:
             'central_config_integration': True
         })
         
+        # Store actual parameters for geometry tools (crop, rotation, affine_transform)
+        self._actual_geometry_params = {}
+        
         # Helper methods to get transformation parameters from central config
         self._get_shear_params = get_shear_parameters
         self._get_rotation_params = get_rotation_parameters
@@ -124,6 +127,10 @@ class ImageTransformer:
             result_image = image.copy()
             applied_transformations = []
             failed_transformations = []
+            
+            # Show image transformation order
+            transformation_order = list(config.keys())
+            logger.info("operations.transformations", f"Image generation order: {transformation_order}")
             
             # Apply transformations in order
             for transform_name, params in config.items():
@@ -657,17 +664,10 @@ class ImageTransformer:
                 
             elif resize_mode == 'fit_within':
                 # Fit within bounds - scale to fit, maintain aspect ratio
-                original_aspect = original_width / original_height
-                target_aspect = target_width / target_height
-                
-                if original_aspect > target_aspect:
-                    # Original is wider - scale by width
-                    new_width = target_width
-                    new_height = int(target_width / original_aspect)
-                else:
-                    # Original is taller - scale by height
-                    new_height = target_height
-                    new_width = int(target_height * original_aspect)
+                # Use same calculation as annotation transformer for consistency
+                scale_factor = min(float(target_width)/original_width, float(target_height)/original_height)
+                new_width = int(round(original_width * scale_factor))
+                new_height = int(round(original_height * scale_factor))
                 
                 result = image.resize((new_width, new_height), resample)
                 
@@ -791,6 +791,18 @@ class ImageTransformer:
                 expand=True, 
                 fillcolor=fill_color
             )
+            
+            # Store actual rotation parameters for annotation transformation
+            actual_rotation_params = {
+                'actual_angle': angle,
+                'fill_color': fill_color,
+                'expand': True,
+                'original_size': original_size,
+                'final_size': result.size
+            }
+            self._actual_geometry_params['rotation'] = actual_rotation_params
+            
+
             
             logger.info("operations.transformations", f"Rotate transformation completed", "rotate_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
@@ -922,6 +934,19 @@ class ImageTransformer:
                 'crop_position': f"({left}, {top})",
                 'scale': scale
             })
+            
+            # Store actual crop coordinates for annotation transformation
+            actual_crop_params = {
+                'x': left,
+                'y': top,
+                'width': new_width,
+                'height': new_height,
+                'scale': scale,
+                'crop_mode': crop_mode
+            }
+            self._actual_geometry_params['crop'] = actual_crop_params
+            
+
             
             cropped = image.crop((left, top, left + new_width, top + new_height))
             result = cropped.resize((width, height), Image.Resampling.LANCZOS)
@@ -1484,6 +1509,21 @@ class ImageTransformer:
                 
                 result = new_image
             
+            # Store actual affine transform parameters for annotation transformation
+            actual_affine_params = {
+                'actual_rotation_angle': rotation_angle,
+                'actual_scale_factor': scale_factor,
+                'actual_horizontal_shift': horizontal_shift,
+                'actual_vertical_shift': vertical_shift,
+                'shift_x_factor': shift_x_factor,
+                'shift_y_factor': shift_y_factor,
+                'original_size': original_size,
+                'final_size': result.size
+            }
+            self._actual_geometry_params['affine_transform'] = actual_affine_params
+            
+
+            
             logger.info("operations.transformations", f"Affine transformation completed", "affine_success", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
@@ -1776,4 +1816,31 @@ class ImageTransformer:
                 'original_size': f"{image.size[0]}x{image.size[1]}"
             })
             raise
-
+    
+    def get_actual_geometry_parameters(self) -> Dict[str, Any]:
+        """
+        Get actual parameters calculated during geometry transformations.
+        
+        This method returns the actual coordinates/parameters that were calculated
+        during image transformation for crop, rotation, and affine_transform tools.
+        These actual parameters are needed for accurate annotation transformation.
+        
+        Returns:
+            Dict containing actual parameters for geometry tools:
+            {
+                'crop': {'x': int, 'y': int, 'width': int, 'height': int},
+                'rotation': {'actual_angle': float, 'fill_color': str},
+                'affine_transform': {'actual_matrix': list, 'actual_params': dict}
+            }
+        """
+        logger.debug("operations.transformations", "Retrieving actual geometry parameters", "get_actual_params", {
+            'available_tools': list(self._actual_geometry_params.keys()),
+            'param_count': len(self._actual_geometry_params)
+        })
+        
+        return self._actual_geometry_params.copy()
+    
+    def clear_actual_geometry_parameters(self):
+        """Clear stored actual geometry parameters (call before new transformation)"""
+        self._actual_geometry_params.clear()
+        logger.debug("operations.transformations", "Cleared actual geometry parameters", "clear_actual_params", {})

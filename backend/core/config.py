@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     MODELS_DIR: Path = BASE_DIR / "models"
     STATIC_FILES_DIR: Path = BASE_DIR / "static"
     TEMP_DIR: Path = BASE_DIR / "temp"
-    UPLOAD_DIR: Path = BASE_DIR / "uploads"
+    #UPLOAD_DIR: Path = BASE_DIR / "uploads"  # legacy folder; can be disabled from auto-creation
     PROJECTS_DIR: Path = BASE_DIR / "projects"
     
     # Database
@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100MB per image
     MAX_BATCH_SIZE: int = 10000  # 10,000 images
     
+    
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
@@ -72,7 +74,7 @@ class Settings(BaseSettings):
         # Create directories if they don't exist
         directories_to_create = [
             self.DATA_DIR, self.MODELS_DIR, self.STATIC_FILES_DIR, 
-            self.TEMP_DIR, self.UPLOAD_DIR, self.PROJECTS_DIR
+            self.TEMP_DIR, self.PROJECTS_DIR
         ]
         
         created_dirs = []

@@ -87,7 +87,7 @@ const ManualLabeling = () => {
   const [editingAnnotation, setEditingAnnotation] = useState(null);
   const [pendingShape, setPendingShape] = useState(null);
   const [activeTool, setActiveTool] = useState('box');
-  const [zoomLevel, setZoomLevel] = useState(100);
+  const [zoomLevel, setZoomLevel] = useState(50);
 
   // History stacks for Undo/Redo (local only)
   const [historyPast, setHistoryPast] = useState([]);
@@ -609,7 +609,7 @@ const ManualLabeling = () => {
         datasetId,
         timestamp: new Date().toISOString()
       });
-      const response = await AnnotationAPI.getDatasetImages(datasetId);
+      const response = await AnnotationAPI.getDatasetImages(datasetId, 0, 1000);
       setImageList(response.images);
       setDatasetProgress({
         total: response.images.length,

@@ -3,7 +3,8 @@ Database models for the Auto-Labeling Tool
 Defines all database tables and relationships
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, JSON, Index
+import sqlalchemy as sa
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -117,6 +118,7 @@ class Image(Base):
     
     # Relationships
     annotations = relationship("Annotation", back_populates="image", cascade="all, delete-orphan")
+    variants = relationship("ImageVariant", back_populates="parent_image", cascade="all, delete-orphan")
     
     @property
     def normalized_file_path(self):
@@ -207,31 +209,46 @@ class Annotation(Base):
         return f"<Annotation(id='{self.id}', class='{self.class_name}', confidence={self.confidence})>"
 
 
-class ModelUsage(Base):
-    """Track model usage and performance"""
-    __tablename__ = "model_usage"
-    
+
+class AiModel(Base):
+    """Uploaded AI models metadata
+    Minimal fields required for core model management and autolabeling.
+    """
+    __tablename__ = "ai_models"
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    model_id = Column(String, nullable=False)
-    model_name = Column(String(255), nullable=False)
-    
-    # Usage statistics
-    total_inferences = Column(Integer, default=0)
-    total_images_processed = Column(Integer, default=0)
-    average_confidence = Column(Float, default=0.0)
-    average_processing_time = Column(Float, default=0.0)  # seconds
-    
-    # Performance tracking
-    last_used = Column(DateTime, default=func.now())
+    name = Column(String(255), nullable=False)
+    # Optional project association. Null => global model visible to all projects.
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    # Model task type (object_detection, instance_segmentation, semantic_segmentation, classification, pose_estimation)
+    type = Column(String(50), nullable=False, default="object_detection")
+    # Storage format (pytorch, onnx, tensorrt)
+    format = Column(String(20), nullable=False)
+    # Absolute or app-relative path to model file
+    file_path = Column(String(500), nullable=False)
+
+    # Classes and count
+    nc = Column(Integer, nullable=False, default=0)
+    classes = Column(JSON, nullable=True)  # List[str], index defines class_id 0..nc-1
+
+    # Input sizes
+    training_input_size = Column(JSON, nullable=True)  # [w, h] if known
+    input_size_default = Column(JSON, nullable=False, default=[640, 640])  # [w, h]
+
+    # Timestamps
     created_at = Column(DateTime, default=func.now())
-    
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        # Allow same model name across different projects; enforce uniqueness per project scope
+        sa.Index("ix_ai_models_name_project", "name", "project_id", unique=True),
+    )
+
     def __repr__(self):
-        logger.debug("app.database", "ModelUsage model representation", "model_usage_repr", {
-            "model_usage_id": self.id,
-            "model_id": self.model_id,
-            "total_inferences": self.total_inferences
-        })
-        return f"<ModelUsage(model_id='{self.model_id}', inferences={self.total_inferences})>"
+        return (
+            f"<AiModel(id='{self.id}', name='{self.name}', format='{self.format}', "
+            f"type='{self.type}', nc={self.nc})>"
+        )
 
 class Release(Base):
     __tablename__ = "releases"
@@ -252,12 +269,10 @@ class Release(Base):
     final_image_count = Column(Integer)  # total exported images
 
     # Cached statistics & metadata from one-time ZIP scan
-    train_image_count = Column(Integer, default=0)
-    val_image_count = Column(Integer, default=0)
-    test_image_count = Column(Integer, default=0)
-    class_count = Column(Integer, default=0)  # nc: number of classes
-    # classes_json = Column(JSON)  # removed: redundant column
-    # shapes_json = Column(JSON)   # removed: redundant column
+    train_image_count = Column(Integer, default=0)  # Actual images in train folder of ZIP
+    val_image_count = Column(Integer, default=0)    # Actual images in val folder of ZIP  
+    test_image_count = Column(Integer, default=0)   # Actual images in test folder of ZIP
+    class_count = Column(Integer, default=0)        # nc: number of classes (enough for UI)
 
     model_path = Column(String(500))  # path to ZIP or export folder
 
@@ -443,6 +458,47 @@ class LabelAnalytics(Base):
             "is_balanced": self.is_balanced
         })
         return f"<LabelAnalytics(dataset='{self.dataset_id}', classes={self.num_classes}, balanced={self.is_balanced})>"
+
+
+class ImageVariant(Base):
+    __tablename__ = "image_variants"
+
+    id = Column(Integer, primary_key=True)
+    # IMPORTANT: keep this INTEGER to match images.id
+    parent_image_id = Column(Integer, ForeignKey("images.id", ondelete="CASCADE"), nullable=False)
+
+    path = Column(Text, nullable=False)
+    width = Column(Integer, nullable=False)
+    height = Column(Integer, nullable=False)
+    affine_json = Column(Text, nullable=False)
+
+    # portable default (works in SQLite/Postgres)
+    created_at = Column(
+        DateTime,
+        nullable=False,
+        server_default=sa.text("CURRENT_TIMESTAMP"),
+    )
+
+    __table_args__ = (
+        sa.Index("ix_image_variants_parent", "parent_image_id"),
+    )
+
+    # relationship back to Image model
+    parent_image = relationship("Image", back_populates="variants")
+
+    def __repr__(self):
+        logger.debug(
+            "app.database",
+            "ImageVariant model representation",
+            "image_variant_repr",
+            {
+                "variant_id": self.id,
+                "parent_image_id": self.parent_image_id,
+                "width": self.width,
+                "height": self.height,
+            },
+        )
+        return f"<ImageVariant(id={self.id}, parent_image_id={self.parent_image_id})>"
     
     
     

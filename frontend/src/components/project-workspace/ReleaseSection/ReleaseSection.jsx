@@ -866,7 +866,8 @@ const ReleaseSection = ({ projectId, datasetId }) => {
         include_images: true,
         include_annotations: true,
         verified_only: false,
-        project_id: projectId || 'gevis'
+        project_id: projectId || 'gevis',
+        preview_data: releaseConfig.previewData // ✅ FIXED: Send preview data with calculated split counts
       };
 
       console.log('Creating release with config:', releaseData);

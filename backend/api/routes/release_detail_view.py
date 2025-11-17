@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 import os
 import zipfile
 import json
-from backend.database.database import get_db
-from backend.database.models import Release
-from backend.utils.path_utils import PathManager
+from database.database import get_db
+from database.models import Release
+from utils.path_utils import PathManager
 from fastapi.responses import StreamingResponse
 from PIL import Image
 import io
@@ -96,14 +96,27 @@ def serve_release_file(release_id: str, filename: str, thumbnail: bool = False, 
                         if not chunk:
                             break
                         yield chunk
-            return StreamingResponse(iterfile(), media_type=content_type)
+            headers = {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+            return StreamingResponse(iterfile(), media_type=content_type, headers=headers)
         else:
             with zipf.open(filename, 'r') as file_in_zip:
                 img = Image.open(file_in_zip)
-                img.thumbnail((size, size))
+                print(f"🔍 THUMBNAIL DEBUG: Original size: {img.size}, Target size: {size}")
+                # Preserve aspect ratio - thumbnail() already does this correctly
+                img.thumbnail((size, size), Image.Resampling.LANCZOS)
+                print(f"🔍 THUMBNAIL DEBUG: After thumbnail: {img.size}")
                 buf = io.BytesIO()
                 save_format = img.format or 'JPEG'
                 img.save(buf, format=save_format)
                 buf.seek(0)
             content_type = f'image/{save_format.lower()}'
-            return StreamingResponse(buf, media_type=content_type)
+            headers = {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+            return StreamingResponse(buf, media_type=content_type, headers=headers)

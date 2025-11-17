@@ -9,10 +9,14 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
+import yaml
 
 from models.model_manager import model_manager, ModelType, ModelFormat
+from sqlalchemy.orm import Session
+from database.database import get_db
+from database.operations import AiModelOperations, ProjectOperations
 from core.config import settings
 from logging_system.professional_logger import get_professional_logger
 
@@ -37,6 +41,7 @@ class ModelUpdateRequest(BaseModel):
     confidence_threshold: Optional[float] = None
     iou_threshold: Optional[float] = None
     description: Optional[str] = None
+    input_size: Optional[List[int]] = None
 
 
 class PredictionRequest(BaseModel):
@@ -44,11 +49,16 @@ class PredictionRequest(BaseModel):
     model_id: str
     confidence: Optional[float] = None
     iou_threshold: Optional[float] = None
+    imgsz: Optional[int] = None  # Optional inference image size override
 
 
 @router.get("/", response_model=List[Dict[str, Any]])
-async def get_models():
-    """Get list of all available models"""
+async def get_models(db: Session = Depends(get_db)):
+    """Get list of global models only.
+
+    Global = AiModel.project_id is NULL in DB, plus all pre-trained models (is_custom == False).
+    This prevents project-scoped custom models from appearing at global level.
+    """
     logger.info("app.backend", f"Starting get models operation", "get_models_start", {
         "endpoint": "/models"
     })
@@ -56,18 +66,58 @@ async def get_models():
     try:
         logger.debug("operations.operations", f"Fetching models list", "models_fetch", {})
         
-        models = model_manager.get_models_list()
-        
-        logger.info("operations.operations", f"Models retrieved successfully", "get_models_success", {
-            "models_count": len(models)
+        all_models = model_manager.get_models_list()
+        filtered: List[Dict[str, Any]] = []
+
+        # Lazy import to avoid circulars
+        from database.models import AiModel  # type: ignore
+
+        for m in all_models:
+            try:
+                # Always include pre-trained models
+                if not bool(m.get("is_custom", False)):
+                    filtered.append(m)
+                    continue
+
+                # For custom models, include only if DB scope is global (project_id is NULL)
+                name = m.get("name")
+                ai_row = db.query(AiModel).filter(AiModel.name == name).first()
+                if ai_row is not None:
+                    if ai_row.project_id is None:
+                        filtered.append(m)
+                    # else: project-scoped -> skip
+                    continue
+
+                # If no DB record exists (legacy), infer by path: project-scoped models live under projects/<name>/model
+                mi = model_manager.models_info.get(m.get("id"))
+                if mi is not None:
+                    proj_dir = str(settings.PROJECTS_DIR).replace("\\", "/").lower()
+                    model_path = str(getattr(mi, "path", "")).replace("\\", "/").lower()
+                    if proj_dir and proj_dir in model_path:
+                        # project-scoped -> skip
+                        continue
+                # Otherwise treat as global custom
+                filtered.append(m)
+            except Exception as fe:
+                # If filtering fails for any reason, be conservative and include only pre-trained
+                if not bool(m.get("is_custom", False)):
+                    filtered.append(m)
+                logger.warning("errors.validation", f"Filter check failed for model '{m.get('name')}', defaulting behavior: {str(fe)}", "global_models_filter_warning", {
+                    "model_id": m.get("id"),
+                    "model_name": m.get("name"),
+                    "error_type": fe.__class__.__name__
+                })
+
+        logger.info("operations.operations", f"Global models retrieved successfully", "get_models_success", {
+            "models_count": len(filtered)
         })
         
-        return models
+        return filtered
         
     except Exception as e:
         logger.error("errors.system", f"Get models operation failed", "get_models_failure", {
             "error": str(e),
-            "error_type": type(e).__name__
+            "error_type": e.__class__.__name__
         })
         raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")
 
@@ -143,7 +193,7 @@ async def get_supported_model_types():
     except Exception as e:
         logger.error("errors.system", f"Get supported model types operation failed", "supported_types_failure", {
             "error": str(e),
-            "error_type": type(e).__name__
+            "error_type": e.__class__.__name__
         })
         raise HTTPException(status_code=500, detail=f"Failed to get supported model types: {str(e)}")
 
@@ -154,9 +204,14 @@ async def import_custom_model(
     name: str = Form(...),
     type: ModelType = Form(...),
     classes: Optional[str] = Form(None),  # JSON string of class names
+    nc: Optional[int] = Form(None),
+    classes_yaml: Optional[UploadFile] = File(None),
     description: str = Form(""),
     confidence_threshold: float = Form(0.5),
-    iou_threshold: float = Form(0.45)
+    iou_threshold: float = Form(0.45),
+    training_input_size: Optional[str] = Form(None),
+    project_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db)
 ):
     """
     Import a custom YOLO model
@@ -226,7 +281,119 @@ async def import_custom_model(
                 logger.debug("operations.operations", f"Classes parsed as comma-separated", "comma_classes_parsed", {
                     "class_count": len(class_list) if class_list else 0
                 })
+
+        # Parse classes from YAML if provided (Ultralytics-style data.yaml)
+        parsed_nc = None
+        if classes_yaml is not None:
+            try:
+                yaml_bytes = await classes_yaml.read()
+                yaml_data = yaml.safe_load(yaml_bytes) if yaml_bytes else None
+                names_value = yaml_data.get('names') if isinstance(yaml_data, dict) else None
+                if isinstance(names_value, dict):
+                    # Sort by numeric key
+                    class_list_yaml = [names_value[k] for k in sorted(names_value.keys(), key=lambda x: int(x))]
+                elif isinstance(names_value, list):
+                    class_list_yaml = [str(n) for n in names_value]
+                else:
+                    class_list_yaml = None
+
+                parsed_nc = yaml_data.get('nc') if isinstance(yaml_data, dict) else None
+                if class_list_yaml and parsed_nc is None:
+                    parsed_nc = len(class_list_yaml)
+
+                logger.info("operations.operations", "Parsed classes from YAML", "yaml_classes_parsed", {
+                    "class_count": len(class_list_yaml) if class_list_yaml else 0,
+                    "parsed_nc": parsed_nc
+                })
+
+                # If user also provided classes, ensure they match YAML; otherwise use YAML-derived classes
+                if class_list_yaml:
+                    if class_list and class_list != class_list_yaml:
+                        raise HTTPException(status_code=422, detail="Classes in YAML do not match provided classes")
+                    class_list = class_list_yaml
+                # If user provided nc and YAML has nc, ensure match
+                if parsed_nc is not None and nc is not None and int(nc) != int(parsed_nc):
+                    raise HTTPException(status_code=422, detail="nc in YAML does not match provided nc")
+                # If nc not provided, use YAML nc
+                if nc is None and parsed_nc is not None:
+                    nc = int(parsed_nc)
+            except HTTPException:
+                raise
+            except Exception as ye:
+                logger.warning("errors.validation", f"Failed to parse classes YAML: {str(ye)}", "yaml_parse_failed", {
+                    "file_name": classes_yaml.filename if hasattr(classes_yaml, 'filename') else None,
+                    "error_type": ye.__class__.__name__
+                })
         
+        # Parse training input size if provided
+        logger.debug("operations.operations", f"Parsing training input size", "training_input_size_parsing", {
+            "training_input_size": training_input_size
+        })
+        training_size_list = None
+        if training_input_size:
+            try:
+                import json
+                parsed = json.loads(training_input_size)
+                if isinstance(parsed, dict):
+                    w = parsed.get("width") or parsed.get("w")
+                    h = parsed.get("height") or parsed.get("h")
+                    if w is not None and h is not None:
+                        training_size_list = [int(w), int(h)]
+                elif isinstance(parsed, (list, tuple)) and len(parsed) >= 2:
+                    training_size_list = [int(parsed[0]), int(parsed[1])]
+                logger.debug("operations.operations", f"Training size parsed as JSON", "json_training_size_parsed", {
+                    "training_size": training_size_list
+                })
+            except json.JSONDecodeError:
+                # Fallbacks for common string formats: "W,H", "W H", "WxH"
+                raw = str(training_input_size).strip()
+                parts = None
+                try:
+                    if "," in raw:
+                        parts = [p.strip() for p in raw.split(",")]
+                    elif " " in raw:
+                        parts = [p.strip() for p in raw.split()]
+                    elif "x" in raw.lower():
+                        parts = [p.strip() for p in raw.lower().split("x")]
+                    if parts and len(parts) >= 2:
+                        training_size_list = [int(parts[0]), int(parts[1])]
+                        logger.debug("operations.operations", f"Training size parsed from string", "string_training_size_parsed", {
+                            "training_size": training_size_list,
+                            "raw": raw
+                        })
+                except Exception as se:
+                    logger.warning("errors.validation", f"Failed to parse training_input_size string: {str(se)}", "training_size_string_parse_failed", {
+                        "raw": raw,
+                        "error_type": se.__class__.__name__
+                    })
+                    training_size_list = None
+
+        # Strict validation for ONNX: require training_input_size and classes; validate nc if provided
+        ext = Path(file.filename).suffix.lower()
+        if ext == ".onnx":
+            if not class_list or len(class_list) == 0:
+                logger.warning("errors.validation", "ONNX import missing classes", "onnx_missing_classes", {
+                    "file_name": file.filename,
+                    "name": name
+                })
+                raise HTTPException(status_code=422, detail="ONNX import requires classes (list of class names)")
+            if not training_size_list:
+                logger.warning("errors.validation", "ONNX import missing training_input_size", "onnx_missing_training_size", {
+                    "file_name": file.filename,
+                    "name": name
+                })
+                raise HTTPException(status_code=422, detail="ONNX import requires training_input_size (width,height)")
+            if nc is not None and int(nc) != len(class_list):
+                logger.warning("errors.validation", "ONNX import nc mismatch", "onnx_nc_mismatch", {
+                    "provided_nc": nc,
+                    "computed_nc": len(class_list),
+                    "name": name
+                })
+                raise HTTPException(status_code=422, detail="nc must equal the number of provided class names")
+            # If nc wasn't provided anywhere, derive from classes
+            if nc is None:
+                nc = len(class_list)
+
         # Save uploaded file to temporary location
         logger.info("operations.operations", f"Saving uploaded file to temporary location", "temp_file_save", {
             "file_name": file.filename,
@@ -239,24 +406,161 @@ async def import_custom_model(
             tmp_file_path = tmp_file.name
         
         try:
-            # Import the model
             logger.info("operations.operations", f"Importing custom model", "model_import_execution", {
                 "model_name": name,
                 "model_type": type,
                 "temp_file_path": tmp_file_path,
                 "class_count": len(class_list) if class_list else 0
             })
-            
+
+            from database.models import AiModel  # type: ignore
+            normalized_name = (name or "").strip()
+            is_global = project_id is None
+            if is_global:
+                exists_any = db.query(AiModel).filter(AiModel.name == normalized_name).first()
+                if exists_any:
+                    raise HTTPException(status_code=409, detail="Model name already exists (global reserved).")
+            else:
+                exists_global = db.query(AiModel).filter(AiModel.name == normalized_name, AiModel.project_id.is_(None)).first()
+                if exists_global:
+                    raise HTTPException(status_code=409, detail="Model name already exists globally.")
+                exists_local = db.query(AiModel).filter(AiModel.name == normalized_name, AiModel.project_id == project_id).first()
+                if exists_local:
+                    raise HTTPException(status_code=409, detail="Model name already exists in this project.")
+
+            dest_dir = None
+            project_name = None
+            id_prefix = None
+            if project_id is not None:
+                proj = ProjectOperations.get_project(db, project_id)
+                if not proj:
+                    raise HTTPException(status_code=404, detail="Project not found")
+                project_name = proj.name
+                id_prefix = project_name.lower().strip().replace(' ', '_')
+                dest_dir = Path(settings.PROJECTS_DIR) / project_name / "model"
+                dest_dir.mkdir(parents=True, exist_ok=True)
+
             model_id = model_manager.import_custom_model(
                 model_file=tmp_file_path,
                 model_name=name,
                 model_type=type,
                 classes=class_list,
+                training_input_size=training_size_list,
                 description=description,
                 confidence_threshold=confidence_threshold,
-                iou_threshold=iou_threshold
+                iou_threshold=iou_threshold,
+                dest_dir=dest_dir,
+                id_prefix=id_prefix
             )
-            
+            # If user provided training_input_size, update in-memory ModelInfo.input_size for UI consistency
+            try:
+                if training_size_list:
+                    mi = model_manager.models_info.get(model_id)
+                    if mi:
+                        mi.input_size = tuple(training_size_list)
+                        model_manager.models_info[model_id] = mi
+                        # Persist to models_config.json
+                        model_manager._save_models_config()
+                        logger.info("operations.operations", "ModelInfo.input_size updated from training_input_size", "model_info_training_size_override", {
+                            "model_id": model_id,
+                            "training_input_size": training_size_list
+                        })
+            except Exception as mem_err:
+                logger.error("errors.system", f"Failed to update in-memory input_size: {str(mem_err)}", "model_info_training_size_override_error", {
+                    "model_id": model_id,
+                    "error": str(mem_err),
+                    "error_type": mem_err.__class__.__name__
+                })
+            # Immediately upsert into ai_models so the DB reflects the new model without requiring restart
+            try:
+                model_info = model_manager.models_info.get(model_id)
+                if model_info:
+                    # Compute file_path for DB as app-relative when under BASE_DIR (global or project)
+                    db_file_path = model_info.path
+                    try:
+                        abs_path = Path(model_info.path).resolve()
+                        parts = list(abs_path.parts)
+                        idx = None
+                        for i, p in enumerate(parts):
+                            q = p.lower()
+                            if q == 'models' or q == 'projects':
+                                idx = i
+                                break
+                        if idx is not None:
+                            rel_path = Path(*parts[idx:])
+                            db_file_path = str(rel_path).replace('\\', '/')
+                        else:
+                            from core.config import settings as core_settings
+                            base = Path(core_settings.BASE_DIR).resolve()
+                            if str(abs_path).startswith(str(base)):
+                                rel_path = abs_path.relative_to(base)
+                                db_file_path = str(rel_path).replace('\\', '/')
+                            else:
+                                db_file_path = str(abs_path).replace('\\', '/')
+                    except Exception:
+                        db_file_path = model_info.path
+                    AiModelOperations.upsert_ai_model(
+                        db=db,
+                        name=model_info.name,
+                        project_id=project_id,
+                        model_type=model_info.type.value if hasattr(model_info.type, "value") else str(model_info.type),
+                        model_format=model_info.format.value if hasattr(model_info.format, "value") else str(model_info.format),
+                        file_path=db_file_path,
+                        classes=model_info.classes,
+                        input_size_default=list(model_info.input_size) if isinstance(model_info.input_size, tuple) else model_info.input_size,
+                        training_input_size=training_size_list,
+                    )
+                    try:
+                        from sqlalchemy import text as sql_text
+                        if project_id is None:
+                            db.execute(sql_text("UPDATE ai_models SET project_name='global' WHERE name=:name AND project_id IS NULL"), {"name": normalized_name})
+                        else:
+                            if not project_name:
+                                from database.models import Project as DBProject
+                                proj = db.query(DBProject).filter(DBProject.id == project_id).first()
+                                project_name = proj.name if proj else None
+                            db.execute(sql_text("UPDATE ai_models SET project_name=:pname WHERE name=:name AND project_id=:pid"), {"pname": project_name, "name": normalized_name, "pid": project_id})
+                        db.commit()
+                    except Exception:
+                        pass
+                    try:
+                        from database.models import AiModel as DBAiModel, Project as DBProject
+                        row = (
+                            db.query(DBAiModel)
+                            .filter(DBAiModel.name == model_info.name, DBAiModel.project_id == project_id)
+                            .first()
+                        )
+                        if row is not None and hasattr(row, "project_name"):
+                            if project_id is None:
+                                row.project_name = "global"
+                            else:
+                                proj = db.query(DBProject).filter(DBProject.id == project_id).first()
+                                row.project_name = proj.name if proj else None
+                            db.commit()
+                    except Exception:
+                        pass
+                    logger.info("operations.operations", "AiModel upserted to DB after import", "model_import_db_upsert_success", {
+                        "model_id": model_id,
+                        "model_name": model_info.name,
+                        "format": str(model_info.format),
+                        "type": str(model_info.type),
+                        "training_input_size": training_size_list
+                    })
+                else:
+                    logger.error("errors.system", "Model info missing after import; aborting", "model_import_db_upsert_missing", {
+                        "model_id": model_id,
+                        "model_name": name
+                    })
+                    raise HTTPException(status_code=500, detail="Model runtime info missing after import")
+            except Exception as db_err:
+                logger.error("errors.system", f"Failed to upsert AiModel after import: {str(db_err)}", "model_import_db_upsert_error", {
+                    "model_id": model_id,
+                    "model_name": name,
+                    "error": str(db_err),
+                    "error_type": db_err.__class__.__name__
+                })
+                raise HTTPException(status_code=500, detail=f"Failed to persist model to DB: {str(db_err)}")
+
             logger.info("operations.operations", f"Model imported successfully", "model_import_success", {
                 "model_id": model_id,
                 "model_name": name,
@@ -284,7 +588,7 @@ async def import_custom_model(
             "model_name": name,
             "file_name": file.filename,
             "error": str(e),
-            "error_type": type(e).__name__
+            "error_type": e.__class__.__name__
         })
         raise HTTPException(status_code=500, detail=f"Failed to import model: {str(e)}")
 
@@ -347,13 +651,21 @@ async def predict_with_model(
                 model_id=request.model_id,
                 image=tmp_file_path,
                 confidence=request.confidence,
-                iou_threshold=request.iou_threshold
+                iou_threshold=request.iou_threshold,
+                **({"imgsz": request.imgsz if request.imgsz is not None else (
+                    model_manager.models_info[request.model_id].input_size[0]
+                    if (request.model_id in model_manager.models_info and 
+                        getattr(model_manager.models_info[request.model_id], "input_size", None)) else None
+                )} if (request.imgsz is not None or (
+                    request.model_id in model_manager.models_info and 
+                    getattr(model_manager.models_info[request.model_id], "input_size", None) is not None
+                )) else {})
             )
             
             logger.info("operations.operations", f"Model prediction completed successfully", "prediction_success", {
                 "model_id": request.model_id,
                 "file_name": file.filename,
-                "results_type": type(results).__name__
+                "results_type": results.__class__.__name__
             })
             
             return results
@@ -379,7 +691,7 @@ async def predict_with_model(
 
 
 @router.get("/{model_id}")
-async def get_model_info(model_id: str):
+async def get_model_info(model_id: str, db: Session = Depends(get_db)):
     """Get detailed information about a specific model"""
     logger.info("app.backend", f"Starting get model info operation", "get_model_info_start", {
         "model_id": model_id,
@@ -402,6 +714,33 @@ async def get_model_info(model_id: str):
         })
         
         model_info = model_manager.models_info[model_id]
+
+        # Optional enrichment from database (AiModel) to include training_input_size and scope
+        # We try to map by name; if multiple projects have same name, prefer a global (project_id is NULL)
+        from database.models import AiModel  # type: ignore
+        ai_row = None
+        try:
+            ai_row = (
+                db.query(AiModel)
+                .filter(AiModel.name == model_info.name)
+                .order_by(AiModel.project_id.isnot(None))
+                .first()
+            )
+        except Exception:
+            ai_row = None
+
+        training_input_size = None
+        project_id = None
+        created_at_db = None
+        nc_db = None
+        try:
+            if ai_row is not None:
+                training_input_size = getattr(ai_row, "training_input_size", None)
+                project_id = getattr(ai_row, "project_id", None)
+                created_at_db = getattr(ai_row, "created_at", None)
+                nc_db = getattr(ai_row, "nc", None)
+        except Exception:
+            pass
         
         logger.info("operations.operations", f"Model information retrieved successfully", "get_model_info_success", {
             "model_id": model_id,
@@ -418,12 +757,20 @@ async def get_model_info(model_id: str):
             "format": model_info.format,
             "classes": model_info.classes,
             "num_classes": len(model_info.classes),
+            "nc": nc_db if isinstance(nc_db, int) and nc_db > 0 else len(model_info.classes),
             "input_size": model_info.input_size,
+            # Enriched from DB when available
+            "training_input_size": training_input_size,
+            "project_id": project_id,
             "confidence_threshold": model_info.confidence_threshold,
             "iou_threshold": model_info.iou_threshold,
             "description": model_info.description,
             "is_custom": model_info.is_custom,
-            "created_at": model_info.created_at
+            "created_at": created_at_db if created_at_db is not None else model_info.created_at,
+            # Enriched metadata for UI consistency
+            "file_size": getattr(model_info, "file_size", 0),
+            "is_ready": getattr(model_info, "is_ready", False),
+            "is_training": getattr(model_info, "is_training", False)
         }
         
     except HTTPException:
@@ -433,7 +780,7 @@ async def get_model_info(model_id: str):
         logger.error("errors.system", f"Get model info operation failed", "get_model_info_failure", {
             "model_id": model_id,
             "error": str(e),
-            "error_type": type(e).__name__
+            "error_type": e.__class__.__name__
         })
         raise HTTPException(status_code=500, detail=f"Failed to get model info: {str(e)}")
 
@@ -446,7 +793,8 @@ async def update_model_settings(model_id: str, request: ModelUpdateRequest):
         "update_data": {
             "confidence_threshold": request.confidence_threshold,
             "iou_threshold": request.iou_threshold,
-            "description": request.description
+            "description": request.description,
+            "input_size": request.input_size
         },
         "endpoint": "/models/{model_id}"
     })
@@ -466,14 +814,16 @@ async def update_model_settings(model_id: str, request: ModelUpdateRequest):
             "model_id": model_id,
             "confidence_threshold": request.confidence_threshold,
             "iou_threshold": request.iou_threshold,
-            "description": request.description
+            "description": request.description,
+            "input_size": request.input_size
         })
         
         success = model_manager.update_model_settings(
             model_id=model_id,
             confidence_threshold=request.confidence_threshold,
             iou_threshold=request.iou_threshold,
-            description=request.description
+            description=request.description,
+            input_size=tuple(request.input_size) if request.input_size else None
         )
         
         if not success:
@@ -482,7 +832,8 @@ async def update_model_settings(model_id: str, request: ModelUpdateRequest):
                 "update_data": {
                     "confidence_threshold": request.confidence_threshold,
                     "iou_threshold": request.iou_threshold,
-                    "description": request.description
+                    "description": request.description,
+                    "input_size": request.input_size
                 }
             })
             raise HTTPException(status_code=500, detail="Failed to update model settings")
@@ -491,7 +842,8 @@ async def update_model_settings(model_id: str, request: ModelUpdateRequest):
             "model_id": model_id,
             "confidence_threshold": request.confidence_threshold,
             "iou_threshold": request.iou_threshold,
-            "description": request.description
+            "description": request.description,
+            "input_size": request.input_size
         })
         
         return {"success": True, "message": "Model settings updated successfully"}
@@ -508,13 +860,13 @@ async def update_model_settings(model_id: str, request: ModelUpdateRequest):
                 "description": request.description
             },
             "error": str(e),
-            "error_type": type(e).__name__
+            "error_type": e.__class__.__name__
         })
         raise HTTPException(status_code=500, detail=f"Failed to update model: {str(e)}")
 
 
 @router.delete("/{model_id}")
-async def delete_model(model_id: str):
+async def delete_model(model_id: str, db: Session = Depends(get_db)):
     """Delete a custom model (pre-trained models cannot be deleted)"""
     logger.info("app.backend", f"Starting delete model operation", "delete_model_start", {
         "model_id": model_id,
@@ -532,10 +884,15 @@ async def delete_model(model_id: str):
             })
             raise HTTPException(status_code=404, detail="Model not found")
         
-        logger.info("operations.operations", f"Deleting model", "model_deletion", {
-            "model_id": model_id
+        # Capture model name before deletion so we can remove the DB row reliably
+        model_info = model_manager.models_info[model_id]
+        model_name = model_info.name
+
+        logger.info("operations.operations", f"Deleting model and corresponding DB record", "model_deletion", {
+            "model_id": model_id,
+            "model_name": model_name
         })
-        
+
         success = model_manager.delete_model(model_id)
         
         if not success:
@@ -544,8 +901,26 @@ async def delete_model(model_id: str):
             })
             raise HTTPException(status_code=500, detail="Failed to delete model")
         
-        logger.info("operations.operations", f"Model deleted successfully", "delete_model_success", {
-            "model_id": model_id
+        # Also remove AiModel record from database if it exists
+        try:
+            db_deleted = AiModelOperations.delete_ai_model_by_name(db, model_name)
+            logger.info("operations.operations", f"AiModel DB record deletion attempted", "delete_model_db_attempt", {
+                "model_id": model_id,
+                "model_name": model_name,
+                "db_deleted": db_deleted
+            })
+        except Exception as db_err:
+            # Log but don't fail the API if DB deletion encounters an error
+            logger.error("errors.system", f"AiModel DB deletion error: {str(db_err)}", "delete_model_db_error", {
+                "model_id": model_id,
+                "model_name": model_name,
+                "error": str(db_err),
+                "error_type": db_err.__class__.__name__
+            })
+
+        logger.info("operations.operations", f"Model deleted successfully (file/config + DB)", "delete_model_success", {
+            "model_id": model_id,
+            "model_name": model_name
         })
         
         return {"success": True, "message": "Model deleted successfully"}
@@ -566,3 +941,72 @@ async def delete_model(model_id: str):
             "error_type": type(e).__name__
         })
         raise HTTPException(status_code=500, detail=f"Failed to delete model: {str(e)}")
+
+
+@router.get("/{model_id}/download")
+async def download_model(model_id: str):
+    """Download the model file for the given model_id"""
+    logger.info("app.backend", f"Starting model download operation", "download_model_start", {
+        "model_id": model_id,
+        "endpoint": "/models/{model_id}/download"
+    })
+
+    try:
+        # Validate model existence
+        logger.debug("operations.operations", f"Checking if model exists for download", "model_existence_check", {
+            "model_id": model_id
+        })
+
+        if model_id not in model_manager.models_info:
+            logger.warning("errors.validation", f"Model not found for download", "model_not_found", {
+                "model_id": model_id
+            })
+            raise HTTPException(status_code=404, detail="Model not found")
+
+        model_info = model_manager.models_info[model_id]
+        file_path = Path(model_info.path)
+
+        # Ensure file exists
+        logger.debug("operations.operations", f"Validating model file path", "model_file_path_validation", {
+            "model_id": model_id,
+            "file_path": str(file_path)
+        })
+
+        if not file_path.exists():
+            logger.error("errors.system", f"Model file not found for download", "model_file_missing", {
+                "model_id": model_id,
+                "file_path": str(file_path)
+            })
+            raise HTTPException(status_code=404, detail="Model file not found")
+
+        # Build a friendly filename
+        safe_name = model_info.name.replace(" ", "_")
+        filename = f"{safe_name}{file_path.suffix}"
+
+        logger.info("operations.operations", f"Model file ready for download", "download_model_ready", {
+            "model_id": model_id,
+            "filename": filename,
+            "file_size": getattr(model_info, "file_size", 0)
+        })
+
+        # Stream the file to client
+        # Add CORS expose header so frontend can read Content-Disposition for filename
+        return FileResponse(
+            path=str(file_path),
+            filename=filename,
+            media_type="application/octet-stream",
+            headers={
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error("errors.system", f"Model download operation failed", "download_model_failure", {
+            "model_id": model_id,
+            "error": str(e),
+            "error_type": e.__class__.__name__
+        })
+        raise HTTPException(status_code=500, detail=f"Failed to download model: {str(e)}")

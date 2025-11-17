@@ -46,9 +46,15 @@ class ExportFormats:
         - Available annotation types (bbox, polygon)
         - User preference
         """
-        # If user explicitly chose a format, respect it
+        # If user explicitly chose a format, respect it (normalize first)
         if user_format and user_format != "auto":
-            return user_format
+            normalized_user_format = ExportFormats._normalize_format_name(user_format)
+            logger.info("operations.exports", f"User explicitly chose format", "user_format_selection", {
+                "original_format": user_format,
+                "normalized_format": normalized_user_format,
+                "respecting_user_choice": True
+            })
+            return normalized_user_format
         
         # Analyze available annotations
         has_polygons = any(ann.get('type') == 'polygon' and 'points' in ann for ann in annotations)
@@ -82,6 +88,9 @@ class ExportFormats:
     @staticmethod
     def get_export_method(format_name: str):
         """Get the appropriate export method based on format name"""
+        # Normalize format name to handle various naming conventions
+        normalized_format = ExportFormats._normalize_format_name(format_name)
+        
         format_methods = {
             "coco": ExportFormats.export_coco,
             "yolo_detection": ExportFormats.export_yolo_detection,
@@ -89,7 +98,49 @@ class ExportFormats:
             "pascal_voc": ExportFormats.export_pascal_voc,
             "csv": ExportFormats.export_csv
         }
-        return format_methods.get(format_name.lower())
+        return format_methods.get(normalized_format)
+    
+    @staticmethod
+    def _normalize_format_name(format_name: str) -> str:
+        """Normalize format name to handle various naming conventions"""
+        if not format_name:
+            return "coco"  # Default fallback
+            
+        # Convert to lowercase and remove common suffixes/prefixes
+        normalized = format_name.lower().strip()
+        
+        # Handle common format name variations
+        format_mappings = {
+            # COCO variations
+            "coco": "coco",
+            "coco_json": "coco", 
+            "coco_format": "coco",
+            "ms_coco": "coco",
+            "microsoft_coco": "coco",
+            
+            # YOLO variations
+            "yolo": "yolo_detection",  # Default YOLO to detection
+            "yolo_detection": "yolo_detection",
+            "yolo_detect": "yolo_detection",
+            "yolo_bbox": "yolo_detection",
+            "yolo_segmentation": "yolo_segmentation",
+            "yolo_segment": "yolo_segmentation",
+            "yolo_seg": "yolo_segmentation",
+            "yolo_polygon": "yolo_segmentation",
+            
+            # Pascal VOC variations
+            "pascal_voc": "pascal_voc",
+            "pascal": "pascal_voc",
+            "voc": "pascal_voc",
+            "xml": "pascal_voc",
+            
+            # CSV variations
+            "csv": "csv",
+            "comma_separated": "csv",
+            "spreadsheet": "csv"
+        }
+        
+        return format_mappings.get(normalized, normalized)
     
     @staticmethod
     def export_coco(data: ExportRequest) -> Dict[str, Any]:
@@ -140,8 +191,19 @@ class ExportFormats:
             category_id = ann.get("class_id", 1) + 1
             
             if ann.get("type") == "bbox":
-                bbox = ann.get("bbox", {})
-                x, y, w, h = bbox.get("x", 0), bbox.get("y", 0), bbox.get("width", 0), bbox.get("height", 0)
+                bbox = ann.get("bbox", [])
+                
+                # Handle bbox format: [x_min, y_min, x_max, y_max] from _prepare_export_data
+                if isinstance(bbox, list) and len(bbox) >= 4:
+                    x_min, y_min, x_max, y_max = bbox[0], bbox[1], bbox[2], bbox[3]
+                    x, y = x_min, y_min
+                    w, h = x_max - x_min, y_max - y_min
+                else:
+                    # Fallback for old dict format
+                    if isinstance(bbox, dict):
+                        x, y, w, h = bbox.get("x", 0), bbox.get("y", 0), bbox.get("width", 0), bbox.get("height", 0)
+                    else:
+                        x, y, w, h = 0, 0, 0, 0
                 area = w * h
                 
                 coco_data["annotations"].append({
@@ -215,17 +277,36 @@ names: {class_names}  # class names
             annotations = []
             for ann in data.annotations:
                 if ann.get("image_id", 0) == img_idx and ann.get("type") == "bbox":
-                    bbox = ann.get("bbox", {})
-                    x, y, w, h = bbox.get("x", 0), bbox.get("y", 0), bbox.get("width", 0), bbox.get("height", 0)
+                    bbox = ann.get("bbox", [])
                     
-                    # Convert to YOLO format (normalized center coordinates)
-                    center_x = (x + w / 2) / img_width
-                    center_y = (y + h / 2) / img_height
-                    norm_width = w / img_width
-                    norm_height = h / img_height
-                    
-                    class_id = ann.get("class_id", 0)
-                    annotations.append(f"{class_id} {center_x:.6f} {center_y:.6f} {norm_width:.6f} {norm_height:.6f}")
+                    # Handle bbox format: [x_min, y_min, x_max, y_max] from _prepare_export_data
+                    if isinstance(bbox, list) and len(bbox) >= 4:
+                        x_min, y_min, x_max, y_max = bbox[0], bbox[1], bbox[2], bbox[3]
+                        
+                        # Convert to YOLO format (normalized center coordinates)
+                        center_x = (x_min + x_max) / 2.0 / img_width
+                        center_y = (y_min + y_max) / 2.0 / img_height
+                        norm_width = (x_max - x_min) / img_width
+                        norm_height = (y_max - y_min) / img_height
+                        
+                        # Clamp values to [0, 1] range
+                        center_x = max(0.0, min(1.0, center_x))
+                        center_y = max(0.0, min(1.0, center_y))
+                        norm_width = max(0.0, min(1.0, norm_width))
+                        norm_height = max(0.0, min(1.0, norm_height))
+                        
+                        class_id = ann.get("class_id", 0)
+                        annotations.append(f"{class_id} {center_x:.6f} {center_y:.6f} {norm_width:.6f} {norm_height:.6f}")
+                    else:
+                        # Fallback for old dict format or invalid bbox
+                        if isinstance(bbox, dict):
+                            x, y, w, h = bbox.get("x", 0), bbox.get("y", 0), bbox.get("width", 0), bbox.get("height", 0)
+                            center_x = (x + w / 2) / img_width
+                            center_y = (y + h / 2) / img_height
+                            norm_width = w / img_width
+                            norm_height = h / img_height
+                            class_id = ann.get("class_id", 0)
+                            annotations.append(f"{class_id} {center_x:.6f} {center_y:.6f} {norm_width:.6f} {norm_height:.6f}")
             
             files[txt_name] = "\n".join(annotations)
         
@@ -289,8 +370,19 @@ task: segment  # for segmentation
                     
                     elif ann.get("type") == "bbox":
                         # Fallback to bounding box if no polygon available
-                        bbox = ann.get("bbox", {})
-                        x, y, w, h = bbox.get("x", 0), bbox.get("y", 0), bbox.get("width", 0), bbox.get("height", 0)
+                        bbox = ann.get("bbox", [])
+                        
+                        # Handle bbox format: [x_min, y_min, x_max, y_max] from _prepare_export_data
+                        if isinstance(bbox, list) and len(bbox) >= 4:
+                            x_min, y_min, x_max, y_max = bbox[0], bbox[1], bbox[2], bbox[3]
+                            x, y = x_min, y_min
+                            w, h = x_max - x_min, y_max - y_min
+                        else:
+                            # Fallback for old dict format
+                            if isinstance(bbox, dict):
+                                x, y, w, h = bbox.get("x", 0), bbox.get("y", 0), bbox.get("width", 0), bbox.get("height", 0)
+                            else:
+                                x, y, w, h = 0, 0, 0, 0
                         
                         # Convert bbox to polygon (4 corners)
                         corners = [
@@ -357,11 +449,24 @@ task: segment  # for segmentation
                     # Bounding box data
                     bbox_x = bbox_y = bbox_width = bbox_height = ""
                     if ann.get("type") == "bbox" and ann.get("bbox"):
-                        bbox = ann.get("bbox", {})
-                        bbox_x = bbox.get("x", 0)
-                        bbox_y = bbox.get("y", 0)
-                        bbox_width = bbox.get("width", 0)
-                        bbox_height = bbox.get("height", 0)
+                        bbox = ann.get("bbox", [])
+                        
+                        # Handle bbox format: [x_min, y_min, x_max, y_max] from _prepare_export_data
+                        if isinstance(bbox, list) and len(bbox) >= 4:
+                            x_min, y_min, x_max, y_max = bbox[0], bbox[1], bbox[2], bbox[3]
+                            bbox_x = x_min
+                            bbox_y = y_min
+                            bbox_width = x_max - x_min
+                            bbox_height = y_max - y_min
+                        else:
+                            # Fallback for old dict format
+                            if isinstance(bbox, dict):
+                                bbox_x = bbox.get("x", 0)
+                                bbox_y = bbox.get("y", 0)
+                                bbox_width = bbox.get("width", 0)
+                                bbox_height = bbox.get("height", 0)
+                            else:
+                                bbox_x = bbox_y = bbox_width = bbox_height = 0
                     
                     # Polygon data
                     polygon_points = ""
@@ -442,20 +547,33 @@ task: segment  # for segmentation
                     difficult = ET.SubElement(obj, "difficult")
                     difficult.text = "0"
                     
-                    bbox = ann.get("bbox", {})
+                    bbox = ann.get("bbox", [])
                     bndbox = ET.SubElement(obj, "bndbox")
                     
+                    # Handle bbox format: [x_min, y_min, x_max, y_max] from _prepare_export_data
+                    if isinstance(bbox, list) and len(bbox) >= 4:
+                        x_min, y_min, x_max, y_max = bbox[0], bbox[1], bbox[2], bbox[3]
+                    else:
+                        # Fallback for old dict format
+                        if isinstance(bbox, dict):
+                            x_min = bbox.get("x", 0)
+                            y_min = bbox.get("y", 0)
+                            x_max = bbox.get("x", 0) + bbox.get("width", 0)
+                            y_max = bbox.get("y", 0) + bbox.get("height", 0)
+                        else:
+                            x_min, y_min, x_max, y_max = 0, 0, 0, 0
+                    
                     xmin = ET.SubElement(bndbox, "xmin")
-                    xmin.text = str(int(bbox.get("x", 0)))
+                    xmin.text = str(int(x_min))
                     
                     ymin = ET.SubElement(bndbox, "ymin")
-                    ymin.text = str(int(bbox.get("y", 0)))
+                    ymin.text = str(int(y_min))
                     
                     xmax = ET.SubElement(bndbox, "xmax")
-                    xmax.text = str(int(bbox.get("x", 0) + bbox.get("width", 0)))
+                    xmax.text = str(int(x_max))
                     
                     ymax = ET.SubElement(bndbox, "ymax")
-                    ymax.text = str(int(bbox.get("y", 0) + bbox.get("height", 0)))
+                    ymax.text = str(int(y_max))
             
             # Convert to string
             ET.indent(annotation, space="  ")
