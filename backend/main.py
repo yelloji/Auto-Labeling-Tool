@@ -21,6 +21,7 @@ import uvicorn
 from api.routes import labels
 
 from api.routes import projects, datasets, annotations, models, enhanced_export, releases
+from models.training import api_routes as training_api
 from api.routes import analytics, augmentation, dataset_management
 from api.routes import image_transformations, logs, frontend_logs, release_detail_view
 from core.config import settings
@@ -133,6 +134,7 @@ app.include_router(images_router, prefix="/api/v1", tags=["images"])
 app.include_router(enhanced_export.router, prefix="/api/v1/enhanced-export", tags=["enhanced-export"])
 app.include_router(releases.router, prefix="/api/v1", tags=["releases"])
 app.include_router(release_detail_view.router, prefix="/api/v1", tags=["release-details"])
+app.include_router(training_api.router, prefix="/api/v1", tags=["training"])
 
 # Include new feature routes
 app.include_router(analytics.router, tags=["analytics"])
