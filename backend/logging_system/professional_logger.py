@@ -161,6 +161,7 @@ class ProfessionalLogger:
             "operations.annotations": "develop-logs/backend/operations/annotations.log",
             "operations.releases": "develop-logs/backend/operations/releases.log",
             "operations.transformations": "develop-logs/backend/operations/transformations.log",
+            "operations.training": "develop-logs/backend/operations/training.log",
             
             # BACKEND ERRORS CATEGORY (2 files)
             "errors.system": "develop-logs/backend/errors/system.log",
