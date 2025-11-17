@@ -26,7 +26,7 @@ const initialFormState = {
   classes: [],
   epochs: 50,
   imgSize: 640,
-  batchSize: 'auto',
+  batchSize: 2,
   mixedPrecision: true,
   earlyStop: true,
   saveBestOnly: true,
@@ -161,9 +161,42 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 batchSize={form.batchSize}
                 mixedPrecision={form.mixedPrecision}
                 earlyStop={form.earlyStop}
-                saveBestOnly={form.saveBestOnly}
                 device={form.device}
                 gpuIndex={form.gpuIndex}
+                taskType={form.taskType}
+                optimizer={form.optimizer}
+                lr0={form.lr0}
+                lrf={form.lrf}
+                momentum={form.momentum}
+                weight_decay={form.weight_decay}
+                patience={form.patience}
+                save_period={form.save_period}
+                workers={form.workers}
+                warmup_epochs={form.warmup_epochs}
+                warmup_momentum={form.warmup_momentum}
+                warmup_bias_lr={form.warmup_bias_lr}
+                box={form.box}
+                cls={form.cls}
+                dfl={form.dfl}
+                mosaic={form.mosaic}
+                mixup={form.mixup}
+                hsv_h={form.hsv_h}
+                hsv_s={form.hsv_s}
+                hsv_v={form.hsv_v}
+                flipud={form.flipud}
+                fliplr={form.fliplr}
+                degrees={form.degrees}
+                translate={form.translate}
+                scale={form.scale}
+                shear={form.shear}
+                perspective={form.perspective}
+                single_cls={form.single_cls}
+                rect={form.rect}
+                overlap_mask={form.overlap_mask}
+                mask_ratio={form.mask_ratio}
+                freeze={form.freeze}
+                val_iou={form.val_iou}
+                val_plots={form.val_plots}
                 isDeveloper={isDeveloper}
                 onChange={(patch) => handleChange(patch)}
               />
@@ -191,7 +224,6 @@ const ModelTrainingSection = ({ projectId, project }) => {
                               batch: form.batchSize,
                               amp: form.mixedPrecision,
                               early_stop: form.earlyStop,
-                              save_best: form.saveBestOnly,
                               device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
                               optimizer: form.optimizer,
                               momentum: form.momentum,
