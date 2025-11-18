@@ -3,6 +3,7 @@ Database configuration and initialization
 """
 
 import os
+import hashlib
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from core.config import settings
@@ -192,6 +193,14 @@ async def init_db():
             db = SessionLocal()
             summary = AiModelOperations.sync_from_config(db)
             logger.info("app.database", "AiModel sync after init_db completed", "ai_model_sync_post_init", summary)
+            try:
+                from .models import DevModeSetting
+                if db.query(DevModeSetting).count() == 0:
+                    db.add(DevModeSetting(password_hash=hashlib.sha256(b"0000").hexdigest()))
+                    db.commit()
+                    logger.info("app.security", "Seeded default dev password", "dev_password_seeded", {"default": True})
+            except Exception as seed_err:
+                logger.warning("errors.system", f"DevModeSetting seed failed: {seed_err}", "dev_password_seed_failed", {"error": str(seed_err)})
         except Exception as sync_err:
             logger.error("errors.system", f"AiModel sync after init_db failed: {str(sync_err)}", "ai_model_sync_post_init_error", {
                 "error": str(sync_err),
