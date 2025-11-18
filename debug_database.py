@@ -13,6 +13,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 import json
+import hashlib
 
 class DatabaseDebugger:
     def __init__(self, db_path="database.db"):
@@ -957,7 +958,12 @@ class DatabaseDebugger:
             row = cursor.fetchone()
             print(f"\n🗂️  Current Setting:")
             has_pw = bool(row[1])
-            print(f"   id: {row[0]} • updated_at: {row[2]} • password_set: {'Yes' if has_pw else 'No'}")
+            is_default = has_pw and (row[1] == hashlib.sha256(b"0000").hexdigest())
+            state = (
+                "Default (0000)"
+                if is_default else ("Custom (hidden)" if has_pw else "Not set")
+            )
+            print(f"   id: {row[0]} • updated_at: {row[2]} • password: {state}")
 
     def get_image_transformations_table(self):
         """Get detailed information about image transformations"""
