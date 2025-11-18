@@ -2,6 +2,7 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from database.models import TrainingSession
 from database.database import get_db
 from api.services.model_serialization import serialize_ai_model
 from models.training.model_selector import get_trainable_models
@@ -44,6 +45,90 @@ async def extract_release(payload: ExtractRequest):
         return {"target_dir": rel_dir}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Training session upsert/get (identity fields)
+class SessionUpsert(BaseModel):
+    project_id: int
+    name: str
+    description: Optional[str] = None
+
+
+@router.post("/training/session/upsert")
+async def upsert_training_session(payload: SessionUpsert, db: Session = Depends(get_db)):
+    try:
+        existing = (
+            db.query(TrainingSession)
+            .filter(TrainingSession.project_id == payload.project_id)
+            .filter(TrainingSession.name == payload.name)
+            .first()
+        )
+        if existing:
+            if payload.description is not None:
+                existing.description = payload.description
+            if not existing.status:
+                existing.status = "queued"
+            db.add(existing)
+            db.commit()
+            db.refresh(existing)
+            return {
+                "id": existing.id,
+                "project_id": existing.project_id,
+                "name": existing.name,
+                "description": existing.description,
+                "status": existing.status,
+            }
+        ts = TrainingSession(
+            project_id=payload.project_id,
+            name=payload.name,
+            description=payload.description or "",
+            status="queued",
+        )
+        db.add(ts)
+        db.commit()
+        db.refresh(ts)
+        return {
+            "id": ts.id,
+            "project_id": ts.project_id,
+            "name": ts.name,
+            "description": ts.description,
+            "status": ts.status,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/training/session/get")
+async def get_training_session(project_id: int = Query(...), name: str = Query(...), db: Session = Depends(get_db)):
+    try:
+        ts = (
+            db.query(TrainingSession)
+            .filter(TrainingSession.project_id == project_id)
+            .filter(TrainingSession.name == name)
+            .first()
+        )
+        if not ts:
+            raise HTTPException(status_code=404, detail="Training session not found")
+        return {
+            "id": ts.id,
+            "project_id": ts.project_id,
+            "name": ts.name,
+            "description": ts.description,
+            "status": ts.status,
+            "framework": ts.framework,
+            "task": ts.task,
+            "model_name": ts.model_name,
+            "dataset_release_id": ts.dataset_release_id,
+            "dataset_release_dir": ts.dataset_release_dir,
+            "dataset_summary_json": ts.dataset_summary_json,
+            "resolved_config_json": ts.resolved_config_json,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

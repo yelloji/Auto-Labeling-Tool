@@ -18,6 +18,7 @@ const initialFormState = {
   mode: 'user',
   projectId: '',
   trainingName: '',
+  description: '',
   framework: 'ultralytics',
   taskType: 'segmentation',
   pretrainedModel: '',
@@ -55,6 +56,21 @@ const ModelTrainingSection = ({ projectId, project }) => {
       setForm((prev) => ({ ...prev, projectId }));
     }
   }, [projectId, form.projectId]);
+
+  // Persist identity while status is queued (name/description)
+  useEffect(() => {
+    const saveIdentity = async () => {
+      try {
+        if (!form.projectId || !form.trainingName) return;
+        await trainingAPI.upsertSession({
+          projectId: form.projectId,
+          name: form.trainingName,
+          description: form.description || ''
+        });
+      } catch (_) {}
+    };
+    saveIdentity();
+  }, [form.projectId, form.trainingName, form.description]);
 
   const resolvedConfig = useMemo(() => ({
     project_id: form.projectId,
@@ -126,6 +142,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
             <Card size="small" title="Identity" bodyStyle={{ padding: 12 }}>
               <IdentitySection
                 trainingName={form.trainingName}
+                description={form.description}
                 onChange={(patch) => handleChange(patch)}
               />
             </Card>

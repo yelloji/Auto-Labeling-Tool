@@ -762,6 +762,20 @@ export const trainingAPI = {
       handleAPIError(error, 'Failed to load trainable models');
       throw error;
     }
+  },
+  upsertSession: async ({ projectId, name, description }) => {
+    const response = await api.post('/api/v1/training/session/upsert', {
+      project_id: projectId,
+      name,
+      description,
+    });
+    return response.data;
+  },
+  getSession: async ({ projectId, name }) => {
+    const response = await api.get('/api/v1/training/session/get', {
+      params: { project_id: projectId, name }
+    });
+    return response.data;
   }
 };
 
