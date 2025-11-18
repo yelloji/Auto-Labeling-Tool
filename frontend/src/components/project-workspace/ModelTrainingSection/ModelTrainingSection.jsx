@@ -11,6 +11,7 @@ import PresetSection from './Preset/PresetSection';
 import './compact.css';
 import { trainingAPI } from '../../../services/api';
 import TerminalPanel from './Terminal/TerminalPanel';
+import ConfigView from './ConfigView/ConfigView';
 
 const { Title, Text } = Typography;
 
@@ -440,6 +441,12 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 onChange={(patch) => handleChange(patch)}
               />
             </Card>
+
+            {(!isDeveloper) && (
+              <Card size="small" title="Config View" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}>
+                <ConfigView mode={form.mode} resolvedConfig={resolvedConfig} />
+              </Card>
+            )}
           </Col>
 
           <Col span={8}>
