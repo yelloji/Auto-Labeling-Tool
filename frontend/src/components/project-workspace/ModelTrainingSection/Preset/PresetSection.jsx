@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space, Row, Col, Collapse } from 'antd';
 import { systemAPI } from '../../../../services/api';
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, box, cls, dfl, mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_plots, taskType }) {
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_plots, taskType }) {
   const OPTIMIZER_PRESETS = {
     SGD: { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 },
     Adam: { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 },
@@ -77,6 +77,11 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                 <Switch checked={earlyStop} onChange={(v) => onChange({ earlyStop: v })} />
               </Form.Item>
             </Col>
+            <Col span={12}>
+              <Form.Item label="Resume" tooltip="Resume training from last checkpoint when available">
+                <Switch checked={resume} onChange={(v) => onChange({ resume: v })} />
+              </Form.Item>
+            </Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}>
@@ -146,6 +151,9 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
               </Form.Item>
               <Form.Item label="Early Stop" tooltip="Allow stopping when no improvement for patience epochs">
                 <Switch checked={earlyStop} onChange={(v) => onChange({ earlyStop: v })} />
+              </Form.Item>
+              <Form.Item label="Resume" tooltip="Resume training from last checkpoint when available">
+                <Switch checked={resume} onChange={(v) => onChange({ resume: v })} />
               </Form.Item>
               <Form.Item label="Optimizer" tooltip="Smart auto picks based on device and batch size">
                 <Select value={optimizerMode === 'smart-auto' ? 'smart-auto' : (optimizer || undefined)} placeholder="Select">
@@ -269,6 +277,7 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
           <Collapse.Panel header="Augmentation" key="aug">
             <Row gutter={12}>
               <Col span={6}><Form.Item label="Mosaic" tooltip="Mosaic augmentation probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.3} value={mosaic} onChange={(v) => onChange({ mosaic: v })} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Close Mosaic" tooltip="Disable mosaic late in training"><Switch checked={close_mosaic} onChange={(v) => onChange({ close_mosaic: v })} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Mixup" tooltip="Mixup augmentation probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.03} onChange={(v) => onChange({ mixup: v })} /></Form.Item></Col>
               <Col span={4}><Form.Item label="HSV H" tooltip="Hue augmentation"><InputNumber min={0} max={1} step={0.001} placeholder={0.005} onChange={(v) => onChange({ hsv_h: v })} /></Form.Item></Col>
               <Col span={4}><Form.Item label="HSV S" tooltip="Saturation augmentation"><InputNumber min={0} max={1} step={0.01} placeholder={0.1} onChange={(v) => onChange({ hsv_s: v })} /></Form.Item></Col>

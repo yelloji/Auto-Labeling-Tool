@@ -32,6 +32,7 @@ const initialFormState = {
   mixedPrecision: true,
   earlyStop: true,
   saveBestOnly: true,
+  resume: false,
   device: 'cpu',
   gpuIndex: null,
   optimizerMode: 'smart-auto'
@@ -184,6 +185,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
             batch: form.batchSize,
             amp: form.mixedPrecision,
             early_stop: form.earlyStop,
+            resume: form.resume,
             device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
           },
           hyperparameters: {
@@ -198,6 +200,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
           },
           augmentation: {
             mosaic: form.mosaic,
+            close_mosaic: form.close_mosaic,
             mixup: form.mixup,
             hsv_h: form.hsv_h,
             hsv_s: form.hsv_s,
@@ -242,6 +245,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     form.batchSize,
     form.mixedPrecision,
     form.earlyStop,
+    form.resume,
     form.device,
     form.gpuIndex,
     form.lr0,
@@ -286,6 +290,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
       batch: form.batchSize,
       amp: form.mixedPrecision,
       early_stop: form.earlyStop,
+      resume: form.resume,
       save_best: form.saveBestOnly,
       model: form.pretrainedModel,
       device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu'
@@ -447,6 +452,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                               batch: form.batchSize,
                               amp: form.mixedPrecision,
                               early_stop: form.earlyStop,
+                              resume: form.resume,
                               device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
                               optimizer: (() => {
                                 if (form.optimizerMode === 'smart-auto') {
@@ -482,6 +488,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                             },
                             augmentation: {
                               mosaic: form.mosaic,
+                              close_mosaic: form.close_mosaic,
                               mixup: form.mixup,
                               hsv_h: form.hsv_h,
                               hsv_s: form.hsv_s,
