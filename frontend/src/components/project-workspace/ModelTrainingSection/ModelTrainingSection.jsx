@@ -72,6 +72,39 @@ const ModelTrainingSection = ({ projectId, project }) => {
     saveIdentity();
   }, [form.projectId, form.trainingName, form.description]);
 
+  // Persist selected model/framework/task
+  useEffect(() => {
+    const saveModel = async () => {
+      try {
+        if (!form.projectId || !form.trainingName) return;
+        await trainingAPI.updateSessionModel({
+          projectId: form.projectId,
+          name: form.trainingName,
+          baseModelId: form.pretrainedModel || null,
+          framework: form.framework || null,
+          task: form.taskType || null,
+          modelName: form.pretrainedModel || null,
+        });
+      } catch (_) {}
+    };
+    saveModel();
+  }, [form.projectId, form.trainingName, form.pretrainedModel, form.framework, form.taskType]);
+
+  // Persist dataset selection from zip: extract if needed, save dir + summary
+  useEffect(() => {
+    const saveDataset = async () => {
+      try {
+        if (!form.projectId || !form.trainingName || !form.datasetZipPath) return;
+        await trainingAPI.updateSessionDatasetFromZip({
+          projectId: form.projectId,
+          name: form.trainingName,
+          zipPath: form.datasetZipPath,
+        });
+      } catch (_) {}
+    };
+    saveDataset();
+  }, [form.projectId, form.trainingName, form.datasetZipPath]);
+
   const resolvedConfig = useMemo(() => ({
     project_id: form.projectId,
     training_name: form.trainingName,
@@ -366,35 +399,3 @@ const ModelTrainingSection = ({ projectId, project }) => {
 };
 
 export default ModelTrainingSection;
-  // Persist selected model/framework/task
-  useEffect(() => {
-    const saveModel = async () => {
-      try {
-        if (!form.projectId || !form.trainingName) return;
-        await trainingAPI.updateSessionModel({
-          projectId: form.projectId,
-          name: form.trainingName,
-          baseModelId: form.pretrainedModel || null,
-          framework: form.framework || null,
-          task: form.taskType || null,
-          modelName: form.pretrainedModel || null,
-        });
-      } catch (_) {}
-    };
-    saveModel();
-  }, [form.projectId, form.trainingName, form.pretrainedModel, form.framework, form.taskType]);
-
-  // Persist dataset selection from zip: extract if needed, save dir + summary
-  useEffect(() => {
-    const saveDataset = async () => {
-      try {
-        if (!form.projectId || !form.trainingName || !form.datasetZipPath) return;
-        await trainingAPI.updateSessionDatasetFromZip({
-          projectId: form.projectId,
-          name: form.trainingName,
-          zipPath: form.datasetZipPath,
-        });
-      } catch (_) {}
-    };
-    saveDataset();
-  }, [form.projectId, form.trainingName, form.datasetZipPath]);
