@@ -105,6 +105,169 @@ const ModelTrainingSection = ({ projectId, project }) => {
     saveDataset();
   }, [form.projectId, form.trainingName, form.datasetZipPath]);
 
+  // Auto-load resolved config and hydrate UI when returning (status=queued)
+  useEffect(() => {
+    const loadSession = async () => {
+      try {
+        if (!form.projectId || !form.trainingName) return;
+        const data = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
+        if (data && typeof data.resolved_config_json === 'string' && data.resolved_config_json.length) {
+          try {
+            const cfg = JSON.parse(data.resolved_config_json);
+            const patch = {};
+            const t = cfg?.train || {};
+            const h = cfg?.hyperparameters || {};
+            const a = cfg?.augmentation || {};
+            const v = cfg?.val || {};
+            const d = cfg?.dataset || {};
+            if (typeof t.epochs === 'number') patch.epochs = t.epochs;
+            if (typeof t.imgsz === 'number') patch.imgSize = t.imgsz;
+            if (typeof t.batch === 'number') patch.batchSize = t.batch;
+            if (typeof t.amp === 'boolean') patch.mixedPrecision = t.amp;
+            if (typeof t.early_stop === 'boolean') patch.earlyStop = t.early_stop;
+            if (typeof t.save_best === 'boolean') patch.saveBestOnly = t.save_best;
+            if (typeof t.model === 'string') patch.pretrainedModel = t.model;
+            if (typeof t.device === 'string') {
+              if (t.device.startsWith('cuda:')) {
+                patch.device = 'gpu';
+                const gi = Number(t.device.replace('cuda:', ''));
+                if (!Number.isNaN(gi)) patch.gpuIndex = gi;
+              } else {
+                patch.device = 'cpu';
+                patch.gpuIndex = null;
+              }
+            }
+            if (typeof h.lr0 === 'number') patch.lr0 = h.lr0;
+            if (typeof h.lrf === 'number') patch.lrf = h.lrf;
+            if (typeof h.warmup_epochs === 'number') patch.warmup_epochs = h.warmup_epochs;
+            if (typeof h.warmup_momentum === 'number') patch.warmup_momentum = h.warmup_momentum;
+            if (typeof h.warmup_bias_lr === 'number') patch.warmup_bias_lr = h.warmup_bias_lr;
+            if (typeof h.box === 'number') patch.box = h.box;
+            if (typeof h.cls === 'number') patch.cls = h.cls;
+            if (typeof h.dfl === 'number') patch.dfl = h.dfl;
+            if (typeof a.mosaic === 'boolean') patch.mosaic = a.mosaic;
+            if (typeof a.mixup === 'boolean') patch.mixup = a.mixup;
+            if (typeof a.hsv_h === 'number') patch.hsv_h = a.hsv_h;
+            if (typeof a.hsv_s === 'number') patch.hsv_s = a.hsv_s;
+            if (typeof a.hsv_v === 'number') patch.hsv_v = a.hsv_v;
+            if (typeof a.flipud === 'number' || typeof a.flipud === 'boolean') patch.flipud = a.flipud;
+            if (typeof a.fliplr === 'number' || typeof a.fliplr === 'boolean') patch.fliplr = a.fliplr;
+            if (typeof a.degrees === 'number') patch.degrees = a.degrees;
+            if (typeof a.translate === 'number') patch.translate = a.translate;
+            if (typeof a.scale === 'number') patch.scale = a.scale;
+            if (typeof a.shear === 'number') patch.shear = a.shear;
+            if (typeof a.perspective === 'number') patch.perspective = a.perspective;
+            if (typeof v.iou === 'number') patch.val_iou = v.iou;
+            if (typeof v.plots === 'boolean') patch.val_plots = v.plots;
+            if (Array.isArray(d.classes)) patch.classes = d.classes;
+            setForm(prev => ({ ...prev, ...patch }));
+            window.__resolvedServerConfig = cfg;
+          } catch {}
+        }
+      } catch {}
+    };
+    loadSession();
+  }, [form.projectId, form.trainingName]);
+
+  // Auto-resolve and save config on UI changes
+  useEffect(() => {
+    const autoSaveConfig = async () => {
+      try {
+        if (!form.projectId || !form.trainingName) return;
+        const overrides = {
+          train: {
+            model: form.pretrainedModel,
+            epochs: form.epochs,
+            imgsz: form.imgSize,
+            batch: form.batchSize,
+            amp: form.mixedPrecision,
+            early_stop: form.earlyStop,
+            device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
+          },
+          hyperparameters: {
+            lr0: form.lr0,
+            lrf: form.lrf,
+            warmup_epochs: form.warmup_epochs,
+            warmup_momentum: form.warmup_momentum,
+            warmup_bias_lr: form.warmup_bias_lr,
+            box: form.box,
+            cls: form.cls,
+            dfl: form.dfl,
+          },
+          augmentation: {
+            mosaic: form.mosaic,
+            mixup: form.mixup,
+            hsv_h: form.hsv_h,
+            hsv_s: form.hsv_s,
+            hsv_v: form.hsv_v,
+            flipud: form.flipud,
+            fliplr: form.fliplr,
+            degrees: form.degrees,
+            translate: form.translate,
+            scale: form.scale,
+            shear: form.shear,
+            perspective: form.perspective,
+          },
+          val: {
+            iou: form.val_iou,
+            plots: form.val_plots,
+          },
+          dataset: {
+            zip_path: form.datasetZipPath,
+            classes: form.classes,
+          },
+        };
+        const res = await trainingAPI.resolveConfig(form.framework, form.taskType, overrides);
+        const resolved = res?.resolved || overrides;
+        window.__resolvedServerConfig = resolved;
+        window.__argsPreview = (res?.preview?.args || []);
+        await trainingAPI.saveSessionConfig({
+          projectId: form.projectId,
+          name: form.trainingName,
+          resolvedConfig: resolved,
+        });
+      } catch {}
+    };
+    autoSaveConfig();
+  }, [
+    form.projectId,
+    form.trainingName,
+    form.framework,
+    form.taskType,
+    form.pretrainedModel,
+    form.epochs,
+    form.imgSize,
+    form.batchSize,
+    form.mixedPrecision,
+    form.earlyStop,
+    form.device,
+    form.gpuIndex,
+    form.lr0,
+    form.lrf,
+    form.warmup_epochs,
+    form.warmup_momentum,
+    form.warmup_bias_lr,
+    form.box,
+    form.cls,
+    form.dfl,
+    form.mosaic,
+    form.mixup,
+    form.hsv_h,
+    form.hsv_s,
+    form.hsv_v,
+    form.flipud,
+    form.fliplr,
+    form.degrees,
+    form.translate,
+    form.scale,
+    form.shear,
+    form.perspective,
+    form.val_iou,
+    form.val_plots,
+    form.datasetZipPath,
+    form.classes,
+  ]);
+
   const resolvedConfig = useMemo(() => ({
     project_id: form.projectId,
     training_name: form.trainingName,
