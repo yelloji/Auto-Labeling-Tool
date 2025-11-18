@@ -34,13 +34,21 @@ from logging_system.professional_logger import get_professional_logger
 logger = get_professional_logger()
 import time
 
+async def lifespan(app: FastAPI):
+    try:
+        await init_db()
+    except Exception as e:
+        logger.error("errors.system", f"init_db startup failed: {e}", "init_db_startup_failed", {"error": str(e)})
+    yield
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Auto-Labeling-Tool API",
     description="A comprehensive local auto and semi-automatic labeling tool for computer vision datasets",
     version="1.0.0",
     docs_url="/api/docs",
-    redoc_url="/api/redoc"
+    redoc_url="/api/redoc",
+    lifespan=lifespan
 )
 
 # Cache Control Middleware
@@ -429,10 +437,3 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
-# Ensure DB is initialized on startup
-@app.on_event("startup")
-async def startup_event():
-    try:
-        await init_db()
-    except Exception as e:
-        logger.error("errors.system", f"init_db startup failed: {e}", "init_db_startup_failed", {"error": str(e)})
