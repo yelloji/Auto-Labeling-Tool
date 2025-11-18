@@ -10,6 +10,7 @@ import TrainingDatasetSection from './TrainingDataset/TrainingDatasetSection';
 import PresetSection from './Preset/PresetSection';
 import './compact.css';
 import { trainingAPI } from '../../../services/api';
+import TerminalPanel from './Terminal/TerminalPanel';
 
 const { Title, Text } = Typography;
 
@@ -556,6 +557,13 @@ const ModelTrainingSection = ({ projectId, project }) => {
             </Affix>
           </Col>
         </Row>
+        {isDeveloper && (
+          <Row gutter={12} style={{ marginTop: 12 }}>
+            <Col span={16}>
+              <TerminalPanel projectId={form.projectId} trainingName={form.trainingName} visible={isDeveloper} />
+            </Col>
+          </Row>
+        )}
       </ConfigProvider>
     </div>
   );

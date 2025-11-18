@@ -1,9 +1,10 @@
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database.models import TrainingSession
-from database.database import get_db
+from database.database import get_db, SessionLocal
 from api.services.model_serialization import serialize_ai_model
 from models.training.model_selector import get_trainable_models
 from models.training.training_extraction import is_extracted, extract_release_zip
@@ -13,7 +14,11 @@ from pathlib import Path
 from sqlalchemy import and_
 from database.models import Release
 from database.models import Project
+from database.models import DevModeSetting
 from datetime import datetime
+import asyncio
+import os
+import hashlib
 
 router = APIRouter()
 
@@ -302,6 +307,69 @@ async def save_training_config(payload: SessionConfigSave, db: Session = Depends
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+def _hash_pw(s: str) -> str:
+    return hashlib.sha256((s or "").encode("utf-8")).hexdigest()
+
+
+@router.websocket("/training/session/terminal/logs")
+async def training_terminal_logs(websocket: WebSocket, project_id: int, name: str, password: str):
+    await websocket.accept()
+    db = SessionLocal()
+    try:
+        row = db.query(DevModeSetting).order_by(DevModeSetting.id.asc()).first()
+        ok = False
+        if row and row.master_password_hash and row.master_password_hash == _hash_pw(password):
+            ok = True
+        if row and row.password_hash and row.password_hash == _hash_pw(password):
+            ok = True
+        if not ok:
+            await websocket.send_text("unauthorized")
+            await websocket.close()
+            return
+        ts = (
+            db.query(TrainingSession)
+            .filter(and_(TrainingSession.project_id == project_id, TrainingSession.name == name))
+            .first()
+        )
+        if not ts:
+            await websocket.send_text("session_not_found")
+            await websocket.close()
+            return
+        log_path = None
+        if ts.logs_dir:
+            log_path = os.path.join(ts.logs_dir, "train.log")
+        if not log_path:
+            await websocket.send_text("no_logs_dir")
+            await websocket.close()
+            return
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        if not os.path.exists(log_path):
+            with open(log_path, "a", encoding="utf-8", errors="ignore") as f:
+                f.write("")
+        pos = 0
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                while True:
+                    f.seek(pos)
+                    chunk = f.read()
+                    if chunk:
+                        pos = f.tell()
+                        await websocket.send_text(chunk)
+                    await asyncio.sleep(0.5)
+        except WebSocketDisconnect:
+            return
+        except Exception:
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 
 @router.get("/training/config/default")
