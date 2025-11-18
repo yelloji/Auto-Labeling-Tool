@@ -11,7 +11,6 @@ import PresetSection from './Preset/PresetSection';
 import './compact.css';
 import { trainingAPI } from '../../../services/api';
 import TerminalPanel from './Terminal/TerminalPanel';
-import ConfigView from './ConfigView/ConfigView';
 
 const { Title, Text } = Typography;
 
@@ -165,6 +164,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
             if (typeof v.iou === 'number') patch.val_iou = v.iou;
             if (typeof v.plots === 'boolean') patch.val_plots = v.plots;
             if (Array.isArray(d.classes)) patch.classes = d.classes;
+            if (typeof data.dataset_release_dir === 'string' && data.dataset_release_dir.length) {
+              patch.datasetReleaseDir = data.dataset_release_dir;
+            }
             setForm(prev => ({ ...prev, ...patch }));
             window.__resolvedServerConfig = cfg;
           } catch {}
@@ -191,6 +193,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
         };
         if (typeof form.close_mosaic === 'number') {
           trainOverrides.close_mosaic = form.close_mosaic;
+        }
+        if (typeof form.datasetReleaseDir === 'string' && form.datasetReleaseDir.length) {
+          trainOverrides.data = `${form.datasetReleaseDir}/data.yaml`;
         }
         const overrides = {
           train: trainOverrides,
@@ -223,7 +228,6 @@ const ModelTrainingSection = ({ projectId, project }) => {
             plots: form.val_plots,
           },
           dataset: {
-            zip_path: form.datasetZipPath,
             classes: form.classes,
           },
         };
@@ -277,6 +281,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     form.val_plots,
     form.datasetZipPath,
     form.classes,
+    form.datasetReleaseDir,
   ]);
 
   const resolvedConfig = useMemo(() => ({
@@ -286,7 +291,6 @@ const ModelTrainingSection = ({ projectId, project }) => {
     task: form.taskType,
     dataset: {
       source: form.datasetSource,
-      zip_path: form.datasetZipPath,
       classes: form.classes
     },
     train: (() => {
@@ -303,6 +307,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
       };
       if (typeof form.close_mosaic === 'number') {
         t.close_mosaic = form.close_mosaic;
+      }
+      if (typeof form.datasetReleaseDir === 'string' && form.datasetReleaseDir.length) {
+        t.data = `${form.datasetReleaseDir}/data.yaml`;
       }
       return t;
     })()
@@ -442,11 +449,6 @@ const ModelTrainingSection = ({ projectId, project }) => {
               />
             </Card>
 
-            {(!isDeveloper) && (
-              <Card size="small" title="Config View" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}>
-                <ConfigView mode={form.mode} resolvedConfig={resolvedConfig} />
-              </Card>
-            )}
           </Col>
 
           <Col span={8}>
