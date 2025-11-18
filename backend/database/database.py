@@ -47,7 +47,7 @@ async def init_db():
             AutoLabelJob,
             Label, DatasetSplit, LabelAnalytics,
             Release, ImageTransformation, ImageVariant,
-            AiModel
+            AiModel, TrainingSession, DevModeSetting
         )
         from .operations import AiModelOperations
         

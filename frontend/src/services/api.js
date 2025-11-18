@@ -742,6 +742,14 @@ export const trainingAPI = {
     const response = await api.get(`/api/v1/training/dataset/summary?${params.toString()}`);
     return response.data;
   },
+  verifyDevPassword: async (password) => {
+    const response = await api.post('/api/v1/dev/auth/verify', { password });
+    return response.data;
+  },
+  changeDevPassword: async ({ currentPassword, newPassword }) => {
+    const response = await api.post('/api/v1/dev/auth/change', { current_password: currentPassword, new_password: newPassword });
+    return response.data;
+  },
   getTrainableModels: async (projectId, framework, task) => {
     try {
       const params = { framework, task };

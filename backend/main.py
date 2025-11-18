@@ -24,6 +24,7 @@ from api.routes import projects, datasets, annotations, models, enhanced_export,
 from models.training import api_routes as training_api
 from api.routes import analytics, augmentation, dataset_management
 from api.routes import image_transformations, logs, frontend_logs, release_detail_view
+from api.routes import dev_password
 from core.config import settings
 from database.database import init_db
 # Import professional logging system
@@ -135,6 +136,7 @@ app.include_router(enhanced_export.router, prefix="/api/v1/enhanced-export", tag
 app.include_router(releases.router, prefix="/api/v1", tags=["releases"])
 app.include_router(release_detail_view.router, prefix="/api/v1", tags=["release-details"])
 app.include_router(training_api.router, prefix="/api/v1", tags=["training"])
+app.include_router(dev_password.router, prefix="/api/v1", tags=["dev-auth"])
 
 # Include new feature routes
 app.include_router(analytics.router, tags=["analytics"])

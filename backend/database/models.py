@@ -594,3 +594,11 @@ class TrainingSession(Base):
 
     def __repr__(self):
         return f"<TrainingSession(id='{self.id}', name='{self.name}', project='{self.project_name}', status='{self.status}')>"
+
+
+class DevModeSetting(Base):
+    __tablename__ = "dev_mode_settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    password_hash = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
