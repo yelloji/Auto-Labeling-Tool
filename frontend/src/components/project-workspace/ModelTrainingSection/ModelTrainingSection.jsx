@@ -33,6 +33,7 @@ const initialFormState = {
   earlyStop: true,
   saveBestOnly: true,
   resume: false,
+  close_mosaic: 20,
   device: 'cpu',
   gpuIndex: null,
   optimizerMode: 'smart-auto'
@@ -186,6 +187,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
             amp: form.mixedPrecision,
             early_stop: form.earlyStop,
             resume: form.resume,
+            close_mosaic: form.close_mosaic,
             device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
           },
           hyperparameters: {
@@ -200,7 +202,6 @@ const ModelTrainingSection = ({ projectId, project }) => {
           },
           augmentation: {
             mosaic: form.mosaic,
-            close_mosaic: form.close_mosaic,
             mixup: form.mixup,
             hsv_h: form.hsv_h,
             hsv_s: form.hsv_s,
@@ -290,6 +291,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
       batch: form.batchSize,
       amp: form.mixedPrecision,
       early_stop: form.earlyStop,
+      close_mosaic: form.close_mosaic,
       resume: form.resume,
       save_best: form.saveBestOnly,
       model: form.pretrainedModel,
@@ -407,9 +409,10 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 cls={form.cls}
                 dfl={form.dfl}
                 mosaic={form.mosaic}
+                close_mosaic={form.close_mosaic}
                 mixup={form.mixup}
                 hsv_h={form.hsv_h}
-                hsv_s={form.hsv_s}
+                hsv_s={form.hsv_s}s
                 hsv_v={form.hsv_v}
                 flipud={form.flipud}
                 fliplr={form.fliplr}
@@ -453,6 +456,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                               amp: form.mixedPrecision,
                               early_stop: form.earlyStop,
                               resume: form.resume,
+                              close_mosaic: form.close_mosaic,
                               device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
                               optimizer: (() => {
                                 if (form.optimizerMode === 'smart-auto') {
