@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Card, Button, Input, Modal, Space } from 'antd'
 import { API_BASE_URL } from '../../../../config'
 
-export default function TerminalPanel({ projectId, trainingName, visible }) {
+export default function TerminalPanel({ projectId, trainingName, visible, autoPrompt = true, onClose }) {
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
   const [connecting, setConnecting] = useState(false)
@@ -45,25 +45,28 @@ export default function TerminalPanel({ projectId, trainingName, visible }) {
     try {
       if (wsRef.current) wsRef.current.close()
     } catch {}
+    if (typeof onClose === 'function') onClose()
   }
+
+  useEffect(() => {
+    if (visible && autoPrompt && !connected) {
+      setOpen(true)
+    }
+  }, [visible])
 
   if (!visible) return null
 
   return (
-    <Card size="small" title="Training Terminal" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}
+    <Card size="small" title="AI Console" bodyStyle={{ padding: 12 }} style={{ position: 'fixed', right: 24, bottom: 24, width: 520, zIndex: 1000 }}
       extra={
         <Space>
-          {!connected && (
-            <Button size="small" type="primary" onClick={() => setOpen(true)}>Open</Button>
-          )}
-          {connected && (
-            <Button size="small" onClick={disconnect}>Close</Button>
-          )}
+          {!connected && (<Button size="small" type="primary" onClick={() => setOpen(true)}>Connect</Button>)}
+          <Button size="small" onClick={disconnect}>Hide</Button>
         </Space>
       }
     >
-      <div style={{ background: '#111', color: '#d0d0d0', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, lineHeight: 1.4, borderRadius: 6, padding: 8, height: 260, overflow: 'auto' }} ref={preRef}>
-        <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{logText || 'Terminal closed'}</pre>
+      <div style={{ background: '#0b1e3b', color: '#c0c0c0', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, lineHeight: 1.4, borderRadius: 6, padding: 8, height: 260, overflow: 'auto' }} ref={preRef}>
+        <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{logText || 'Diagnostics hidden'}</pre>
       </div>
 
       <Modal open={open} title="Enter Terminal Password" onOk={connect} onCancel={() => setOpen(false)} confirmLoading={connecting} okText="Connect">

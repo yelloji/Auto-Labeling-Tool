@@ -51,6 +51,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
   const [form, setForm] = useState({ ...initialFormState, projectId });
   const isDeveloper = form.mode === 'developer';
   const handleChange = (patch) => setForm((prev) => ({ ...prev, ...patch }));
+  const [consoleVisible, setConsoleVisible] = useState(false);
 
   useEffect(() => {
     if (projectId && projectId !== form.projectId) {
@@ -321,7 +322,12 @@ const ModelTrainingSection = ({ projectId, project }) => {
             <ThunderboltOutlined style={{ marginRight: 8 }} />
             Model Training
           </Title>
-          <ModeToggle mode={form.mode} onChange={(mode) => handleChange({ mode })} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {isDeveloper && (
+              <Button size="small" onClick={() => setConsoleVisible(true)}>AI Console</Button>
+            )}
+            <ModeToggle mode={form.mode} onChange={(mode) => handleChange({ mode })} />
+          </div>
         </div>
         <div style={{ marginTop: 8 }}>
           <Steps size="small" current={currentStep} items={[
@@ -557,12 +563,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
             </Affix>
           </Col>
         </Row>
-        {isDeveloper && (
-          <Row gutter={12} style={{ marginTop: 12 }}>
-            <Col span={16}>
-              <TerminalPanel projectId={form.projectId} trainingName={form.trainingName} visible={isDeveloper} />
-            </Col>
-          </Row>
+        {isDeveloper && consoleVisible && (
+          <TerminalPanel projectId={form.projectId} trainingName={form.trainingName} visible={consoleVisible} autoPrompt onClose={() => setConsoleVisible(false)} />
         )}
       </ConfigProvider>
     </div>
