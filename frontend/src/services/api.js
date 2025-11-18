@@ -776,6 +776,33 @@ export const trainingAPI = {
       params: { project_id: projectId, name }
     });
     return response.data;
+  },
+  updateSessionModel: async ({ projectId, name, baseModelId, framework, task, modelName }) => {
+    const response = await api.post('/api/v1/training/session/update-model', {
+      project_id: projectId,
+      name,
+      base_model_id: baseModelId,
+      framework,
+      task,
+      model_name: modelName,
+    });
+    return response.data;
+  },
+  updateSessionDatasetFromZip: async ({ projectId, name, zipPath }) => {
+    const response = await api.post('/api/v1/training/session/update-dataset-from-zip', {
+      project_id: projectId,
+      name,
+      zip_path: zipPath,
+    });
+    return response.data;
+  },
+  saveSessionConfig: async ({ projectId, name, resolvedConfig }) => {
+    const response = await api.post('/api/v1/training/session/save-config', {
+      project_id: projectId,
+      name,
+      resolved_config_json: resolvedConfig,
+    });
+    return response.data;
   }
 };
 

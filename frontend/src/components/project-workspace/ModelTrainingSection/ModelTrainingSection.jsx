@@ -305,6 +305,14 @@ const ModelTrainingSection = ({ projectId, project }) => {
                           // We don't change the memo; we show server-resolved in the preview below
                           window.__resolvedServerConfig = resolved;
                           window.__argsPreview = (res?.preview?.args || []);
+                          // Save resolved config to session
+                          if (form.projectId && form.trainingName) {
+                            await trainingAPI.saveSessionConfig({
+                              projectId: form.projectId,
+                              name: form.trainingName,
+                              resolvedConfig: resolved,
+                            });
+                          }
                         } catch (e) {}
                       }}
                     >Preflight</Button>
@@ -352,3 +360,35 @@ const ModelTrainingSection = ({ projectId, project }) => {
 };
 
 export default ModelTrainingSection;
+  // Persist selected model/framework/task
+  useEffect(() => {
+    const saveModel = async () => {
+      try {
+        if (!form.projectId || !form.trainingName) return;
+        await trainingAPI.updateSessionModel({
+          projectId: form.projectId,
+          name: form.trainingName,
+          baseModelId: form.pretrainedModel || null,
+          framework: form.framework || null,
+          task: form.taskType || null,
+          modelName: form.pretrainedModel || null,
+        });
+      } catch (_) {}
+    };
+    saveModel();
+  }, [form.projectId, form.trainingName, form.pretrainedModel, form.framework, form.taskType]);
+
+  // Persist dataset selection from zip: extract if needed, save dir + summary
+  useEffect(() => {
+    const saveDataset = async () => {
+      try {
+        if (!form.projectId || !form.trainingName || !form.datasetZipPath) return;
+        await trainingAPI.updateSessionDatasetFromZip({
+          projectId: form.projectId,
+          name: form.trainingName,
+          zipPath: form.datasetZipPath,
+        });
+      } catch (_) {}
+    };
+    saveDataset();
+  }, [form.projectId, form.trainingName, form.datasetZipPath]);

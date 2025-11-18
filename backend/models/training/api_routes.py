@@ -10,6 +10,8 @@ from models.training.training_extraction import is_extracted, extract_release_zi
 from models.training.config import load_base_config, resolve_config, build_args_preview
 from models.training.dataset_summary import summarize_dataset, find_and_summarize
 from pathlib import Path
+from sqlalchemy import and_
+from database.models import Release
 
 router = APIRouter()
 
@@ -127,6 +129,119 @@ async def get_training_session(project_id: int = Query(...), name: str = Query(.
             "dataset_summary_json": ts.dataset_summary_json,
             "resolved_config_json": ts.resolved_config_json,
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Update selected model/framework/task for session
+class SessionModelUpdate(BaseModel):
+    project_id: int
+    name: str
+    base_model_id: Optional[str] = None
+    framework: Optional[str] = None
+    task: Optional[str] = None
+    model_name: Optional[str] = None
+
+
+@router.post("/training/session/update-model")
+async def update_training_model(payload: SessionModelUpdate, db: Session = Depends(get_db)):
+    try:
+        ts = (
+            db.query(TrainingSession)
+            .filter(and_(TrainingSession.project_id == payload.project_id, TrainingSession.name == payload.name))
+            .first()
+        )
+        if not ts:
+            raise HTTPException(status_code=404, detail="Training session not found")
+        if payload.base_model_id is not None:
+            ts.base_model_id = payload.base_model_id
+        if payload.framework is not None:
+            ts.framework = payload.framework
+        if payload.task is not None:
+            ts.task = payload.task
+        if payload.model_name is not None:
+            ts.model_name = payload.model_name
+        db.add(ts)
+        db.commit()
+        db.refresh(ts)
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Update dataset info for session based on zip path
+class SessionDatasetUpdate(BaseModel):
+    project_id: int
+    name: str
+    zip_path: str
+
+
+@router.post("/training/session/update-dataset-from-zip")
+async def update_training_dataset_from_zip(payload: SessionDatasetUpdate, db: Session = Depends(get_db)):
+    try:
+        ts = (
+            db.query(TrainingSession)
+            .filter(and_(TrainingSession.project_id == payload.project_id, TrainingSession.name == payload.name))
+            .first()
+        )
+        if not ts:
+            raise HTTPException(status_code=404, detail="Training session not found")
+        # Ensure extracted dir
+        exists, rel_dir = is_extracted(payload.zip_path)
+        if not exists:
+            rel_dir = extract_release_zip(payload.zip_path)
+        # Compute summary
+        summary = find_and_summarize(Path(rel_dir))
+        # Try link to release by zip path
+        release = (
+            db.query(Release)
+            .filter(Release.model_path == payload.zip_path)
+            .first()
+        )
+        ts.dataset_release_id = release.id if release else None
+        ts.dataset_release_dir = rel_dir
+        ts.dataset_summary_json = summary and (summary if isinstance(summary, str) else None)
+        if not isinstance(summary, str):
+            # ensure JSON string
+            import json as _json
+            ts.dataset_summary_json = _json.dumps(summary)
+        db.add(ts)
+        db.commit()
+        return {"ok": True, "dataset_release_id": ts.dataset_release_id, "dataset_release_dir": ts.dataset_release_dir}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Save resolved config
+class SessionConfigSave(BaseModel):
+    project_id: int
+    name: str
+    resolved_config_json: Dict[str, Any]
+
+
+@router.post("/training/session/save-config")
+async def save_training_config(payload: SessionConfigSave, db: Session = Depends(get_db)):
+    try:
+        ts = (
+            db.query(TrainingSession)
+            .filter(and_(TrainingSession.project_id == payload.project_id, TrainingSession.name == payload.name))
+            .first()
+        )
+        if not ts:
+            raise HTTPException(status_code=404, detail="Training session not found")
+        import json as _json
+        ts.resolved_config_json = _json.dumps(payload.resolved_config_json)
+        db.add(ts)
+        db.commit()
+        return {"ok": True}
     except HTTPException:
         raise
     except Exception as e:
