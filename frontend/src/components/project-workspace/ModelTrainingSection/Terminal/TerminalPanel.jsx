@@ -9,6 +9,7 @@ export default function TerminalPanel({ projectId, trainingName, visible, autoPr
   const [connected, setConnected] = useState(false)
   const [logText, setLogText] = useState('')
   const [pos, setPos] = useState({ x: 24, y: 64 })
+  const [size, setSize] = useState({ w: 520, h: 260 })
   const wsRef = useRef(null)
   const preRef = useRef(null)
 
@@ -58,10 +59,46 @@ export default function TerminalPanel({ projectId, trainingName, visible, autoPr
   if (!visible) return null
 
   const onDragStart = (e) => {
+    const controls = e.target.closest('.ai-console-controls')
+    if (controls) return
     const sx = e.clientX, sy = e.clientY
     const ix = pos.x, iy = pos.y
+    let rafId = null
     const move = (ev) => {
-      setPos({ x: Math.max(12, ix + (ev.clientX - sx)), y: Math.max(12, iy + (ev.clientY - sy)) })
+      const nx = Math.max(12, ix + (ev.clientX - sx))
+      const ny = Math.max(12, iy + (ev.clientY - sy))
+      if (rafId) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => setPos({ x: nx, y: ny }))
+    }
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
+  const onResizeRight = (e) => {
+    const sx = e.clientX
+    const iw = size.w
+    const move = (ev) => {
+      const nw = Math.max(360, Math.min(1400, iw + (ev.clientX - sx)))
+      setSize(s => ({ ...s, w: nw }))
+    }
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
+  const onResizeBottom = (e) => {
+    const sy = e.clientY
+    const ih = size.h
+    const move = (ev) => {
+      const nh = Math.max(140, Math.min(900, ih + (ev.clientY - sy)))
+      setSize(s => ({ ...s, h: nh }))
     }
     const up = () => {
       window.removeEventListener('mousemove', move)
@@ -72,18 +109,20 @@ export default function TerminalPanel({ projectId, trainingName, visible, autoPr
   }
 
   return (
-    <Card size="small" title="AI Console" bodyStyle={{ padding: 12 }} style={{ position: 'fixed', left: pos.x, top: pos.y, width: 520, zIndex: 1000 }}
+    <Card size="small" title="AI Console" bodyStyle={{ padding: 12 }} style={{ position: 'fixed', left: pos.x, top: pos.y, width: size.w, zIndex: 1000, userSelect: 'none' }}
       extra={
-        <Space>
+        <Space className="ai-console-controls">
           {!connected && (<Button size="small" type="primary" onClick={() => setOpen(true)}>Connect</Button>)}
           <Button size="small" onClick={disconnect}>Hide</Button>
         </Space>
       }
+      onMouseDown={onDragStart}
     >
-      <div style={{ cursor: 'move', marginBottom: 8, color: '#c0c0c0' }} onMouseDown={onDragStart}>Drag to move</div>
-      <div style={{ background: '#0b1e3b', color: '#c0c0c0', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, lineHeight: 1.4, borderRadius: 6, padding: 8, height: 260, overflow: 'auto' }} ref={preRef}>
-        <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{logText || 'Diagnostics hidden'}</pre>
+      <div style={{ background: '#0b1e3b', color: '#c0c0c0', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, lineHeight: 1.4, borderRadius: 6, padding: 8, height: size.h, overflow: 'auto' }} ref={preRef}>
+        <pre style={{ whiteSpace: 'pre', margin: 0 }}>{logText || 'Diagnostics hidden'}</pre>
       </div>
+      <div style={{ position: 'absolute', right: 0, top: '50%', width: 8, height: 40, cursor: 'ew-resize' }} onMouseDown={onResizeRight} />
+      <div style={{ position: 'absolute', left: '50%', bottom: 0, width: 40, height: 8, cursor: 'ns-resize' }} onMouseDown={onResizeBottom} />
 
       <Modal open={open} title="Enter Terminal Password" onOk={connect} onCancel={() => setOpen(false)} confirmLoading={connecting} okText="Connect">
         <Input.Password value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Developer/terminal password" />
