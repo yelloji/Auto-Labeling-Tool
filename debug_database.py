@@ -921,6 +921,44 @@ class DatabaseDebugger:
             print(f"   📅 Created: {row['created_at']}")
             print(f"   🔄 Updated: {row['updated_at'] if 'updated_at' in row.keys() else 'N/A'}")
 
+    def get_dev_mode_settings_table(self):
+        """Show developer mode settings table (password state)"""
+        cursor = self.conn.cursor()
+
+        self.print_header("DEV MODE SETTINGS TABLE")
+
+        # Check table existence
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='dev_mode_settings'")
+        if not cursor.fetchone():
+            print("❌ dev_mode_settings table does not exist!")
+            return
+
+        # Schema
+        print("\n📐 Schema:")
+        cursor.execute("PRAGMA table_info(dev_mode_settings)")
+        for col in cursor.fetchall():
+            col_info = f"   - {col[1]} ({col[2]})"
+            if col[3]:
+                col_info += " NOT NULL"
+            if col[4] is not None:
+                col_info += f" DEFAULT {col[4]}"
+            if col[5]:
+                col_info += " PRIMARY KEY"
+            print(col_info)
+
+        # Row count
+        cursor.execute("SELECT COUNT(*) FROM dev_mode_settings")
+        count = cursor.fetchone()[0]
+        print(f"\n📊 Total rows: {count}")
+
+        # Show the first record (if any)
+        if count:
+            cursor.execute("SELECT id, password_hash, updated_at FROM dev_mode_settings ORDER BY id LIMIT 1")
+            row = cursor.fetchone()
+            print(f"\n🗂️  Current Setting:")
+            has_pw = bool(row[1])
+            print(f"   id: {row[0]} • updated_at: {row[2]} • password_set: {'Yes' if has_pw else 'No'}")
+
     def get_image_transformations_table(self):
         """Get detailed information about image transformations"""
         cursor = self.conn.cursor()
@@ -1329,6 +1367,7 @@ class DatabaseDebugger:
             self.get_database_statistics()
             self.get_table_info()
             self.get_ai_models_table()  # Add AI models table analysis
+            self.get_dev_mode_settings_table()  # Show dev-mode settings
             self.get_training_sessions_table()  # Training sessions table analysis
             self.get_projects_overview()
             self.get_datasets_detailed()
