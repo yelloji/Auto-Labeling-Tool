@@ -10,6 +10,7 @@ export default function TerminalPanel({ projectId, trainingName, visible, autoPr
   const [logText, setLogText] = useState('')
   const [pos, setPos] = useState({ x: 24, y: 64 })
   const [size, setSize] = useState({ w: 520, h: 260 })
+  const [expanded, setExpanded] = useState(false)
   const wsRef = useRef(null)
   const preRef = useRef(null)
 
@@ -113,12 +114,17 @@ export default function TerminalPanel({ projectId, trainingName, visible, autoPr
       extra={
         <Space className="ai-console-controls">
           {!connected && (<Button size="small" type="primary" onClick={() => setOpen(true)}>Connect</Button>)}
+          <Button size="small" onClick={() => {
+            const target = expanded ? 520 : Math.max(720, Math.min((window.innerWidth || 1200) - 48, 1600))
+            setSize(s => ({ ...s, w: target }))
+            setExpanded(!expanded)
+          }}>{expanded ? 'Collapse' : 'Expand'}</Button>
           <Button size="small" onClick={disconnect}>Hide</Button>
         </Space>
       }
       onMouseDown={onDragStart}
     >
-      <div style={{ background: '#0b1e3b', color: '#c0c0c0', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, lineHeight: 1.4, borderRadius: 6, padding: 8, height: size.h, overflow: 'auto' }} ref={preRef}>
+      <div style={{ background: '#0b1e3b', color: '#c0c0c0', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, lineHeight: 1.4, borderRadius: 6, padding: 8, height: size.h, overflowY: 'auto', overflowX: 'auto' }} ref={preRef}>
         <pre style={{ whiteSpace: 'pre', margin: 0 }}>{logText || 'Diagnostics hidden'}</pre>
       </div>
       <div style={{ position: 'absolute', right: 0, top: '50%', width: 8, height: 40, cursor: 'ew-resize' }} onMouseDown={onResizeRight} />
