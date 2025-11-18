@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import hashlib
@@ -54,7 +55,9 @@ async def change_password(payload: ChangeRequest, db: Session = Depends(get_db))
         return {"ok": True}
     if row.password_hash:
         cpw = payload.current_password or ""
-        if row.password_hash != _hash(cpw):
+        is_current = (row.password_hash == _hash(cpw))
+        is_master = (row.master_password_hash and row.master_password_hash == _hash(cpw))
+        if not (is_current or is_master):
             raise HTTPException(status_code=401, detail="Current password incorrect")
     row.password_hash = _hash(npw)
     db.add(row)

@@ -196,9 +196,25 @@ async def init_db():
             try:
                 from .models import DevModeSetting
                 if db.query(DevModeSetting).count() == 0:
-                    db.add(DevModeSetting(password_hash=hashlib.sha256(b"0000").hexdigest()))
+                    db.add(DevModeSetting(
+                        password_hash=hashlib.sha256(b"0000").hexdigest(),
+                        master_password_hash=hashlib.sha256(b"gevis").hexdigest()
+                    ))
                     db.commit()
                     logger.info("app.security", "Seeded default dev password", "dev_password_seeded", {"default": True})
+                else:
+                    # Migration: add master_password_hash if missing
+                    with engine.begin() as conn:
+                        cols = conn.execute(text("PRAGMA table_info(dev_mode_settings)")).fetchall()
+                        names = {c[1] for c in cols}
+                        if "master_password_hash" not in names:
+                            conn.execute(text("ALTER TABLE dev_mode_settings ADD COLUMN master_password_hash TEXT"))
+                        # Ensure at least one row has master set
+                    row = db.query(DevModeSetting).order_by(DevModeSetting.id.asc()).first()
+                    if row and not row.master_password_hash:
+                        row.master_password_hash = hashlib.sha256(b"gevis").hexdigest()
+                        db.add(row)
+                        db.commit()
             except Exception as seed_err:
                 logger.warning("errors.system", f"DevModeSetting seed failed: {seed_err}", "dev_password_seed_failed", {"error": str(seed_err)})
         except Exception as sync_err:

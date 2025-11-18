@@ -601,4 +601,5 @@ class DevModeSetting(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     password_hash = Column(Text, nullable=True)
+    master_password_hash = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

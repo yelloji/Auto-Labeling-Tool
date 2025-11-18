@@ -30,9 +30,6 @@ export default function ModeToggle({ mode, onChange }) {
           ]}
         />
       </Tooltip>
-      <div style={{ marginLeft: 8 }}>
-        <Button size="small" onClick={() => setShowChange(true)}>Change Password</Button>
-      </div>
       <Modal
         title="Developer Mode"
         open={showVerify}
@@ -53,7 +50,12 @@ export default function ModeToggle({ mode, onChange }) {
         }}
         okText="Enter"
       >
-        <Input.Password placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <div style={{ display: 'grid', gap: 8 }}>
+          <Input.Password placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <div>
+            <Button type="link" size="small" onClick={() => { setShowVerify(false); setShowChange(true); }}>Change password</Button>
+          </div>
+        </div>
       </Modal>
       <Modal
         title="Change Developer Password"
@@ -79,6 +81,7 @@ export default function ModeToggle({ mode, onChange }) {
           <Input.Password placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
           <Input.Password placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
           <Input.Password placeholder="Repeat new password" value={newPassword2} onChange={(e) => setNewPassword2(e.target.value)} />
+          
         </div>
       </Modal>
     </div>
