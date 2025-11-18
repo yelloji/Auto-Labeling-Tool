@@ -277,7 +277,13 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
           <Collapse.Panel header="Augmentation" key="aug">
             <Row gutter={12}>
               <Col span={6}><Form.Item label="Mosaic" tooltip="Mosaic augmentation probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.3} value={mosaic} onChange={(v) => onChange({ mosaic: v })} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Close Mosaic (final epochs)" tooltip="Disable mosaic for last N epochs (0 = disabled)"><InputNumber min={0} max={500} step={1} placeholder={20} value={typeof close_mosaic === 'number' ? close_mosaic : undefined} onChange={(v) => onChange({ close_mosaic: v })} /></Form.Item></Col>
+              {isDeveloper && (
+                <Col span={6}>
+                  <Form.Item label="Close Mosaic (final epochs)" tooltip="Disable mosaic for last N epochs (0 = disabled)">
+                    <InputNumber min={0} max={500} step={1} placeholder={20} value={typeof close_mosaic === 'number' ? close_mosaic : undefined} onChange={(v) => onChange({ close_mosaic: v })} />
+                  </Form.Item>
+                </Col>
+              )}
               <Col span={6}><Form.Item label="Mixup" tooltip="Mixup augmentation probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.03} onChange={(v) => onChange({ mixup: v })} /></Form.Item></Col>
               <Col span={4}><Form.Item label="HSV H" tooltip="Hue augmentation"><InputNumber min={0} max={1} step={0.001} placeholder={0.005} onChange={(v) => onChange({ hsv_h: v })} /></Form.Item></Col>
               <Col span={4}><Form.Item label="HSV S" tooltip="Saturation augmentation"><InputNumber min={0} max={1} step={0.01} placeholder={0.1} onChange={(v) => onChange({ hsv_s: v })} /></Form.Item></Col>
