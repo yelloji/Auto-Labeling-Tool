@@ -98,7 +98,6 @@ class Image(Base):
     
     # Dataset relationship
     dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
-    dataset_release_id = Column(String, ForeignKey("releases.id"), nullable=True)
     dataset = relationship("Dataset", back_populates="images")
     
     # Status tracking

@@ -429,10 +429,3 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
-# Ensure DB is initialized on startup
-@app.on_event("startup")
-async def startup_event():
-    try:
-        await init_db()
-    except Exception as e:
-        logger.error("errors.system", f"init_db startup failed: {e}", "init_db_startup_failed", {"error": str(e)})

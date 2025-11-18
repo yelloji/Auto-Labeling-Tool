@@ -172,6 +172,8 @@ async def init_db():
         except Exception as ts_err:
             logger.warning("errors.system", f"Training sessions migration failed: {ts_err}", "training_sessions_migration_failed", {"error": str(ts_err)})
 
+        
+
         # Create directories if they don't exist
         logger.info("app.database", "Creating required directories", "directories_creation_start", {
             "database_path": settings.DATABASE_PATH,
