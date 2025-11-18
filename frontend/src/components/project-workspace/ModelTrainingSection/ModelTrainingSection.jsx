@@ -33,7 +33,7 @@ const initialFormState = {
   earlyStop: true,
   saveBestOnly: true,
   resume: false,
-  close_mosaic: 20,
+  close_mosaic: null,
   device: 'cpu',
   gpuIndex: null,
   optimizerMode: 'smart-auto'
@@ -178,18 +178,21 @@ const ModelTrainingSection = ({ projectId, project }) => {
     const autoSaveConfig = async () => {
       try {
         if (!form.projectId || !form.trainingName) return;
+        const trainOverrides = {
+          model: form.pretrainedModel,
+          epochs: form.epochs,
+          imgsz: form.imgSize,
+          batch: form.batchSize,
+          amp: form.mixedPrecision,
+          early_stop: form.earlyStop,
+          resume: form.resume,
+          device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
+        };
+        if (typeof form.close_mosaic === 'number') {
+          trainOverrides.close_mosaic = form.close_mosaic;
+        }
         const overrides = {
-          train: {
-            model: form.pretrainedModel,
-            epochs: form.epochs,
-            imgsz: form.imgSize,
-            batch: form.batchSize,
-            amp: form.mixedPrecision,
-            early_stop: form.earlyStop,
-            resume: form.resume,
-            close_mosaic: form.close_mosaic,
-            device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
-          },
+          train: trainOverrides,
           hyperparameters: {
             lr0: form.lr0,
             lrf: form.lrf,
@@ -285,18 +288,23 @@ const ModelTrainingSection = ({ projectId, project }) => {
       zip_path: form.datasetZipPath,
       classes: form.classes
     },
-    train: {
-      epochs: form.epochs,
-      imgsz: form.imgSize,
-      batch: form.batchSize,
-      amp: form.mixedPrecision,
-      early_stop: form.earlyStop,
-      close_mosaic: form.close_mosaic,
-      resume: form.resume,
-      save_best: form.saveBestOnly,
-      model: form.pretrainedModel,
-      device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu'
-    }
+    train: (() => {
+      const t = {
+        epochs: form.epochs,
+        imgsz: form.imgSize,
+        batch: form.batchSize,
+        amp: form.mixedPrecision,
+        early_stop: form.earlyStop,
+        resume: form.resume,
+        save_best: form.saveBestOnly,
+        model: form.pretrainedModel,
+        device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu'
+      };
+      if (typeof form.close_mosaic === 'number') {
+        t.close_mosaic = form.close_mosaic;
+      }
+      return t;
+    })()
   }), [form]);
 
   const readiness = useMemo(() => ({
@@ -448,38 +456,43 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       onClick={async () => {
                         try {
                           const overrides = {
-                            train: {
-                              model: form.pretrainedModel,
-                              epochs: form.epochs,
-                              imgsz: form.imgSize,
-                              batch: form.batchSize,
-                              amp: form.mixedPrecision,
-                              early_stop: form.earlyStop,
-                              resume: form.resume,
-                              close_mosaic: form.close_mosaic,
-                              device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
-                              optimizer: (() => {
-                                if (form.optimizerMode === 'smart-auto') {
-                                  const isGPU = form.device === 'gpu';
-                                  const bsz = typeof form.batchSize === 'number' ? form.batchSize : 0;
-                                  if (!isGPU) return 'Adam';
-                                  if (bsz >= 32) return 'SGD';
-                                  return 'AdamW';
-                                }
-                                return form.optimizer;
-                              })(),
-                              momentum: form.momentum,
-                              weight_decay: form.weight_decay,
-                              cos_lr: form.cos_lr,
-                              patience: form.patience,
-                              save_period: form.save_period,
-                              workers: form.workers,
-                              overlap_mask: form.overlap_mask,
-                              mask_ratio: form.mask_ratio,
-                              single_cls: form.single_cls,
-                              rect: form.rect,
-                              freeze: form.freeze
-                            },
+                            train: (() => {
+                              const t = {
+                                model: form.pretrainedModel,
+                                epochs: form.epochs,
+                                imgsz: form.imgSize,
+                                batch: form.batchSize,
+                                amp: form.mixedPrecision,
+                                early_stop: form.earlyStop,
+                                resume: form.resume,
+                                device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
+                                optimizer: (() => {
+                                  if (form.optimizerMode === 'smart-auto') {
+                                    const isGPU = form.device === 'gpu';
+                                    const bsz = typeof form.batchSize === 'number' ? form.batchSize : 0;
+                                    if (!isGPU) return 'Adam';
+                                    if (bsz >= 32) return 'SGD';
+                                    return 'AdamW';
+                                  }
+                                  return form.optimizer;
+                                })(),
+                                momentum: form.momentum,
+                                weight_decay: form.weight_decay,
+                                cos_lr: form.cos_lr,
+                                patience: form.patience,
+                                save_period: form.save_period,
+                                workers: form.workers,
+                                overlap_mask: form.overlap_mask,
+                                mask_ratio: form.mask_ratio,
+                                single_cls: form.single_cls,
+                                rect: form.rect,
+                                freeze: form.freeze
+                              };
+                              if (typeof form.close_mosaic === 'number') {
+                                t.close_mosaic = form.close_mosaic;
+                              }
+                              return t;
+                            })(),
                             hyperparameters: {
                               lr0: form.lr0,
                               lrf: form.lrf,
