@@ -106,6 +106,71 @@ async def init_db():
 
         
         
+        # Training sessions schema migration/additions (safe, additive)
+        try:
+            with engine.begin() as conn:
+                cols = conn.execute(text("PRAGMA table_info(training_sessions)")).fetchall()
+                existing = {c[1] for c in cols}
+                def add_col(sql):
+                    conn.execute(text(sql))
+                add_map = {
+                    "training_uid": "ALTER TABLE training_sessions ADD COLUMN training_uid TEXT",
+                    "project_id": "ALTER TABLE training_sessions ADD COLUMN project_id INTEGER",
+                    "project_name": "ALTER TABLE training_sessions ADD COLUMN project_name TEXT",
+                    "framework": "ALTER TABLE training_sessions ADD COLUMN framework VARCHAR(32)",
+                    "task": "ALTER TABLE training_sessions ADD COLUMN task VARCHAR(32)",
+                    "model_name": "ALTER TABLE training_sessions ADD COLUMN model_name TEXT",
+                    "dataset_release_id": "ALTER TABLE training_sessions ADD COLUMN dataset_release_id TEXT",
+                    "dataset_release_dir": "ALTER TABLE training_sessions ADD COLUMN dataset_release_dir TEXT",
+                    "dataset_summary_json": "ALTER TABLE training_sessions ADD COLUMN dataset_summary_json TEXT",
+                    "resolved_config_json": "ALTER TABLE training_sessions ADD COLUMN resolved_config_json TEXT",
+                    "run_dir": "ALTER TABLE training_sessions ADD COLUMN run_dir TEXT",
+                    "weights_dir": "ALTER TABLE training_sessions ADD COLUMN weights_dir TEXT",
+                    "best_weights_path": "ALTER TABLE training_sessions ADD COLUMN best_weights_path TEXT",
+                    "logs_dir": "ALTER TABLE training_sessions ADD COLUMN logs_dir TEXT",
+                    "artifacts_dir": "ALTER TABLE training_sessions ADD COLUMN artifacts_dir TEXT",
+                    "progress_pct": "ALTER TABLE training_sessions ADD COLUMN progress_pct INTEGER DEFAULT 0",
+                    "best_epoch": "ALTER TABLE training_sessions ADD COLUMN best_epoch INTEGER",
+                    "best_box_map50": "ALTER TABLE training_sessions ADD COLUMN best_box_map50 FLOAT DEFAULT 0.0",
+                    "best_box_map95": "ALTER TABLE training_sessions ADD COLUMN best_box_map95 FLOAT DEFAULT 0.0",
+                    "best_mask_map50": "ALTER TABLE training_sessions ADD COLUMN best_mask_map50 FLOAT",
+                    "best_mask_map95": "ALTER TABLE training_sessions ADD COLUMN best_mask_map95 FLOAT",
+                    "metrics_json": "ALTER TABLE training_sessions ADD COLUMN metrics_json TEXT",
+                    "last_update_at": "ALTER TABLE training_sessions ADD COLUMN last_update_at DATETIME",
+                    "error_msg": "ALTER TABLE training_sessions ADD COLUMN error_msg TEXT"
+                }
+                for col, sql_stmt in add_map.items():
+                    if "training_sessions" in {t[0] for t in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}:
+                        if col not in existing:
+                            try:
+                                add_col(sql_stmt)
+                            except Exception as e:
+                                logger.warning("errors.system", f"Could not add column {col} to training_sessions: {e}", "training_sessions_add_column_failed", {"error": str(e), "column": col})
+                # Create indexes
+                try:
+                    conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_training_sessions_project_name ON training_sessions(project_id, name)"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_training_sessions_uid ON training_sessions(training_uid)"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_training_sessions_project_status ON training_sessions(project_id, status)"))
+                except Exception:
+                    pass
+                # Backfill new quick metrics from legacy columns if present
+                try:
+                    conn.execute(text("UPDATE training_sessions SET best_box_map50 = COALESCE(best_box_map50, best_map50)"))
+                except Exception:
+                    pass
+                try:
+                    conn.execute(text("UPDATE training_sessions SET best_box_map95 = COALESCE(best_box_map95, best_map95)"))
+                except Exception:
+                    pass
+        except Exception as ts_err:
+            logger.warning("errors.system", f"Training sessions migration failed: {ts_err}", "training_sessions_migration_failed", {"error": str(ts_err)})
+
         # Create directories if they don't exist
         logger.info("app.database", "Creating required directories", "directories_creation_start", {
             "database_path": settings.DATABASE_PATH,

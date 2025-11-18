@@ -81,7 +81,94 @@ class DatabaseDebugger:
             # Get row count
             cursor.execute(f"SELECT COUNT(*) FROM {table_name};")
             count = cursor.fetchone()[0]
-            print(f"   📊 Total rows: {count}")
+        print(f"   📊 Total rows: {count}")
+
+    def get_training_sessions_table(self):
+        """Detailed info about training_sessions table"""
+        cursor = self.conn.cursor()
+        self.print_header("TRAINING SESSIONS TABLE")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='training_sessions'")
+        if not cursor.fetchone():
+            print("❌ training_sessions table does not exist!")
+            return
+        print("\n📐 Schema:")
+        cursor.execute("PRAGMA table_info('training_sessions')")
+        for col in cursor.fetchall():
+            col_info = f"   - {col[1]} ({col[2]})"
+            if col[3]:
+                col_info += " NOT NULL"
+            if col[4] is not None:
+                col_info += f" DEFAULT {col[4]}"
+            if col[5]:
+                col_info += " PRIMARY KEY"
+            print(col_info)
+        print("\n🔎 Indexes:")
+        cursor.execute("PRAGMA index_list('training_sessions')")
+        idx_list = cursor.fetchall()
+        if idx_list:
+            for idx in idx_list:
+                idx_name = idx[1]
+                is_unique = bool(idx[2]) if len(idx) > 2 else False
+                print(f"   - {idx_name} {'(UNIQUE)' if is_unique else ''}")
+                try:
+                    cursor.execute(f"PRAGMA index_info('{idx_name}')")
+                    cols = ", ".join([r[2] for r in cursor.fetchall()])
+                    print(f"     Columns: {cols}")
+                except Exception as e:
+                    print(f"     ⚠️  Could not read index columns: {e}")
+        else:
+            print("   (no indexes)")
+        cursor.execute("SELECT COUNT(*) FROM training_sessions")
+        count = cursor.fetchone()[0]
+        print(f"\n📊 Total rows: {count}")
+        if count:
+            print("\n🗂️  Recent Sessions:")
+            cursor.execute("""
+                SELECT 
+                    id, training_uid, name,
+                    project_id, project_name,
+                    base_model_id, dataset_release_id, dataset_release_dir, dataset_summary_json,
+                    framework, task, model_name,
+                    run_dir, weights_dir, best_weights_path, logs_dir, artifacts_dir,
+                    status, progress_pct,
+                    best_epoch,
+                    best_box_map50, best_box_map95,
+                    best_mask_map50, best_mask_map95,
+                    created_at, started_at, last_update_at, completed_at,
+                    error_msg
+                FROM training_sessions
+                ORDER BY created_at DESC
+                LIMIT 10
+            """)
+            for row in cursor.fetchall():
+                print(f"   ▶️ {row['name']} (ID: {row['id']}) • UID: {row['training_uid'] or 'N/A'}")
+                print(f"      🏗️  Project: {row['project_name']} (ID: {row['project_id']})")
+                print(f"\n      🔗 Links:")
+                print(f"         Base Model: {row['base_model_id']}")
+                print(f"         Release ID: {row['dataset_release_id']}")
+                print(f"         Release Dir: {row['dataset_release_dir']}")
+                if row['dataset_summary_json']:
+                    print(f"         Dataset Summary JSON: present")
+                else:
+                    print(f"         Dataset Summary JSON: N/A")
+                print(f"\n      🎛️  Context:")
+                print(f"         Framework: {row['framework'] or 'N/A'} • Task: {row['task'] or 'N/A'} • Model Name: {row['model_name'] or 'N/A'}")
+                print(f"\n      📂 Paths:")
+                print(f"         run_dir: {row['run_dir'] or 'N/A'}")
+                print(f"         weights_dir: {row['weights_dir'] or 'N/A'}")
+                print(f"         best_weights_path: {row['best_weights_path'] or 'N/A'}")
+                print(f"         logs_dir: {row['logs_dir'] or 'N/A'}")
+                print(f"         artifacts_dir: {row['artifacts_dir'] or 'N/A'}")
+                print(f"\n      📈 Status:")
+                print(f"         {row['status']} • Progress: {row['progress_pct']}%")
+                print(f"\n      🏅 Quick Metrics:")
+                print(f"         Best Epoch: {row['best_epoch'] if row['best_epoch'] is not None else 'N/A'}")
+                print(f"         Box mAP: 50={row['best_box_map50'] if row['best_box_map50'] is not None else 'N/A'} • 95={row['best_box_map95'] if row['best_box_map95'] is not None else 'N/A'}")
+                print(f"         Mask mAP: 50={row['best_mask_map50'] if row['best_mask_map50'] is not None else 'N/A'} • 95={row['best_mask_map95'] if row['best_mask_map95'] is not None else 'N/A'}")
+                print(f"\n      📅 Timestamps:")
+                print(f"         Created: {row['created_at']} • Started: {row['started_at']} • Updated: {row['last_update_at']} • Completed: {row['completed_at']}")
+                if row['error_msg']:
+                    print(f"\n      ❗ Error: {row['error_msg']}")
     
     def get_projects_overview(self):
         """Get overview of all projects"""
@@ -1242,6 +1329,7 @@ class DatabaseDebugger:
             self.get_database_statistics()
             self.get_table_info()
             self.get_ai_models_table()  # Add AI models table analysis
+            self.get_training_sessions_table()  # Training sessions table analysis
             self.get_projects_overview()
             self.get_datasets_detailed()
             self.get_labels_table()  # Add labels table analysis
