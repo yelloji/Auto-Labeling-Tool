@@ -803,6 +803,13 @@ export const trainingAPI = {
       resolved_config_json: resolvedConfig,
     });
     return response.data;
+  },
+  startSession: async ({ projectId, name }) => {
+    const response = await api.post('/api/v1/training/session/start', {
+      project_id: projectId,
+      name,
+    });
+    return response.data;
   }
 };
 

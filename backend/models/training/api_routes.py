@@ -12,6 +12,8 @@ from models.training.dataset_summary import summarize_dataset, find_and_summariz
 from pathlib import Path
 from sqlalchemy import and_
 from database.models import Release
+from database.models import Project
+from datetime import datetime
 
 router = APIRouter()
 
@@ -47,6 +49,60 @@ async def extract_release(payload: ExtractRequest):
         return {"target_dir": rel_dir}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Start training: create session directories and flip status to running
+class SessionStart(BaseModel):
+    project_id: int
+    name: str
+
+
+@router.post("/training/session/start")
+async def start_training_session(payload: SessionStart, db: Session = Depends(get_db)):
+    try:
+        ts = (
+            db.query(TrainingSession)
+            .filter(and_(TrainingSession.project_id == payload.project_id, TrainingSession.name == payload.name))
+            .first()
+        )
+        if not ts:
+            raise HTTPException(status_code=404, detail="Training session not found")
+        project = db.query(Project).filter(Project.id == payload.project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        project_name = project.name
+        base_dir = Path("projects") / project_name / "models" / "training" / ts.name
+        runs_dir = base_dir / "runs"
+        weights_dir = base_dir / "weights"
+        logs_dir = base_dir / "logs"
+        artifacts_dir = base_dir / "artifacts"
+        for d in [runs_dir, weights_dir, logs_dir, artifacts_dir]:
+            d.mkdir(parents=True, exist_ok=True)
+        ts.run_dir = str(runs_dir)
+        ts.weights_dir = str(weights_dir)
+        ts.logs_dir = str(logs_dir)
+        ts.artifacts_dir = str(artifacts_dir)
+        ts.best_weights_path = None
+        ts.status = "running"
+        ts.progress_pct = 0
+        ts.started_at = datetime.utcnow()
+        ts.last_update_at = ts.started_at
+        db.add(ts)
+        db.commit()
+        return {
+            "ok": True,
+            "paths": {
+                "run_dir": ts.run_dir,
+                "weights_dir": ts.weights_dir,
+                "logs_dir": ts.logs_dir,
+                "artifacts_dir": ts.artifacts_dir,
+            },
+            "status": ts.status,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

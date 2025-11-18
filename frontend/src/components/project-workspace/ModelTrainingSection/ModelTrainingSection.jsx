@@ -317,9 +317,15 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       }}
                     >Preflight</Button>
                   </div>
-                  <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady)}>
-                    Start Training
-                  </Button>
+                    <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady)}
+                      onClick={async () => {
+                        try {
+                          if (form.projectId && form.trainingName) {
+                            await trainingAPI.startSession({ projectId: form.projectId, name: form.trainingName });
+                          }
+                        } catch (e) {}
+                      }}
+                    >Start Training</Button>
                 </Card>
                 <Card size="small" style={{ marginTop: 12 }} bodyStyle={{ padding: 12 }}>
                   <Tabs defaultActiveKey="config" items={[
