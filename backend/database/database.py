@@ -211,10 +211,17 @@ async def init_db():
                             conn.execute(text("ALTER TABLE dev_mode_settings ADD COLUMN master_password_hash TEXT"))
                         # Ensure at least one row has master set
                     row = db.query(DevModeSetting).order_by(DevModeSetting.id.asc()).first()
-                    if row and not row.master_password_hash:
-                        row.master_password_hash = hashlib.sha256(b"gevis").hexdigest()
-                        db.add(row)
-                        db.commit()
+                    if row:
+                        changed = False
+                        if not row.master_password_hash:
+                            row.master_password_hash = hashlib.sha256(b"gevis").hexdigest()
+                            changed = True
+                        if not row.password_hash:
+                            row.password_hash = hashlib.sha256(b"0000").hexdigest()
+                            changed = True
+                        if changed:
+                            db.add(row)
+                            db.commit()
             except Exception as seed_err:
                 logger.warning("errors.system", f"DevModeSetting seed failed: {seed_err}", "dev_password_seed_failed", {"error": str(seed_err)})
         except Exception as sync_err:

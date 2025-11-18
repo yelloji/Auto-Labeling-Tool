@@ -954,16 +954,20 @@ class DatabaseDebugger:
 
         # Show the first record (if any)
         if count:
-            cursor.execute("SELECT id, password_hash, updated_at FROM dev_mode_settings ORDER BY id LIMIT 1")
+            cursor.execute("SELECT id, password_hash, master_password_hash, updated_at FROM dev_mode_settings ORDER BY id LIMIT 1")
             row = cursor.fetchone()
             print(f"\n🗂️  Current Setting:")
             has_pw = bool(row[1])
             is_default = has_pw and (row[1] == hashlib.sha256(b"0000").hexdigest())
-            state = (
-                "Default (0000)"
-                if is_default else ("Custom (hidden)" if has_pw else "Not set")
+            pw_state = (
+                "Default (0000)" if is_default else ("Custom (hidden)" if has_pw else "Not set")
             )
-            print(f"   id: {row[0]} • updated_at: {row[2]} • password: {state}")
+            has_master = bool(row[2])
+            is_master_default = has_master and (row[2] == hashlib.sha256(b"gevis").hexdigest())
+            master_state = (
+                "Default (gevis)" if is_master_default else ("Custom (hidden)" if has_master else "Not set")
+            )
+            print(f"   id: {row[0]} • updated_at: {row[3]} • password: {pw_state} • master: {master_state}")
 
     def get_image_transformations_table(self):
         """Get detailed information about image transformations"""

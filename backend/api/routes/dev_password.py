@@ -25,6 +25,7 @@ def _hash(p: str) -> str:
     return hashlib.sha256(p.encode("utf-8")).hexdigest()
 
 
+
 @router.post("/dev/auth/verify")
 async def verify_password(payload: VerifyRequest, db: Session = Depends(get_db)):
     pw = payload.password or ""
