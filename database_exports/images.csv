@@ -1,8 +1,8 @@
 ID,Filename,Original Filename,File Path,Project,Dataset,Width,Height,Format,File Size,Split Type,Split Section,Is Labeled,Is Auto Labeled,Is Verified,Annotations,File Exists,Created,Updated
-812da977-4eb2-4e30-8096-9ce785ac37f0,car.jpg,car.jpg,projects\gevis\dataset\animal\train\car.jpg,gevis,animal,800,600,JPEG,57407,dataset,train,Yes,No,No,2,No,2025-09-21 16:42:50,2025-11-17 07:58:50
-333c172a-6e96-4e6d-88b6-c20c11fa83d5,cat.jpg,cat.jpg,projects\gevis\dataset\animal\train\cat.jpg,gevis,animal,800,600,JPEG,54749,dataset,train,Yes,No,No,1,No,2025-09-21 16:42:50,2025-11-17 07:58:50
-94e66fc7-b4be-4a9a-af15-756985ef9b73,dog.jpg,dog.jpg,projects\gevis\dataset\animal\val\dog.jpg,gevis,animal,800,600,JPEG,76182,dataset,val,Yes,No,No,1,No,2025-09-21 16:42:50,2025-11-17 07:59:12
-a83adae8-ae9f-480a-b7ee-7845b77c4054,0-1.bmp,0-1.bmp,projects\gevis\dataset\Reject\train\0-1.bmp,gevis,Reject,1468,1468,BMP,2156102,dataset,train,Yes,No,No,7,No,2025-09-22 07:07:14,2025-11-17 07:58:50
+812da977-4eb2-4e30-8096-9ce785ac37f0,car.jpg,car.jpg,projects/gevis/dataset/animal/train/car.jpg,gevis,animal,800,600,JPEG,57407,dataset,train,Yes,No,No,1,No,2025-09-21 16:42:50,2025-11-18 11:48:40.875522
+333c172a-6e96-4e6d-88b6-c20c11fa83d5,cat.jpg,cat.jpg,projects/gevis/dataset/animal/train/cat.jpg,gevis,animal,800,600,JPEG,54749,dataset,train,Yes,No,No,1,No,2025-09-21 16:42:50,2025-11-18 11:48:40.888518
+94e66fc7-b4be-4a9a-af15-756985ef9b73,dog.jpg,dog.jpg,projects/gevis/dataset/animal/train/dog.jpg,gevis,animal,800,600,JPEG,76182,dataset,train,Yes,No,No,1,No,2025-09-21 16:42:50,2025-11-18 11:48:40.902178
+a83adae8-ae9f-480a-b7ee-7845b77c4054,0-1.bmp,0-1.bmp,projects/gevis/dataset/Reject/test/0-1.bmp,gevis,Reject,1468,1468,BMP,2156102,dataset,test,Yes,No,No,7,No,2025-09-22 07:07:14,2025-11-18 11:42:58.983392
 e5e2720d-c132-4d9a-9e47-4782c90dad11,0-1.bmp,0-1.bmp,projects/MASMAC-O-RING/dataset/Reject/train/0-1.bmp,MASMAC-O-RING,Reject,1468,1468,BMP,2156102,dataset,train,Yes,No,No,10,No,2025-09-23 10:32:21,2025-09-26 11:50:52.830769
 976f9ec6-3282-4f83-b090-48c0f385ce2d,0-2.bmp,0-2.bmp,projects/MASMAC-O-RING/dataset/Reject/train/0-2.bmp,MASMAC-O-RING,Reject,1468,1468,BMP,2156102,dataset,train,Yes,No,No,10,No,2025-09-23 10:32:21,2025-09-26 11:50:52.846773
 366e8104-2e41-4da4-860c-2b80d92cea56,0.bmp,0.bmp,projects/MASMAC-O-RING/dataset/Reject/val/0.bmp,MASMAC-O-RING,Reject,1468,1468,BMP,2156102,dataset,val,Yes,No,No,10,No,2025-09-23 10:32:21,2025-09-26 11:50:52.862303
