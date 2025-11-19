@@ -25,6 +25,7 @@ const initialFormState = {
   pretrainedModel: '',
   datasetSource: 'release_zip',
   datasetZipPath: '',
+  datasetReleaseDir: '',
   classes: [],
   epochs: 50,
   imgSize: 640,
@@ -99,11 +100,14 @@ const ModelTrainingSection = ({ projectId, project }) => {
     const saveDataset = async () => {
       try {
         if (!form.projectId || !form.trainingName || !form.datasetZipPath) return;
-        await trainingAPI.updateSessionDatasetFromZip({
+        const res = await trainingAPI.updateSessionDatasetFromZip({
           projectId: form.projectId,
           name: form.trainingName,
           zipPath: form.datasetZipPath,
         });
+        if (res && typeof res.dataset_release_dir === 'string' && res.dataset_release_dir.length) {
+          setForm(prev => ({ ...prev, datasetReleaseDir: res.dataset_release_dir }));
+        }
       } catch (_) {}
     };
     saveDataset();
@@ -227,9 +231,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
             iou: form.val_iou,
             plots: form.val_plots,
           },
-          dataset: {
-            classes: form.classes,
-          },
+          // omit dataset from config preview; use train.data (data.yaml)
         };
         const res = await trainingAPI.resolveConfig(form.framework, form.taskType, overrides);
         const resolved = res?.resolved || overrides;
@@ -289,10 +291,6 @@ const ModelTrainingSection = ({ projectId, project }) => {
     training_name: form.trainingName,
     framework: form.framework,
     task: form.taskType,
-    dataset: {
-      source: form.datasetSource,
-      classes: form.classes
-    },
     train: (() => {
       const t = {
         epochs: form.epochs,
