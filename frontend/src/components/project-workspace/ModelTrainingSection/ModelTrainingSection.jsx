@@ -61,6 +61,10 @@ const ModelTrainingSection = ({ projectId, project }) => {
   const handleChange = (patch) => setForm((prev) => ({ ...prev, ...patch }));
   const [consoleVisible, setConsoleVisible] = useState(false);
 
+  // Refs to track previous values for Early Stop / Patience sync
+  const prevEarlyStop = React.useRef(form.earlyStop);
+  const prevPatience = React.useRef(form.patience);
+
   useEffect(() => {
     if (projectId && projectId !== form.projectId) {
       setForm((prev) => ({ ...prev, projectId }));
@@ -181,17 +185,22 @@ const ModelTrainingSection = ({ projectId, project }) => {
   useEffect(() => {
     if (!form.hydratedIdentity) return; // Don't run during initial hydration
 
-    // If patience is set to 0 manually, turn off Early Stop
-    if (typeof form.patience === 'number' && form.patience === 0 && form.earlyStop === true) {
+    // Detect what changed
+    const earlyStopChanged = prevEarlyStop.current !== form.earlyStop;
+    const patienceChanged = prevPatience.current !== form.patience;
+
+    // Rule 3: If user toggled earlyStop to ON and patience is 0, set patience to 30
+    if (earlyStopChanged && form.earlyStop === true && (typeof form.patience !== 'number' || form.patience === 0)) {
+      setForm(prev => ({ ...prev, patience: 30 }));
+    }
+    // Rule 1: If user changed patience to 0, turn off earlyStop
+    else if (patienceChanged && form.patience === 0 && form.earlyStop === true) {
       setForm(prev => ({ ...prev, earlyStop: false }));
-      return;
     }
 
-    // If Early Stop is turned ON and patience is 0, reset patience to default 30
-    if (form.earlyStop === true && (typeof form.patience !== 'number' || form.patience === 0)) {
-      setForm(prev => ({ ...prev, patience: 30 }));
-      return;
-    }
+    // Update refs for next comparison
+    prevEarlyStop.current = form.earlyStop;
+    prevPatience.current = form.patience;
   }, [form.patience, form.earlyStop, form.hydratedIdentity]);
 
   // Auto-load resolved config and hydrate UI when returning (status=queued)
