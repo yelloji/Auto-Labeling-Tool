@@ -19,6 +19,10 @@ def load_base_config(framework: str, task: str) -> Dict[str, Any]:
     base_dir = Path(settings.BASE_DIR)
     if framework.lower() == "ultralytics":
         task_norm = (task or "segmentation").lower()
+        # Map 'segment' (YOLO name) to 'segmentation' (our folder name)
+        if task_norm == "segment":
+            task_norm = "segmentation"
+            
         cfg_rel = Path("backend/models/training/configs/ultralytics") / task_norm / "default.yaml"
         cfg_path = base_dir / cfg_rel
         if cfg_path.exists():
@@ -46,6 +50,15 @@ def _deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
 def resolve_config(framework: str, task: str, overrides: Dict[str, Any]) -> Dict[str, Any]:
     base = load_base_config(framework, task)
     resolved = _deep_merge(base, overrides or {})
+
+    # User preference: Enforce specific order for nested sections at the end
+    # Order: train -> hyperparameters -> augmentation -> val
+    ordered_keys = ["train", "hyperparameters", "augmentation", "val"]
+    for key in ordered_keys:
+        if key in resolved:
+            content = resolved.pop(key)
+            resolved[key] = content
+        
     # Auto-bind data.yaml into train.data if provided
     try:
         ds = resolved.get("dataset", {})

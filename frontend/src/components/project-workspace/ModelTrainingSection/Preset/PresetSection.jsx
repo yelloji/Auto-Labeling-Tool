@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space, Row, Col, Collapse } from 'antd';
 import { systemAPI } from '../../../../services/api';
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_plots, taskType }) {
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_plots, taskType }) {
   const OPTIMIZER_PRESETS = {
     SGD: { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 },
     Adam: { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 },
@@ -181,12 +181,12 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
               </Form.Item>
             </Col>
           </Row>
-          
+
         </>
       )}
       {/* Save Best Only is enforced by backend default; use save_period to keep extra checkpoints */}
       {isDeveloper && (
-        <Collapse defaultActiveKey={["opt","loss","aug"]}>
+        <Collapse defaultActiveKey={["opt", "loss", "aug"]}>
           <Collapse.Panel header="Optimization" key="opt">
             <Row gutter={12}>
               <Col span={12}>
@@ -248,7 +248,16 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
               </Col>
               <Col span={12}>
                 <Form.Item label="Cosine LR Scheduler" tooltip="Use cosine decay schedule">
-                  <Switch onChange={(v) => onChange({ cos_lr: v })} />
+                  <Switch checked={cos_lr} onChange={(v) => onChange({ cos_lr: v })} />
+                </Form.Item>
+                <Form.Item label="Warmup Epochs" tooltip="Epochs for warmup">
+                  <InputNumber min={0} step={1} placeholder={3.0} value={warmup_epochs} onChange={(v) => onChange({ warmup_epochs: v })} />
+                </Form.Item>
+                <Form.Item label="Warmup Momentum" tooltip="Initial momentum for warmup">
+                  <InputNumber min={0} max={1} step={0.01} placeholder={0.8} value={warmup_momentum} onChange={(v) => onChange({ warmup_momentum: v })} />
+                </Form.Item>
+                <Form.Item label="Warmup Bias LR" tooltip="Initial bias lr for warmup">
+                  <InputNumber min={0} step={0.01} placeholder={0.1} value={warmup_bias_lr} onChange={(v) => onChange({ warmup_bias_lr: v })} />
                 </Form.Item>
                 <Form.Item label="Patience (Early Stop)" tooltip="Epochs to wait without improvement before stopping">
                   <InputNumber min={0} placeholder={30} value={patience} onChange={(v) => onChange({ patience: v })} />
@@ -263,7 +272,7 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
             </Row>
             <Row gutter={12}>
               <Col span={8}><Form.Item label="Warmup Epochs" tooltip="Warmup length in epochs"><InputNumber min={0} step={0.1} placeholder={3.0} value={warmup_epochs} onChange={(v) => onChange({ warmup_epochs: v })} /></Form.Item></Col>
-              <Col span={8}><Form.Item label="Warmup Momentum" tooltip="Initial momentum during warmup"><InputNumber min={0} max={1} step={0.01} placeholder={0.8} onChange={(v) => onChange({ warmup_momentum: v })} /></Form.Item></Col>
+              <Col span={8}><Form.Item label="Warmup Momentum" tooltip="Initial momentum during warmup"><InputNumber min={0} max={1} step={0.01} placeholder={0.8} value={warmup_momentum} onChange={(v) => onChange({ warmup_momentum: v })} /></Form.Item></Col>
               <Col span={8}><Form.Item label="Warmup Bias LR" tooltip="Initial bias learning rate"><InputNumber min={0} step={0.001} placeholder={0.1} value={warmup_bias_lr} onChange={(v) => onChange({ warmup_bias_lr: v })} /></Form.Item></Col>
             </Row>
           </Collapse.Panel>
@@ -284,26 +293,26 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                   </Form.Item>
                 </Col>
               )}
-              <Col span={6}><Form.Item label="Mixup" tooltip="Mixup augmentation probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.03} onChange={(v) => onChange({ mixup: v })} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="HSV H" tooltip="Hue augmentation"><InputNumber min={0} max={1} step={0.001} placeholder={0.005} onChange={(v) => onChange({ hsv_h: v })} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="HSV S" tooltip="Saturation augmentation"><InputNumber min={0} max={1} step={0.01} placeholder={0.1} onChange={(v) => onChange({ hsv_s: v })} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="HSV V" tooltip="Value/Brightness augmentation"><InputNumber min={0} max={1} step={0.01} placeholder={0.05} onChange={(v) => onChange({ hsv_v: v })} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Mixup" tooltip="Mixup augmentation probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.03} value={mixup} onChange={(v) => onChange({ mixup: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="HSV H" tooltip="Hue augmentation"><InputNumber min={0} max={1} step={0.001} placeholder={0.005} value={hsv_h} onChange={(v) => onChange({ hsv_h: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="HSV S" tooltip="Saturation augmentation"><InputNumber min={0} max={1} step={0.01} placeholder={0.1} value={hsv_s} onChange={(v) => onChange({ hsv_s: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="HSV V" tooltip="Value/Brightness augmentation"><InputNumber min={0} max={1} step={0.01} placeholder={0.05} value={hsv_v} onChange={(v) => onChange({ hsv_v: v })} /></Form.Item></Col>
             </Row>
             <Row gutter={12}>
               <Col span={4}><Form.Item label="FlipUD" tooltip="Vertical flip probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.0} value={flipud} onChange={(v) => onChange({ flipud: v })} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="FlipLR" tooltip="Horizontal flip probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.5} onChange={(v) => onChange({ fliplr: v })} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="Degrees" tooltip="Rotation range"><InputNumber min={0} max={180} step={0.5} placeholder={0.0} onChange={(v) => onChange({ degrees: v })} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="Translate" tooltip="Translation fraction"><InputNumber min={0} max={1} step={0.01} placeholder={0.1} onChange={(v) => onChange({ translate: v })} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="Scale" tooltip="Scale gain"><InputNumber min={0} max={2} step={0.01} placeholder={0.5} onChange={(v) => onChange({ scale: v })} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="Shear" tooltip="Shear fraction"><InputNumber min={0} max={1} step={0.01} placeholder={0.0} onChange={(v) => onChange({ shear: v })} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="Perspective" tooltip="Perspective fraction"><InputNumber min={0} max={1} step={0.001} placeholder={0.0} onChange={(v) => onChange({ perspective: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="FlipLR" tooltip="Horizontal flip probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.5} value={fliplr} onChange={(v) => onChange({ fliplr: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="Degrees" tooltip="Rotation range"><InputNumber min={0} max={180} step={0.5} placeholder={0.0} value={degrees} onChange={(v) => onChange({ degrees: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="Translate" tooltip="Translation fraction"><InputNumber min={0} max={1} step={0.01} placeholder={0.1} value={translate} onChange={(v) => onChange({ translate: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="Scale" tooltip="Scale gain"><InputNumber min={0} max={2} step={0.01} placeholder={0.5} value={scale} onChange={(v) => onChange({ scale: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="Shear" tooltip="Shear fraction"><InputNumber min={0} max={1} step={0.01} placeholder={0.0} value={shear} onChange={(v) => onChange({ shear: v })} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="Perspective" tooltip="Perspective fraction"><InputNumber min={0} max={1} step={0.001} placeholder={0.0} value={perspective} onChange={(v) => onChange({ perspective: v })} /></Form.Item></Col>
             </Row>
           </Collapse.Panel>
           <Collapse.Panel header="Task & Segmentation" key="task">
             <Row gutter={12}>
               <Col span={6}><Form.Item label="Single Class" tooltip="Treat multi-class data as single-class"><Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Rectangular" tooltip="Rectangular batches"><Switch onChange={(v) => onChange({ rect: v })} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Overlap Mask" tooltip="Merge masks into single image mask"><Switch onChange={(v) => onChange({ overlap_mask: v })} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Rectangular" tooltip="Rectangular batches"><Switch checked={rect} onChange={(v) => onChange({ rect: v })} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Overlap Mask" tooltip="Merge masks into single image mask"><Switch checked={overlap_mask} onChange={(v) => onChange({ overlap_mask: v })} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Mask Ratio" tooltip="Mask downsample ratio"><InputNumber min={1} step={1} placeholder={2} value={mask_ratio} onChange={(v) => onChange({ mask_ratio: v })} /></Form.Item></Col>
             </Row>
             <Row gutter={12}>

@@ -415,7 +415,16 @@ async def save_training_config(payload: SessionConfigSave, db: Session = Depends
         if not ts:
             raise HTTPException(status_code=404, detail="Training session not found")
         import json as _json
-        ts.resolved_config_json = _json.dumps(payload.resolved_config_json)
+        
+        # Enforce key order: train, hyperparameters, augmentation, val
+        cfg = payload.resolved_config_json
+        ordered_keys = ["train", "hyperparameters", "augmentation", "val"]
+        for key in ordered_keys:
+            if key in cfg:
+                content = cfg.pop(key)
+                cfg[key] = content
+                
+        ts.resolved_config_json = _json.dumps(cfg)
         db.add(ts)
         db.commit()
         return {"ok": True}

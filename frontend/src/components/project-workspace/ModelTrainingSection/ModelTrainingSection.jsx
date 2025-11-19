@@ -39,6 +39,9 @@ const initialFormState = {
   device: 'cpu',
   gpuIndex: null,
   optimizerMode: 'smart-auto',
+  warmup_momentum: 0.8,
+  warmup_bias_lr: 0.1,
+  cos_lr: false,
   hydratedIdentity: false
 };
 
@@ -51,7 +54,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     });
   }, [projectId]);
 
-  
+
 
   const [form, setForm] = useState({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
   const isDeveloper = form.mode === 'developer';
@@ -80,8 +83,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
           if (sess && sess.id) {
             setForm((prev) => ({ ...prev, sessionId: sess.id, status: sess.status || prev.status }));
           }
-        } catch (_) {}
-      } catch (_) {}
+        } catch (_) { }
+      } catch (_) { }
     }, 200);
     return () => clearTimeout(timer);
   }, [form.projectId, form.trainingName, form.description, form.hydratedIdentity]);
@@ -94,7 +97,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
         if (data && data.name) {
           setForm((prev) => ({ ...prev, trainingName: data.name }));
         }
-      } catch (_) {}
+      } catch (_) { }
     };
     resumeActive();
   }, [form.projectId, form.trainingName]);
@@ -120,7 +123,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
         if (Object.keys(patch).length) {
           setForm(prev => ({ ...prev, ...patch }));
         }
-      } catch (_) {}
+      } catch (_) { }
     };
     maybeExtract();
   }, [form.sessionId]);
@@ -143,7 +146,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
         if (hasFramework) payload.framework = form.framework;
         if (hasTask) payload.task = form.taskType;
         await trainingAPI.updateSessionModel(payload);
-      } catch (_) {}
+      } catch (_) { }
     };
     saveModel();
   }, [form.projectId, form.trainingName, form.pretrainedModel, form.framework, form.taskType, form.hydratedIdentity]);
@@ -169,10 +172,27 @@ const ModelTrainingSection = ({ projectId, project }) => {
         if (Object.keys(patch).length) {
           setForm(prev => ({ ...prev, ...patch }));
         }
-      } catch (_) {}
+      } catch (_) { }
     };
     saveDataset();
   }, [form.projectId, form.trainingName, form.datasetZipPath, form.hydratedIdentity]);
+
+  // Synchronize Early Stop switch with Patience value
+  useEffect(() => {
+    if (!form.hydratedIdentity) return; // Don't run during initial hydration
+
+    // If patience is set to 0 manually, turn off Early Stop
+    if (typeof form.patience === 'number' && form.patience === 0 && form.earlyStop === true) {
+      setForm(prev => ({ ...prev, earlyStop: false }));
+      return;
+    }
+
+    // If Early Stop is turned ON and patience is 0, reset patience to default 30
+    if (form.earlyStop === true && (typeof form.patience !== 'number' || form.patience === 0)) {
+      setForm(prev => ({ ...prev, patience: 30 }));
+      return;
+    }
+  }, [form.patience, form.earlyStop, form.hydratedIdentity]);
 
   // Auto-load resolved config and hydrate UI when returning (status=queued)
   useEffect(() => {
@@ -189,13 +209,16 @@ const ModelTrainingSection = ({ projectId, project }) => {
             const a = cfg?.augmentation || {};
             const v = cfg?.val || {};
             const d = cfg?.dataset || {};
-            if (typeof t.epochs === 'number') patch.epochs = t.epochs;
-            if (typeof t.imgsz === 'number') patch.imgSize = t.imgsz;
-            if (typeof t.batch === 'number') patch.batchSize = t.batch;
-            if (typeof t.amp === 'boolean') patch.mixedPrecision = t.amp;
-            if (typeof t.early_stop === 'boolean') patch.earlyStop = t.early_stop;
-            if (typeof t.save_best === 'boolean') patch.saveBestOnly = t.save_best;
-            if (typeof t.model === 'string') patch.pretrainedModel = t.model;
+            // Helper to check if value is defined and not null (allows 0, false, etc.)
+            const isValidValue = (v) => v !== undefined && v !== null;
+
+            if (isValidValue(t.epochs)) patch.epochs = t.epochs;
+            if (isValidValue(t.imgsz)) patch.imgSize = t.imgsz;
+            if (isValidValue(t.batch)) patch.batchSize = t.batch;
+            if (isValidValue(t.amp)) patch.mixedPrecision = t.amp;
+            if (isValidValue(t.early_stop)) patch.earlyStop = t.early_stop;
+            if (isValidValue(t.save_best)) patch.saveBestOnly = t.save_best;
+            if (isValidValue(t.model)) patch.pretrainedModel = t.model;
             if (typeof t.device === 'string') {
               if (t.device.startsWith('cuda:')) {
                 patch.device = 'gpu';
@@ -206,48 +229,91 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 patch.gpuIndex = null;
               }
             }
-            if (typeof t.resume === 'boolean') patch.resume = t.resume;
-            if (typeof t.optimizer === 'string') patch.optimizer = t.optimizer;
-            if (typeof t.single_cls === 'boolean') patch.single_cls = t.single_cls;
-            if (typeof t.rect === 'boolean') patch.rect = t.rect;
-            if (typeof t.overlap_mask === 'boolean') patch.overlap_mask = t.overlap_mask;
-            if (typeof t.mask_ratio === 'number') patch.mask_ratio = t.mask_ratio;
-            if (typeof t.freeze === 'number' || Array.isArray(t.freeze)) patch.freeze = t.freeze;
-            if (typeof t.data === 'string' && t.data.endsWith('/data.yaml')) {
-              const baseDir = t.data.slice(0, -('/data.yaml'.length));
-              if (baseDir.length) patch.datasetReleaseDir = baseDir;
+            if (isValidValue(t.resume)) patch.resume = t.resume;
+
+            // Optimizer Hydration
+            if (isValidValue(t.optimizer)) {
+              patch.optimizer = t.optimizer;
+              // Check if this optimizer matches the "Smart Auto" default
+              const isGPU = (patch.device || form.device) === 'gpu';
+              const bsz = (patch.batchSize || form.batchSize);
+              let smartDefault = 'Adam';
+              if (!isGPU) smartDefault = 'Adam';
+              else if (bsz >= 32) smartDefault = 'SGD';
+              else smartDefault = 'AdamW';
+
+              if (t.optimizer !== smartDefault) {
+                patch.optimizerMode = 'manual';
+              } else {
+                // If it matches smart default, we can leave it as smart-auto OR set to manual. 
+                // To be safe and preserve user intent, if it's explicitly saved, we could set manual, 
+                // but usually 'smart-auto' is preferred if it matches. 
+                // Let's stick to: if it differs, force manual.
+              }
             }
-            if (typeof h.lr0 === 'number') patch.lr0 = h.lr0;
-            if (typeof h.lrf === 'number') patch.lrf = h.lrf;
-            if (typeof h.momentum === 'number') patch.momentum = h.momentum;
-            if (typeof h.weight_decay === 'number') patch.weight_decay = h.weight_decay;
-            if (typeof h.warmup_epochs === 'number') patch.warmup_epochs = h.warmup_epochs;
-            if (typeof h.warmup_momentum === 'number') patch.warmup_momentum = h.warmup_momentum;
-            if (typeof h.warmup_bias_lr === 'number') patch.warmup_bias_lr = h.warmup_bias_lr;
-            if (typeof h.cos_lr === 'boolean') patch.cos_lr = h.cos_lr;
-            if (typeof h.box === 'number') patch.box = h.box;
-            if (typeof h.cls === 'number') patch.cls = h.cls;
-            if (typeof h.dfl === 'number') patch.dfl = h.dfl;
-            if (typeof a.mosaic === 'boolean') patch.mosaic = a.mosaic;
-            if (typeof a.mixup === 'boolean') patch.mixup = a.mixup;
-            if (typeof a.hsv_h === 'number') patch.hsv_h = a.hsv_h;
-            if (typeof a.hsv_s === 'number') patch.hsv_s = a.hsv_s;
-            if (typeof a.hsv_v === 'number') patch.hsv_v = a.hsv_v;
-            if (typeof a.flipud === 'number' || typeof a.flipud === 'boolean') patch.flipud = a.flipud;
-            if (typeof a.fliplr === 'number' || typeof a.fliplr === 'boolean') patch.fliplr = a.fliplr;
-            if (typeof a.degrees === 'number') patch.degrees = a.degrees;
-            if (typeof a.translate === 'number') patch.translate = a.translate;
-            if (typeof a.scale === 'number') patch.scale = a.scale;
-            if (typeof a.shear === 'number') patch.shear = a.shear;
-            if (typeof a.perspective === 'number') patch.perspective = a.perspective;
-            if (typeof a.close_mosaic === 'number') patch.close_mosaic = a.close_mosaic;
-            if (typeof v.iou === 'number') patch.val_iou = v.iou;
-            if (typeof v.plots === 'boolean') patch.val_plots = v.plots;
+
+            if (isValidValue(t.single_cls)) patch.single_cls = t.single_cls;
+            if (isValidValue(t.rect)) patch.rect = t.rect;
+            if (isValidValue(t.overlap_mask)) patch.overlap_mask = t.overlap_mask;
+            if (isValidValue(t.mask_ratio)) patch.mask_ratio = t.mask_ratio;
+            if (isValidValue(t.freeze)) patch.freeze = t.freeze;
+
+            // Hydrate Root/Train params that might be missing
+            if (isValidValue(t.patience)) patch.patience = t.patience;
+            else if (isValidValue(cfg.patience)) patch.patience = cfg.patience;
+
+            if (isValidValue(t.save_period)) patch.save_period = t.save_period;
+            else if (isValidValue(cfg.save_period)) patch.save_period = cfg.save_period;
+
+            if (isValidValue(t.workers)) patch.workers = t.workers;
+            else if (isValidValue(cfg.workers)) patch.workers = cfg.workers;
+
+            if (typeof t.data === 'string') {
+              const normalizedData = t.data.replace(/\\/g, '/');
+              if (normalizedData.endsWith('/data.yaml')) {
+                const baseDir = t.data.slice(0, -('/data.yaml'.length));
+                if (baseDir.length) patch.datasetReleaseDir = baseDir;
+              }
+            }
+
+            if (isValidValue(h.lr0)) patch.lr0 = h.lr0;
+            if (isValidValue(h.lrf)) patch.lrf = h.lrf;
+            if (isValidValue(h.momentum)) patch.momentum = h.momentum;
+            if (isValidValue(h.weight_decay)) patch.weight_decay = h.weight_decay;
+            if (isValidValue(h.warmup_epochs)) patch.warmup_epochs = h.warmup_epochs;
+            if (isValidValue(h.warmup_momentum)) patch.warmup_momentum = h.warmup_momentum;
+            if (isValidValue(h.warmup_bias_lr)) patch.warmup_bias_lr = h.warmup_bias_lr;
+
+            // cos_lr might be in hyperparameters OR train/root depending on version
+            if (isValidValue(h.cos_lr)) patch.cos_lr = h.cos_lr;
+            else if (isValidValue(t.cos_lr)) patch.cos_lr = t.cos_lr;
+            else if (isValidValue(cfg.cos_lr)) patch.cos_lr = cfg.cos_lr;
+
+            if (isValidValue(h.box)) patch.box = h.box;
+            if (isValidValue(h.cls)) patch.cls = h.cls;
+            if (isValidValue(h.dfl)) patch.dfl = h.dfl;
+
+            if (isValidValue(a.mosaic)) patch.mosaic = a.mosaic;
+            if (isValidValue(a.mixup)) patch.mixup = a.mixup;
+            if (isValidValue(a.hsv_h)) patch.hsv_h = a.hsv_h;
+            if (isValidValue(a.hsv_s)) patch.hsv_s = a.hsv_s;
+            if (isValidValue(a.hsv_v)) patch.hsv_v = a.hsv_v;
+            if (isValidValue(a.flipud)) patch.flipud = a.flipud;
+            if (isValidValue(a.fliplr)) patch.fliplr = a.fliplr;
+            if (isValidValue(a.degrees)) patch.degrees = a.degrees;
+            if (isValidValue(a.translate)) patch.translate = a.translate;
+            if (isValidValue(a.scale)) patch.scale = a.scale;
+            if (isValidValue(a.shear)) patch.shear = a.shear;
+            if (isValidValue(a.perspective)) patch.perspective = a.perspective;
+            if (isValidValue(a.close_mosaic)) patch.close_mosaic = a.close_mosaic;
+
+            if (isValidValue(v.iou)) patch.val_iou = v.iou;
+            if (isValidValue(v.plots)) patch.val_plots = v.plots;
             if (Array.isArray(d.classes)) patch.classes = d.classes;
             window.__resolvedServerConfig = cfg;
             if (typeof cfg.framework === 'string') patch.framework = cfg.framework;
             if (typeof cfg.task === 'string') patch.taskType = cfg.task;
-          } catch {}
+          } catch { }
         }
         if (data && typeof data.description === 'string') patch.description = data.description;
         if (data && typeof data.framework === 'string') patch.framework = data.framework;
@@ -265,7 +331,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
             const zp = String(match?.model_path || match?.path || match?.release_zip || match?.zip_path || '').trim();
             if (zp.length) patch.datasetZipPath = zp;
             patch.datasetReleaseId = String(data.dataset_release_id);
-          } catch {}
+          } catch { }
         }
         patch.hydratedIdentity = true;
         setForm(prev => ({ ...prev, ...patch }));
@@ -295,6 +361,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
           mask_ratio: form.mask_ratio,
           freeze: form.freeze,
           device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
+          patience: form.patience,
+          save_period: form.save_period,
+          workers: form.workers,
         };
         if (typeof form.datasetReleaseDir === 'string' && form.datasetReleaseDir.length) {
           trainOverrides.data = `${form.datasetReleaseDir}/data.yaml`;
@@ -344,7 +413,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
           name: form.trainingName,
           resolvedConfig: resolved,
         });
-      } catch {}
+      } catch { }
     };
     autoSaveConfig();
   }, [
@@ -376,6 +445,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
     form.warmup_momentum,
     form.warmup_bias_lr,
     form.cos_lr,
+    form.patience,
+    form.save_period,
+    form.workers,
     form.box,
     form.cls,
     form.dfl,
@@ -517,6 +589,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 batchSize={form.batchSize}
                 mixedPrecision={form.mixedPrecision}
                 earlyStop={form.earlyStop}
+                resume={form.resume}
                 device={form.device}
                 gpuIndex={form.gpuIndex}
                 taskType={form.taskType}
@@ -532,6 +605,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 warmup_epochs={form.warmup_epochs}
                 warmup_momentum={form.warmup_momentum}
                 warmup_bias_lr={form.warmup_bias_lr}
+                cos_lr={form.cos_lr}
                 box={form.box}
                 cls={form.cls}
                 dfl={form.dfl}
@@ -657,19 +731,19 @@ const ModelTrainingSection = ({ projectId, project }) => {
                               resolvedConfig: resolved,
                             });
                           }
-                        } catch (e) {}
+                        } catch (e) { }
                       }}
                     >Preflight</Button>
                   </div>
-                    <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady)}
-                      onClick={async () => {
-                        try {
-                          if (form.projectId && form.trainingName) {
-                            await trainingAPI.startSession({ projectId: form.projectId, name: form.trainingName });
-                          }
-                        } catch (e) {}
-                      }}
-                    >Start Training</Button>
+                  <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady)}
+                    onClick={async () => {
+                      try {
+                        if (form.projectId && form.trainingName) {
+                          await trainingAPI.startSession({ projectId: form.projectId, name: form.trainingName });
+                        }
+                      } catch (e) { }
+                    }}
+                  >Start Training</Button>
                 </Card>
                 <Card size="small" style={{ marginTop: 12 }} bodyStyle={{ padding: 12 }}>
                   <Tabs defaultActiveKey="config" items={[
