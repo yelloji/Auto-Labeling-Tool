@@ -51,7 +51,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
   
 
-  const [form, setForm] = useState({ ...initialFormState, projectId });
+  const [form, setForm] = useState({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
   const isDeveloper = form.mode === 'developer';
   const handleChange = (patch) => setForm((prev) => ({ ...prev, ...patch }));
   const [consoleVisible, setConsoleVisible] = useState(false);
@@ -64,18 +64,37 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
   // Persist identity while status is queued (name/description)
   useEffect(() => {
-    const saveIdentity = async () => {
+    const timer = setTimeout(async () => {
       try {
-        if (!form.projectId || !form.trainingName) return;
+        if (!form.projectId || !form.trainingName || form.trainingName.length < 3) return;
         await trainingAPI.upsertSession({
           projectId: form.projectId,
           name: form.trainingName,
           description: form.description || ''
         });
+        try {
+          const sess = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
+          if (sess && sess.id) {
+            setForm((prev) => ({ ...prev, sessionId: sess.id, status: sess.status || prev.status }));
+          }
+        } catch (_) {}
+      } catch (_) {}
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [form.projectId, form.trainingName, form.description]);
+
+  useEffect(() => {
+    const resumeActive = async () => {
+      try {
+        if (!form.projectId || form.trainingName) return;
+        const data = await trainingAPI.getActiveSession(form.projectId);
+        if (data && data.name) {
+          setForm((prev) => ({ ...prev, trainingName: data.name }));
+        }
       } catch (_) {}
     };
-    saveIdentity();
-  }, [form.projectId, form.trainingName, form.description]);
+    resumeActive();
+  }, [form.projectId, form.trainingName]);
 
   // Persist selected model/framework/task
   useEffect(() => {
@@ -426,7 +445,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 close_mosaic={form.close_mosaic}
                 mixup={form.mixup}
                 hsv_h={form.hsv_h}
-                hsv_s={form.hsv_s}s
+                hsv_s={form.hsv_s}
                 hsv_v={form.hsv_v}
                 flipud={form.flipud}
                 fliplr={form.fliplr}

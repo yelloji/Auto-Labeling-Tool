@@ -763,6 +763,12 @@ export const trainingAPI = {
       throw error;
     }
   },
+  getActiveSession: async (projectId) => {
+    const response = await api.get('/api/v1/training/session/active', {
+      params: { project_id: projectId }
+    });
+    return response.data;
+  },
   upsertSession: async ({ projectId, name, description }) => {
     const response = await api.post('/api/v1/training/session/upsert', {
       project_id: projectId,

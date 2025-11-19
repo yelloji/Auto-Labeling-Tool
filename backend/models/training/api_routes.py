@@ -16,6 +16,7 @@ from database.models import Release
 from database.models import Project
 from database.models import DevModeSetting
 from datetime import datetime
+import uuid
 import asyncio
 import os
 import hashlib
@@ -133,6 +134,14 @@ async def upsert_training_session(payload: SessionUpsert, db: Session = Depends(
                 existing.description = payload.description
             if not existing.status:
                 existing.status = "queued"
+            if not existing.training_uid:
+                existing.training_uid = uuid.uuid4().hex
+            try:
+                project = db.query(Project).filter(Project.id == payload.project_id).first()
+                if project:
+                    existing.project_name = project.name
+            except Exception:
+                pass
             db.add(existing)
             db.commit()
             db.refresh(existing)
@@ -143,12 +152,88 @@ async def upsert_training_session(payload: SessionUpsert, db: Session = Depends(
                 "description": existing.description,
                 "status": existing.status,
             }
+        active = (
+            db.query(TrainingSession)
+            .filter(TrainingSession.project_id == payload.project_id)
+            .filter(TrainingSession.status.in_(["queued", "running"]))
+            .order_by(TrainingSession.created_at.desc())
+            .first()
+        )
+        if active:
+            conflict = (
+                db.query(TrainingSession)
+                .filter(TrainingSession.project_id == payload.project_id)
+                .filter(TrainingSession.name == payload.name)
+                .first()
+            )
+            if conflict:
+                if payload.description is not None:
+                    conflict.description = payload.description
+                if not conflict.status:
+                    conflict.status = "queued"
+                if not conflict.training_uid:
+                    conflict.training_uid = uuid.uuid4().hex
+                try:
+                    project = db.query(Project).filter(Project.id == payload.project_id).first()
+                    if project:
+                        conflict.project_name = project.name
+                except Exception:
+                    pass
+                db.add(conflict)
+                db.commit()
+                db.refresh(conflict)
+                return {
+                    "id": conflict.id,
+                    "project_id": conflict.project_id,
+                    "name": conflict.name,
+                    "description": conflict.description,
+                    "status": conflict.status,
+                }
+            active.name = payload.name
+            if payload.description is not None:
+                active.description = payload.description
+            if not active.status:
+                active.status = "queued"
+            if not active.training_uid:
+                active.training_uid = uuid.uuid4().hex
+            try:
+                project = db.query(Project).filter(Project.id == payload.project_id).first()
+                if project:
+                    active.project_name = project.name
+            except Exception:
+                pass
+            db.add(active)
+            db.commit()
+            db.refresh(active)
+            return {
+                "id": active.id,
+                "project_id": active.project_id,
+                "name": active.name,
+                "description": active.description,
+                "status": active.status,
+            }
         ts = TrainingSession(
             project_id=payload.project_id,
             name=payload.name,
             description=payload.description or "",
             status="queued",
+            base_model_id="unassigned",
+            framework="ultralytics",
+            task="segmentation",
+            training_uid=uuid.uuid4().hex,
         )
+        try:
+            import json as _json
+            base_cfg = load_base_config(ts.framework or "ultralytics", ts.task or "segmentation")
+            ts.resolved_config_json = _json.dumps(base_cfg)
+        except Exception:
+            pass
+        try:
+            project = db.query(Project).filter(Project.id == payload.project_id).first()
+            if project:
+                ts.project_name = project.name
+        except Exception:
+            pass
         db.add(ts)
         db.commit()
         db.refresh(ts)
@@ -195,6 +280,37 @@ async def get_training_session(project_id: int = Query(...), name: str = Query(.
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
+@router.get("/training/session/active")
+async def get_active_training_session(project_id: int = Query(...), db: Session = Depends(get_db)):
+    try:
+        ts = (
+            db.query(TrainingSession)
+            .filter(TrainingSession.project_id == project_id)
+            .filter(TrainingSession.status.in_(["queued", "running"]))
+            .order_by(TrainingSession.last_update_at.desc(), TrainingSession.created_at.desc())
+            .first()
+        )
+        if not ts:
+            raise HTTPException(status_code=404, detail="No active training session")
+        return {
+            "id": ts.id,
+            "project_id": ts.project_id,
+            "name": ts.name,
+            "description": ts.description,
+            "status": ts.status,
+            "framework": ts.framework,
+            "task": ts.task,
+            "model_name": ts.model_name,
+            "dataset_release_id": ts.dataset_release_id,
+            "dataset_release_dir": ts.dataset_release_dir,
+            "dataset_summary_json": ts.dataset_summary_json,
+            "resolved_config_json": ts.resolved_config_json,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # Update selected model/framework/task for session
 class SessionModelUpdate(BaseModel):

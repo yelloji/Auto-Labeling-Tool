@@ -124,52 +124,30 @@ class DatabaseDebugger:
         print(f"\n📊 Total rows: {count}")
         if count:
             print("\n🗂️  Recent Sessions:")
+            # Preserve actual column order as defined in the table
+            cursor.execute("PRAGMA table_info('training_sessions')")
+            _cols_info = cursor.fetchall()
+            _col_names = [c[1] for c in _cols_info]
             cursor.execute("""
-                SELECT 
-                    id, training_uid, name,
-                    project_id, project_name,
-                    base_model_id, dataset_release_id, dataset_release_dir, dataset_summary_json,
-                    framework, task, model_name,
-                    run_dir, weights_dir, best_weights_path, logs_dir, artifacts_dir,
-                    status, progress_pct,
-                    best_epoch,
-                    best_box_map50, best_box_map95,
-                    best_mask_map50, best_mask_map95,
-                    created_at, started_at, last_update_at, completed_at,
-                    error_msg
+                SELECT *
                 FROM training_sessions
                 ORDER BY created_at DESC
                 LIMIT 10
             """)
             for row in cursor.fetchall():
-                print(f"   ▶️ {row['name']} (ID: {row['id']}) • UID: {row['training_uid'] or 'N/A'}")
-                print(f"      🏗️  Project: {row['project_name']} (ID: {row['project_id']})")
-                print(f"\n      🔗 Links:")
-                print(f"         Base Model: {row['base_model_id']}")
-                print(f"         Release ID: {row['dataset_release_id']}")
-                print(f"         Release Dir: {row['dataset_release_dir']}")
-                if row['dataset_summary_json']:
-                    print(f"         Dataset Summary JSON: present")
-                else:
-                    print(f"         Dataset Summary JSON: N/A")
-                print(f"\n      🎛️  Context:")
-                print(f"         Framework: {row['framework'] or 'N/A'} • Task: {row['task'] or 'N/A'} • Model Name: {row['model_name'] or 'N/A'}")
-                print(f"\n      📂 Paths:")
-                print(f"         run_dir: {row['run_dir'] or 'N/A'}")
-                print(f"         weights_dir: {row['weights_dir'] or 'N/A'}")
-                print(f"         best_weights_path: {row['best_weights_path'] or 'N/A'}")
-                print(f"         logs_dir: {row['logs_dir'] or 'N/A'}")
-                print(f"         artifacts_dir: {row['artifacts_dir'] or 'N/A'}")
-                print(f"\n      📈 Status:")
-                print(f"         {row['status']} • Progress: {row['progress_pct']}%")
-                print(f"\n      🏅 Quick Metrics:")
-                print(f"         Best Epoch: {row['best_epoch'] if row['best_epoch'] is not None else 'N/A'}")
-                print(f"         Box mAP: 50={row['best_box_map50'] if row['best_box_map50'] is not None else 'N/A'} • 95={row['best_box_map95'] if row['best_box_map95'] is not None else 'N/A'}")
-                print(f"         Mask mAP: 50={row['best_mask_map50'] if row['best_mask_map50'] is not None else 'N/A'} • 95={row['best_mask_map95'] if row['best_mask_map95'] is not None else 'N/A'}")
-                print(f"\n      📅 Timestamps:")
-                print(f"         Created: {row['created_at']} • Started: {row['started_at']} • Updated: {row['last_update_at']} • Completed: {row['completed_at']}")
-                if row['error_msg']:
-                    print(f"\n      ❗ Error: {row['error_msg']}")
+                print(f"   🧾 Full Row (table order):")
+                for cn in _col_names:
+                    val = row[cn]
+                    if cn in ("dataset_summary_json", "resolved_config_json", "metrics_json") and val:
+                        try:
+                            _parsed = json.loads(val) if isinstance(val, str) else val
+                            print(f"         {cn}:")
+                            for _line in json.dumps(_parsed, indent=2, default=str).splitlines():
+                                print(f"           {_line}")
+                        except Exception:
+                            print(f"         {cn}: (could not parse)")
+                    else:
+                        print(f"         {cn}: {val if val not in (None, '') else 'N/A'}")
     
     def get_projects_overview(self):
         """Get overview of all projects"""
@@ -1409,6 +1387,19 @@ def main():
     parser.add_argument('--db', type=str, default='database.db', help='Path to database file')
     parser.add_argument('--labels', action='store_true', help='Show only labels table data')
     parser.add_argument('--ai-models', action='store_true', help='Show only ai_models table data')
+    parser.add_argument('--training-sessions', action='store_true', help='Show training_sessions table data')
+    parser.add_argument('--projects', action='store_true', help='Show projects overview')
+    parser.add_argument('--datasets', action='store_true', help='Show datasets detailed view')
+    parser.add_argument('--images', action='store_true', help='Show images detailed view')
+    parser.add_argument('--annotations-summary', action='store_true', help='Show annotations summary')
+    parser.add_argument('--annotations-detailed', action='store_true', help='Show detailed annotations')
+    parser.add_argument('--releases', action='store_true', help='Show releases table')
+    parser.add_argument('--transformations', action='store_true', help='Show image_transformations table')
+    parser.add_argument('--transformations-detailed', action='store_true', help='Show detailed image transformations')
+    parser.add_argument('--relationships', action='store_true', help='Show transformation-release relationships')
+    parser.add_argument('--stats', action='store_true', help='Show database statistics')
+    parser.add_argument('--schema', action='store_true', help='Show database schema information')
+    parser.add_argument('--filesystem', action='store_true', help='Compare file system vs database')
     args = parser.parse_args()
     
     db_path = args.db
@@ -1422,21 +1413,58 @@ def main():
     print("=" * 50)
     print(f"Using database file: {db_path}")
     
-    # Create the debugger
     debugger = DatabaseDebugger(db_path)
-    
-    if args.labels:
-        # Only show labels table
+    targets = [
+        args.labels,
+        args.ai_models,
+        args.training_sessions,
+        args.projects,
+        args.datasets,
+        args.images,
+        args.annotations_summary,
+        args.annotations_detailed,
+        args.releases,
+        args.transformations,
+        args.transformations_detailed,
+        args.relationships,
+        args.stats,
+        args.schema,
+        args.filesystem,
+    ]
+    if any(targets):
         if debugger.connect():
-            debugger.get_labels_table()
-            debugger.close()
-    elif args.ai_models:
-        # Only show ai_models table
-        if debugger.connect():
-            debugger.get_ai_models_table()
+            if args.labels:
+                debugger.get_labels_table()
+            if args.ai_models:
+                debugger.get_ai_models_table()
+            if args.training_sessions:
+                debugger.get_training_sessions_table()
+            if args.projects:
+                debugger.get_projects_overview()
+            if args.datasets:
+                debugger.get_datasets_detailed()
+            if args.images:
+                debugger.get_images_detailed()
+            if args.annotations_summary:
+                debugger.get_annotations_summary()
+            if args.annotations_detailed:
+                debugger.get_detailed_annotations()
+            if args.releases:
+                debugger.get_releases_table()
+            if args.transformations:
+                debugger.get_image_transformations_table()
+            if args.transformations_detailed:
+                debugger.get_image_transformations_detailed()
+            if args.relationships:
+                debugger.get_transformation_release_relationships()
+            if args.stats:
+                debugger.get_database_statistics()
+            if args.schema:
+                debugger.get_table_info()
+            if args.filesystem:
+                debugger.get_file_system_vs_database()
             debugger.close()
     else:
-        # Run full debug
         debugger.run_full_debug()
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 {
-  "export_timestamp": "2025-11-18T12:48:49.417263",
+  "export_timestamp": "2025-11-19T11:35:17.167084",
   "database_path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\database.db",
   "projects": [
     {
@@ -22,7 +22,7 @@
           "name": "animal",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-21 16:42:50",
-          "updated_at": "2025-11-18 11:48:40.914830",
+          "updated_at": "2025-11-19 08:01:14.694470",
           "statistics": {
             "total_images": 3,
             "labeled_images": 3,
@@ -46,7 +46,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-11-18 11:48:40.875522",
+              "updated_at": "2025-11-19 08:01:14.656290",
               "file_exists": false
             },
             {
@@ -65,7 +65,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-11-18 11:48:40.888518",
+              "updated_at": "2025-11-19 08:01:14.669141",
               "file_exists": false
             },
             {
@@ -84,7 +84,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-11-18 11:48:40.902178",
+              "updated_at": "2025-11-19 08:01:14.681144",
               "file_exists": false
             }
           ]
