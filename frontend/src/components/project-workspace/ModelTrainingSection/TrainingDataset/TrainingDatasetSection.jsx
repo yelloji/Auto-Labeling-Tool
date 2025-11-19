@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Form, Alert, Tag, Space, Select, Button, Card, Typography } from 'antd';
 import { releasesAPI, trainingAPI } from '../../../../services/api';
 
-export default function TrainingDatasetSection({ projectId, datasetSource, datasetZipPath, classes, datasetSummary, isDeveloper, onChange }) {
+export default function TrainingDatasetSection({ projectId, datasetSource, datasetReleaseId, datasetZipPath, datasetReleaseDir, classes, datasetSummary, isDeveloper, hydratedIdentity, onChange }) {
   const [loadingReleases, setLoadingReleases] = useState(false);
   const [projectReleases, setProjectReleases] = useState([]);
   const [checkingExtract, setCheckingExtract] = useState(false);
@@ -21,9 +21,9 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
         const releases = await releasesAPI.getProjectReleases(projectId);
         setProjectReleases(Array.isArray(releases) ? releases : []);
         const firstZip = (Array.isArray(releases) ? releases : [])
-          .find((r) => String(r?.model_path || '').toLowerCase().endsWith('.zip'));
-        if (firstZip && !datasetZipPath) {
-          onChange({ datasetZipPath: firstZip.model_path });
+          .find((r) => String(getZipPath(r) || '').toLowerCase().endsWith('.zip'));
+        if (firstZip && hydratedIdentity && !datasetZipPath && !datasetReleaseDir && !datasetReleaseId) {
+          onChange({ datasetReleaseId: firstZip.id, datasetZipPath: getZipPath(firstZip) });
         }
       } catch (e) {
         // swallow error, keep manual input
@@ -33,7 +33,7 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
       }
     };
     loadReleases();
-  }, [projectId]);
+  }, [projectId, hydratedIdentity, datasetReleaseDir, datasetZipPath, datasetReleaseId]);
 
   useEffect(() => {
     const check = async () => {
@@ -70,6 +70,22 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
     check();
   }, [datasetZipPath]);
 
+  useEffect(() => {
+    const refresh = async () => {
+      const dir = String(datasetReleaseDir || '').trim();
+      if (!dir) return;
+      setExtractedInfo({ extracted: true, target_dir: dir });
+      try {
+        const sum = await trainingAPI.datasetSummary({ releaseDir: dir });
+        setSummary(sum);
+        if (Array.isArray(sum?.classes)) {
+          onChange({ classes: sum.classes });
+        }
+      } catch (e) {}
+    };
+    refresh();
+  }, [datasetReleaseDir]);
+
   return (
     <Form layout="vertical">
       <Form.Item label="Release" required>
@@ -77,17 +93,22 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
             showSearch
             style={{ width: '100%' }}
             placeholder={loadingReleases ? 'Loading releases…' : ((projectReleases && projectReleases.length) ? 'Select a release' : 'No releases available for this project')}
-            value={datasetZipPath || undefined}
-            onChange={(val) => onChange({ datasetZipPath: val })}
+            value={(datasetReleaseId ? String(datasetReleaseId) : undefined)}
+            onChange={(val) => {
+              const rel = (projectReleases || []).find((r) => String(r?.id) === String(val));
+              const zp = getZipPath(rel);
+              onChange({ datasetReleaseId: String(val), datasetZipPath: zp });
+            }}
             optionFilterProp="label"
             disabled={loadingReleases || !(projectReleases && projectReleases.length)}
           >
             {(projectReleases || []).map((r) => {
               const label = r?.name || r?.release_version || 'Release';
-              const value = getZipPath(r);
-              const isItemZip = value.toLowerCase().endsWith('.zip');
+              const value = String(r?.id);
+              const zp = getZipPath(r);
+              const isItemZip = zp.toLowerCase().endsWith('.zip');
               return (
-                <Select.Option key={r?.id || value || label} value={isItemZip ? value : undefined} label={label} disabled={!isItemZip}>
+                <Select.Option key={r?.id || label} value={isItemZip ? value : undefined} label={label} disabled={!isItemZip}>
                   {label}
                 </Select.Option>
               );

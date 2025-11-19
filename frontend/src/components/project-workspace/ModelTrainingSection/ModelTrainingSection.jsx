@@ -9,7 +9,7 @@ import PretrainedModelSelect from './PretrainedModel/PretrainedModelSelect';
 import TrainingDatasetSection from './TrainingDataset/TrainingDatasetSection';
 import PresetSection from './Preset/PresetSection';
 import './compact.css';
-import { trainingAPI } from '../../../services/api';
+import { trainingAPI, releasesAPI } from '../../../services/api';
 import TerminalPanel from './Terminal/TerminalPanel';
 
 const { Title, Text } = Typography;
@@ -24,6 +24,7 @@ const initialFormState = {
   taskType: 'segmentation',
   pretrainedModel: '',
   datasetSource: 'release_zip',
+  datasetReleaseId: null,
   datasetZipPath: '',
   datasetReleaseDir: '',
   classes: [],
@@ -37,7 +38,8 @@ const initialFormState = {
   close_mosaic: null,
   device: 'cpu',
   gpuIndex: null,
-  optimizerMode: 'smart-auto'
+  optimizerMode: 'smart-auto',
+  hydratedIdentity: false
 };
 
 const ModelTrainingSection = ({ projectId, project }) => {
@@ -67,11 +69,12 @@ const ModelTrainingSection = ({ projectId, project }) => {
     const timer = setTimeout(async () => {
       try {
         if (!form.projectId || !form.trainingName || form.trainingName.length < 3) return;
-        await trainingAPI.upsertSession({
-          projectId: form.projectId,
-          name: form.trainingName,
-          description: form.description || ''
-        });
+        if (!form.hydratedIdentity) return;
+        const payload = { projectId: form.projectId, name: form.trainingName };
+        if (typeof form.description === 'string' && form.description.trim().length) {
+          payload.description = form.description;
+        }
+        await trainingAPI.upsertSession(payload);
         try {
           const sess = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
           if (sess && sess.id) {
@@ -79,9 +82,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
           }
         } catch (_) {}
       } catch (_) {}
-    }, 600);
+    }, 200);
     return () => clearTimeout(timer);
-  }, [form.projectId, form.trainingName, form.description]);
+  }, [form.projectId, form.trainingName, form.description, form.hydratedIdentity]);
 
   useEffect(() => {
     const resumeActive = async () => {
@@ -96,41 +99,80 @@ const ModelTrainingSection = ({ projectId, project }) => {
     resumeActive();
   }, [form.projectId, form.trainingName]);
 
+  useEffect(() => {
+    const maybeExtract = async () => {
+      try {
+        if (!form.sessionId) return;
+        if (!form.projectId || !form.trainingName || !form.datasetZipPath) return;
+        if (!form.hydratedIdentity) return;
+        const res = await trainingAPI.updateSessionDatasetFromZip({
+          projectId: form.projectId,
+          name: form.trainingName,
+          zipPath: form.datasetZipPath,
+        });
+        const patch = {};
+        if (res && typeof res.dataset_release_dir === 'string' && res.dataset_release_dir.length) {
+          patch.datasetReleaseDir = res.dataset_release_dir;
+        }
+        if (res && typeof res.dataset_release_id !== 'undefined' && res.dataset_release_id !== null) {
+          patch.datasetReleaseId = String(res.dataset_release_id);
+        }
+        if (Object.keys(patch).length) {
+          setForm(prev => ({ ...prev, ...patch }));
+        }
+      } catch (_) {}
+    };
+    maybeExtract();
+  }, [form.sessionId]);
+
   // Persist selected model/framework/task
   useEffect(() => {
     const saveModel = async () => {
       try {
         if (!form.projectId || !form.trainingName) return;
-        await trainingAPI.updateSessionModel({
-          projectId: form.projectId,
-          name: form.trainingName,
-          baseModelId: form.pretrainedModel || null,
-          framework: form.framework || null,
-          task: form.taskType || null,
-          modelName: form.pretrainedModel || null,
-        });
+        if (!form.hydratedIdentity) return;
+        const hasModel = typeof form.pretrainedModel === 'string' && form.pretrainedModel.trim().length;
+        const hasFramework = typeof form.framework === 'string' && form.framework.trim().length;
+        const hasTask = typeof form.taskType === 'string' && form.taskType.trim().length;
+        if (!(hasModel || hasFramework || hasTask)) return;
+        const payload = { projectId: form.projectId, name: form.trainingName };
+        if (hasModel) {
+          payload.baseModelId = form.pretrainedModel;
+          payload.modelName = form.pretrainedModel;
+        }
+        if (hasFramework) payload.framework = form.framework;
+        if (hasTask) payload.task = form.taskType;
+        await trainingAPI.updateSessionModel(payload);
       } catch (_) {}
     };
     saveModel();
-  }, [form.projectId, form.trainingName, form.pretrainedModel, form.framework, form.taskType]);
+  }, [form.projectId, form.trainingName, form.pretrainedModel, form.framework, form.taskType, form.hydratedIdentity]);
 
   // Persist dataset selection from zip: extract if needed, save dir + summary
   useEffect(() => {
     const saveDataset = async () => {
       try {
         if (!form.projectId || !form.trainingName || !form.datasetZipPath) return;
+        if (!form.hydratedIdentity) return;
         const res = await trainingAPI.updateSessionDatasetFromZip({
           projectId: form.projectId,
           name: form.trainingName,
           zipPath: form.datasetZipPath,
         });
+        const patch = {};
         if (res && typeof res.dataset_release_dir === 'string' && res.dataset_release_dir.length) {
-          setForm(prev => ({ ...prev, datasetReleaseDir: res.dataset_release_dir }));
+          patch.datasetReleaseDir = res.dataset_release_dir;
+        }
+        if (res && typeof res.dataset_release_id !== 'undefined' && res.dataset_release_id !== null) {
+          patch.datasetReleaseId = String(res.dataset_release_id);
+        }
+        if (Object.keys(patch).length) {
+          setForm(prev => ({ ...prev, ...patch }));
         }
       } catch (_) {}
     };
     saveDataset();
-  }, [form.projectId, form.trainingName, form.datasetZipPath]);
+  }, [form.projectId, form.trainingName, form.datasetZipPath, form.hydratedIdentity]);
 
   // Auto-load resolved config and hydrate UI when returning (status=queued)
   useEffect(() => {
@@ -138,10 +180,10 @@ const ModelTrainingSection = ({ projectId, project }) => {
       try {
         if (!form.projectId || !form.trainingName) return;
         const data = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
+        const patch = {};
         if (data && typeof data.resolved_config_json === 'string' && data.resolved_config_json.length) {
           try {
             const cfg = JSON.parse(data.resolved_config_json);
-            const patch = {};
             const t = cfg?.train || {};
             const h = cfg?.hyperparameters || {};
             const a = cfg?.augmentation || {};
@@ -164,11 +206,25 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 patch.gpuIndex = null;
               }
             }
+            if (typeof t.resume === 'boolean') patch.resume = t.resume;
+            if (typeof t.optimizer === 'string') patch.optimizer = t.optimizer;
+            if (typeof t.single_cls === 'boolean') patch.single_cls = t.single_cls;
+            if (typeof t.rect === 'boolean') patch.rect = t.rect;
+            if (typeof t.overlap_mask === 'boolean') patch.overlap_mask = t.overlap_mask;
+            if (typeof t.mask_ratio === 'number') patch.mask_ratio = t.mask_ratio;
+            if (typeof t.freeze === 'number' || Array.isArray(t.freeze)) patch.freeze = t.freeze;
+            if (typeof t.data === 'string' && t.data.endsWith('/data.yaml')) {
+              const baseDir = t.data.slice(0, -('/data.yaml'.length));
+              if (baseDir.length) patch.datasetReleaseDir = baseDir;
+            }
             if (typeof h.lr0 === 'number') patch.lr0 = h.lr0;
             if (typeof h.lrf === 'number') patch.lrf = h.lrf;
+            if (typeof h.momentum === 'number') patch.momentum = h.momentum;
+            if (typeof h.weight_decay === 'number') patch.weight_decay = h.weight_decay;
             if (typeof h.warmup_epochs === 'number') patch.warmup_epochs = h.warmup_epochs;
             if (typeof h.warmup_momentum === 'number') patch.warmup_momentum = h.warmup_momentum;
             if (typeof h.warmup_bias_lr === 'number') patch.warmup_bias_lr = h.warmup_bias_lr;
+            if (typeof h.cos_lr === 'boolean') patch.cos_lr = h.cos_lr;
             if (typeof h.box === 'number') patch.box = h.box;
             if (typeof h.cls === 'number') patch.cls = h.cls;
             if (typeof h.dfl === 'number') patch.dfl = h.dfl;
@@ -184,17 +240,36 @@ const ModelTrainingSection = ({ projectId, project }) => {
             if (typeof a.scale === 'number') patch.scale = a.scale;
             if (typeof a.shear === 'number') patch.shear = a.shear;
             if (typeof a.perspective === 'number') patch.perspective = a.perspective;
+            if (typeof a.close_mosaic === 'number') patch.close_mosaic = a.close_mosaic;
             if (typeof v.iou === 'number') patch.val_iou = v.iou;
             if (typeof v.plots === 'boolean') patch.val_plots = v.plots;
             if (Array.isArray(d.classes)) patch.classes = d.classes;
-            if (typeof data.dataset_release_dir === 'string' && data.dataset_release_dir.length) {
-              patch.datasetReleaseDir = data.dataset_release_dir;
-            }
-            setForm(prev => ({ ...prev, ...patch }));
             window.__resolvedServerConfig = cfg;
+            if (typeof cfg.framework === 'string') patch.framework = cfg.framework;
+            if (typeof cfg.task === 'string') patch.taskType = cfg.task;
           } catch {}
         }
-      } catch {}
+        if (data && typeof data.description === 'string') patch.description = data.description;
+        if (data && typeof data.framework === 'string') patch.framework = data.framework;
+        if (data && typeof data.task === 'string') patch.taskType = data.task;
+        if (data && typeof data.model_name === 'string' && !(typeof patch.pretrainedModel === 'string' && patch.pretrainedModel.length)) {
+          patch.pretrainedModel = data.model_name;
+        }
+        if (typeof data.dataset_release_dir === 'string' && data.dataset_release_dir.length) {
+          patch.datasetReleaseDir = data.dataset_release_dir;
+        }
+        if (data && typeof data.dataset_release_id !== 'undefined' && data.dataset_release_id !== null) {
+          try {
+            const rels = await releasesAPI.getProjectReleases(form.projectId);
+            const match = (Array.isArray(rels) ? rels : []).find((r) => String(r?.id) === String(data.dataset_release_id));
+            const zp = String(match?.model_path || match?.path || match?.release_zip || match?.zip_path || '').trim();
+            if (zp.length) patch.datasetZipPath = zp;
+            patch.datasetReleaseId = String(data.dataset_release_id);
+          } catch {}
+        }
+        patch.hydratedIdentity = true;
+        setForm(prev => ({ ...prev, ...patch }));
+      } catch { setForm(prev => ({ ...prev, hydratedIdentity: true })); }
     };
     loadSession();
   }, [form.projectId, form.trainingName]);
@@ -204,6 +279,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     const autoSaveConfig = async () => {
       try {
         if (!form.projectId || !form.trainingName) return;
+        if (!form.hydratedIdentity) return;
         const trainOverrides = {
           model: form.pretrainedModel,
           epochs: form.epochs,
@@ -212,11 +288,14 @@ const ModelTrainingSection = ({ projectId, project }) => {
           amp: form.mixedPrecision,
           early_stop: form.earlyStop,
           resume: form.resume,
+          optimizer: form.optimizer,
+          single_cls: form.single_cls,
+          rect: form.rect,
+          overlap_mask: form.overlap_mask,
+          mask_ratio: form.mask_ratio,
+          freeze: form.freeze,
           device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
         };
-        if (typeof form.close_mosaic === 'number') {
-          trainOverrides.close_mosaic = form.close_mosaic;
-        }
         if (typeof form.datasetReleaseDir === 'string' && form.datasetReleaseDir.length) {
           trainOverrides.data = `${form.datasetReleaseDir}/data.yaml`;
         }
@@ -225,15 +304,19 @@ const ModelTrainingSection = ({ projectId, project }) => {
           hyperparameters: {
             lr0: form.lr0,
             lrf: form.lrf,
+            momentum: form.momentum,
+            weight_decay: form.weight_decay,
             warmup_epochs: form.warmup_epochs,
             warmup_momentum: form.warmup_momentum,
             warmup_bias_lr: form.warmup_bias_lr,
+            cos_lr: form.cos_lr,
             box: form.box,
             cls: form.cls,
             dfl: form.dfl,
           },
           augmentation: {
             mosaic: form.mosaic,
+            close_mosaic: form.close_mosaic,
             mixup: form.mixup,
             hsv_h: form.hsv_h,
             hsv_s: form.hsv_s,
@@ -267,6 +350,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
   }, [
     form.projectId,
     form.trainingName,
+    form.hydratedIdentity,
     form.framework,
     form.taskType,
     form.pretrainedModel,
@@ -276,17 +360,27 @@ const ModelTrainingSection = ({ projectId, project }) => {
     form.mixedPrecision,
     form.earlyStop,
     form.resume,
+    form.optimizer,
+    form.single_cls,
+    form.rect,
+    form.overlap_mask,
+    form.mask_ratio,
+    form.freeze,
     form.device,
     form.gpuIndex,
     form.lr0,
     form.lrf,
+    form.momentum,
+    form.weight_decay,
     form.warmup_epochs,
     form.warmup_momentum,
     form.warmup_bias_lr,
+    form.cos_lr,
     form.box,
     form.cls,
     form.dfl,
     form.mosaic,
+    form.close_mosaic,
     form.mixup,
     form.hsv_h,
     form.hsv_s,
@@ -322,9 +416,6 @@ const ModelTrainingSection = ({ projectId, project }) => {
         model: form.pretrainedModel,
         device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu'
       };
-      if (typeof form.close_mosaic === 'number') {
-        t.close_mosaic = form.close_mosaic;
-      }
       if (typeof form.datasetReleaseDir === 'string' && form.datasetReleaseDir.length) {
         t.data = `${form.datasetReleaseDir}/data.yaml`;
       }
@@ -409,9 +500,12 @@ const ModelTrainingSection = ({ projectId, project }) => {
               <TrainingDatasetSection
                 projectId={project?.id || projectId || form.projectId}
                 datasetSource={form.datasetSource}
+                datasetReleaseId={form.datasetReleaseId}
                 datasetZipPath={form.datasetZipPath}
+                datasetReleaseDir={form.datasetReleaseDir}
                 classes={form.classes}
                 isDeveloper={isDeveloper}
+                hydratedIdentity={form.hydratedIdentity}
                 onChange={(patch) => handleChange(patch)}
               />
             </Card>
@@ -514,9 +608,6 @@ const ModelTrainingSection = ({ projectId, project }) => {
                                 rect: form.rect,
                                 freeze: form.freeze
                               };
-                              if (typeof form.close_mosaic === 'number') {
-                                t.close_mosaic = form.close_mosaic;
-                              }
                               return t;
                             })(),
                             hyperparameters: {
