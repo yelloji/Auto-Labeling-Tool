@@ -156,25 +156,41 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                 <Switch checked={resume} onChange={(v) => onChange({ resume: v })} />
               </Form.Item>
               <Form.Item label="Optimizer" tooltip="Smart auto picks based on device and batch size">
-                <Select value={optimizerMode === 'smart-auto' ? 'smart-auto' : (optimizer || undefined)} placeholder="Select">
-                  <Select.Option value="smart-auto" onClick={() => {
+                <Select
+                  value={optimizerMode === 'smart-auto' ? 'smart-auto' : (optimizer || undefined)}
+                  placeholder="Select"
+                  onChange={(v) => {
+                    if (v === 'smart-auto') {
+                      const isGPU = device === 'gpu';
+                      const bsz = typeof batchSize === 'number' ? batchSize : 0;
+                      let picked = 'AdamW';
+                      let rec = { lr0: 0.0007, lrf: 0.01, momentum: 0.937, weight_decay: 0.0005 };
+                      if (!isGPU) {
+                        picked = 'Adam';
+                        rec = { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 };
+                      } else if (bsz >= 32) {
+                        picked = 'SGD';
+                        rec = { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 };
+                      }
+                      onChange({ optimizerMode: 'smart-auto', optimizer: picked, ...rec });
+                    } else {
+                      const preset = OPTIMIZER_PRESETS[v] || {};
+                      onChange({ optimizerMode: null, optimizer: v, ...preset });
+                    }
+                  }}
+                >
+                  <Select.Option value="smart-auto">smart auto</Select.Option>
+                  <Select.Option value="AdamW">AdamW</Select.Option>
+                  <Select.Option value="SGD">SGD</Select.Option>
+                </Select>
+                {optimizerMode === 'smart-auto' && (
+                  (() => {
                     const isGPU = device === 'gpu';
                     const bsz = typeof batchSize === 'number' ? batchSize : 0;
-                    let picked = 'AdamW';
-                    let rec = { lr0: 0.0007, lrf: 0.01, momentum: 0.937, weight_decay: 0.0005 };
-                    if (!isGPU) { picked = 'Adam'; rec = { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 }; }
-                    else if (bsz >= 32) { picked = 'SGD'; rec = { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 }; }
-                    onChange({ optimizerMode: 'smart-auto', ...rec });
-                  }}>smart auto</Select.Option>
-                  <Select.Option value="AdamW" onClick={() => {
-                    const preset = OPTIMIZER_PRESETS['AdamW'];
-                    onChange({ optimizerMode: null, optimizer: 'AdamW', ...preset });
-                  }}>AdamW</Select.Option>
-                  <Select.Option value="SGD" onClick={() => {
-                    const preset = OPTIMIZER_PRESETS['SGD'];
-                    onChange({ optimizerMode: null, optimizer: 'SGD', ...preset });
-                  }}>SGD</Select.Option>
-                </Select>
+                    const resolved = !isGPU ? 'Adam' : (bsz >= 32) ? 'SGD' : 'AdamW';
+                    return <span style={{ marginLeft: 8, color: '#888' }}>({resolved})</span>;
+                  })()
+                )}
               </Form.Item>
               <Form.Item label="Single Class" tooltip="Treat data as single class (industrial setups)">
                 <Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} />

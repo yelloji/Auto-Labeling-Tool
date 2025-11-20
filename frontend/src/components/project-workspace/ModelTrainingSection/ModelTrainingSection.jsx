@@ -203,6 +203,30 @@ const ModelTrainingSection = ({ projectId, project }) => {
     prevPatience.current = form.patience;
   }, [form.patience, form.earlyStop, form.hydratedIdentity]);
 
+  // Auto-recalculate smart-auto optimizer when device or batch size changes
+  useEffect(() => {
+    if (!form.hydratedIdentity) return; // Don't run during initial hydration
+    if (form.optimizerMode !== 'smart-auto') return; // Only for smart-auto mode
+
+    const isGPU = form.device === 'gpu';
+    const bsz = typeof form.batchSize === 'number' ? form.batchSize : 0;
+    let picked = 'AdamW';
+    let rec = { lr0: 0.0007, lrf: 0.01, momentum: 0.937, weight_decay: 0.0005 };
+
+    if (!isGPU) {
+      picked = 'Adam';
+      rec = { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 };
+    } else if (bsz >= 32) {
+      picked = 'SGD';
+      rec = { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 };
+    }
+
+    // Only update if the optimizer actually changed
+    if (form.optimizer !== picked) {
+      setForm(prev => ({ ...prev, optimizer: picked, ...rec }));
+    }
+  }, [form.device, form.batchSize, form.optimizerMode, form.optimizer, form.hydratedIdentity]);
+
   // Auto-load resolved config and hydrate UI when returning (status=queued)
   useEffect(() => {
     const loadSession = async () => {
