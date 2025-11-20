@@ -35,7 +35,6 @@ const initialFormState = {
   earlyStop: true,
   saveBestOnly: true,
   resume: false,
-  close_mosaic: null,
   device: 'cpu',
   gpuIndex: null,
   optimizerMode: 'smart-auto',
