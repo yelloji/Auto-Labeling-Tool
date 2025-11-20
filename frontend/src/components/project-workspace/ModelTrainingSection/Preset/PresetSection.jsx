@@ -82,6 +82,11 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                 <Switch checked={resume} onChange={(v) => onChange({ resume: v })} />
               </Form.Item>
             </Col>
+            <Col span={12}>
+              <Form.Item label="Single Class" tooltip="Treat multi-class data as single-class">
+                <Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} />
+              </Form.Item>
+            </Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}>
@@ -286,11 +291,6 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                 </Form.Item>
               </Col>
             </Row>
-            <Row gutter={12}>
-              <Col span={8}><Form.Item label="Warmup Epochs" tooltip="Warmup length in epochs"><InputNumber min={0} step={0.1} placeholder={3.0} value={warmup_epochs} onChange={(v) => onChange({ warmup_epochs: v })} /></Form.Item></Col>
-              <Col span={8}><Form.Item label="Warmup Momentum" tooltip="Initial momentum during warmup"><InputNumber min={0} max={1} step={0.01} placeholder={0.8} value={warmup_momentum} onChange={(v) => onChange({ warmup_momentum: v })} /></Form.Item></Col>
-              <Col span={8}><Form.Item label="Warmup Bias LR" tooltip="Initial bias learning rate"><InputNumber min={0} step={0.001} placeholder={0.1} value={warmup_bias_lr} onChange={(v) => onChange({ warmup_bias_lr: v })} /></Form.Item></Col>
-            </Row>
           </Collapse.Panel>
           <Collapse.Panel header="Loss Weights" key="loss">
             <Row gutter={12}>
@@ -326,12 +326,9 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
           </Collapse.Panel>
           <Collapse.Panel header="Task & Segmentation" key="task">
             <Row gutter={12}>
-              <Col span={6}><Form.Item label="Single Class" tooltip="Treat multi-class data as single-class"><Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Rectangular" tooltip="Rectangular batches"><Switch checked={rect} onChange={(v) => onChange({ rect: v })} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Overlap Mask" tooltip="Merge masks into single image mask"><Switch checked={overlap_mask} onChange={(v) => onChange({ overlap_mask: v })} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Mask Ratio" tooltip="Mask downsample ratio"><InputNumber min={1} step={1} placeholder={2} value={mask_ratio} onChange={(v) => onChange({ mask_ratio: v })} /></Form.Item></Col>
-            </Row>
-            <Row gutter={12}>
               <Col span={6}><Form.Item label="Freeze Layers" tooltip="Freeze first N layers"><InputNumber min={0} step={1} placeholder={0} value={freeze} onChange={(v) => onChange({ freeze: v })} /></Form.Item></Col>
             </Row>
           </Collapse.Panel>
