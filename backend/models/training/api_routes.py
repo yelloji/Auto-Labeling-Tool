@@ -10,6 +10,9 @@ from models.training.model_selector import get_trainable_models
 from models.training.training_extraction import is_extracted, extract_release_zip
 from models.training.config import load_base_config, resolve_config, build_args_preview
 from models.training.dataset_summary import summarize_dataset, find_and_summarize
+from models.training.yaml_generator import generate_ultralytics_training_yaml
+from models.training.executor import start_ultralytics_training
+import json
 from pathlib import Path
 from sqlalchemy import and_
 from database.models import Release
@@ -86,15 +89,49 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         artifacts_dir = base_dir / "artifacts"
         for d in [runs_dir, weights_dir, logs_dir, artifacts_dir]:
             d.mkdir(parents=True, exist_ok=True)
+        
+        # Set paths
         ts.run_dir = str(runs_dir)
         ts.weights_dir = str(weights_dir)
         ts.logs_dir = str(logs_dir)
         ts.artifacts_dir = str(artifacts_dir)
         ts.best_weights_path = None
+        
+        # Load resolved config
+        resolved_config = {}
+        if ts.resolved_config_json:
+            try:
+                resolved_config = json.loads(ts.resolved_config_json)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid resolved config JSON: {str(e)}")
+        
+        # Generate temporary YAML config
+        temp_yaml_path = artifacts_dir / "temp_training_config.yaml"
+        try:
+            generate_ultralytics_training_yaml(resolved_config, str(temp_yaml_path))
+            
+            # Save snapshot to DB
+            with open(temp_yaml_path, 'r', encoding='utf-8') as f:
+                ts.training_config_snapshot = f.read()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to generate training config: {str(e)}")
+        
+        # Start training process
+        process = start_ultralytics_training(str(temp_yaml_path), ts, db)
+        
+        # Clean up temp file
+        try:
+            temp_yaml_path.unlink()
+        except Exception:
+            pass  # Non-critical if cleanup fails
+        
+        # Update status
         ts.status = "running"
         ts.progress_pct = 0
         ts.started_at = datetime.utcnow()
         ts.last_update_at = ts.started_at
+        
+        # Commit to DB
         db.add(ts)
         db.commit()
         return {
@@ -106,6 +143,7 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
                 "artifacts_dir": ts.artifacts_dir,
             },
             "status": ts.status,
+            "process_started": process is not None,
         }
     except HTTPException:
         raise

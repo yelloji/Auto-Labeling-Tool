@@ -1,0 +1,499 @@
+# Detailed Implementation Plan: Training Runner Backend
+
+## Overview
+Implement backend logic to execute YOLO training sessions using the resolved configuration. This will enable the "Start Training" button in the UI to actually run model training.
+
+---
+
+## Current State Analysis
+
+### Existing Components
+1. **TrainingSession Model** (`backend/database/models.py:530-595`)
+   - Already has `resolved_config_json` column to store config
+   - Has directory paths: `run_dir`, `weights_dir`, `logs_dir`, `artifacts_dir`
+   - Status tracking: `status`, `progress_pct`, timestamps
+   - **Missing**: `training_config_snapshot` column (mentioned in plan)
+
+2. **API Endpoints** ([backend/models/training/api_routes.py](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py))
+   - `POST /training/session/start` - Currently only creates directories and sets status to "running"
+   - `POST /training/session/save-config` - Saves `resolved_config_json` to database
+   - `POST /training/config/resolve` - Resolves config by merging base + overrides
+
+3. **Config System** ([backend/models/training/config.py](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/config.py))
+   - [load_base_config()](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/config.py#18-38) - Loads YAML defaults for framework/task
+   - [resolve_config()](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/config.py#50-74) - Merges base config with user overrides
+   - [build_args_preview()](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/config.py#76-109) - Builds command-line args (for preview only)
+
+### What's Missing
+- No actual YOLO training execution
+- No YAML config file generation
+- No subprocess/process management to run `yolo train`
+- No training progress monitoring
+- No cleanup after training
+
+---
+
+## Implementation Tasks
+
+### Task 1: Add `training_config_snapshot` Column
+**File**: [backend/database/models.py](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/database/models.py)
+**Location**: [TrainingSession](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/database/models.py#530-596) class (line ~530)
+
+**Action**: Add new column after `resolved_config_json`:
+```python
+training_config_snapshot = Column(Text, nullable=True)  # Final YAML config used for training
+```
+
+**Why**: Store the exact YAML configuration that was used to start training, separate from the resolved JSON config.
+
+---
+
+### Task 2: Create YAML Generator Function
+**File**: **NEW** - `backend/models/training/yaml_generator.py`
+
+**Purpose**: Generate temporary YAML config files for YOLO training
+
+**Functions to implement**:
+
+```python
+def generate_training_yaml(
+    resolved_config: Dict[str, Any],
+    output_path: str
+) -> str:
+    """
+    Generate a YAML config file from resolved config dict.
+    
+    Args:
+        resolved_config: Config dict with train, hyperparameters, augmentation, val
+        output_path: Path to write YAML file
+        
+    Returns:
+        str: Path to generated YAML file
+    """
+```
+
+**Logic**:
+1. Take `resolved_config` dict (train, hyperparameters, augmentation, val)
+2. Flatten nested structure into YOLO-compatible format
+3. Write to temporary YAML file using `yaml.safe_dump()`
+4. Return file path
+
+---
+
+### Task 3: Create Training Execution Module
+**File**: **NEW** - `backend/models/training/executor.py`
+
+**Purpose**: Execute YOLO training commands in subprocess
+
+**Functions to implement**:
+
+```python
+def start_yolo_training(
+    config_yaml_path: str,
+    session: TrainingSession,
+    db: Session
+) -> subprocess.Popen:
+    """
+    Start YOLO training in background subprocess.
+    
+    Args:
+        config_yaml_path: Path to temporary YAML config
+        session: TrainingSession database object
+        db: Database session
+        
+    Returns:
+        subprocess.Popen: Running process handle
+    """
+```
+
+**Logic**:
+1. Build command: `["yolo", "train", f"cfg={config_yaml_path}"]`
+2. Set working directory to `session.run_dir`
+3. Redirect stdout/stderr to log file in `session.logs_dir`
+4. Start process with `subprocess.Popen()`
+5. Store process PID for later monitoring
+6. Return process handle
+
+---
+
+### Task 4: Modify [start_training_session](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py#68-114) Endpoint
+**File**: [backend/models/training/api_routes.py](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py)
+**Location**: [start_training_session()](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py#68-114) function (line ~68)
+
+**Current behavior**:
+- Creates directories
+- Sets status to "running"
+- Returns paths
+
+**New behavior** (add these steps):
+
+1. **Before setting status**:
+   - Load `resolved_config_json` from database
+   - Generate temporary YAML file in `artifacts_dir`
+   - Save YAML content to `training_config_snapshot` column
+
+2. **After directories are created**:
+   - Call `start_yolo_training()` to execute training
+   - Update session with process info
+   - Delete temporary YAML file (or keep for debugging)
+
+**Pseudocode**:
+```python
+# After creating directories...
+import json
+resolved_config = json.loads(ts.resolved_config_json) if ts.resolved_config_json else {}
+
+# Generate YAML
+temp_yaml_path = Path(ts.artifacts_dir) / "temp_config.yaml"
+yaml_generator.generate_training_yaml(resolved_config, str(temp_yaml_path))
+
+# Store snapshot
+with open(temp_yaml_path, 'r') as f:
+    ts.training_config_snapshot = f.read()
+
+# Start training
+process = executor.start_yolo_training(str(temp_yaml_path), ts, db)
+
+# Clean up temp file
+temp_yaml_path.unlink()  # Delete after process starts
+
+# Update status as before
+ts.status = "running"
+# ... rest of code
+```
+
+---
+
+## File Structure Summary
+
+### Files to MODIFY:
+1. **[backend/database/models.py](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/database/models.py)**
+   - Add `training_config_snapshot` column to [TrainingSession](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/database/models.py#530-596) class
+
+2. **[backend/models/training/api_routes.py](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py)**
+   - Modify [start_training_session()](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py#68-114) to generate YAML and execute training
+
+### Files to CREATE:
+1. **`backend/models/training/yaml_generator.py`** (NEW)
+   - `generate_training_yaml()` function
+
+2. **`backend/models/training/executor.py`** (NEW)
+   - `start_yolo_training()` function
+
+---
+
+## Detailed Code Changes
+
+### 1. Add Column to TrainingSession Model
+
+**File**: [backend/database/models.py](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/database/models.py)
+**Line**: After line ~559 (after `resolved_config_json`)
+
+```python
+# Add this line:
+training_config_snapshot = Column(Text, nullable=True)
+```
+
+---
+
+### 2. Create `yaml_generator.py`
+
+**File**: `backend/models/training/yaml_generator.py` (NEW)
+
+```python
+import yaml
+from pathlib import Path
+from typing import Dict, Any
+from logging_system.professional_logger import get_professional_logger
+
+logger = get_professional_logger()
+
+
+def generate_training_yaml(resolved_config: Dict[str, Any], output_path: str) -> str:
+    """
+    Generate YAML config file for YOLO training from resolved config.
+    
+    Args:
+        resolved_config: Dict with train, hyperparameters, augmentation, val sections
+        output_path: Path to write YAML file
+        
+    Returns:
+        str: Path to generated YAML file
+    """
+    # Flatten nested structure for YOLO
+    flattened = {}
+    
+    # Merge all sections into flat dict
+    for section in ['train', 'hyperparameters', 'augmentation', 'val']:
+        if section in resolved_config:
+            flattened.update(resolved_config[section])
+    
+    # Write to YAML
+    output_file = Path(output_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(output_file, 'w', encoding='utf-8') as f:
+        yaml.safe_dump(flattened, f, default_flow_style=False, sort_keys=False)
+    
+    logger.info("operations.training", "Generated training YAML", "yaml_generator", {"path": str(output_file)})
+    return str(output_file)
+```
+
+---
+
+### 3. Create `executor.py`
+
+**File**: `backend/models/training/executor.py` (NEW)
+
+```python
+import subprocess
+from pathlib import Path
+from typing import Optional
+from database.models import TrainingSession
+from sqlalchemy.orm import Session
+from logging_system.professional_logger import get_professional_logger
+
+logger = get_professional_logger()
+
+
+def start_yolo_training(
+    config_yaml_path: str,
+    session: TrainingSession,
+    db: Session
+) -> Optional[subprocess.Popen]:
+    """
+    Execute YOLO training command in background subprocess.
+    
+    Args:
+        config_yaml_path: Path to YAML config file
+        session: TrainingSession database object
+        db: Database session
+        
+    Returns:
+        subprocess.Popen if successful, None if failed
+    """
+    try:
+        # Build command
+        cmd = ["yolo", "train", f"cfg={config_yaml_path}"]
+        
+        # Set up log file
+        log_file_path = Path(session.logs_dir) / "training.log"
+        log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Open log file
+        log_file = open(log_file_path, 'w', encoding='utf-8')
+        
+        # Start process
+        process = subprocess.Popen(
+            cmd,
+            cwd=session.run_dir,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,  # Merge stderr into stdout
+            text=True
+        )
+        
+        logger.info("operations.training", "Started YOLO training process", "training_start", {
+            "session_name": session.name,
+            "pid": process.pid,
+            "command": " ".join(cmd)
+        })
+        
+        return process
+        
+    except Exception as e:
+        logger.error("operations.training", "Failed to start training", "training_start_error", {
+            "session_name": session.name,
+            "error": str(e)
+        })
+        return None
+```
+
+---
+
+### 4. Modify [start_training_session()](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py#68-114) Endpoint
+
+**File**: [backend/models/training/api_routes.py](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py)
+**Function**: [start_training_session()](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py#68-114) (starting at line ~68)
+
+**Add imports at top of file**:
+```python
+import json
+from .yaml_generator import generate_training_yaml
+from .executor import start_yolo_training
+```
+
+**Replace the section after directory creation** (after line ~93):
+
+**Current code** (lines ~94-113):
+```python
+ts.run_dir = str(runs_dir)
+ts.weights_dir = str(weights_dir)
+ts.logs_dir = str(logs_dir)
+ts.artifacts_dir = str(artifacts_dir)
+ts.best_weights_path = None
+ts.status = "running"
+ts.progress_pct = 0
+ts.started_at = datetime.utcnow()
+ts.last_update_at = ts.started_at
+db.add(ts)
+db.commit()
+return { ... }
+```
+
+**New code**:
+```python
+# Set paths
+ts.run_dir = str(runs_dir)
+ts.weights_dir = str(weights_dir)
+ts.logs_dir = str(logs_dir)
+ts.artifacts_dir = str(artifacts_dir)
+ts.best_weights_path = None
+
+# Load resolved config
+resolved_config = {}
+if ts.resolved_config_json:
+    try:
+        resolved_config = json.loads(ts.resolved_config_json)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid resolved config JSON: {str(e)}")
+
+# Generate temporary YAML config
+temp_yaml_path = artifacts_dir / "temp_training_config.yaml"
+try:
+    generate_training_yaml(resolved_config, str(temp_yaml_path))
+    
+    # Save snapshot to DB
+    with open(temp_yaml_path, 'r', encoding='utf-8') as f:
+        ts.training_config_snapshot = f.read()
+except Exception as e:
+    raise HTTPException(status_code=500, detail=f"Failed to generate training config: {str(e)}")
+
+# Start training process
+process = start_yolo_training(str(temp_yaml_path), ts, db)
+
+# Clean up temp file
+try:
+    temp_yaml_path.unlink()
+except Exception:
+    pass  # Non-critical if cleanup fails
+
+# Update status
+ts.status = "running"
+ts.progress_pct = 0
+ts.started_at = datetime.utcnow()
+ts.last_update_at = ts.started_at
+
+# Commit to DB
+db.add(ts)
+db.commit()
+
+return {
+    "ok": True,
+    "paths": {
+        "run_dir": ts.run_dir,
+        "weights_dir": ts.weights_dir,
+        "logs_dir": ts.logs_dir,
+        "artifacts_dir": ts.artifacts_dir,
+    },
+    "status": ts.status,
+    "process_started": process is not None,
+}
+```
+
+---
+
+## Testing Plan
+
+### Manual Testing Steps:
+
+1. **Test Config Preview** (Frontend)
+   - Open ModelTrainingSection
+   - Configure training parameters
+   - Click "Preflight" button
+   - Verify Config Preview shows only: [train](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py#407-435), `hyperparameters`, `augmentation`, `val`
+
+2. **Test Training Start** (Backend)
+   - Click "Start Training" button
+   - Check developer console for errors
+   - Verify training process starts
+
+3. **Verify File System**
+   - Check `projects/{project_name}/models/training/{training_name}/` directory
+   - Verify subdirectories exist: `runs/`, `weights/`, [logs/](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py#441-498), `artifacts/`
+   - Check `logs/training.log` for YOLO output
+
+4. **Verify Database**
+   - Query `training_sessions` table
+   - Verify `training_config_snapshot` column is populated with YAML content
+   - Verify `status` is "running"
+   - Verify `started_at` timestamp is set
+
+5. **Monitor Training**
+   - Tail log file: `tail -f projects/{project}/models/training/{name}/logs/training.log`
+   - Verify YOLO training output appears
+   - Wait for training to complete or manually stop
+
+---
+
+## Risk Assessment
+
+### Potential Issues:
+
+1. **Database Migration**
+   - Adding `training_config_snapshot` column requires DB migration
+   - **Mitigation**: SQLAlchemy will auto-create column if using create_all(), or manual ALTER TABLE
+
+2. **Process Management**
+   - Training runs in background, no monitoring
+   - **Mitigation**: Future work - add process monitoring, status updates
+
+3. **YOLO Command Not Found**
+   - `yolo` command may not be in PATH
+   - **Mitigation**: Error handling in executor, log to training.log
+
+4. **File Permissions**
+   - May not have write access to directories
+   - **Mitigation**: Proper error handling, return 500 error to user
+
+5. **Config Mismatch**
+   - Resolved config may not match YOLO's expected format
+   - **Mitigation**: Test with known-good configs first
+
+---
+
+## Next Steps After Implementation
+
+1. **Add Process Monitoring**
+   - Track training progress by parsing log files
+   - Update `progress_pct` in database
+   - Detect completion and update status
+
+2. **Add Cleanup on Failure**
+   - If training fails, update status to "failed"
+   - Store error message in `error_msg` column
+
+3. **Add Training Cancellation**
+   - New endpoint to kill training process
+   - Clean up resources
+
+4. **Add Metrics Parsing**
+   - Parse YOLO output to extract mAP scores
+   - Update `best_box_map50`, `best_box_map95`, etc.
+
+---
+
+## Summary
+
+### New Files (2):
+1. `backend/models/training/yaml_generator.py` - Generate YAML configs
+2. `backend/models/training/executor.py` - Execute training subprocess
+
+### Modified Files (2):
+1. [backend/database/models.py](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/database/models.py) - Add `training_config_snapshot` column
+2. [backend/models/training/api_routes.py](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py) - Modify [start_training_session()](file:///v:/stage-1-labeling-app/app-3-fix-release-system-422-error/backend/models/training/api_routes.py#68-114) endpoint
+
+### Total Complexity: Medium
+- Well-defined interfaces
+- Clear separation of concerns
+- Builds on existing code
+- Requires database schema change

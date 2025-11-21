@@ -557,6 +557,8 @@ class TrainingSession(Base):
 
     # Core hyperparams live in resolved_config_json (no separate columns)
     resolved_config_json = Column(Text, nullable=True)
+    training_config_snapshot = Column(Text, nullable=True)  # Final YAML config used for training
+
 
     # Paths
     run_dir = Column(Text, nullable=True)
