@@ -802,13 +802,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                           <pre style={{ background: '#f7f7f7', padding: 12, borderRadius: 4, maxHeight: 220, overflow: 'auto', margin: 0 }}>
                             {JSON.stringify(configPreview, null, 2)}
                           </pre>
-                          {Array.isArray(window.__argsPreview) && window.__argsPreview.length > 0 && (
-                            <div style={{ marginTop: 8 }}>
-                              <pre style={{ background: '#fafafa', padding: 8, borderRadius: 4, maxHeight: 100, overflow: 'auto', margin: 0 }}>
-                                {window.__argsPreview.join(' ')}
-                              </pre>
-                            </div>
-                          )}
+
                         </div>
                       )
                     },
