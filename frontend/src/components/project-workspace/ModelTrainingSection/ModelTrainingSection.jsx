@@ -60,6 +60,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
   const isDeveloper = form.mode === 'developer';
   const handleChange = (patch) => setForm((prev) => ({ ...prev, ...patch }));
   const [consoleVisible, setConsoleVisible] = useState(false);
+  const [isTraining, setIsTraining] = useState(false);
+
 
   // Refs to track previous values for Early Stop / Patience sync
   const prevEarlyStop = React.useRef(form.earlyStop);
@@ -784,15 +786,19 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       }}
                     >Preflight</Button>
                   </div>
-                  <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady)}
+                  <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady) || isTraining}
                     onClick={async () => {
                       try {
                         if (form.projectId && form.trainingName) {
+                          setIsTraining(true);
                           await trainingAPI.startSession({ projectId: form.projectId, name: form.trainingName });
                         }
-                      } catch (e) { }
+                      } catch (e) {
+                        setIsTraining(false);
+                      }
                     }}
-                  >Start Training</Button>
+                  >{isTraining ? 'Training Started...' : 'Start Training'}</Button>
+
                 </Card>
                 <Card size="small" style={{ marginTop: 12 }} bodyStyle={{ padding: 12 }}>
                   <Tabs defaultActiveKey="config" items={[
