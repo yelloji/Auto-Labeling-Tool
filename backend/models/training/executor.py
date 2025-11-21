@@ -6,6 +6,7 @@ For other frameworks, create separate executor modules.
 """
 
 import subprocess
+import os
 from pathlib import Path
 from typing import Optional
 from database.models import TrainingSession
@@ -35,7 +36,17 @@ def start_ultralytics_training(
     """
     try:
         # Build command for Ultralytics YOLO
+        import shutil
+        import sys
+        
         cmd = ["yolo", "train", f"cfg={config_yaml_path}"]
+        
+        if not shutil.which("yolo"):
+            logger.warning("operations.training", "YOLO command not found in PATH, falling back to python module", "yolo_fallback", {
+                "path": str(os.environ.get("PATH"))
+            })
+            # Fallback to python -m ultralytics
+            cmd = [sys.executable, "-m", "ultralytics", "train", f"cfg={config_yaml_path}"]
         
         # Set up log file
         log_file_path = Path(session.logs_dir) / "training.log"

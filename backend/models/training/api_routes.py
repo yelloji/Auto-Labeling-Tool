@@ -82,7 +82,16 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         project_name = project.name
-        base_dir = Path("projects") / project_name / "models" / "training" / ts.name
+        
+        # Find project root (up one level from backend)
+        # We assume backend is at {root}/backend
+        current_file = Path(__file__).resolve()
+        backend_dir = current_file.parent
+        while backend_dir.name != "backend" and backend_dir.parent != backend_dir:
+            backend_dir = backend_dir.parent
+        project_root = backend_dir.parent
+        
+        base_dir = project_root / "projects" / project_name / "models" / "training" / ts.name
         runs_dir = base_dir / "runs"
         weights_dir = base_dir / "weights"
         logs_dir = base_dir / "logs"
@@ -108,7 +117,8 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         # Inject project and name for YOLO output directory control
         if 'train' not in resolved_config:
             resolved_config['train'] = {}
-        resolved_config['train']['project'] = str(Path("projects") / project_name / "models" / "training")
+        # Use absolute path for YOLO project dir to avoid ambiguity
+        resolved_config['train']['project'] = str(project_root / "projects" / project_name / "models" / "training")
         resolved_config['train']['name'] = ts.name
         
         # Generate temporary YAML config
@@ -125,12 +135,16 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         # Start training process
         process = start_ultralytics_training(str(temp_yaml_path), ts, db)
         
-        # Clean up temp file
-        try:
-            temp_yaml_path.unlink()
-        except Exception:
-            pass  # Non-critical if cleanup fails
+        # Clean up temp file - REMOVED to prevent race condition
+        # We keep the file in artifacts_dir for debugging and ensuring YOLO can read it
+        # try:
+        #     temp_yaml_path.unlink()
+        # except Exception:
+        #     pass
         
+        if process is None:
+            raise HTTPException(status_code=500, detail="Failed to start training process (check server logs)")
+
         # Update status
         ts.status = "running"
         ts.progress_pct = 0
