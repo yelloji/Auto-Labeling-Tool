@@ -60,6 +60,19 @@ def generate_ultralytics_training_yaml(resolved_config: Dict[str, Any], output_p
     flattened['task'] = task_mapping.get(task, "segment")
     flattened['mode'] = 'train'  # Always train mode for this config generator
     
+    # Convert device format: "cuda:0" → 0, "cpu" → "cpu"
+    if 'device' in flattened:
+        device = flattened['device']
+        if isinstance(device, str):
+            if device.startswith('cuda:'):
+                # Extract GPU index: "cuda:0" → 0
+                try:
+                    flattened['device'] = int(device.replace('cuda:', ''))
+                except ValueError:
+                    flattened['device'] = 0  # Default to first GPU if parse fails
+            elif device == 'cpu':
+                flattened['device'] = 'cpu'  # Keep as string
+    
     # Write to YAML
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)

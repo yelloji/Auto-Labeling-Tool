@@ -105,10 +105,16 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Invalid resolved config JSON: {str(e)}")
         
+        # Inject project and name for YOLO output directory control
+        if 'train' not in resolved_config:
+            resolved_config['train'] = {}
+        resolved_config['train']['project'] = str(Path("projects") / project_name / "models" / "training")
+        resolved_config['train']['name'] = ts.name
+        
         # Generate temporary YAML config
         temp_yaml_path = artifacts_dir / "temp_training_config.yaml"
         try:
-            generate_ultralytics_training_yaml(resolved_config, str(temp_yaml_path))
+            generate_ultralytics_training_yaml(resolved_config, str(temp_yaml_path), ts.framework, ts.task)
             
             # Save snapshot to DB
             with open(temp_yaml_path, 'r', encoding='utf-8') as f:
