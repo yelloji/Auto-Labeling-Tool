@@ -51,6 +51,15 @@ def generate_ultralytics_training_yaml(resolved_config: Dict[str, Any], output_p
         if section in resolved_config and isinstance(resolved_config[section], dict):
             flattened.update(resolved_config[section])
     
+    # Add required YOLO parameters (must match official YOLO format)
+    # Map our DB task names to YOLO's official task names
+    task_mapping = {
+        "detection": "detect",
+        "segmentation": "segment"
+    }
+    flattened['task'] = task_mapping.get(task, "segment")
+    flattened['mode'] = 'train'  # Always train mode for this config generator
+    
     # Write to YAML
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
