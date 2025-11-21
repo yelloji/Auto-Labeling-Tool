@@ -526,6 +526,21 @@ const ModelTrainingSection = ({ projectId, project }) => {
       return t;
     })()
   }), [form]);
+  // Config Preview: Extract only nested sections (user overrides)
+  const configPreview = useMemo(() => {
+    const serverConfig = window.__resolvedServerConfig;
+    // Fallback to resolvedConfig if server config is missing, though resolvedConfig is incomplete (only train)
+    const src = serverConfig || resolvedConfig;
+    if (src && typeof src === 'object') {
+      return {
+        train: src.train || {},
+        hyperparameters: src.hyperparameters || {},
+        augmentation: src.augmentation || {},
+        val: src.val || {}
+      };
+    }
+    return { train: {}, hyperparameters: {}, augmentation: {}, val: {} };
+  }, [window.__resolvedServerConfig, resolvedConfig]);
 
   const readiness = useMemo(() => ({
     nameReady: Boolean(form.trainingName),
@@ -785,7 +800,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       children: (
                         <div>
                           <pre style={{ background: '#f7f7f7', padding: 12, borderRadius: 4, maxHeight: 220, overflow: 'auto', margin: 0 }}>
-                            {JSON.stringify(window.__resolvedServerConfig || resolvedConfig, null, 2)}
+                            {JSON.stringify(configPreview, null, 2)}
                           </pre>
                           {Array.isArray(window.__argsPreview) && window.__argsPreview.length > 0 && (
                             <div style={{ marginTop: 8 }}>
