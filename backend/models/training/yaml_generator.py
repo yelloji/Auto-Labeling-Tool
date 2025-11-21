@@ -13,28 +13,40 @@ from logging_system.professional_logger import get_professional_logger
 logger = get_professional_logger()
 
 
-def generate_ultralytics_training_yaml(resolved_config: Dict[str, Any], output_path: str) -> str:
+def generate_ultralytics_training_yaml(resolved_config: Dict[str, Any], output_path: str, framework: str = "ultralytics", task: str = "segmentation") -> str:
     """
     Generate YAML config file for Ultralytics YOLO training from resolved config.
     
     **FRAMEWORK: Ultralytics YOLO ONLY**
     
     Args:
-        resolved_config: Dict with train, hyperparameters, augmentation, val sections
+        resolved_config: Dict with train, hyperparameters, augmentation, val sections (user overrides only)
         output_path: Path to write YAML file
+        framework: Framework name (default: "ultralytics")
+        task: Task type (default: "segmentation")
         
     Returns:
         str: Path to generated YAML file
     """
-    # Flatten nested structure for YOLO
-    # Current DB structure: flat defaults at root + nested user overrides
-    # Strategy: Start with root params, then override with nested sections
+    from .config import load_base_config
     
-    # Step 1: Get all root-level parameters (exclude nested sections)
-    flattened = {k: v for k, v in resolved_config.items() 
-                 if k not in ['train', 'hyperparameters', 'augmentation', 'val', 'dataset', 'predict', 'visualize', 'export', 'outputs']}
+    # Load base config from YAML file (flat structure with ALL defaults)
+    base_config = load_base_config(framework, task)
     
-    # Step 2: Override with nested sections (these are user overrides that should win)
+    # Flatten base config (it's already flat in the YAML, but may have nested sections)
+    flattened = {}
+    if isinstance(base_config, dict):
+        # Get all root-level parameters from base (exclude nested sections)
+        for k, v in base_config.items():
+            if k not in ['train', 'hyperparameters', 'augmentation', 'val', 'dataset', 'predict', 'visualize', 'export', 'outputs']:
+                flattened[k] = v
+        
+        # Also flatten any nested sections in base config
+        for section in ['train', 'hyperparameters', 'augmentation', 'val']:
+            if section in base_config and isinstance(base_config[section], dict):
+                flattened.update(base_config[section])
+    
+    # Override with user's nested config (these are user overrides that should win!)
     for section in ['train', 'hyperparameters', 'augmentation', 'val']:
         if section in resolved_config and isinstance(resolved_config[section], dict):
             flattened.update(resolved_config[section])

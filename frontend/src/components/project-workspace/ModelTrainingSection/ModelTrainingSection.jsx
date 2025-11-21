@@ -438,12 +438,12 @@ const ModelTrainingSection = ({ projectId, project }) => {
         };
         const res = await trainingAPI.resolveConfig(form.framework, form.taskType, overrides);
         const resolved = res?.resolved || overrides;
-        window.__resolvedServerConfig = resolved;
+        window.__resolvedServerConfig = overrides;
         window.__argsPreview = (res?.preview?.args || []);
         await trainingAPI.saveSessionConfig({
           projectId: form.projectId,
           name: form.trainingName,
-          resolvedConfig: resolved,
+          resolvedConfig: overrides,
         });
       } catch { }
     };

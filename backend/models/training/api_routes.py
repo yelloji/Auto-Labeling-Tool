@@ -454,15 +454,18 @@ async def save_training_config(payload: SessionConfigSave, db: Session = Depends
             raise HTTPException(status_code=404, detail="Training session not found")
         import json as _json
         
-        # Enforce key order: train, hyperparameters, augmentation, val
+        # CLEAN CONFIG: Only save nested user overrides (train, hyperparameters, augmentation, val)
+        # Strip out flat default config to keep DB clean and maintainable
         cfg = payload.resolved_config_json
+        clean_config = {}
+        
+        # Enforce key order and only include nested sections
         ordered_keys = ["train", "hyperparameters", "augmentation", "val"]
         for key in ordered_keys:
-            if key in cfg:
-                content = cfg.pop(key)
-                cfg[key] = content
+            if key in cfg and isinstance(cfg[key], dict):
+                clean_config[key] = cfg[key]
                 
-        ts.resolved_config_json = _json.dumps(cfg)
+        ts.resolved_config_json = _json.dumps(clean_config)
         db.add(ts)
         db.commit()
         return {"ok": True}
