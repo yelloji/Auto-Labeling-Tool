@@ -56,6 +56,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
 
   const [form, setForm] = useState({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
+  const [serverConfig, setServerConfig] = useState({});  // ← ADD THIS LINE
   const isDeveloper = form.mode === 'developer';
   const handleChange = (patch) => setForm((prev) => ({ ...prev, ...patch }));
   const [consoleVisible, setConsoleVisible] = useState(false);
@@ -438,6 +439,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
         };
         const res = await trainingAPI.resolveConfig(form.framework, form.taskType, overrides);
         const resolved = res?.resolved || overrides;
+        setServerConfig(overrides);  // ← ADD THIS LINE
         window.__resolvedServerConfig = overrides;
         window.__argsPreview = (res?.preview?.args || []);
         await trainingAPI.saveSessionConfig({
@@ -528,9 +530,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
   }), [form]);
   // Config Preview: Extract only nested sections (user overrides)
   const configPreview = useMemo(() => {
-    const serverConfig = window.__resolvedServerConfig;
+    const cfg = serverConfig;  // ← CHANGED
     // Fallback to resolvedConfig if server config is missing, though resolvedConfig is incomplete (only train)
-    const src = serverConfig || resolvedConfig;
+    const src = cfg || resolvedConfig;  // ← CHANGED (use cfg instead of serverConfig)
     if (src && typeof src === 'object') {
       return {
         train: src.train || {},
@@ -540,7 +542,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
       };
     }
     return { train: {}, hyperparameters: {}, augmentation: {}, val: {} };
-  }, [window.__resolvedServerConfig, resolvedConfig]);
+  }, [serverConfig, resolvedConfig]);
 
   const readiness = useMemo(() => ({
     nameReady: Boolean(form.trainingName),
