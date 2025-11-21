@@ -44,10 +44,18 @@ def start_ultralytics_training(
         # Open log file
         log_file = open(log_file_path, 'w', encoding='utf-8')
         
-        # Start process
+        # Find project root directory (where "projects" folder exists)
+        # This makes the code portable - works regardless of main folder name
+        project_root = Path(__file__).resolve()
+        while project_root.parent != project_root:
+            if (project_root / "projects").exists():
+                break
+            project_root = project_root.parent
+        
+        # Start process from project root for relative paths to work
         process = subprocess.Popen(
             cmd,
-            cwd=session.run_dir,
+            cwd=str(project_root),
             stdout=log_file,
             stderr=subprocess.STDOUT,  # Merge stderr into stdout
             text=True
