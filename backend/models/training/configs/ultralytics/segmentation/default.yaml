@@ -22,7 +22,7 @@ train:
   verbose: true
   seed: 0
   deterministic: true
-  single_cls: true
+  single_cls: false
   rect: false
   cos_lr: true
   close_mosaic: 20

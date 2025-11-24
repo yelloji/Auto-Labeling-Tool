@@ -60,8 +60,6 @@ const ModelTrainingSection = ({ projectId, project }) => {
   const isDeveloper = form.mode === 'developer';
   const handleChange = (patch) => setForm((prev) => ({ ...prev, ...patch }));
   const [consoleVisible, setConsoleVisible] = useState(false);
-  const [isTraining, setIsTraining] = useState(false);
-
 
   // Refs to track previous values for Early Stop / Patience sync
   const prevEarlyStop = React.useRef(form.earlyStop);
@@ -697,108 +695,17 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       <Tag color={readiness.datasetReady ? 'green' : 'red'}>Dataset</Tag>
                       <Tag color={readiness.modelReady ? 'green' : 'red'}>Model</Tag>
                     </div>
-                    <Button type="default" size="small" disabled={!readiness.datasetReady || !readiness.modelReady}
-                      onClick={async () => {
-                        try {
-                          const overrides = {
-                            train: (() => {
-                              const t = {
-                                model: form.pretrainedModel,
-                                epochs: form.epochs,
-                                imgsz: form.imgSize,
-                                batch: form.batchSize,
-                                amp: form.mixedPrecision,
-                                early_stop: form.earlyStop,
-                                resume: form.resume,
-                                device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
-                                optimizer: (() => {
-                                  if (form.optimizerMode === 'smart-auto') {
-                                    const isGPU = form.device === 'gpu';
-                                    const bsz = typeof form.batchSize === 'number' ? form.batchSize : 0;
-                                    if (!isGPU) return 'Adam';
-                                    if (bsz >= 32) return 'SGD';
-                                    return 'AdamW';
-                                  }
-                                  return form.optimizer;
-                                })(),
-                                momentum: form.momentum,
-                                weight_decay: form.weight_decay,
-                                cos_lr: form.cos_lr,
-                                patience: form.patience,
-                                save_period: form.save_period,
-                                workers: form.workers,
-                                overlap_mask: form.overlap_mask,
-                                mask_ratio: form.mask_ratio,
-                                single_cls: form.single_cls,
-                                rect: form.rect,
-                                freeze: form.freeze
-                              };
-                              return t;
-                            })(),
-                            hyperparameters: {
-                              lr0: form.lr0,
-                              lrf: form.lrf,
-                              warmup_epochs: form.warmup_epochs,
-                              warmup_momentum: form.warmup_momentum,
-                              warmup_bias_lr: form.warmup_bias_lr,
-                              box: form.box,
-                              cls: form.cls,
-                              dfl: form.dfl
-                            },
-                            augmentation: {
-                              mosaic: form.mosaic,
-                              close_mosaic: form.close_mosaic,
-                              mixup: form.mixup,
-                              hsv_h: form.hsv_h,
-                              hsv_s: form.hsv_s,
-                              hsv_v: form.hsv_v,
-                              flipud: form.flipud,
-                              fliplr: form.fliplr,
-                              degrees: form.degrees,
-                              translate: form.translate,
-                              scale: form.scale,
-                              shear: form.shear,
-                              perspective: form.perspective
-                            },
-                            val: {
-                              iou: form.val_iou,
-                              plots: form.val_plots
-                            },
-                            dataset: {
-                              zip_path: form.datasetZipPath
-                            }
-                          };
-                          const res = await trainingAPI.resolveConfig(form.framework, form.taskType, overrides);
-                          const resolved = res?.resolved || resolvedConfig;
-                          // Update preview by temporarily overriding resolvedConfig output
-                          // We don't change the memo; we show server-resolved in the preview below
-                          window.__resolvedServerConfig = resolved;
-                          window.__argsPreview = (res?.preview?.args || []);
-                          // Save resolved config to session
-                          if (form.projectId && form.trainingName) {
-                            await trainingAPI.saveSessionConfig({
-                              projectId: form.projectId,
-                              name: form.trainingName,
-                              resolvedConfig: resolved,
-                            });
-                          }
-                        } catch (e) { }
-                      }}
-                    >Preflight</Button>
+
                   </div>
-                  <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady) || isTraining}
+                  <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady)}
                     onClick={async () => {
                       try {
                         if (form.projectId && form.trainingName) {
-                          setIsTraining(true);
                           await trainingAPI.startSession({ projectId: form.projectId, name: form.trainingName });
                         }
-                      } catch (e) {
-                        setIsTraining(false);
-                      }
+                      } catch (e) { }
                     }}
-                  >{isTraining ? 'Training Started...' : 'Start Training'}</Button>
-
+                  >Start Training</Button>
                 </Card>
                 <Card size="small" style={{ marginTop: 12 }} bodyStyle={{ padding: 12 }}>
                   <Tabs defaultActiveKey="config" items={[
