@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Form, Alert, Tag, Space, Select, Button, Card, Typography } from 'antd';
 import { releasesAPI, trainingAPI } from '../../../../services/api';
 
-export default function TrainingDatasetSection({ projectId, datasetSource, datasetReleaseId, datasetZipPath, datasetReleaseDir, classes, datasetSummary, isDeveloper, hydratedIdentity, onChange }) {
+export default function TrainingDatasetSection({ projectId, datasetSource, datasetReleaseId, datasetZipPath, datasetReleaseDir, classes, datasetSummary, isDeveloper, hydratedIdentity, onChange, disabled }) {
   const [loadingReleases, setLoadingReleases] = useState(false);
   const [projectReleases, setProjectReleases] = useState([]);
   const [checkingExtract, setCheckingExtract] = useState(false);
@@ -81,7 +81,7 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
         if (Array.isArray(sum?.classes)) {
           onChange({ classes: sum.classes });
         }
-      } catch (e) {}
+      } catch (e) { }
     };
     refresh();
   }, [datasetReleaseDir]);
@@ -89,31 +89,31 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
   return (
     <Form layout="vertical">
       <Form.Item label="Release" required>
-          <Select
-            showSearch
-            style={{ width: '100%' }}
-            placeholder={loadingReleases ? 'Loading releases…' : ((projectReleases && projectReleases.length) ? 'Select a release' : 'No releases available for this project')}
-            value={(datasetReleaseId ? String(datasetReleaseId) : undefined)}
-            onChange={(val) => {
-              const rel = (projectReleases || []).find((r) => String(r?.id) === String(val));
-              const zp = getZipPath(rel);
-              onChange({ datasetReleaseId: String(val), datasetZipPath: zp });
-            }}
-            optionFilterProp="label"
-            disabled={loadingReleases || !(projectReleases && projectReleases.length)}
-          >
-            {(projectReleases || []).map((r) => {
-              const label = r?.name || r?.release_version || 'Release';
-              const value = String(r?.id);
-              const zp = getZipPath(r);
-              const isItemZip = zp.toLowerCase().endsWith('.zip');
-              return (
-                <Select.Option key={r?.id || label} value={isItemZip ? value : undefined} label={label} disabled={!isItemZip}>
-                  {label}
-                </Select.Option>
-              );
-            })}
-          </Select>
+        <Select
+          showSearch
+          style={{ width: '100%' }}
+          placeholder={loadingReleases ? 'Loading releases…' : ((projectReleases && projectReleases.length) ? 'Select a release' : 'No releases available for this project')}
+          value={(datasetReleaseId ? String(datasetReleaseId) : undefined)}
+          onChange={(val) => {
+            const rel = (projectReleases || []).find((r) => String(r?.id) === String(val));
+            const zp = getZipPath(rel);
+            onChange({ datasetReleaseId: String(val), datasetZipPath: zp });
+          }}
+          optionFilterProp="label"
+          disabled={disabled || loadingReleases || !(projectReleases && projectReleases.length)}
+        >
+          {(projectReleases || []).map((r) => {
+            const label = r?.name || r?.release_version || 'Release';
+            const value = String(r?.id);
+            const zp = getZipPath(r);
+            const isItemZip = zp.toLowerCase().endsWith('.zip');
+            return (
+              <Select.Option key={r?.id || label} value={isItemZip ? value : undefined} label={label} disabled={!isItemZip}>
+                {label}
+              </Select.Option>
+            );
+          })}
+        </Select>
       </Form.Item>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -125,12 +125,12 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
               {extractedInfo.extracted ? (
                 <Tag color="green">Extracted</Tag>
               ) : (
-                <Button size="small" type="primary" loading={checkingExtract}
+                <Button size="small" type="primary" loading={checkingExtract} disabled={disabled}
                   onClick={async () => {
                     try {
                       const res = await trainingAPI.extractRelease(datasetZipPath);
                       if (res?.target_dir) setExtractedInfo({ extracted: true, target_dir: res.target_dir });
-                    } catch (e) {}
+                    } catch (e) { }
                   }}
                 >Extract</Button>
               )}

@@ -569,6 +569,7 @@ class TrainingSession(Base):
 
     # Status & progress
     status = Column(String(50), default="pending")  # queued/pending, running, completed, failed
+    process_pid = Column(Integer, nullable=True)
     progress_pct = Column(Integer, default=0)
 
     # Quick metrics

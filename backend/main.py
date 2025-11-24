@@ -387,6 +387,14 @@ async def startup_event():
     await init_db()
     logger.info("app.database", "✅ Database initialized successfully", "database_initialized")
     
+    # Start training health checker
+    try:
+        from models.training.health_checker import start_training_health_checker
+        start_training_health_checker()
+        logger.info("app.startup", "✅ Training health checker started", "health_checker_started")
+    except Exception as e:
+        logger.error("app.startup", f"Failed to start training health checker: {str(e)}", "health_checker_error", {"error": str(e)})
+    
     # Initialize auto-export system based on dedicated configuration
     try:
         from database.export_config import export_settings

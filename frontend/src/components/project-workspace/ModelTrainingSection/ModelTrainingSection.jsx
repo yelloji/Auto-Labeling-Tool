@@ -56,7 +56,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
 
   const [form, setForm] = useState({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
-  const [serverConfig, setServerConfig] = useState({});  // ← ADD THIS LINE
+  const [serverConfig, setServerConfig] = useState({});
+  const isTraining = form.status === 'running';
   const isDeveloper = form.mode === 'developer';
   const handleChange = (patch) => setForm((prev) => ({ ...prev, ...patch }));
   const [consoleVisible, setConsoleVisible] = useState(false);
@@ -131,6 +132,22 @@ const ModelTrainingSection = ({ projectId, project }) => {
     };
     maybeExtract();
   }, [form.sessionId]);
+
+  // Poll for status updates when running
+  useEffect(() => {
+    if (!isTraining || !form.projectId || !form.trainingName) return;
+
+    const timer = setInterval(async () => {
+      try {
+        const sess = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
+        if (sess && sess.status && sess.status !== form.status) {
+          setForm(prev => ({ ...prev, status: sess.status }));
+        }
+      } catch (e) { }
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(timer);
+  }, [isTraining, form.projectId, form.trainingName, form.status]);
 
   // Persist selected model/framework/task
   useEffect(() => {
@@ -599,6 +616,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 trainingName={form.trainingName}
                 description={form.description}
                 onChange={(patch) => handleChange(patch)}
+                disabled={isTraining}
               />
             </Card>
 
@@ -607,6 +625,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 framework={form.framework}
                 taskType={form.taskType}
                 onChange={(patch) => handleChange(patch)}
+                disabled={isTraining}
               />
               <PretrainedModelSelect
                 framework={form.framework}
@@ -614,6 +633,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 projectId={form.projectId}
                 value={form.pretrainedModel}
                 onChange={(value) => handleChange({ pretrainedModel: value })}
+                disabled={isTraining}
               />
             </Card>
 
@@ -680,6 +700,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 val_plots={form.val_plots}
                 isDeveloper={isDeveloper}
                 onChange={(patch) => handleChange(patch)}
+                disabled={isTraining}
               />
             </Card>
 
@@ -697,7 +718,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                     </div>
 
                   </div>
-                  <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady)}
+                  <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady) || isTraining}
                     onClick={async () => {
                       try {
                         if (form.projectId && form.trainingName) {
@@ -705,7 +726,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                         }
                       } catch (e) { }
                     }}
-                  >Start Training</Button>
+                  >{isTraining ? 'Training...' : 'Start Training'}</Button>
                 </Card>
                 <Card size="small" style={{ marginTop: 12 }} bodyStyle={{ padding: 12 }}>
                   <Tabs defaultActiveKey="config" items={[

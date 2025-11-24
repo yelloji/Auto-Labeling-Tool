@@ -81,6 +81,38 @@ def extract_release_zip(zip_relative_path: str, project_name_hint: Optional[str]
     with zipfile.ZipFile(str(zip_abs), 'r') as zf:
         zf.extractall(str(target_abs))
 
+    # Auto-fix data.yaml path to be project-relative
+    # This ensures YOLO can find the dataset regardless of where the command is run from
+    try:
+        data_yaml_path = target_abs / "data.yaml"
+        if data_yaml_path.exists():
+            import yaml
+            
+            # Read existing YAML
+            with open(data_yaml_path, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f) or {}
+            
+            # Update 'path' to be the project-relative directory
+            # rel_dir is like "projects/gevis/training_data/slug"
+            # This matches what we want because executor runs with cwd=project_root
+            old_path = data.get('path')
+            data['path'] = rel_dir
+            
+            # Write back
+            with open(data_yaml_path, 'w', encoding='utf-8') as f:
+                yaml.dump(data, f, sort_keys=False, default_flow_style=None)
+                
+            logger.info("operations.training", "Auto-updated data.yaml path", "data_yaml_update", {
+                "file": str(data_yaml_path),
+                "old_path": old_path,
+                "new_path": rel_dir
+            })
+    except Exception as e:
+        logger.error("operations.training", "Failed to auto-update data.yaml path", "data_yaml_update_error", {
+            "error": str(e),
+            "target_dir": str(target_abs)
+        })
+
     logger.info("operations.training", "Zip extracted successfully", "training_extract_success", {
         "zip_path": zip_relative_path,
         "target_dir": rel_dir,

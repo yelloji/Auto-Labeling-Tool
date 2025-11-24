@@ -3,7 +3,7 @@ import { Form, Select, Tag, Spin } from 'antd';
 import { trainingAPI } from '../../../../services/api';
 
 
-export default function PretrainedModelSelect({ framework, taskType, projectId, value, onChange }) {
+export default function PretrainedModelSelect({ framework, taskType, projectId, value, onChange, disabled }) {
   const [loading, setLoading] = useState(false);
   const [modelOptions, setModelOptions] = useState([]);
 
@@ -50,7 +50,7 @@ export default function PretrainedModelSelect({ framework, taskType, projectId, 
             options={modelOptions}
             onChange={onChange}
             showSearch
-            disabled={!modelOptions.length}
+            disabled={disabled || !modelOptions.length}
           />
         )}
       </Form.Item>
