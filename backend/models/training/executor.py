@@ -86,6 +86,55 @@ def start_ultralytics_training(
             "framework": "ultralytics"
         })
         
+        # Start background thread to monitor process completion
+        import threading
+        from datetime import datetime
+        
+        def monitor_process():
+            """Monitor training process and update DB when it completes"""
+            try:
+                # Wait for process to finish
+                exit_code = process.wait()
+                
+                # Close log file
+                log_file.close()
+                
+                # Update session status based on exit code
+                from database.session import SessionLocal
+                monitor_db = SessionLocal()
+                try:
+                    # Refresh session from DB
+                    monitor_db.refresh(session)
+                    
+                    if exit_code == 0:
+                        session.status = "completed"
+                        logger.info("operations.training", "Training completed successfully", "training_complete", {
+                            "session_name": session.name,
+                            "exit_code": exit_code
+                        })
+                    else:
+                        session.status = "failed"
+                        session.error_msg = f"Training process exited with code {exit_code}"
+                        logger.error("operations.training", "Training failed", "training_failed", {
+                            "session_name": session.name,
+                            "exit_code": exit_code
+                        })
+                    
+                    session.completed_at = datetime.utcnow()
+                    monitor_db.commit()
+                finally:
+                    monitor_db.close()
+                    
+            except Exception as e:
+                logger.error("operations.training", "Error monitoring training process", "monitor_error", {
+                    "session_name": session.name,
+                    "error": str(e)
+                })
+        
+        # Start monitoring thread (daemon so it doesn't block app shutdown)
+        monitor_thread = threading.Thread(target=monitor_process, daemon=True)
+        monitor_thread.start()
+        
         return process
         
     except Exception as e:
