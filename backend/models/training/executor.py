@@ -7,13 +7,70 @@ For other frameworks, create separate executor modules.
 
 import subprocess
 import os
+import threading
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 from database.models import TrainingSession
 from sqlalchemy.orm import Session
+from database.database import SessionLocal
 from logging_system.professional_logger import get_professional_logger
 
 logger = get_professional_logger()
+
+
+def _monitor_process_completion(process: subprocess.Popen, session_id: int, log_file):
+    """
+    Background thread function that waits for training process to complete.
+    Updates database status based on exit code (framework-agnostic).
+    
+    Args:
+        process: The subprocess.Popen object
+        session_id: Database ID of the training session
+        log_file: File handle to close after process finishes
+    """
+    try:
+        # Wait for process to finish and get exit code
+        exit_code = process.wait()
+        
+        # Close log file
+        try:
+            log_file.close()
+        except:
+            pass
+        
+        # Update database with completion status
+        db = SessionLocal()
+        try:
+            session = db.query(TrainingSession).filter(TrainingSession.id == session_id).first()
+            if session and session.status == "running":
+                # Only update if status is still "running" (health checker might have already updated)
+                if exit_code == 0:
+                    session.status = "completed"
+                    logger.info("operations.training", f"Training completed successfully (exit code 0)", "training_completed", {
+                        "session_id": session_id,
+                        "session_name": session.name,
+                        "exit_code": exit_code
+                    })
+                else:
+                    session.status = "failed"
+                    session.error_msg = f"Training process exited with code {exit_code}"
+                    logger.error("operations.training", f"Training failed (exit code {exit_code})", "training_failed", {
+                        "session_id": session_id,
+                        "session_name": session.name,
+                        "exit_code": exit_code
+                    })
+                
+                session.completed_at = datetime.utcnow()
+                db.commit()
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error("operations.training", f"Error in process monitor thread: {e}", "monitor_thread_error", {
+            "session_id": session_id,
+            "error": str(e)
+        })
 
 
 def start_ultralytics_training(
@@ -90,9 +147,20 @@ def start_ultralytics_training(
         session.process_pid = process.pid
         db.commit()
         
-        # NOTE: We no longer use a background thread here.
-        # Instead, the Health Checker service (backend/models/training/health_checker.py)
-        # monitors the process using the saved PID. This is more robust against backend restarts.
+        # Start background thread to monitor process completion
+        # This captures exit code for framework-agnostic success/failure detection
+        # Health checker remains as safety net if backend crashes/restarts
+        monitor_thread = threading.Thread(
+            target=_monitor_process_completion,
+            args=(process, session.id, log_file),
+            daemon=True
+        )
+        monitor_thread.start()
+        
+        logger.info("operations.training", "Process monitoring thread started", "monitor_thread_start", {
+            "session_id": session.id,
+            "session_name": session.name
+        })
         
         return process
         

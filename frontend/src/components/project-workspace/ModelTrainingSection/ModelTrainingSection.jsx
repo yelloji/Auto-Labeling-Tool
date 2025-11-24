@@ -149,6 +149,30 @@ const ModelTrainingSection = ({ projectId, project }) => {
     return () => clearInterval(timer);
   }, [isTraining, form.projectId, form.trainingName, form.status]);
 
+
+
+  // Reset form when training completes
+  useEffect(() => {
+    // Track previous training state
+    const wasTraining = sessionStorage.getItem('wasTraining') === 'true';
+
+    if (wasTraining && !isTraining && (form.status === 'completed' || form.status === 'failed')) {
+      // Training just finished - reset form to initial state
+      setForm({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
+      sessionStorage.removeItem('wasTraining');
+
+      logInfo('app.frontend.ui', 'training_completed_form_reset', 'Form reset after training completion', {
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Update tracking flag
+    if (isTraining) {
+      sessionStorage.setItem('wasTraining', 'true');
+    }
+  }, [isTraining, form.status, projectId]);
+
+
   // Persist selected model/framework/task
   useEffect(() => {
     const saveModel = async () => {
@@ -722,9 +746,12 @@ const ModelTrainingSection = ({ projectId, project }) => {
                     onClick={async () => {
                       try {
                         if (form.projectId && form.trainingName) {
+                          setForm(prev => ({ ...prev, status: 'running' }));
                           await trainingAPI.startSession({ projectId: form.projectId, name: form.trainingName });
                         }
-                      } catch (e) { }
+                      } catch (e) {
+                        setForm(prev => ({ ...prev, status: 'queued' }));
+                      }
                     }}
                   >{isTraining ? 'Training...' : 'Start Training'}</Button>
                 </Card>
