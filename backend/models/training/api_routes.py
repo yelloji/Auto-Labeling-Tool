@@ -91,19 +91,26 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
             backend_dir = backend_dir.parent
         project_root = backend_dir.parent
         
-        base_dir = project_root / "projects" / project_name / "models" / "training" / ts.name
-        runs_dir = base_dir / "runs"
-        weights_dir = base_dir / "weights"
-        logs_dir = base_dir / "logs"
-        artifacts_dir = base_dir / "artifacts"
+        # Define relative path for portability (DB storage & YOLO config)
+        # projects/gevis/models/training/SESSION_NAME
+        rel_base_dir = Path("projects") / project_name / "models" / "training" / ts.name
+        
+        # Define absolute path for directory creation
+        abs_base_dir = project_root / rel_base_dir
+        
+        runs_dir = abs_base_dir / "runs"
+        weights_dir = abs_base_dir / "weights"
+        logs_dir = abs_base_dir / "logs"
+        artifacts_dir = abs_base_dir / "artifacts"
+        
         for d in [runs_dir, weights_dir, logs_dir, artifacts_dir]:
             d.mkdir(parents=True, exist_ok=True)
         
-        # Set paths
-        ts.run_dir = str(runs_dir)
-        ts.weights_dir = str(weights_dir)
-        ts.logs_dir = str(logs_dir)
-        ts.artifacts_dir = str(artifacts_dir)
+        # Set paths in DB as RELATIVE paths for portability
+        ts.run_dir = str(rel_base_dir / "runs")
+        ts.weights_dir = str(rel_base_dir / "weights")
+        ts.logs_dir = str(rel_base_dir / "logs")
+        ts.artifacts_dir = str(rel_base_dir / "artifacts")
         ts.best_weights_path = None
         
         # Load resolved config
@@ -117,8 +124,10 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         # Inject project and name for YOLO output directory control
         if 'train' not in resolved_config:
             resolved_config['train'] = {}
-        # Use absolute path for YOLO project dir to avoid ambiguity
-        resolved_config['train']['project'] = str(project_root / "projects" / project_name / "models" / "training")
+            
+        # Use RELATIVE path for YOLO project dir
+        # Since executor runs with cwd=project_root, this works and keeps config portable
+        resolved_config['train']['project'] = str(rel_base_dir.parent)
         resolved_config['train']['name'] = ts.name
         
         # Generate temporary YAML config

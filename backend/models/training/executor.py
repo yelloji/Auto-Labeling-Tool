@@ -39,21 +39,16 @@ def start_ultralytics_training(
         import shutil
         import sys
         
-        cmd = ["yolo", "train", f"cfg={config_yaml_path}"]
+        cmd = ["yolo", f"cfg={config_yaml_path}"]
         
         if not shutil.which("yolo"):
             logger.warning("operations.training", "YOLO command not found in PATH, falling back to python module", "yolo_fallback", {
                 "path": str(os.environ.get("PATH"))
             })
             # Fallback to python -m ultralytics
-            cmd = [sys.executable, "-m", "ultralytics", "train", f"cfg={config_yaml_path}"]
+            cmd = [sys.executable, "-m", "ultralytics", f"cfg={config_yaml_path}"]
         
-        # Set up log file
-        log_file_path = Path(session.logs_dir) / "training.log"
-        log_file_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Open log file
-        log_file = open(log_file_path, 'w', encoding='utf-8')
+
         
         # Find project root directory (where "projects" folder exists)
         # This makes the code portable - works regardless of main folder name
@@ -64,9 +59,21 @@ def start_ultralytics_training(
             project_root = project_root.parent
         
         # Start process from project root for relative paths to work
+        cwd_path = str(project_root)
+        
+        # Resolve log path relative to project root (since DB now stores relative paths)
+        # If session.logs_dir is absolute, this still works (Path handles it)
+        # If relative (projects/...), it joins with project_root
+        log_dir_path = project_root / session.logs_dir
+        log_file_path = log_dir_path / "training.log"
+        log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Open log file
+        log_file = open(log_file_path, 'w', encoding='utf-8')
+        
         process = subprocess.Popen(
             cmd,
-            cwd=str(project_root),
+            cwd=cwd_path,
             stdout=log_file,
             stderr=subprocess.STDOUT,  # Merge stderr into stdout
             text=True

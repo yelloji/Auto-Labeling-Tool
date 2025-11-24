@@ -72,6 +72,22 @@ def generate_ultralytics_training_yaml(resolved_config: Dict[str, Any], output_p
                     flattened['device'] = 0  # Default to first GPU if parse fails
             elif device == 'cpu':
                 flattened['device'] = 'cpu'  # Keep as string
+
+    # Handle early_stop -> patience mapping
+    # YOLO uses 'patience' (int), our UI uses 'early_stop' (bool)
+    if 'early_stop' in flattened:
+        early_stop = flattened.pop('early_stop')  # Remove invalid key
+        if early_stop:
+            # If enabled, ensure patience is > 0 (default to 30 if not set or 0)
+            if 'patience' not in flattened or flattened['patience'] == 0:
+                flattened['patience'] = 30
+        else:
+            # If disabled, set patience to 0
+            flattened['patience'] = 0
+
+    # Remove internal UI keys that aren't valid YOLO args
+    if 'enabled' in flattened:
+        flattened.pop('enabled')
     
     # Write to YAML
     output_file = Path(output_path)
