@@ -99,17 +99,18 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         # Define absolute path for directory creation
         abs_base_dir = project_root / rel_base_dir
         
-        runs_dir = abs_base_dir / "runs"
-        weights_dir = abs_base_dir / "weights"
+        # Create only our custom folders - YOLO will create weights/ when training
+        # runs/ is only created by YOLO for inference/prediction
         logs_dir = abs_base_dir / "logs"
         artifacts_dir = abs_base_dir / "artifacts"
         
-        for d in [runs_dir, weights_dir, logs_dir, artifacts_dir]:
+        for d in [logs_dir, artifacts_dir]:
             d.mkdir(parents=True, exist_ok=True)
         
         # Set paths in DB as RELATIVE paths for portability
-        ts.run_dir = str(rel_base_dir / "runs")
-        ts.weights_dir = str(rel_base_dir / "weights")
+        # YOLO will create weights/ folder, we just set the path for tracking
+        ts.run_dir = str(rel_base_dir)  # Root training dir
+        ts.weights_dir = str(rel_base_dir / "weights")  # YOLO creates this
         ts.logs_dir = str(rel_base_dir / "logs")
         ts.artifacts_dir = str(rel_base_dir / "artifacts")
         ts.best_weights_path = None

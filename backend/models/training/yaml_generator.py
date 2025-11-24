@@ -60,6 +60,9 @@ def generate_ultralytics_training_yaml(resolved_config: Dict[str, Any], output_p
     flattened['task'] = task_mapping.get(task, "segment")
     flattened['mode'] = 'train'  # Always train mode for this config generator
     
+    # Allow YOLO to use existing folder (we create logs/ and artifacts/ before YOLO runs)
+    flattened['exist_ok'] = True
+    
     # Find Project Root (dynamically)
     # .../backend/models/training/yaml_generator.py -> resolve -> parents[3] = ROOT
     current_file = Path(__file__).resolve()
@@ -77,7 +80,7 @@ def generate_ultralytics_training_yaml(resolved_config: Dict[str, Any], output_p
     
     # Fix Model Path: Resolve to absolute path
     # Handles both:
-    # 1. Retraining: 'projects/gevis/.../best.pt'
+    # 1. Retraining: 'projects/gevis/model/.../best.pt'
     # 2. Base Model: 'yolo11n.pt' (in models/yolo)
     for key in ['model', 'pretrained']:
         if key in flattened and isinstance(flattened[key], str):
@@ -92,6 +95,14 @@ def generate_ultralytics_training_yaml(resolved_config: Dict[str, Any], output_p
                 local_model = project_root / "models" / "yolo" / model_path_str
                 if local_model.exists():
                     flattened[key] = str(local_model)
+    
+    # Remove 'pretrained' if 'model' is already a .pt file
+    # User always uses .pt files directly, not .yaml architectures
+    if 'model' in flattened and isinstance(flattened['model'], str):
+        if flattened['model'].endswith('.pt'):
+            # Model is a weights file, remove pretrained to prevent confusion/redownload
+            if 'pretrained' in flattened:
+                flattened.pop('pretrained')
     
     # Convert device format: "cuda:0" → 0, "cpu" → "cpu"
     
