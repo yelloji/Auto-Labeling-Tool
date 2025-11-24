@@ -92,8 +92,9 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         project_root = backend_dir.parent
         
         # Define relative path for portability (DB storage & YOLO config)
-        # projects/gevis/models/training/SESSION_NAME
-        rel_base_dir = Path("projects") / project_name / "models" / "training" / ts.name
+        # projects/gevis/model/training/SESSION_NAME
+        # User requested to use 'model' folder (singular) which already exists
+        rel_base_dir = Path("projects") / project_name / "model" / "training" / ts.name
         
         # Define absolute path for directory creation
         abs_base_dir = project_root / rel_base_dir
@@ -532,15 +533,28 @@ async def training_terminal_logs(websocket: WebSocket, project_id: int, name: st
             await websocket.send_text("session_not_found")
             await websocket.close()
             return
+
+        # Resolve project root dynamically (same logic as start_session)
+        current_file = Path(__file__).resolve()
+        backend_dir = current_file.parent
+        while backend_dir.name != "backend" and backend_dir.parent != backend_dir:
+            backend_dir = backend_dir.parent
+        project_root = backend_dir.parent
+
         log_path = None
         if ts.logs_dir:
-            log_path = os.path.join(ts.logs_dir, "train.log")
+            # ts.logs_dir is relative (projects/...), so resolve against project_root
+            log_path = project_root / ts.logs_dir / "training.log"  # Changed from train.log to training.log
+            
         if not log_path:
             await websocket.send_text("no_logs_dir")
             await websocket.close()
             return
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        if not os.path.exists(log_path):
+            
+        # Ensure directory exists (should already exist from start_session)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        if not log_path.exists():
             with open(log_path, "a", encoding="utf-8", errors="ignore") as f:
                 f.write("")
         pos = 0

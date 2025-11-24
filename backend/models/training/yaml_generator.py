@@ -60,6 +60,41 @@ def generate_ultralytics_training_yaml(resolved_config: Dict[str, Any], output_p
     flattened['task'] = task_mapping.get(task, "segment")
     flattened['mode'] = 'train'  # Always train mode for this config generator
     
+    # Find Project Root (dynamically)
+    # .../backend/models/training/yaml_generator.py -> resolve -> parents[3] = ROOT
+    current_file = Path(__file__).resolve()
+    project_root = current_file.parents[3]
+
+    # Fix 'data' path: Resolve to absolute path
+    # This fixes "Dataset images not found" because YOLO needs absolute path to data.yaml
+    # to correctly resolve relative image paths inside it.
+    if 'data' in flattened and isinstance(flattened['data'], str):
+        data_path = flattened['data']
+        # Try resolving against project root
+        abs_data_path = project_root / data_path
+        if abs_data_path.exists():
+            flattened['data'] = str(abs_data_path)
+    
+    # Fix Model Path: Resolve to absolute path
+    # Handles both:
+    # 1. Retraining: 'projects/gevis/.../best.pt'
+    # 2. Base Model: 'yolo11n.pt' (in models/yolo)
+    for key in ['model', 'pretrained']:
+        if key in flattened and isinstance(flattened[key], str):
+            model_path_str = flattened[key]
+            # 1. Check if it exists relative to project root (e.g. projects/gevis/model/...)
+            abs_model_path = project_root / model_path_str
+            if abs_model_path.exists():
+                flattened[key] = str(abs_model_path)
+            else:
+                # 2. Check if it's in models/yolo (Base models - Global)
+                # User confirmed global models are in 'models/yolo'
+                local_model = project_root / "models" / "yolo" / model_path_str
+                if local_model.exists():
+                    flattened[key] = str(local_model)
+    
+    # Convert device format: "cuda:0" → 0, "cpu" → "cpu"
+    
     # Convert device format: "cuda:0" → 0, "cpu" → "cpu"
     if 'device' in flattened:
         device = flattened['device']
