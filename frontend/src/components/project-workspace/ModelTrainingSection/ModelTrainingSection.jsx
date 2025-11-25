@@ -11,6 +11,7 @@ import PresetSection from './Preset/PresetSection';
 import './compact.css';
 import { trainingAPI, releasesAPI } from '../../../services/api';
 import TerminalPanel from './Terminal/TerminalPanel';
+import LiveTrainingDashboard from './Dashboard/LiveTrainingDashboard';
 
 const { Title, Text } = Typography;
 
@@ -56,6 +57,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
 
   const [form, setForm] = useState({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
+  const [activeTab, setActiveTab] = useState('config');
   const [serverConfig, setServerConfig] = useState({});
   const isTraining = form.status === 'running';
   const isDeveloper = form.mode === 'developer';
@@ -106,6 +108,22 @@ const ModelTrainingSection = ({ projectId, project }) => {
     };
     resumeActive();
   }, [form.projectId, form.trainingName]);
+
+  // Poll for live metrics every 1 second during training 
+  useEffect(() => {
+    if (!isTraining || !form.sessionId) return;
+    const interval = setInterval(async () => {
+      try {
+        const session = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
+        if (session?.metrics_json) {
+          setForm(prev => ({ ...prev, liveMetrics: JSON.parse(session.metrics_json) }));
+        }
+      } catch (e) {
+        console.error('Failed to fetch metrics:', e);
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isTraining, form.sessionId, form.projectId, form.trainingName]);
 
   useEffect(() => {
     const maybeExtract = async () => {
@@ -748,6 +766,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                         if (form.projectId && form.trainingName) {
                           setForm(prev => ({ ...prev, status: 'running' }));
                           await trainingAPI.startSession({ projectId: form.projectId, name: form.trainingName });
+                          setActiveTab('status'); // Auto-switch to status tab
                         }
                       } catch (e) {
                         setForm(prev => ({ ...prev, status: 'queued' }));
@@ -756,7 +775,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                   >{isTraining ? 'Training...' : 'Start Training'}</Button>
                 </Card>
                 <Card size="small" style={{ marginTop: 12 }} bodyStyle={{ padding: 12 }}>
-                  <Tabs defaultActiveKey="config" items={[
+                  <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
                     {
                       key: 'config',
                       label: 'Config Preview',
@@ -773,7 +792,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       key: 'status',
                       label: 'Status',
                       children: (
-                        <div style={{ color: '#888' }}>Training status will appear here (progress, logs)</div>
+                        <LiveTrainingDashboard metrics={form.liveMetrics || {}} />
                       )
                     }
                   ]} />

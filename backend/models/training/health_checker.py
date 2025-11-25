@@ -46,6 +46,52 @@ def check_training_health():
                         # But we started it, so we should have access.
                         is_running = False
                     
+                    # Parse metrics from log file (whether running or completed)
+                    try:
+                        from pathlib import Path
+                        from .metrics_parser import parse_training_log
+                        import json
+                        
+                        # Construct log file path
+                        current_file = Path(__file__).resolve()
+                        project_root = current_file
+                        while project_root.parent != project_root:
+                            if (project_root / "projects").exists():
+                                break
+                            project_root = project_root.parent
+                        
+                        log_file_path = project_root / session.logs_dir / "training.log"
+                        
+                        if log_file_path.exists():
+                            metrics = parse_training_log(log_file_path)
+                            session.metrics_json = json.dumps(metrics)
+                            
+                            # Update progress percentage if available
+                            if metrics.get("training", {}).get("epoch") and metrics.get("training", {}).get("total_epochs"):
+                                epoch = metrics["training"]["epoch"]
+                                total = metrics["training"]["total_epochs"]
+                                progress_pct = metrics["training"].get("progress_pct", 0)
+                                
+                                # Calculate overall progress
+                                epoch_progress = (epoch - 1) / total * 100
+                                intra_epoch = progress_pct / total
+                                session.progress_pct = min(99.9, epoch_progress + intra_epoch)
+                            
+                            # Update best metrics if validation data is available
+                            if metrics.get("validation"):
+                                val = metrics["validation"]
+                                session.best_box_map50 = max(session.best_box_map50 or 0.0, val.get("box_map50", 0.0))
+                                session.best_box_map95 = max(session.best_box_map95 or 0.0, val.get("box_map50_95", 0.0))
+                                if session.best_mask_map50 is None: session.best_mask_map50 = 0.0
+                                session.best_mask_map50 = max(session.best_mask_map50, val.get("mask_map50", 0.0))
+                                if session.best_mask_map95 is None: session.best_mask_map95 = 0.0
+                                session.best_mask_map95 = max(session.best_mask_map95, val.get("mask_map50_95", 0.0))
+                            
+                            db.commit()
+                    except Exception as e:
+                        logger.warning("operations.training", f"Error parsing log metrics: {e}", "log_parse_error")
+                    
+
                     if not is_running:
                         # Process is gone! Check training log to determine success/failure
                         log_status = "completed"  # Default to completed
@@ -114,6 +160,40 @@ def check_training_health():
                                 "error": str(e)
                             })
                         
+                        # Parse log for real-time metrics
+                        if log_file_path.exists():
+                            try:
+                                from .metrics_parser import parse_training_log
+                                
+                                metrics = parse_training_log(log_file_path)
+                                session.metrics_json = json.dumps(metrics)
+                                
+                                # Update progress percentage if available
+                                if metrics.get("training", {}).get("epoch") and metrics.get("training", {}).get("total_epochs"):
+                                    epoch = metrics["training"]["epoch"]
+                                    total = metrics["training"]["total_epochs"]
+                                    progress_pct = metrics["training"].get("progress_pct", 0)
+                                    
+                                    # Calculate overall progress
+                                    epoch_progress = (epoch - 1) / total * 100
+                                    intra_epoch = progress_pct / total
+                                    session.progress_pct = min(99.9, epoch_progress + intra_epoch)
+                                
+                                # Update best metrics if validation data is available
+                                if metrics.get("validation"):
+                                    val = metrics["validation"]
+                                    session.best_box_map50 = max(session.best_box_map50 or 0.0, val.get("box_map50", 0.0))
+                                    session.best_box_map95 = max(session.best_box_map95 or 0.0, val.get("box_map50_95", 0.0))
+                                    if session.best_mask_map50 is None: session.best_mask_map50 = 0.0
+                                    session.best_mask_map50 = max(session.best_mask_map50, val.get("mask_map50", 0.0))
+                                    if session.best_mask_map95 is None: session.best_mask_map95 = 0.0
+                                    session.best_mask_map95 = max(session.best_mask_map95, val.get("mask_map50_95", 0.0))
+                                
+                                db.commit()
+                                
+                            except Exception as e:
+                                logger.warning("operations.training", f"Error parsing log metrics: {e}", "log_parse_error")
+                        
                         # Update session status based on log analysis
                         session.status = log_status
                         if error_msg:
@@ -140,8 +220,8 @@ def check_training_health():
         except Exception as e:
             logger.error("operations.training", "Error in health checker", "health_check_error", {"error": str(e)})
             
-        # Wait 1 second before next check (fast response on modern hardware)
-        time.sleep(1)
+        # Wait 0.5 seconds before next check (fast, accurate live updates)
+        time.sleep(0.5)
 
 def start_training_health_checker():
     """Starts the health checker in a background thread"""

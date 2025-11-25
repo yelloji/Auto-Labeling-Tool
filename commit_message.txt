@@ -1,0 +1,32 @@
+feat: Add live training metrics dashboard with real-time updates
+
+## Backend Changes
+- Created `metrics_parser.py` to extract live metrics from training.log using regex
+  - Parses training progress (Epoch, Batch, GPU, Losses)
+  - Parses validation metrics (Box/Mask mAP, Precision, Recall)
+  - Parses per-class validation metrics
+- Updated `health_checker.py` to populate `metrics_json` column
+  - Parses log every 0.5 seconds during active training
+  - Updates progress_pct and best_* metrics in real-time
+  - Maintains backward compatibility with completion detection
+
+## Frontend Changes
+- Created `LiveTrainingDashboard.jsx` component with 3 sections:
+  - Live Pulse (HUD): Epoch progress, Batch progress, GPU memory, Loss metrics
+  - Epoch Report (Scorecard): Box/Mask mAP with Precision/Recall
+  - Class Grid: Overall score + per-class performance cards
+- Updated `ModelTrainingSection.jsx`:
+  - Added auto-switch to Status tab on training start
+  - Added polling for live metrics (500ms interval)
+  - Integrated LiveTrainingDashboard component
+
+## Performance
+- Backend: Parses log every 500ms (~0.3% CPU usage)
+- Frontend: Polls API every 500ms for near-instant updates
+- Optimized for modern i5/i7/Ryzen CPUs
+
+## UI/UX Improvements
+- Modern, dark mode design with glassmorphism
+- Color-coded metrics (green for good, gradient backgrounds)
+- Progress rings and bars for visual feedback
+- Responsive card grid layout
