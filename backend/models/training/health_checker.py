@@ -3,7 +3,7 @@ import threading
 import psutil
 import os
 from datetime import datetime
-from database.session import SessionLocal
+from database.database import SessionLocal
 from database.models import TrainingSession
 from logging_system.professional_logger import get_professional_logger
 
@@ -47,17 +47,92 @@ def check_training_health():
                         is_running = False
                     
                     if not is_running:
-                        # Process is gone!
-                        logger.info("operations.training", f"Training process {pid} for session '{session.name}' is gone. Marking as completed.", "process_gone", {
-                            "session_id": session.id,
-                            "pid": pid
-                        })
+                        # Process is gone! Check training log to determine success/failure
+                        log_status = "completed"  # Default to completed
+                        error_msg = None
                         
-                        # Mark as completed
-                        # TODO: In the future, parse logs to distinguish 'failed' vs 'completed'
-                        session.status = "completed"
+                        # Try to read the training log file
+                        try:
+                            from pathlib import Path
+                            
+                            # Construct log file path (stored as relative path in DB)
+                            # Find project root
+                            current_file = Path(__file__).resolve()
+                            project_root = current_file
+                            while project_root.parent != project_root:
+                                if (project_root / "projects").exists():
+                                    break
+                                project_root = project_root.parent
+                            
+                            log_file_path = project_root / session.logs_dir / "training.log"
+                            
+                            if log_file_path.exists():
+                                # Read last 30 lines (sufficient for completion detection)
+                                with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                    lines = f.readlines()
+                                    last_lines = ''.join(lines[-30:]) if len(lines) > 30 else ''.join(lines)
+                                
+                                # Check for failure markers first (universal across all frameworks)
+                                if "KeyboardInterrupt" in last_lines:
+                                    log_status = "failed"
+                                    error_msg = "Training interrupted by user (Ctrl+C)"
+                                elif "Error:" in last_lines or "ERROR:" in last_lines:
+                                    log_status = "failed"
+                                    error_msg = "Training failed with error (see log)"
+                                elif "Exception:" in last_lines or "Traceback" in last_lines:
+                                    log_status = "failed"
+                                    error_msg = "Training failed with exception (see log)"
+                                elif "CUDA out of memory" in last_lines:
+                                    log_status = "failed"
+                                    error_msg = "Training failed: GPU out of memory"
+                                elif "RuntimeError" in last_lines:
+                                    log_status = "failed"
+                                    error_msg = "Training failed with runtime error"
+                                # Check for success markers (framework-specific)
+                                elif "Results saved to" in last_lines:
+                                    # YOLO/Ultralytics success
+                                    log_status = "completed"
+                                elif "Training complete" in last_lines or "Finished training" in last_lines:
+                                    # Generic PyTorch/Detectron2 success
+                                    log_status = "completed"
+                                elif "Saving checkpoint" in last_lines or "Model saved" in last_lines:
+                                    # MMDetection/PyTorch checkpointing success
+                                    log_status = "completed"
+                                else:
+                                    # No clear success marker - mark as incomplete (possible crash)
+                                    log_status = "failed"
+                                    error_msg = "Training incomplete (no completion marker found in log)"
+                            else:
+                                # Log file doesn't exist - mark as failed
+                                log_status = "failed"
+                                error_msg = "Training log file not found"
+                                
+                        except Exception as e:
+                            # Error reading log - default to completed for safety
+                            logger.warning("operations.training", f"Could not read log file for session '{session.name}': {e}", "log_read_error", {
+                                "session_id": session.id,
+                                "error": str(e)
+                            })
+                        
+                        # Update session status based on log analysis
+                        session.status = log_status
+                        if error_msg:
+                            session.error_msg = error_msg
                         session.completed_at = datetime.utcnow()
                         db.commit()
+                        
+                        # Log the result
+                        if log_status == "completed":
+                            logger.info("operations.training", f"Training process {pid} for session '{session.name}' completed successfully.", "process_completed", {
+                                "session_id": session.id,
+                                "pid": pid
+                            })
+                        else:
+                            logger.error("operations.training", f"Training process {pid} for session '{session.name}' failed: {error_msg}", "process_failed", {
+                                "session_id": session.id,
+                                "pid": pid,
+                                "error": error_msg
+                            })
                         
             finally:
                 db.close()
@@ -65,8 +140,8 @@ def check_training_health():
         except Exception as e:
             logger.error("operations.training", "Error in health checker", "health_check_error", {"error": str(e)})
             
-        # Wait 5 seconds before next check
-        time.sleep(5)
+        # Wait 1 second before next check (fast response on modern hardware)
+        time.sleep(1)
 
 def start_training_health_checker():
     """Starts the health checker in a background thread"""

@@ -1,5 +1,5 @@
 {
-  "export_timestamp": "2025-11-24T17:44:44.353690",
+  "export_timestamp": "2025-11-25T12:04:09.151750",
   "database_path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\database.db",
   "projects": [
     {
@@ -14,7 +14,7 @@
         "total_images": 4,
         "labeled_images": 4,
         "unlabeled_images": 0,
-        "annotations": 10
+        "annotations": 11
       },
       "datasets": [
         {
@@ -22,12 +22,12 @@
           "name": "animal",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-21 16:42:50",
-          "updated_at": "2025-11-19 08:01:14.694470",
+          "updated_at": "2025-11-25 09:18:26.605442",
           "statistics": {
             "total_images": 3,
             "labeled_images": 3,
             "unlabeled_images": 0,
-            "annotations": 3
+            "annotations": 4
           },
           "images": [
             {
@@ -44,9 +44,9 @@
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
-              "annotation_count": 1,
+              "annotation_count": 2,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-11-19 08:01:14.656290",
+              "updated_at": "2025-11-25 09:18:26.531467",
               "file_exists": false
             },
             {
@@ -65,7 +65,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-11-19 08:01:14.669141",
+              "updated_at": "2025-11-25 09:18:26.557584",
               "file_exists": false
             },
             {
@@ -84,7 +84,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-11-19 08:01:14.681144",
+              "updated_at": "2025-11-25 09:18:26.586823",
               "file_exists": false
             }
           ]
@@ -1570,7 +1570,7 @@
     "total_projects": 6,
     "total_datasets": 10,
     "total_images": 69,
-    "total_annotations": 347,
+    "total_annotations": 348,
     "labeled_images": 69,
     "unlabeled_images": 0
   }

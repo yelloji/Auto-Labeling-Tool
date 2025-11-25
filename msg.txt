@@ -1,6 +1,0 @@
-Backend+UI: Enrich model metadata and refine Models page (remove “No metrics”, add type icons)
-
-- Backend: ModelManager now populates and returns created_at, file_size, is_ready, is_training; GET /models and GET /models/{id} include these fields.
-- Frontend: ModelsModern hides “No metrics” when accuracy missing; adds distinct icons for Object Detection and (Instance/Semantic) Segmentation and shows icon in the type badge.
-- Result: model cards show correct status, size, and date; default YOLO11 models render cleanly without misleading metrics.
-- Note: no changes made to backend/requirements-cuda121.txt.
