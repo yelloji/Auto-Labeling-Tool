@@ -343,6 +343,7 @@ async def get_training_session(project_id: int = Query(...), name: str = Query(.
             "dataset_release_dir": ts.dataset_release_dir,
             "dataset_summary_json": ts.dataset_summary_json,
             "resolved_config_json": ts.resolved_config_json,
+            "metrics_json": ts.metrics_json,
         }
     except HTTPException:
         raise
@@ -375,6 +376,7 @@ async def get_active_training_session(project_id: int = Query(...), db: Session 
             "dataset_release_dir": ts.dataset_release_dir,
             "dataset_summary_json": ts.dataset_summary_json,
             "resolved_config_json": ts.resolved_config_json,
+            "metrics_json": ts.metrics_json,
         }
     except HTTPException:
         raise

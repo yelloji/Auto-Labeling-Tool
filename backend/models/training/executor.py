@@ -71,12 +71,18 @@ def start_ultralytics_training(
         # Open log file
         log_file = open(log_file_path, 'w', encoding='utf-8')
         
+        # Force unbuffered output for real-time logging
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        
         process = subprocess.Popen(
             cmd,
             cwd=cwd_path,
             stdout=log_file,
             stderr=subprocess.STDOUT,  # Merge stderr into stdout
-            text=True
+            text=True,
+            bufsize=1,  # Line buffering
+            env=env
         )
         
         logger.info("operations.training", "Started Ultralytics YOLO training process", "training_start", {

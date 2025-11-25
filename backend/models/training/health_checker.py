@@ -64,30 +64,34 @@ def check_training_health():
                         
                         if log_file_path.exists():
                             metrics = parse_training_log(log_file_path)
-                            session.metrics_json = json.dumps(metrics)
+                            metrics_str = json.dumps(metrics)
                             
-                            # Update progress percentage if available
-                            if metrics.get("training", {}).get("epoch") and metrics.get("training", {}).get("total_epochs"):
-                                epoch = metrics["training"]["epoch"]
-                                total = metrics["training"]["total_epochs"]
-                                progress_pct = metrics["training"].get("progress_pct", 0)
+                            # Only update if metrics changed to avoid DB locking
+                            if session.metrics_json != metrics_str:
+                                session.metrics_json = metrics_str
                                 
-                                # Calculate overall progress
-                                epoch_progress = (epoch - 1) / total * 100
-                                intra_epoch = progress_pct / total
-                                session.progress_pct = min(99.9, epoch_progress + intra_epoch)
-                            
-                            # Update best metrics if validation data is available
-                            if metrics.get("validation"):
-                                val = metrics["validation"]
-                                session.best_box_map50 = max(session.best_box_map50 or 0.0, val.get("box_map50", 0.0))
-                                session.best_box_map95 = max(session.best_box_map95 or 0.0, val.get("box_map50_95", 0.0))
-                                if session.best_mask_map50 is None: session.best_mask_map50 = 0.0
-                                session.best_mask_map50 = max(session.best_mask_map50, val.get("mask_map50", 0.0))
-                                if session.best_mask_map95 is None: session.best_mask_map95 = 0.0
-                                session.best_mask_map95 = max(session.best_mask_map95, val.get("mask_map50_95", 0.0))
-                            
-                            db.commit()
+                                # Update progress percentage if available
+                                if metrics.get("training", {}).get("epoch") and metrics.get("training", {}).get("total_epochs"):
+                                    epoch = metrics["training"]["epoch"]
+                                    total = metrics["training"]["total_epochs"]
+                                    progress_pct = metrics["training"].get("progress_pct", 0)
+                                    
+                                    # Calculate overall progress
+                                    epoch_progress = (epoch - 1) / total * 100
+                                    intra_epoch = progress_pct / total
+                                    session.progress_pct = min(99.9, epoch_progress + intra_epoch)
+                                
+                                # Update best metrics if validation data is available
+                                if metrics.get("validation"):
+                                    val = metrics["validation"]
+                                    session.best_box_map50 = max(session.best_box_map50 or 0.0, val.get("box_map50", 0.0))
+                                    session.best_box_map95 = max(session.best_box_map95 or 0.0, val.get("box_map50_95", 0.0))
+                                    if session.best_mask_map50 is None: session.best_mask_map50 = 0.0
+                                    session.best_mask_map50 = max(session.best_mask_map50, val.get("mask_map50", 0.0))
+                                    if session.best_mask_map95 is None: session.best_mask_map95 = 0.0
+                                    session.best_mask_map95 = max(session.best_mask_map95, val.get("mask_map50_95", 0.0))
+                                
+                                db.commit()
                     except Exception as e:
                         logger.warning("operations.training", f"Error parsing log metrics: {e}", "log_parse_error")
                     

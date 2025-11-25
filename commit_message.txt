@@ -1,32 +1,24 @@
-feat: Add live training metrics dashboard with real-time updates
+feat: Implement Live Training Metrics Dashboard
 
-## Backend Changes
-- Created `metrics_parser.py` to extract live metrics from training.log using regex
-  - Parses training progress (Epoch, Batch, GPU, Losses)
-  - Parses validation metrics (Box/Mask mAP, Precision, Recall)
-  - Parses per-class validation metrics
-- Updated `health_checker.py` to populate `metrics_json` column
-  - Parses log every 0.5 seconds during active training
-  - Updates progress_pct and best_* metrics in real-time
-  - Maintains backward compatibility with completion detection
+This commit introduces a real-time dashboard for monitoring training progress.
 
-## Frontend Changes
-- Created `LiveTrainingDashboard.jsx` component with 3 sections:
-  - Live Pulse (HUD): Epoch progress, Batch progress, GPU memory, Loss metrics
-  - Epoch Report (Scorecard): Box/Mask mAP with Precision/Recall
-  - Class Grid: Overall score + per-class performance cards
+Backend Changes:
+- Added `metrics_parser.py`: Implements regex-based parsing of `training.log` to extract live metrics (Epoch, Batch, GPU, Losses, Validation mAP).
+- Updated `health_checker.py`: 
+  - Polls training logs every 0.5 seconds during active training.
+  - Updates `metrics_json` in the database only when values change to reduce DB contention.
+- Updated `executor.py`: Forced unbuffered output (`PYTHONUNBUFFERED=1`) to ensure logs are written instantly for real-time feedback.
+- Updated `api_routes.py`: Added `metrics_json` to `get_training_session` and `get_active_training_session` responses.
+
+Frontend Changes:
+- Created `LiveTrainingDashboard.jsx`:
+  - "Live Pulse" HUD: Shows circular epoch progress, batch progress bar, GPU memory, and loss metrics.
+  - "Epoch Report": Displays Box and Mask mAP/Precision/Recall after each validation epoch.
+  - "Class Grid": Shows overall model score and per-class performance cards.
 - Updated `ModelTrainingSection.jsx`:
-  - Added auto-switch to Status tab on training start
-  - Added polling for live metrics (500ms interval)
-  - Integrated LiveTrainingDashboard component
+  - Auto-switches to the "Status" tab when training starts.
+  - Polls the API every 500ms for live metric updates.
+  - Integrates the new `LiveTrainingDashboard` component.
 
-## Performance
-- Backend: Parses log every 500ms (~0.3% CPU usage)
-- Frontend: Polls API every 500ms for near-instant updates
-- Optimized for modern i5/i7/Ryzen CPUs
-
-## UI/UX Improvements
-- Modern, dark mode design with glassmorphism
-- Color-coded metrics (green for good, gradient backgrounds)
-- Progress rings and bars for visual feedback
-- Responsive card grid layout
+Database:
+- Updated `database.db` and exports with latest schema/data.
