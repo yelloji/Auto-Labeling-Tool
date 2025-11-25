@@ -11,7 +11,7 @@ const taskOptions = [
   { label: 'Segmentation', value: 'segmentation' },
 ];
 
-export default function FrameworkTaskSection({ framework, taskType, onChange }) {
+export default function FrameworkTaskSection({ framework, taskType, onChange, disabled }) {
   return (
     <Form layout="vertical">
       <Form.Item label="Framework" required>
@@ -19,6 +19,7 @@ export default function FrameworkTaskSection({ framework, taskType, onChange }) 
           value={framework}
           options={frameworkOptions}
           onChange={(value) => onChange({ framework: value })}
+          disabled={disabled}
         />
       </Form.Item>
       <Form.Item label="Task Type" required>
@@ -26,6 +27,7 @@ export default function FrameworkTaskSection({ framework, taskType, onChange }) 
           value={taskType}
           options={taskOptions}
           onChange={(value) => onChange({ taskType: value })}
+          disabled={disabled}
         />
       </Form.Item>
     </Form>

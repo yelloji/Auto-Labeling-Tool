@@ -706,6 +706,119 @@ export const releasesAPI = {
   }
 };
 
+// ==================== TRAINING API ====================
+
+export const trainingAPI = {
+  checkExtracted: async (zipPath) => {
+    try {
+      const response = await api.get('/api/v1/training/check-extracted', {
+        params: { zip_path: zipPath }
+      });
+      return response.data;
+    } catch (error) {
+      handleAPIError(error, 'Failed to check extraction');
+      throw error;
+    }
+  },
+  extractRelease: async (zipPath) => {
+    try {
+      const response = await api.post('/api/v1/training/extract-release', {
+        zip_path: zipPath
+      });
+      return response.data;
+    } catch (error) {
+      handleAPIError(error, 'Failed to extract release');
+      throw error;
+    }
+  },
+  resolveConfig: async (framework, task, overrides) => {
+    const response = await api.post('/api/v1/training/config/resolve', { framework, task, overrides });
+    return response.data;
+  },
+  datasetSummary: async ({ releaseDir, dataYamlPath }) => {
+    const params = new URLSearchParams();
+    if (releaseDir) params.append('release_dir', releaseDir);
+    if (dataYamlPath) params.append('data_yaml_path', dataYamlPath);
+    const response = await api.get(`/api/v1/training/dataset/summary?${params.toString()}`);
+    return response.data;
+  },
+  verifyDevPassword: async (password) => {
+    const response = await api.post('/api/v1/dev/auth/verify', { password });
+    return response.data;
+  },
+  changeDevPassword: async ({ currentPassword, newPassword }) => {
+    const response = await api.post('/api/v1/dev/auth/change', { current_password: currentPassword, new_password: newPassword });
+    return response.data;
+  },
+  getTrainableModels: async (projectId, framework, task) => {
+    try {
+      const params = { framework, task };
+      if (projectId !== null && projectId !== undefined && String(projectId).trim() !== '') {
+        params.project_id = projectId;
+      }
+      const response = await api.get('/api/v1/training/models', { params });
+      return response.data || [];
+    } catch (error) {
+      handleAPIError(error, 'Failed to load trainable models');
+      throw error;
+    }
+  },
+  getActiveSession: async (projectId) => {
+    const response = await api.get('/api/v1/training/session/active', {
+      params: { project_id: projectId }
+    });
+    return response.data;
+  },
+  upsertSession: async ({ projectId, name, description }) => {
+    const response = await api.post('/api/v1/training/session/upsert', {
+      project_id: projectId,
+      name,
+      description,
+    });
+    return response.data;
+  },
+  getSession: async ({ projectId, name }) => {
+    const response = await api.get('/api/v1/training/session/get', {
+      params: { project_id: projectId, name }
+    });
+    return response.data;
+  },
+  updateSessionModel: async ({ projectId, name, baseModelId, framework, task, modelName }) => {
+    const response = await api.post('/api/v1/training/session/update-model', {
+      project_id: projectId,
+      name,
+      base_model_id: baseModelId,
+      framework,
+      task,
+      model_name: modelName,
+    });
+    return response.data;
+  },
+  updateSessionDatasetFromZip: async ({ projectId, name, zipPath }) => {
+    const response = await api.post('/api/v1/training/session/update-dataset-from-zip', {
+      project_id: projectId,
+      name,
+      zip_path: zipPath,
+    });
+    return response.data;
+  },
+  saveSessionConfig: async ({ projectId, name, resolvedConfig }) => {
+    const response = await api.post('/api/v1/training/session/save-config', {
+      project_id: projectId,
+      name,
+      resolved_config_json: resolvedConfig,
+    });
+    return response.data;
+  },
+  startSession: async ({ projectId, name }) => {
+    const response = await api.post('/api/v1/training/session/start', {
+      project_id: projectId,
+      name,
+    });
+    return response.data;
+  }
+};
+
 // ==================== DATA AUGMENTATION API ====================
 
 export const augmentationAPI = {
@@ -1100,20 +1213,5 @@ export const systemAPI = {
   }
 };
 
-export const trainingAPI = {
-  getTrainableModels: async (projectId, framework, task) => {
-    try {
-      const params = { framework, task };
-      if (projectId !== null && projectId !== undefined && String(projectId).trim() !== '') {
-        params.project_id = projectId;
-      }
-      const response = await api.get('/api/v1/training/models', { params });
-      return response.data || [];
-    } catch (error) {
-      handleAPIError(error, 'Failed to load trainable models');
-      throw error;
-    }
-  }
-};
 
 export default api;

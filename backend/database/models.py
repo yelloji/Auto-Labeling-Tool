@@ -521,3 +521,87 @@ class Label(Base):
             "project_id": self.project_id
         })
         return f"<Label(id='{self.id}', name='{self.name}', project='{self.project_id}')>"
+
+
+# -----------------------------------------------------------------------------
+# Training Sessions (centralized here for canonical ORM definitions)
+# -----------------------------------------------------------------------------
+
+class TrainingSession(Base):
+    """Training session metadata, config snapshot, paths and metrics."""
+    __tablename__ = "training_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    training_uid = Column(String(64), unique=True, nullable=True)
+
+    # Human-friendly
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    
+    project_id = Column(Integer, nullable=True)
+    project_name = Column(String(255), nullable=True)
+
+    # Links
+    # Deprecated: dataset_id stored historically; use dataset_release_id/dataset_release_dir going forward
+    # dataset_id column remains in DB for compatibility but is not mapped here
+    base_model_id = Column(String, nullable=False)
+    dataset_release_id = Column(String, ForeignKey("releases.id"), nullable=True)
+
+
+    # Context
+    framework = Column(String(32), nullable=True)
+    task = Column(String(32), nullable=True)
+    model_name = Column(String(255), nullable=True)
+    dataset_release_dir = Column(Text, nullable=True)
+    dataset_summary_json = Column(Text, nullable=True)
+
+    # Core hyperparams live in resolved_config_json (no separate columns)
+    resolved_config_json = Column(Text, nullable=True)
+    training_config_snapshot = Column(Text, nullable=True)  # Final YAML config used for training
+
+
+    # Paths
+    run_dir = Column(Text, nullable=True)
+    weights_dir = Column(Text, nullable=True)
+    best_weights_path = Column(Text, nullable=True)
+    logs_dir = Column(Text, nullable=True)
+    artifacts_dir = Column(Text, nullable=True)
+
+    # Status & progress
+    status = Column(String(50), default="pending")  # queued/pending, running, completed, failed
+    process_pid = Column(Integer, nullable=True)
+    progress_pct = Column(Integer, default=0)
+
+    # Quick metrics
+    best_epoch = Column(Integer)
+    best_box_map50 = Column(Float, default=0.0)
+    best_box_map95 = Column(Float, default=0.0)
+    best_mask_map50 = Column(Float)
+    best_mask_map95 = Column(Float)
+    current_loss = Column(Float)
+    metrics_json = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    started_at = Column(DateTime)
+    last_update_at = Column(DateTime)
+    completed_at = Column(DateTime)
+    error_msg = Column(Text, nullable=True)
+
+    __table_args__ = (
+        sa.Index("ix_training_sessions_project_name", "project_id", "name", unique=True),
+        sa.Index("ix_training_sessions_project_status", "project_id", "status"),
+        sa.Index("ix_training_sessions_uid", "training_uid", unique=True),
+    )
+
+    def __repr__(self):
+        return f"<TrainingSession(id='{self.id}', name='{self.name}', project='{self.project_name}', status='{self.status}')>"
+
+
+class DevModeSetting(Base):
+    __tablename__ = "dev_mode_settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    password_hash = Column(Text, nullable=True)
+    master_password_hash = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

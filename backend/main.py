@@ -21,8 +21,10 @@ import uvicorn
 from api.routes import labels
 
 from api.routes import projects, datasets, annotations, models, enhanced_export, releases
+from models.training import api_routes as training_api
 from api.routes import analytics, augmentation, dataset_management
 from api.routes import image_transformations, logs, frontend_logs, release_detail_view
+from api.routes import dev_password
 from core.config import settings
 from database.database import init_db
 # Import professional logging system
@@ -133,6 +135,8 @@ app.include_router(images_router, prefix="/api/v1", tags=["images"])
 app.include_router(enhanced_export.router, prefix="/api/v1/enhanced-export", tags=["enhanced-export"])
 app.include_router(releases.router, prefix="/api/v1", tags=["releases"])
 app.include_router(release_detail_view.router, prefix="/api/v1", tags=["release-details"])
+app.include_router(training_api.router, prefix="/api/v1", tags=["training"])
+app.include_router(dev_password.router, prefix="/api/v1", tags=["dev-auth"])
 
 # Include new feature routes
 app.include_router(analytics.router, tags=["analytics"])
@@ -320,9 +324,7 @@ async def system_hardware():
 
 # Include Smart Segmentation routes
 from api import smart_segmentation
-from api.routes import training_models
 app.include_router(smart_segmentation.router, prefix="/api", tags=["smart-segmentation"])
-app.include_router(training_models.router, prefix="/api/v1", tags=["training-models"])
 
 # Serve static files (for uploaded images, etc.)
 static_dir = Path(settings.STATIC_FILES_DIR)
@@ -384,6 +386,14 @@ async def startup_event():
     })
     await init_db()
     logger.info("app.database", "✅ Database initialized successfully", "database_initialized")
+    
+    # Start training health checker
+    try:
+        from models.training.health_checker import start_training_health_checker
+        start_training_health_checker()
+        logger.info("app.startup", "✅ Training health checker started", "health_checker_started")
+    except Exception as e:
+        logger.error("app.startup", f"Failed to start training health checker: {str(e)}", "health_checker_error", {"error": str(e)})
     
     # Initialize auto-export system based on dedicated configuration
     try:

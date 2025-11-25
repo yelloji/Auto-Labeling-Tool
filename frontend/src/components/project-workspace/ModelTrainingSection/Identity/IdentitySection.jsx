@@ -2,7 +2,7 @@ import React from 'react';
 import { Form, Input } from 'antd';
 
 // Project ID is kept internally by the parent and sent to backend; no need to display here.
-export default function IdentitySection({ trainingName, onChange }) {
+export default function IdentitySection({ trainingName, description, onChange, disabled }) {
   return (
     <Form layout="vertical">
       <Form.Item
@@ -20,6 +20,23 @@ export default function IdentitySection({ trainingName, onChange }) {
             onChange({ trainingName: sanitized });
           }}
           maxLength={64}
+          disabled={disabled}
+        />
+      </Form.Item>
+      <Form.Item
+        label="Description"
+        tooltip="Short note about this training session"
+      >
+        <Input.TextArea
+          value={description}
+          placeholder="Add a short description…"
+          rows={3}
+          onChange={(e) => {
+            const raw = e.target.value || '';
+            onChange({ description: raw });
+          }}
+          maxLength={500}
+          disabled={disabled}
         />
       </Form.Item>
     </Form>

@@ -13,6 +13,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 import json
+import hashlib
 
 class DatabaseDebugger:
     def __init__(self, db_path="database.db"):
@@ -81,7 +82,72 @@ class DatabaseDebugger:
             # Get row count
             cursor.execute(f"SELECT COUNT(*) FROM {table_name};")
             count = cursor.fetchone()[0]
-            print(f"   📊 Total rows: {count}")
+        print(f"   📊 Total rows: {count}")
+
+    def get_training_sessions_table(self):
+        """Detailed info about training_sessions table"""
+        cursor = self.conn.cursor()
+        self.print_header("TRAINING SESSIONS TABLE")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='training_sessions'")
+        if not cursor.fetchone():
+            print("❌ training_sessions table does not exist!")
+            return
+        print("\n📐 Schema:")
+        cursor.execute("PRAGMA table_info('training_sessions')")
+        for col in cursor.fetchall():
+            col_info = f"   - {col[1]} ({col[2]})"
+            if col[3]:
+                col_info += " NOT NULL"
+            if col[4] is not None:
+                col_info += f" DEFAULT {col[4]}"
+            if col[5]:
+                col_info += " PRIMARY KEY"
+            print(col_info)
+        print("\n🔎 Indexes:")
+        cursor.execute("PRAGMA index_list('training_sessions')")
+        idx_list = cursor.fetchall()
+        if idx_list:
+            for idx in idx_list:
+                idx_name = idx[1]
+                is_unique = bool(idx[2]) if len(idx) > 2 else False
+                print(f"   - {idx_name} {'(UNIQUE)' if is_unique else ''}")
+                try:
+                    cursor.execute(f"PRAGMA index_info('{idx_name}')")
+                    cols = ", ".join([r[2] for r in cursor.fetchall()])
+                    print(f"     Columns: {cols}")
+                except Exception as e:
+                    print(f"     ⚠️  Could not read index columns: {e}")
+        else:
+            print("   (no indexes)")
+        cursor.execute("SELECT COUNT(*) FROM training_sessions")
+        count = cursor.fetchone()[0]
+        print(f"\n📊 Total rows: {count}")
+        if count:
+            print("\n🗂️  Recent Sessions:")
+            # Preserve actual column order as defined in the table
+            cursor.execute("PRAGMA table_info('training_sessions')")
+            _cols_info = cursor.fetchall()
+            _col_names = [c[1] for c in _cols_info]
+            cursor.execute("""
+                SELECT *
+                FROM training_sessions
+                ORDER BY created_at DESC
+                LIMIT 10
+            """)
+            for row in cursor.fetchall():
+                print(f"   🧾 Full Row (table order):")
+                for cn in _col_names:
+                    val = row[cn]
+                    if cn in ("dataset_summary_json", "resolved_config_json", "metrics_json") and val:
+                        try:
+                            _parsed = json.loads(val) if isinstance(val, str) else val
+                            print(f"         {cn}:")
+                            for _line in json.dumps(_parsed, indent=2, default=str).splitlines():
+                                print(f"           {_line}")
+                        except Exception:
+                            print(f"         {cn}: (could not parse)")
+                    else:
+                        print(f"         {cn}: {val if val not in (None, '') else 'N/A'}")
     
     def get_projects_overview(self):
         """Get overview of all projects"""
@@ -834,6 +900,53 @@ class DatabaseDebugger:
             print(f"   📅 Created: {row['created_at']}")
             print(f"   🔄 Updated: {row['updated_at'] if 'updated_at' in row.keys() else 'N/A'}")
 
+    def get_dev_mode_settings_table(self):
+        """Show developer mode settings table (password state)"""
+        cursor = self.conn.cursor()
+
+        self.print_header("DEV MODE SETTINGS TABLE")
+
+        # Check table existence
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='dev_mode_settings'")
+        if not cursor.fetchone():
+            print("❌ dev_mode_settings table does not exist!")
+            return
+
+        # Schema
+        print("\n📐 Schema:")
+        cursor.execute("PRAGMA table_info(dev_mode_settings)")
+        for col in cursor.fetchall():
+            col_info = f"   - {col[1]} ({col[2]})"
+            if col[3]:
+                col_info += " NOT NULL"
+            if col[4] is not None:
+                col_info += f" DEFAULT {col[4]}"
+            if col[5]:
+                col_info += " PRIMARY KEY"
+            print(col_info)
+
+        # Row count
+        cursor.execute("SELECT COUNT(*) FROM dev_mode_settings")
+        count = cursor.fetchone()[0]
+        print(f"\n📊 Total rows: {count}")
+
+        # Show the first record (if any)
+        if count:
+            cursor.execute("SELECT id, password_hash, master_password_hash, updated_at FROM dev_mode_settings ORDER BY id LIMIT 1")
+            row = cursor.fetchone()
+            print(f"\n🗂️  Current Setting:")
+            has_pw = bool(row[1])
+            is_default = has_pw and (row[1] == hashlib.sha256(b"0000").hexdigest())
+            pw_state = (
+                "Default (0000)" if is_default else ("Custom (hidden)" if has_pw else "Not set")
+            )
+            has_master = bool(row[2])
+            is_master_default = has_master and (row[2] == hashlib.sha256(b"gevis").hexdigest())
+            master_state = (
+                "Default (gevis)" if is_master_default else ("Custom (hidden)" if has_master else "Not set")
+            )
+            print(f"   id: {row[0]} • updated_at: {row[3]} • password: {pw_state} • master: {master_state}")
+
     def get_image_transformations_table(self):
         """Get detailed information about image transformations"""
         cursor = self.conn.cursor()
@@ -1242,6 +1355,8 @@ class DatabaseDebugger:
             self.get_database_statistics()
             self.get_table_info()
             self.get_ai_models_table()  # Add AI models table analysis
+            self.get_dev_mode_settings_table()  # Show dev-mode settings
+            self.get_training_sessions_table()  # Training sessions table analysis
             self.get_projects_overview()
             self.get_datasets_detailed()
             self.get_labels_table()  # Add labels table analysis
@@ -1272,6 +1387,19 @@ def main():
     parser.add_argument('--db', type=str, default='database.db', help='Path to database file')
     parser.add_argument('--labels', action='store_true', help='Show only labels table data')
     parser.add_argument('--ai-models', action='store_true', help='Show only ai_models table data')
+    parser.add_argument('--training-sessions', action='store_true', help='Show training_sessions table data')
+    parser.add_argument('--projects', action='store_true', help='Show projects overview')
+    parser.add_argument('--datasets', action='store_true', help='Show datasets detailed view')
+    parser.add_argument('--images', action='store_true', help='Show images detailed view')
+    parser.add_argument('--annotations-summary', action='store_true', help='Show annotations summary')
+    parser.add_argument('--annotations-detailed', action='store_true', help='Show detailed annotations')
+    parser.add_argument('--releases', action='store_true', help='Show releases table')
+    parser.add_argument('--transformations', action='store_true', help='Show image_transformations table')
+    parser.add_argument('--transformations-detailed', action='store_true', help='Show detailed image transformations')
+    parser.add_argument('--relationships', action='store_true', help='Show transformation-release relationships')
+    parser.add_argument('--stats', action='store_true', help='Show database statistics')
+    parser.add_argument('--schema', action='store_true', help='Show database schema information')
+    parser.add_argument('--filesystem', action='store_true', help='Compare file system vs database')
     args = parser.parse_args()
     
     db_path = args.db
@@ -1285,21 +1413,58 @@ def main():
     print("=" * 50)
     print(f"Using database file: {db_path}")
     
-    # Create the debugger
     debugger = DatabaseDebugger(db_path)
-    
-    if args.labels:
-        # Only show labels table
+    targets = [
+        args.labels,
+        args.ai_models,
+        args.training_sessions,
+        args.projects,
+        args.datasets,
+        args.images,
+        args.annotations_summary,
+        args.annotations_detailed,
+        args.releases,
+        args.transformations,
+        args.transformations_detailed,
+        args.relationships,
+        args.stats,
+        args.schema,
+        args.filesystem,
+    ]
+    if any(targets):
         if debugger.connect():
-            debugger.get_labels_table()
-            debugger.close()
-    elif args.ai_models:
-        # Only show ai_models table
-        if debugger.connect():
-            debugger.get_ai_models_table()
+            if args.labels:
+                debugger.get_labels_table()
+            if args.ai_models:
+                debugger.get_ai_models_table()
+            if args.training_sessions:
+                debugger.get_training_sessions_table()
+            if args.projects:
+                debugger.get_projects_overview()
+            if args.datasets:
+                debugger.get_datasets_detailed()
+            if args.images:
+                debugger.get_images_detailed()
+            if args.annotations_summary:
+                debugger.get_annotations_summary()
+            if args.annotations_detailed:
+                debugger.get_detailed_annotations()
+            if args.releases:
+                debugger.get_releases_table()
+            if args.transformations:
+                debugger.get_image_transformations_table()
+            if args.transformations_detailed:
+                debugger.get_image_transformations_detailed()
+            if args.relationships:
+                debugger.get_transformation_release_relationships()
+            if args.stats:
+                debugger.get_database_statistics()
+            if args.schema:
+                debugger.get_table_info()
+            if args.filesystem:
+                debugger.get_file_system_vs_database()
             debugger.close()
     else:
-        # Run full debug
         debugger.run_full_debug()
 
 if __name__ == "__main__":

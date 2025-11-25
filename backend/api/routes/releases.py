@@ -1141,6 +1141,47 @@ def delete_release(release_id: str, db: Session = Depends(get_db)):
                     "absolute_path": abs_zip_path
                 })
         
+        # ✅ STEP 1b: If ZIP was deleted, also remove extracted training_data folder for this release
+        try:
+            if zip_file_path:
+                # Derive project name and slug from relative zip path
+                rel = str(zip_file_path).replace("\\", "/")
+                parts = rel.split("/")
+                project_name = None
+                try:
+                    idx = parts.index("projects") if "projects" in parts else -1
+                    if idx >= 0 and len(parts) >= idx + 3 and parts[idx + 2] == "releases":
+                        project_name = parts[idx + 1]
+                except Exception:
+                    project_name = None
+                if project_name:
+                    from utils.path_utils import PathManager
+                    from pathlib import Path
+                    slug = Path(parts[-1]).stem.replace(" ", "_")
+                    target_rel = f"projects/{project_name}/training_data/{slug}"
+                    target_abs = PathManager.get_absolute_path(target_rel)
+                    if target_abs and os.path.exists(target_abs):
+                        try:
+                            import shutil
+                            shutil.rmtree(target_abs)
+                            logger.info("operations.releases", "Extracted training_data folder deleted", "release_extract_folder_delete_success", {
+                                "release_id": release_id,
+                                "project_name": project_name,
+                                "target_dir": target_rel
+                            })
+                        except Exception as rm_err:
+                            logger.warning("operations.releases", "Failed to delete extracted training_data folder", "release_extract_folder_delete_warning", {
+                                "release_id": release_id,
+                                "project_name": project_name,
+                                "target_dir": target_rel,
+                                "error": str(rm_err)
+                            })
+        except Exception as cascade_err:
+            logger.warning("operations.releases", "Cascade delete for extracted folder encountered a non-fatal error", "release_cascade_delete_warning", {
+                "release_id": release_id,
+                "error": str(cascade_err)
+            })
+
         # ✅ STEP 2: Clean up related transformations
         transformations_deleted = 0
         try:
