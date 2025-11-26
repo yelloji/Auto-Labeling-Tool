@@ -1,16 +1,11 @@
-fix: Dashboard persistence and batch progress improvements
+fix: Batch regex and metrics persistence final fixes
 
-## Frontend Fixes
-- **ModelTrainingSection.jsx**: Stop polling when training completes (preserve final metrics)
-- **LiveTrainingDashboard.jsx**: Fixed conditional rendering to only hide when metrics are truly empty
-
-## Backend Fixes
-- **metrics_parser.py**: 
-  - Fixed batch regex to require 'it/s' (avoids matching epoch numbers like "1/20")
-  - Added None checks for optional batch_speed and batch_eta to prevent float(None) crash
+## Fixes Applied
+- **metrics_parser.py**: Fixed batch regex to match new log format with brackets (28/29 [00:01<00:00, 7.065it/s])
+- **ModelTrainingSection.jsx**: Preserve liveMetrics when form resets after training completion
 
 ## Issues Resolved
-- Dashboard no longer disappears after training completes
-- Batch count now shows correct total (29/29 instead of varying 5/5, 20/20)
-- Batch speed and remaining time display correctly when available
-- Parser no longer crashes when batch progress lacks speed/time data
+- Batch count now shows correct total (29/29 instead of 20/20 or 5/5)
+- Batch speed and remaining time display correctly
+- Dashboard metrics persist after training completes (no disappearing)
+- Form reset no longer clears final metrics

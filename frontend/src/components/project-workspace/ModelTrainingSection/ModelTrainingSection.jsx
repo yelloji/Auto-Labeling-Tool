@@ -220,7 +220,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
     if (wasTraining && !isTraining && (form.status === 'completed' || form.status === 'failed')) {
       // Training just finished - reset form to initial state
-      setForm({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
+      setForm(prev => ({ ...initialFormState, projectId, sessionId: null, status: 'queued', liveMetrics: prev.liveMetrics }));
       sessionStorage.removeItem('wasTraining');
 
       logInfo('app.frontend.ui', 'training_completed_form_reset', 'Form reset after training completion', {
