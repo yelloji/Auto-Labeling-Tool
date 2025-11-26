@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Progress, Row, Col, Statistic, Tag, Typography } from 'antd';
+import { Card, Progress, Row, Col, Statistic, Tag, Typography, Tooltip } from 'antd';
 import { ThunderboltOutlined, DatabaseOutlined, HddOutlined } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
@@ -9,7 +9,7 @@ const LiveTrainingDashboard = ({ metrics }) => {
     const validation = metrics?.validation || {};
     const classes = metrics?.classes || [];
 
-  
+
 
     // Hide dashboard only if metrics object is completely empty
     if (!metrics || (Object.keys(training).length === 0 && Object.keys(validation).length === 0)) {
@@ -88,36 +88,44 @@ const LiveTrainingDashboard = ({ metrics }) => {
                 {/* Losses Row */}
                 <Row gutter={[8, 8]} style={{ marginTop: 12 }}>
                     <Col span={6}>
-                        <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4 }}>
-                            <div style={{ color: '#fff', fontSize: 10 }}>Box</div>
-                            <div style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
-                                {training.box_loss?.toFixed(2) || 'N/A'}
+                        <Tooltip title="Bounding Box Loss">
+                            <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4, cursor: 'help' }}>
+                                <div style={{ color: '#fff', fontSize: 10 }}>Box Loss</div>
+                                <div style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
+                                    {training.box_loss?.toFixed(2) || 'N/A'}
+                                </div>
                             </div>
-                        </div>
+                        </Tooltip>
                     </Col>
                     <Col span={6}>
-                        <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4 }}>
-                            <div style={{ color: '#fff', fontSize: 10 }}>Seg</div>
-                            <div style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
-                                {training.seg_loss?.toFixed(2) || 'N/A'}
+                        <Tooltip title="Segmentation Loss">
+                            <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4, cursor: 'help' }}>
+                                <div style={{ color: '#fff', fontSize: 10 }}>Seg Loss</div>
+                                <div style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
+                                    {training.seg_loss?.toFixed(2) || 'N/A'}
+                                </div>
                             </div>
-                        </div>
+                        </Tooltip>
                     </Col>
                     <Col span={6}>
-                        <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4 }}>
-                            <div style={{ color: '#fff', fontSize: 10 }}>Cls</div>
-                            <div style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
-                                {training.cls_loss?.toFixed(2) || 'N/A'}
+                        <Tooltip title="Classification Loss">
+                            <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4, cursor: 'help' }}>
+                                <div style={{ color: '#fff', fontSize: 10 }}>Cls Loss</div>
+                                <div style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
+                                    {training.cls_loss?.toFixed(2) || 'N/A'}
+                                </div>
                             </div>
-                        </div>
+                        </Tooltip>
                     </Col>
                     <Col span={6}>
-                        <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4 }}>
-                            <div style={{ color: '#fff', fontSize: 10 }}>DFL</div>
-                            <div style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
-                                {training.dfl_loss?.toFixed(2) || 'N/A'}
+                        <Tooltip title="Distribution Focal Loss">
+                            <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4, cursor: 'help' }}>
+                                <div style={{ color: '#fff', fontSize: 10 }}>DFL Loss</div>
+                                <div style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
+                                    {training.dfl_loss?.toFixed(2) || 'N/A'}
+                                </div>
                             </div>
-                        </div>
+                        </Tooltip>
                     </Col>
                 </Row>
             </Card>
