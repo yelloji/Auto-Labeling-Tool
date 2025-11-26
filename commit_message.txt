@@ -1,20 +1,16 @@
-feat: Finalize live training dashboard metrics persistence and visibility
+fix: Dashboard persistence and batch progress improvements
 
-## Frontend Changes
-- **ModelTrainingSection.jsx**: 
-  - Fixed metrics clearing logic to persist data after training completes.
-  - Metrics now only clear when a NEW, non-empty training name is entered.
-  - Added `useEffect` to load the last completed training session's metrics on page mount.
-- **LiveTrainingDashboard.jsx**:
-  - Added conditional rendering to hide the dashboard when no metrics exist (e.g., status='queued').
-  - Prevents displaying empty "0/0" states before training starts.
+## Frontend Fixes
+- **ModelTrainingSection.jsx**: Stop polling when training completes (preserve final metrics)
+- **LiveTrainingDashboard.jsx**: Fixed conditional rendering to only hide when metrics are truly empty
 
-## Backend Changes
-- **api_routes.py**:
-  - Added new endpoint `GET /projects/{id}/training/last-completed`.
-  - Fetches the most recent session with `status='completed'` to restore dashboard state.
+## Backend Fixes
+- **metrics_parser.py**: 
+  - Fixed batch regex to require 'it/s' (avoids matching epoch numbers like "1/20")
+  - Added None checks for optional batch_speed and batch_eta to prevent float(None) crash
 
-## Fixes
-- Resolved issue where metrics would reset to zero immediately after training finished.
-- Resolved issue where dashboard showed empty zeros when creating a new training.
-- Dashboard now persists across page reloads and backend restarts.
+## Issues Resolved
+- Dashboard no longer disappears after training completes
+- Batch count now shows correct total (29/29 instead of varying 5/5, 20/20)
+- Batch speed and remaining time display correctly when available
+- Parser no longer crashes when batch progress lacks speed/time data

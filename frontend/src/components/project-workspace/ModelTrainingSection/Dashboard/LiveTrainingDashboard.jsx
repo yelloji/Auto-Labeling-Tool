@@ -9,8 +9,10 @@ const LiveTrainingDashboard = ({ metrics }) => {
     const validation = metrics?.validation || {};
     const classes = metrics?.classes || [];
 
-    // Hide dashboard if no metrics at all
-    if (!metrics || (!training.epoch && !validation.box_map50)) {
+  
+
+    // Hide dashboard only if metrics object is completely empty
+    if (!metrics || (Object.keys(training).length === 0 && Object.keys(validation).length === 0)) {
         return null;
     }
 

@@ -47,9 +47,10 @@ def parse_training_log(log_file_path: Path) -> Dict:
             r'(\d+)%'  # Progress % (10)
         )
         
-        # Batch progress: "1/29 1.6it/s 1.8s<17.6s" -> batch, total, speed, remaining_time
-        # Made speed and time optional to be safe
-        batch_pattern = re.compile(r'(\d+)/(\d+)(?:\s+([\d.]+)it/s)?(?:\s+[\d.]+s<([\d.]+)s)?')
+        # Batch progress: Must have "it/s" to distinguish from epoch "1/20"
+        # Examples: "4/29 2.70it/s" or "1/29 1.6it/s 1.8s<17.6s"
+        # Captures: batch(1), total(2), speed(3), eta(4)
+        batch_pattern = re.compile(r'(\d+)/(\d+)\s+(?:[\[0-9:.<]+\s+)?([\d.]+)it/s(?:\s+[\d.]+s<([\d.]+)s)?')
         
         # Validation results: "all         19         19     0.0118          1      0.866      0.282    0.00186      0.158    0.00114   0.000406"
         val_pattern = re.compile(

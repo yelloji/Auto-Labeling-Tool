@@ -111,7 +111,11 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
   // Poll for live metrics every 1 second during training 
   useEffect(() => {
+
     if (!form.sessionId) return;
+
+    // Stop polling if training is completed (to preserve final metrics)
+    if (form.status === 'completed') return;
     const interval = setInterval(async () => {
       try {
         const session = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
@@ -123,7 +127,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
       }
     }, 500);
     return () => clearInterval(interval);
-  }, [isTraining, form.sessionId, form.projectId, form.trainingName]);
+
+  }, [isTraining, form.sessionId, form.projectId, form.trainingName, form.status]);
 
   // Clear live metrics only when user enters a NEW training name (not empty)
   const prevTrainingName = React.useRef(form.trainingName);
