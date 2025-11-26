@@ -621,3 +621,35 @@ async def dataset_summary(release_dir: Optional[str] = None, data_yaml_path: Opt
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/projects/{project_id}/training/last-completed")
+async def get_last_completed_session(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get the most recent completed training session for a project"""
+    try:
+        # Get project
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get last completed session
+        session = db.query(TrainingSession).filter(
+            TrainingSession.project_id == project_id,
+            TrainingSession.status == "completed"
+        ).order_by(TrainingSession.updated_at.desc()).first()
+        
+        if not session:
+            return None
+        
+        return {
+            "id": session.id,
+            "name": session.name,
+            "status": session.status,
+            "metrics_json": session.metrics_json,
+            "created_at": session.created_at.isoformat() if session.created_at else None,
+            "updated_at": session.updated_at.isoformat() if session.updated_at else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))    

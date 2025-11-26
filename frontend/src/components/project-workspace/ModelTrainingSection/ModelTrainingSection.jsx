@@ -125,10 +125,44 @@ const ModelTrainingSection = ({ projectId, project }) => {
     return () => clearInterval(interval);
   }, [isTraining, form.sessionId, form.projectId, form.trainingName]);
 
-  // Clear live metrics when training name changes (new session)
+  // Clear live metrics only when user enters a NEW training name (not empty)
+  const prevTrainingName = React.useRef(form.trainingName);
   useEffect(() => {
-    setForm(prev => ({ ...prev, liveMetrics: null }));
+    // Only clear if:
+    // 1. Previous name existed
+    // 2. New name is different
+    // 3. New name is NOT empty (not a reset)
+    if (prevTrainingName.current &&
+      prevTrainingName.current !== form.trainingName &&
+      form.trainingName.trim().length > 0) {
+      setForm(prev => ({ ...prev, liveMetrics: null }));
+    }
+    prevTrainingName.current = form.trainingName;
   }, [form.trainingName]);
+
+  // Load last completed training's metrics on page mount
+  useEffect(() => {
+    const loadLastMetrics = async () => {
+      try {
+        if (!form.projectId || form.liveMetrics) return;
+
+        const response = await fetch(`/api/projects/${form.projectId}/training/last-completed`);
+        if (response.ok) {
+          const session = await response.json();
+          if (session?.metrics_json) {
+            setForm(prev => ({
+              ...prev,
+              liveMetrics: JSON.parse(session.metrics_json)
+            }));
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load last metrics:', e);
+      }
+    };
+
+    loadLastMetrics();
+  }, [form.projectId]);
 
   useEffect(() => {
     const maybeExtract = async () => {

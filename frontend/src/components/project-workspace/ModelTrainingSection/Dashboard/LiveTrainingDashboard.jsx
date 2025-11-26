@@ -9,6 +9,11 @@ const LiveTrainingDashboard = ({ metrics }) => {
     const validation = metrics?.validation || {};
     const classes = metrics?.classes || [];
 
+    // Hide dashboard if no metrics at all
+    if (!metrics || (!training.epoch && !validation.box_map50)) {
+        return null;
+    }
+
     // Calculate epoch progress percentage
     const epochProgress = training.total_epochs
         ? ((training.epoch || 0) / training.total_epochs) * 100
