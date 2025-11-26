@@ -624,7 +624,7 @@ async def dataset_summary(release_dir: Optional[str] = None, data_yaml_path: Opt
 
 @router.get("/projects/{project_id}/training/last-completed")
 async def get_last_completed_session(
-    project_id: str,
+    project_id: int,
     db: Session = Depends(get_db)
 ):
     """Get the most recent completed training session for a project"""
@@ -638,7 +638,7 @@ async def get_last_completed_session(
         session = db.query(TrainingSession).filter(
             TrainingSession.project_id == project_id,
             TrainingSession.status == "completed"
-        ).order_by(TrainingSession.updated_at.desc()).first()
+        ).order_by(TrainingSession.last_update_at.desc()).first()
         
         if not session:
             return None
@@ -649,7 +649,9 @@ async def get_last_completed_session(
             "status": session.status,
             "metrics_json": session.metrics_json,
             "created_at": session.created_at.isoformat() if session.created_at else None,
-            "updated_at": session.updated_at.isoformat() if session.updated_at else None
+            "last_update_at": session.last_update_at.isoformat() if session.last_update_at else None
         }
     except Exception as e:
+        print(f"Error in get_last_completed_session: {str(e)}")  # Log error to console
         raise HTTPException(status_code=500, detail=str(e))    
+    

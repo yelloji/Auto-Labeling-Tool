@@ -48,7 +48,8 @@ def parse_training_log(log_file_path: Path) -> Dict:
         )
         
         # Batch progress: "1/29 1.6it/s 1.8s<17.6s" -> batch, total, speed, remaining_time
-        batch_pattern = re.compile(r'(\d+)/(\d+)\s+([\d.]+)it/s\s+[\d.]+s<([\d.]+)s')
+        # Made speed and time optional to be safe
+        batch_pattern = re.compile(r'(\d+)/(\d+)(?:\s+([\d.]+)it/s)?(?:\s+[\d.]+s<([\d.]+)s)?')
         
         # Validation results: "all         19         19     0.0118          1      0.866      0.282    0.00186      0.158    0.00114   0.000406"
         val_pattern = re.compile(
@@ -88,8 +89,11 @@ def parse_training_log(log_file_path: Path) -> Dict:
             if batch_match and "training" in metrics:
                 metrics["training"]["batch"] = int(batch_match.group(1))
                 metrics["training"]["total_batches"] = int(batch_match.group(2))
-                metrics["training"]["batch_speed"] = float(batch_match.group(3))
-                metrics["training"]["batch_eta"] = float(batch_match.group(4))
+                # Safely handle optional speed and ETA (can be None)
+                if batch_match.group(3):
+                    metrics["training"]["batch_speed"] = float(batch_match.group(3))
+                if batch_match.group(4):
+                    metrics["training"]["batch_eta"] = float(batch_match.group(4))
             
             # Check for validation results
             val_match = val_pattern.search(line)

@@ -146,7 +146,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
       try {
         if (!form.projectId || form.liveMetrics) return;
 
-        const response = await fetch(`/api/projects/${form.projectId}/training/last-completed`);
+        const response = await fetch(`/api/v1/projects/${form.projectId}/training/last-completed`);
         if (response.ok) {
           const session = await response.json();
           if (session?.metrics_json) {
