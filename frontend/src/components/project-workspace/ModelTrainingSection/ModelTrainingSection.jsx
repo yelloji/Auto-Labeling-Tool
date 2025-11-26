@@ -111,7 +111,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
   // Poll for live metrics every 1 second during training 
   useEffect(() => {
-    if (!isTraining || !form.sessionId) return;
+    if (!form.sessionId) return;
     const interval = setInterval(async () => {
       try {
         const session = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
@@ -124,6 +124,11 @@ const ModelTrainingSection = ({ projectId, project }) => {
     }, 500);
     return () => clearInterval(interval);
   }, [isTraining, form.sessionId, form.projectId, form.trainingName]);
+
+  // Clear live metrics when training name changes (new session)
+  useEffect(() => {
+    setForm(prev => ({ ...prev, liveMetrics: null }));
+  }, [form.trainingName]);
 
   useEffect(() => {
     const maybeExtract = async () => {
