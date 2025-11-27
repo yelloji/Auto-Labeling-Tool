@@ -836,7 +836,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       key: 'status',
                       label: 'Status',
                       children: (
-                        <LiveTrainingDashboard metrics={form.liveMetrics || {}} />
+                        <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4 }}>
+                          <LiveTrainingDashboard metrics={form.liveMetrics || {}} />
+                        </div>
                       )
                     }
                   ]} />
