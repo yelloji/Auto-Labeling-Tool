@@ -128,6 +128,30 @@ const LiveTrainingDashboard = ({ metrics }) => {
                         </Tooltip>
                     </Col>
                 </Row>
+
+                {/* Instances & Size Row */}
+                <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
+                    <Col span={12}>
+                        <Tooltip title="Number of labeled objects in current batch">
+                            <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4, cursor: 'help' }}>
+                                <div style={{ color: '#fff', fontSize: 10 }}>Instances</div>
+                                <div style={{ color: '#00d9ff', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
+                                    {training.instances || 'N/A'}
+                                </div>
+                            </div>
+                        </Tooltip>
+                    </Col>
+                    <Col span={12}>
+                        <Tooltip title="Training image resolution (e.g., 640x640)">
+                            <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4, cursor: 'help' }}>
+                                <div style={{ color: '#fff', fontSize: 10 }}>Size</div>
+                                <div style={{ color: '#00d9ff', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
+                                    {training.img_size || 'N/A'}
+                                </div>
+                            </div>
+                        </Tooltip>
+                    </Col>
+                </Row>
             </Card>
 
             {/* Section 2: Epoch Report (Scorecard) - Always visible */}
