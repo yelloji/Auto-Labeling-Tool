@@ -9,7 +9,13 @@ const LiveTrainingDashboard = ({ metrics, status }) => {
     const validation = metrics?.validation || {};
     const classes = metrics?.classes || [];
 
-
+    // Calculate F1 Scores
+    const boxF1 = (validation.box_p && validation.box_r)
+        ? (2 * validation.box_p * validation.box_r) / (validation.box_p + validation.box_r)
+        : 0;
+    const maskF1 = (validation.mask_p && validation.mask_r)
+        ? (2 * validation.mask_p * validation.mask_r) / (validation.mask_p + validation.mask_r)
+        : 0;
 
     // Hide dashboard only if metrics object is completely empty
     if (!metrics || (Object.keys(training).length === 0 && Object.keys(validation).length === 0)) {
@@ -338,22 +344,30 @@ const LiveTrainingDashboard = ({ metrics, status }) => {
             >
                 <Row gutter={[12, 12]}>
                     <Col span={12}>
-                        <Progress
-                            type="dashboard"
-                            percent={Math.round((validation.box_map50 || 0) * 100)}
-                            strokeColor="#1890ff"
-                            format={(percent) => `${percent}%`}
-                        />
-                        <div style={{ textAlign: 'center', fontSize: 11, marginTop: 4 }}>Box mAP50</div>
+                        <Tooltip title="F1 Score = Harmonic mean of Precision and Recall (balances false alarms vs missed defects)">
+                            <div style={{ textAlign: 'center', cursor: 'help' }}>
+                                <Progress
+                                    type="dashboard"
+                                    percent={Math.round(boxF1 * 100)}
+                                    strokeColor="#1890ff"
+                                    format={(percent) => `${percent}%`}
+                                />
+                                <div style={{ textAlign: 'center', fontSize: 11, marginTop: 4 }}>Box F1 Score</div>
+                            </div>
+                        </Tooltip>
                     </Col>
                     <Col span={12}>
-                        <Progress
-                            type="dashboard"
-                            percent={Math.round((validation.mask_map50 || 0) * 100)}
-                            strokeColor="#722ed1"
-                            format={(percent) => `${percent}%`}
-                        />
-                        <div style={{ textAlign: 'center', fontSize: 11, marginTop: 4 }}>Mask mAP50</div>
+                        <Tooltip title="F1 Score = Harmonic mean of Precision and Recall (balances false alarms vs missed defects)">
+                            <div style={{ textAlign: 'center', cursor: 'help' }}>
+                                <Progress
+                                    type="dashboard"
+                                    percent={Math.round(maskF1 * 100)}
+                                    strokeColor="#722ed1"
+                                    format={(percent) => `${percent}%`}
+                                />
+                                <div style={{ textAlign: 'center', fontSize: 11, marginTop: 4 }}>Mask F1 Score</div>
+                            </div>
+                        </Tooltip>
                     </Col>
                 </Row>
                 <Row gutter={[8, 8]} style={{ marginTop: 12 }}>
@@ -366,46 +380,195 @@ const LiveTrainingDashboard = ({ metrics, status }) => {
                 </Row>
             </Card>
 
-            {/* Per-Class Cards */}
+
+            {/* Section 4: Per-Class Performance */}
             {classes.length > 0 && (
                 <div>
                     <Title level={5} style={{ fontSize: 12, marginBottom: 8 }}>Per-Class Performance</Title>
                     <Row gutter={[12, 12]}>
-                        {classes.map((cls, idx) => (
-                            <Col span={24} key={idx}>
-                                <Card
-                                    size="small"
-                                    title={
-                                        <span style={{ fontSize: 12 }}>
-                                            {cls.class} <Tag color="blue" style={{ marginLeft: 8 }}>{cls.instances}</Tag>
-                                        </span>
-                                    }
-                                    bodyStyle={{ padding: 12 }}
-                                >
-                                    <Row gutter={[8, 8]}>
-                                        <Col span={12}>
-                                            <div style={{ fontSize: 10, color: '#888' }}>Box mAP</div>
-                                            <Progress
-                                                percent={Math.round(cls.box_map50 * 100)}
-                                                strokeColor="#1890ff"
-                                                size="small"
-                                            />
-                                        </Col>
-                                        <Col span={12}>
-                                            <div style={{ fontSize: 10, color: '#888' }}>Mask mAP</div>
-                                            <Progress
-                                                percent={Math.round(cls.mask_map50 * 100)}
-                                                strokeColor="#722ed1"
-                                                size="small"
-                                            />
-                                        </Col>
-                                    </Row>
-                                    <div style={{ fontSize: 10, color: '#888', marginTop: 8 }}>
-                                        P: {(cls.box_p * 100).toFixed(1)}% | R: {(cls.box_r * 100).toFixed(1)}%
-                                    </div>
-                                </Card>
-                            </Col>
-                        ))}
+                        {classes.map((cls, idx) => {
+                            // Calculate F1 scores for this class
+                            const classBoxF1 = (cls.box_p && cls.box_r)
+                                ? (2 * cls.box_p * cls.box_r) / (cls.box_p + cls.box_r)
+                                : 0;
+                            const classMaskF1 = (cls.mask_p && cls.mask_r)
+                                ? (2 * cls.mask_p * cls.mask_r) / (cls.mask_p + cls.mask_r)
+                                : 0;
+
+                            return (
+                                <Col span={24} key={idx}>
+                                    <Card
+                                        size="small"
+                                        title={
+                                            <span style={{ fontSize: 12 }}>
+                                                {cls.class} <Tag color="blue" style={{ marginLeft: 8 }}>{cls.instances} instances</Tag>
+                                            </span>
+                                        }
+                                        bodyStyle={{ padding: 12 }}
+                                        style={{ marginBottom: 8 }}
+                                    >
+                                        {/* F1 Score Row */}
+                                        <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+                                            <Col span={12}>
+                                                <Tooltip title="F1 Score = Harmonic mean of Precision and Recall (balances false alarms vs missed defects)">
+                                                    <div style={{ textAlign: 'center', cursor: 'help' }}>
+                                                        <Progress
+                                                            type="dashboard"
+                                                            percent={Math.round(classBoxF1 * 100)}
+                                                            width={80}
+                                                            strokeColor="#1890ff"
+                                                        />
+                                                        <div style={{ fontSize: 11, marginTop: 4 }}>Box F1</div>
+                                                    </div>
+                                                </Tooltip>
+                                            </Col>
+                                            <Col span={12}>
+                                                <Tooltip title="F1 Score = Harmonic mean of Precision and Recall (balances false alarms vs missed defects)">
+                                                    <div style={{ textAlign: 'center', cursor: 'help' }}>
+                                                        <Progress
+                                                            type="dashboard"
+                                                            percent={Math.round(classMaskF1 * 100)}
+                                                            width={80}
+                                                            strokeColor="#722ed1"
+                                                        />
+                                                        <div style={{ fontSize: 11, marginTop: 4 }}>Mask F1</div>
+                                                    </div>
+                                                </Tooltip>
+                                            </Col>
+                                        </Row>
+
+                                        {/* Box and Mask Details */}
+                                        <Row gutter={[12, 12]}>
+                                            {/* Box Detection Card */}
+                                            <Col span={12}>
+                                                <Card
+                                                    size="small"
+                                                    title={<span style={{ fontSize: 11 }}>📦 BOX DETECTION</span>}
+                                                    style={{
+                                                        background: '#f8f9fa',
+                                                        borderTop: '2px solid #1890ff',
+                                                        borderRadius: 4,
+                                                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                                                    }}
+                                                    bodyStyle={{ padding: 12 }}
+                                                >
+                                                    <Tooltip title="Correct predictions (avoids false alarms)">
+                                                        <div style={{ marginBottom: 12, cursor: 'help' }}>
+                                                            <Text style={{ fontSize: 11, color: '#666' }}>Precision</Text>
+                                                            <div style={{ fontSize: 16, fontWeight: 'bold', color: '#52c41a', marginBottom: 4 }}>
+                                                                {((cls.box_p || 0) * 100).toFixed(1)}%
+                                                            </div>
+                                                            <Progress
+                                                                percent={Math.round((cls.box_p || 0) * 100)}
+                                                                strokeColor="#52c41a"
+                                                                showInfo={false}
+                                                                size="small"
+                                                            />
+                                                        </div>
+                                                    </Tooltip>
+
+                                                    <Tooltip title="Objects detected (catches all defects)">
+                                                        <div style={{ marginBottom: 12, cursor: 'help' }}>
+                                                            <Text style={{ fontSize: 11, color: '#666' }}>Recall</Text>
+                                                            <div style={{ fontSize: 16, fontWeight: 'bold', color: '#1890ff', marginBottom: 4 }}>
+                                                                {((cls.box_r || 0) * 100).toFixed(1)}%
+                                                            </div>
+                                                            <Progress
+                                                                percent={Math.round((cls.box_r || 0) * 100)}
+                                                                strokeColor="#1890ff"
+                                                                showInfo={false}
+                                                                size="small"
+                                                            />
+                                                        </div>
+                                                    </Tooltip>
+
+                                                    <Tooltip title="Overall accuracy at 50% overlap">
+                                                        <div style={{ marginBottom: 8, cursor: 'help' }}>
+                                                            <Text style={{ fontSize: 11, color: '#666' }}>mAP50</Text>
+                                                            <div style={{ fontSize: 16, fontWeight: 'bold', color: '#262626' }}>
+                                                                {(cls.box_map50 || 0).toFixed(3)}
+                                                            </div>
+                                                        </div>
+                                                    </Tooltip>
+
+                                                    <Tooltip title="Strict accuracy across multiple thresholds">
+                                                        <div style={{ cursor: 'help' }}>
+                                                            <Text style={{ fontSize: 11, color: '#666' }}>mAP50-95</Text>
+                                                            <div style={{ fontSize: 16, fontWeight: 'bold', color: '#faad14' }}>
+                                                                {(cls.box_map50_95 || 0).toFixed(3)}
+                                                            </div>
+                                                        </div>
+                                                    </Tooltip>
+                                                </Card>
+                                            </Col>
+
+                                            {/* Mask Segmentation Card */}
+                                            <Col span={12}>
+                                                <Card
+                                                    size="small"
+                                                    title={<span style={{ fontSize: 11 }}>🎭 MASK SEGMENTATION</span>}
+                                                    style={{
+                                                        background: '#f8f9fa',
+                                                        borderTop: '2px solid #722ed1',
+                                                        borderRadius: 4,
+                                                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                                                    }}
+                                                    bodyStyle={{ padding: 12 }}
+                                                >
+                                                    <Tooltip title="Correct predictions (avoids false alarms)">
+                                                        <div style={{ marginBottom: 12, cursor: 'help' }}>
+                                                            <Text style={{ fontSize: 11, color: '#666' }}>Precision</Text>
+                                                            <div style={{ fontSize: 16, fontWeight: 'bold', color: '#52c41a', marginBottom: 4 }}>
+                                                                {((cls.mask_p || 0) * 100).toFixed(1)}%
+                                                            </div>
+                                                            <Progress
+                                                                percent={Math.round((cls.mask_p || 0) * 100)}
+                                                                strokeColor="#52c41a"
+                                                                showInfo={false}
+                                                                size="small"
+                                                            />
+                                                        </div>
+                                                    </Tooltip>
+
+                                                    <Tooltip title="Objects detected (catches all defects)">
+                                                        <div style={{ marginBottom: 12, cursor: 'help' }}>
+                                                            <Text style={{ fontSize: 11, color: '#666' }}>Recall</Text>
+                                                            <div style={{ fontSize: 16, fontWeight: 'bold', color: '#1890ff', marginBottom: 4 }}>
+                                                                {((cls.mask_r || 0) * 100).toFixed(1)}%
+                                                            </div>
+                                                            <Progress
+                                                                percent={Math.round((cls.mask_r || 0) * 100)}
+                                                                strokeColor="#1890ff"
+                                                                showInfo={false}
+                                                                size="small"
+                                                            />
+                                                        </div>
+                                                    </Tooltip>
+
+                                                    <Tooltip title="Overall accuracy at 50% overlap">
+                                                        <div style={{ marginBottom: 8, cursor: 'help' }}>
+                                                            <Text style={{ fontSize: 11, color: '#666' }}>mAP50</Text>
+                                                            <div style={{ fontSize: 16, fontWeight: 'bold', color: '#262626' }}>
+                                                                {(cls.mask_map50 || 0).toFixed(3)}
+                                                            </div>
+                                                        </div>
+                                                    </Tooltip>
+
+                                                    <Tooltip title="Strict accuracy across multiple thresholds">
+                                                        <div style={{ cursor: 'help' }}>
+                                                            <Text style={{ fontSize: 11, color: '#666' }}>mAP50-95</Text>
+                                                            <div style={{ fontSize: 16, fontWeight: 'bold', color: '#faad14' }}>
+                                                                {(cls.mask_map50_95 || 0).toFixed(3)}
+                                                            </div>
+                                                        </div>
+                                                    </Tooltip>
+                                                </Card>
+                                            </Col>
+                                        </Row>
+                                    </Card>
+                                </Col>
+                            );
+                        })}
                     </Row>
                 </div>
             )}
