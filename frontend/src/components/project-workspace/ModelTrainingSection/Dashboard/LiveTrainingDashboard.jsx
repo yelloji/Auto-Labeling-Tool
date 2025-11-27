@@ -154,38 +154,173 @@ const LiveTrainingDashboard = ({ metrics }) => {
                 </Row>
             </Card>
 
-            {/* Section 2: Epoch Report (Scorecard) - Always visible */}
+            {/* Section 2: Validation Results - Beautiful Header + Cards */}
+            {/* Validation Header Card */}
+            <Card
+                size="small"
+                style={{
+                    marginBottom: 12,
+                    background: '#f5f7fa',
+                    border: '1px solid #e8e8e8',
+                    borderRadius: 4,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                }}
+                bodyStyle={{ padding: 12 }}
+            >
+                <div style={{ textAlign: 'center', marginBottom: 8 }}>
+                    <Text strong style={{ fontSize: 13, color: '#333', whiteSpace: 'nowrap' }}>✨ VALIDATION RESULTS (Per Epoch)</Text>
+                </div>
+                <Row gutter={[8, 8]}>
+                    <Col span={12}>
+                        <Tooltip title="Total validation images">
+                            <div style={{ textAlign: 'center', borderRadius: 4, padding: 6, cursor: 'help' }}>
+                                <Tag icon={<DatabaseOutlined />} color="blue">Images: {validation.images || 0}</Tag>
+                            </div>
+                        </Tooltip>
+                    </Col>
+                    <Col span={12}>
+                        <Tooltip title="Total labeled objects in validation">
+                            <div style={{ textAlign: 'center', borderRadius: 4, padding: 6, cursor: 'help' }}>
+                                <Tag icon={<ThunderboltOutlined />} color="green">Instances: {validation.instances || 0}</Tag>
+                            </div>
+                        </Tooltip>
+                    </Col>
+                </Row>
+            </Card>
+
+            {/* Box & Mask Performance Cards */}
             <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+                {/* Box Detection Card */}
                 <Col span={12}>
                     <Card
                         size="small"
-                        title={<span style={{ fontSize: 12 }}>📦 Box Performance</span>}
-                        bodyStyle={{ padding: 12, textAlign: 'center' }}
+                        title={<span style={{ fontSize: 11 }}>📦 BOX DETECTION</span>}
+                        style={{
+                            background: '#f8f9fa',
+                            borderTop: '2px solid #1890ff',
+                            borderRadius: 4,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                        }}
+                        bodyStyle={{ padding: 12 }}
                     >
-                        <Statistic
-                            value={((validation.box_map50 || 0) * 100).toFixed(1)}
-                            suffix="%"
-                            valueStyle={{ color: '#1890ff', fontSize: 28, fontWeight: 'bold' }}
-                        />
-                        <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                            P: {((validation.box_p || 0) * 100).toFixed(1)}% | R: {((validation.box_r || 0) * 100).toFixed(1)}%
-                        </div>
+                        {/* Precision */}
+                        <Tooltip title="Correct predictions (avoids false alarms)">
+                            <div style={{ marginBottom: 12, cursor: 'help' }}>
+                                <Text style={{ fontSize: 11, color: '#666' }}>Precision</Text>
+                                <div style={{ fontSize: 16, fontWeight: 'bold', color: '#52c41a', marginBottom: 4 }}>
+                                    {((validation.box_p || 0) * 100).toFixed(1)}%
+                                </div>
+                                <Progress
+                                    percent={Math.round((validation.box_p || 0) * 100)}
+                                    strokeColor="#52c41a"
+                                    showInfo={false}
+                                    size="small"
+                                />
+                            </div>
+                        </Tooltip>
+
+                        {/* Recall */}
+                        <Tooltip title="Objects detected (catches all defects)">
+                            <div style={{ marginBottom: 12, cursor: 'help' }}>
+                                <Text style={{ fontSize: 11, color: '#666' }}>Recall</Text>
+                                <div style={{ fontSize: 16, fontWeight: 'bold', color: '#1890ff', marginBottom: 4 }}>
+                                    {((validation.box_r || 0) * 100).toFixed(1)}%
+                                </div>
+                                <Progress
+                                    percent={Math.round((validation.box_r || 0) * 100)}
+                                    strokeColor="#1890ff"
+                                    showInfo={false}
+                                    size="small"
+                                />
+                            </div>
+                        </Tooltip>
+
+                        {/* mAP50 */}
+                        <Tooltip title="Overall accuracy at 50% overlap">
+                            <div style={{ marginBottom: 8, cursor: 'help' }}>
+                                <Text style={{ fontSize: 11, color: '#666' }}>mAP50</Text>
+                                <div style={{ fontSize: 16, fontWeight: 'bold', color: '#262626' }}>
+                                    {(validation.box_map50 || 0).toFixed(3)}
+                                </div>
+                            </div>
+                        </Tooltip>
+
+                        {/* mAP50-95 */}
+                        <Tooltip title="Strict accuracy across multiple thresholds">
+                            <div style={{ cursor: 'help' }}>
+                                <Text style={{ fontSize: 11, color: '#666' }}>mAP50-95</Text>
+                                <div style={{ fontSize: 16, fontWeight: 'bold', color: '#faad14' }}>
+                                    {(validation.box_map50_95 || 0).toFixed(3)}
+                                </div>
+                            </div>
+                        </Tooltip>
                     </Card>
                 </Col>
+
+                {/* Mask Segmentation Card */}
                 <Col span={12}>
                     <Card
                         size="small"
-                        title={<span style={{ fontSize: 12 }}>🎭 Mask Performance</span>}
-                        bodyStyle={{ padding: 12, textAlign: 'center' }}
+                        title={<span style={{ fontSize: 11 }}>🎭 MASK SEGMENTATION</span>}
+                        style={{
+                            background: '#f8f9fa',
+                            borderTop: '2px solid #722ed1',
+                            borderRadius: 4,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                        }}
+                        bodyStyle={{ padding: 12 }}
                     >
-                        <Statistic
-                            value={((validation.mask_map50 || 0) * 100).toFixed(1)}
-                            suffix="%"
-                            valueStyle={{ color: '#722ed1', fontSize: 28, fontWeight: 'bold' }}
-                        />
-                        <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                            P: {((validation.mask_p || 0) * 100).toFixed(1)}% | R: {((validation.mask_r || 0) * 100).toFixed(1)}%
-                        </div>
+                        {/* Precision */}
+                        <Tooltip title="Correct predictions (avoids false alarms)">
+                            <div style={{ marginBottom: 12, cursor: 'help' }}>
+                                <Text style={{ fontSize: 11, color: '#666' }}>Precision</Text>
+                                <div style={{ fontSize: 16, fontWeight: 'bold', color: '#52c41a', marginBottom: 4 }}>
+                                    {((validation.mask_p || 0) * 100).toFixed(1)}%
+                                </div>
+                                <Progress
+                                    percent={Math.round((validation.mask_p || 0) * 100)}
+                                    strokeColor="#52c41a"
+                                    showInfo={false}
+                                    size="small"
+                                />
+                            </div>
+                        </Tooltip>
+
+                        {/* Recall */}
+                        <Tooltip title="Objects detected (catches all defects)">
+                            <div style={{ marginBottom: 12, cursor: 'help' }}>
+                                <Text style={{ fontSize: 11, color: '#666' }}>Recall</Text>
+                                <div style={{ fontSize: 16, fontWeight: 'bold', color: '#1890ff', marginBottom: 4 }}>
+                                    {((validation.mask_r || 0) * 100).toFixed(1)}%
+                                </div>
+                                <Progress
+                                    percent={Math.round((validation.mask_r || 0) * 100)}
+                                    strokeColor="#1890ff"
+                                    showInfo={false}
+                                    size="small"
+                                />
+                            </div>
+                        </Tooltip>
+
+                        {/* mAP50 */}
+                        <Tooltip title="Overall accuracy at 50% overlap">
+                            <div style={{ marginBottom: 8, cursor: 'help' }}>
+                                <Text style={{ fontSize: 11, color: '#666' }}>mAP50</Text>
+                                <div style={{ fontSize: 16, fontWeight: 'bold', color: '#262626' }}>
+                                    {(validation.mask_map50 || 0).toFixed(3)}
+                                </div>
+                            </div>
+                        </Tooltip>
+
+                        {/* mAP50-95 */}
+                        <Tooltip title="Strict accuracy across multiple thresholds">
+                            <div style={{ cursor: 'help' }}>
+                                <Text style={{ fontSize: 11, color: '#666' }}>mAP50-95</Text>
+                                <div style={{ fontSize: 16, fontWeight: 'bold', color: '#faad14' }}>
+                                    {(validation.mask_map50_95 || 0).toFixed(3)}
+                                </div>
+                            </div>
+                        </Tooltip>
                     </Card>
                 </Col>
             </Row>
