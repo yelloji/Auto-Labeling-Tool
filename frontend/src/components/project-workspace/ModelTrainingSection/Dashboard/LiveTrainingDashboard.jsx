@@ -4,7 +4,7 @@ import { ThunderboltOutlined, DatabaseOutlined, HddOutlined } from '@ant-design/
 
 const { Text, Title } = Typography;
 
-const LiveTrainingDashboard = ({ metrics }) => {
+const LiveTrainingDashboard = ({ metrics, status }) => {
     const training = metrics?.training || {};
     const validation = metrics?.validation || {};
     const classes = metrics?.classes || [];
@@ -168,7 +168,11 @@ const LiveTrainingDashboard = ({ metrics }) => {
                 bodyStyle={{ padding: 12 }}
             >
                 <div style={{ textAlign: 'center', marginBottom: 8 }}>
-                    <Text strong style={{ fontSize: 13, color: '#333', whiteSpace: 'nowrap' }}>✨ VALIDATION RESULTS (Per Epoch)</Text>
+                    <Text strong style={{ fontSize: 13, color: '#333', whiteSpace: 'nowrap' }}>
+                        {status === 'completed'
+                            ? "✨ FINAL VALIDATION RESULTS"
+                            : `✨ VALIDATION RESULTS (Epoch ${Math.max(0, (training.epoch || 1) - 1)})`}
+                    </Text>
                 </div>
                 <Row gutter={[8, 8]}>
                     <Col span={12}>

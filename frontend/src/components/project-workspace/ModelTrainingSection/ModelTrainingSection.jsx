@@ -120,7 +120,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
       try {
         const session = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
         if (session?.metrics_json) {
-          setForm(prev => ({ ...prev, liveMetrics: JSON.parse(session.metrics_json) }));
+          setForm(prev => ({ ...prev, liveMetrics: JSON.parse(session.metrics_json), status: session.status || prev.status }));
         }
       } catch (e) {
         console.error('Failed to fetch metrics:', e);
@@ -157,7 +157,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
           if (session?.metrics_json) {
             setForm(prev => ({
               ...prev,
-              liveMetrics: JSON.parse(session.metrics_json)
+              liveMetrics: JSON.parse(session.metrics_json),
+              status: 'completed'
             }));
           }
         }
@@ -837,7 +838,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       label: 'Status',
                       children: (
                         <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4 }}>
-                          <LiveTrainingDashboard metrics={form.liveMetrics || {}} />
+                          <LiveTrainingDashboard metrics={form.liveMetrics || {}} status={form.status} />
                         </div>
                       )
                     }
