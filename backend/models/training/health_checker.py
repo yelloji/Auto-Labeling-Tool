@@ -63,7 +63,12 @@ def check_training_health():
                         log_file_path = project_root / session.logs_dir / "training.log"
                         
                         if log_file_path.exists():
-                            metrics = parse_training_log(log_file_path)
+                            # Pass framework and task for task-aware parsing
+                            metrics = parse_training_log(
+                                log_file_path,
+                                framework=session.framework,
+                                task=session.task
+                            )
                             metrics_str = json.dumps(metrics)
                             
                             # Only update if metrics changed to avoid DB locking
@@ -169,7 +174,12 @@ def check_training_health():
                             try:
                                 from .metrics_parser import parse_training_log
                                 
-                                metrics = parse_training_log(log_file_path)
+                                # Pass framework and task for task-aware parsing
+                                metrics = parse_training_log(
+                                    log_file_path,
+                                    framework=session.framework,
+                                    task=session.task
+                                )
                                 session.metrics_json = json.dumps(metrics)
                                 
                                 # Update progress percentage if available
