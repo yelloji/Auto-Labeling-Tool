@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space, Row, Col, Collapse } from 'antd';
 import { systemAPI } from '../../../../services/api';
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, taskType, disabled }) {
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, max_det, taskType, disabled }) {
   const OPTIMIZER_PRESETS = {
     SGD: { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 },
     Adam: { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 },
@@ -337,9 +337,10 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
           </Collapse.Panel>
           <Collapse.Panel header="Validation" key="val">
             <Row gutter={12}>
-              <Col span={8}><Form.Item label="Val IoU" tooltip="IoU threshold used in validation"><InputNumber min={0} max={1} step={0.01} placeholder={0.5} value={val_iou} onChange={(v) => onChange({ val_iou: v })} disabled={disabled} /></Form.Item></Col>
-              <Col span={8}><Form.Item label="Val Conf" tooltip="Confidence threshold for validation (default 0.001)"><InputNumber min={0} max={1} step={0.01} placeholder={0.25} value={val_conf} onChange={(v) => onChange({ val_conf: v })} disabled={disabled} /></Form.Item></Col>
-              <Col span={8}><Form.Item label="Val Plots" tooltip="Save validation plots"><Switch checked={val_plots} onChange={(v) => onChange({ val_plots: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Val IoU" tooltip="IoU threshold used in validation"><InputNumber min={0} max={1} step={0.01} placeholder={0.5} value={val_iou} onChange={(v) => onChange({ val_iou: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Val Conf" tooltip="Confidence threshold for validation (default 0.001)"><InputNumber min={0} max={1} step={0.01} placeholder={0.25} value={val_conf} onChange={(v) => onChange({ val_conf: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Max Det" tooltip="Maximum detections per image (default 300)"><InputNumber min={1} step={1} placeholder={300} value={max_det} onChange={(v) => onChange({ max_det: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Val Plots" tooltip="Save validation plots"><Switch checked={val_plots} onChange={(v) => onChange({ val_plots: v })} disabled={disabled} /></Form.Item></Col>
             </Row>
           </Collapse.Panel>
         </Collapse>

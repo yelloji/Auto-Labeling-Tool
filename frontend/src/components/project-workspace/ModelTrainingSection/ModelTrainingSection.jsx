@@ -446,7 +446,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
             if (isValidValue(a.close_mosaic)) patch.close_mosaic = a.close_mosaic;
 
             if (isValidValue(v.iou)) patch.val_iou = v.iou;
+            if (isValidValue(v.conf)) patch.val_conf = v.conf;
             if (isValidValue(v.plots)) patch.val_plots = v.plots;
+            if (isValidValue(v.max_det)) patch.max_det = v.max_det;
             if (Array.isArray(d.classes)) patch.classes = d.classes;
             window.__resolvedServerConfig = cfg;
             if (typeof cfg.framework === 'string') patch.framework = cfg.framework;
@@ -538,7 +540,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
           },
           val: {
             iou: form.val_iou,
+            conf: form.val_conf,
             plots: form.val_plots,
+            max_det: form.max_det,
           },
           // omit dataset from config preview; use train.data (data.yaml)
         };
@@ -604,7 +608,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
     form.shear,
     form.perspective,
     form.val_iou,
+    form.val_conf,
     form.val_plots,
+    form.max_det,
     form.datasetZipPath,
     form.classes,
     form.datasetReleaseDir,
@@ -787,6 +793,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 val_iou={form.val_iou}
                 val_conf={form.val_conf}
                 val_plots={form.val_plots}
+                max_det={form.max_det}
                 isDeveloper={isDeveloper}
                 onChange={(patch) => handleChange(patch)}
                 disabled={isTraining}

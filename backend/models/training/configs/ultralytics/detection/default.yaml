@@ -25,7 +25,7 @@ train:
   single_cls: false
   rect: false
   cos_lr: true
-  close_mosaic: 20
+  close_mosaic: 10
   resume: false
   amp: true
   fraction: 1.0
@@ -39,7 +39,7 @@ val:
   enabled: true
   split: "val"
   save_json: false
-  conf: null
+  conf: 0.25
   iou: 0.5
   max_det: 300
   half: false
@@ -87,17 +87,17 @@ hyperparameters:
   warmup_epochs: 3.0
   warmup_momentum: 0.8
   warmup_bias_lr: 0.1
-  box: 10.0
-  cls: 0.3
-  dfl: 2.0
+  box: 7.5
+  cls: 0.5
+  dfl: 1.5
   pose: 12.0
   kobj: 1.0
   nbs: 64
 
 augmentation:
-  hsv_h: 0.005
-  hsv_s: 0.1
-  hsv_v: 0.05
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
   degrees: 0.0
   translate: 0.1
   scale: 0.5
@@ -106,8 +106,8 @@ augmentation:
   flipud: 0.0
   fliplr: 0.5
   bgr: 0.0
-  mosaic: 0.3
-  mixup: 0.03
+  mosaic: 1.0
+  mixup: 0.0
   cutmix: 0.0
   copy_paste: 0.0
   copy_paste_mode: "flip"
