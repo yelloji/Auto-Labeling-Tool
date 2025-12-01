@@ -42,6 +42,7 @@ const initialFormState = {
   warmup_momentum: 0.8,
   warmup_bias_lr: 0.1,
   cos_lr: false,
+  val_plots: true,
   hydratedIdentity: false
 };
 
