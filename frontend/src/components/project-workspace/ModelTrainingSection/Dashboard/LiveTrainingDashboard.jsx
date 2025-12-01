@@ -180,7 +180,7 @@ const LiveTrainingDashboard = ({ metrics, status }) => {
             >
                 <div style={{ textAlign: 'center', marginBottom: 8 }}>
                     <Text strong style={{ fontSize: 13, color: '#333', whiteSpace: 'nowrap' }}>
-                        {status === 'completed'
+                        {(status === 'completed' || classes.length > 0)
                             ? "✨ FINAL VALIDATION RESULTS"
                             : `✨ VALIDATION RESULTS (Epoch ${Math.max(0, (training.epoch || 1) - 1)})`}
                     </Text>

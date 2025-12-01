@@ -116,12 +116,21 @@ const ModelTrainingSection = ({ projectId, project }) => {
     if (!form.sessionId) return;
 
     // Stop polling if training is completed (to preserve final metrics)
-    if (form.status === 'completed') return;
     const interval = setInterval(async () => {
       try {
         const session = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
         if (session?.metrics_json) {
-          setForm(prev => ({ ...prev, liveMetrics: JSON.parse(session.metrics_json), status: session.status || prev.status }));
+          const newMetrics = JSON.parse(session.metrics_json);
+          setForm(prev => ({
+            ...prev,
+            liveMetrics: newMetrics,
+            status: session.status || prev.status,
+            finalMetricsFetched: session.status === 'completed'
+          }));
+          // Stop polling after fetching completed metrics
+          if (session.status === 'completed') {
+            clearInterval(interval);
+          }
         }
       } catch (e) {
         console.error('Failed to fetch metrics:', e);
@@ -129,7 +138,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     }, 500);
     return () => clearInterval(interval);
 
-  }, [isTraining, form.sessionId, form.projectId, form.trainingName, form.status]);
+  }, [form.sessionId, form.projectId, form.trainingName]);
 
   // Clear live metrics only when user enters a NEW training name (not empty)
   const prevTrainingName = React.useRef(form.trainingName);
