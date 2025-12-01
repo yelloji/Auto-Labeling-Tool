@@ -148,7 +148,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
   // Load last completed training's metrics on page mount
   useEffect(() => {
-    const loadLastMetrics = async () => {
+    const loadLastMetrics = async (retryCount = 0) => {
       try {
         if (!form.projectId || form.liveMetrics) return;
 
@@ -165,6 +165,10 @@ const ModelTrainingSection = ({ projectId, project }) => {
         }
       } catch (e) {
         console.error('Failed to load last metrics:', e);
+        // Retry once if first attempt fails
+        if (retryCount < 1) {
+          setTimeout(() => loadLastMetrics(retryCount + 1), 2000);
+        }
       }
     };
 
