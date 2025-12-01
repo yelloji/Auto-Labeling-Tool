@@ -30,10 +30,10 @@ def parse_training_log(log_file_path: Path, framework: str = None, task: str = N
         return metrics
     
     try:
-        # Read last 50 lines for context
+        # Read last 150 lines for context (increased from 50 to handle verbose validation output)
         with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
-            recent_lines = lines[-50:] if len(lines) > 50 else lines
+            recent_lines = lines[-150:] if len(lines) > 150 else lines
         
         # Determine if this is segmentation or detection task
         is_segmentation = task == 'segmentation' if task else None
