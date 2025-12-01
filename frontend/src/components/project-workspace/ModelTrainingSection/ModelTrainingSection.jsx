@@ -784,6 +784,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 mask_ratio={form.mask_ratio}
                 freeze={form.freeze}
                 val_iou={form.val_iou}
+                val_conf={form.val_conf}
                 val_plots={form.val_plots}
                 isDeveloper={isDeveloper}
                 onChange={(patch) => handleChange(patch)}
