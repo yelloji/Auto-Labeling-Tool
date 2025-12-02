@@ -6,4 +6,4 @@ logInfo('app.frontend.ui', 'visualize_section_module_loaded', 'VisualizeSection 
   components: ['VisualizeSection']
 });
 
-export { default } from './VisualizeSection';
+export { default } from './ModelLabSection';

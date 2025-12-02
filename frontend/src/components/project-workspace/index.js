@@ -6,7 +6,7 @@ import ReleaseSection from './ReleaseSection';
 import AnalyticsSection from './AnalyticsSection';
 import ModelsSection from './ModelsSection';
 import ModelTrainingSection from './ModelTrainingSection/ModelTrainingSection.jsx';
-import VisualizeSection from './VisualizeSection';
+import ModelLabSection from './ModelLabSection';
 import DeploymentsSection from './DeploymentsSection';
 import ActiveLearningSection from './ActiveLearningSection';
 
@@ -24,7 +24,7 @@ export {
   AnalyticsSection,
   ModelsSection,
   ModelTrainingSection,
-  VisualizeSection,
+  ModelLabSection,
   DeploymentsSection,
   ActiveLearningSection
 };

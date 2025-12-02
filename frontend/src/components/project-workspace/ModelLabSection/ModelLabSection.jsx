@@ -4,7 +4,7 @@ import {
   Alert
 } from 'antd';
 import {
-  EyeOutlined
+  ExperimentOutlined
 } from '@ant-design/icons';
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
@@ -12,7 +12,7 @@ const { Title } = Typography;
 
 // This component is extracted from ProjectWorkspace.js
 // The main structure comes from the renderVisualizeContent function (lines 1589-1601)
-const VisualizeSection = () => {
+const ModelLabSection = () => {
   useEffect(() => {
     logInfo('app.frontend.ui', 'visualize_section_initialized', 'VisualizeSection component initialized', {
       timestamp: new Date().toISOString(),
@@ -29,12 +29,12 @@ const VisualizeSection = () => {
   return (
     <div style={{ padding: '24px' }}>
       <Title level={2}>
-        <EyeOutlined style={{ marginRight: '8px' }} />
-        Visualize
+        <ExperimentOutlined style={{ marginRight: '8px' }} />
+        Model Lab
       </Title>
       <Alert
-        message="Data Visualization"
-        description="Visualize your dataset and model performance."
+        message="Model Testing & Management"
+        description="Test, validate, and manage your trained models."
         type="info"
         showIcon
       />
@@ -42,4 +42,4 @@ const VisualizeSection = () => {
   );
 };
 
-export default VisualizeSection;
+export default ModelLabSection;
