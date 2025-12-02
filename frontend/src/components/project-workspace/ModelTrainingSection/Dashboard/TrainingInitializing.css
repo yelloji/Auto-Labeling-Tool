@@ -1,0 +1,134 @@
+/* Pulse animation for the icon */
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.15);
+        opacity: 0.8;
+    }
+}
+
+.pulse-icon {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+/* Loading dots animation */
+@keyframes bounce {
+
+    0%,
+    80%,
+    100% {
+        transform: translateY(0);
+        opacity: 0.4;
+    }
+
+    40% {
+        transform: translateY(-12px);
+        opacity: 1;
+    }
+}
+
+.loading-dots {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+.loading-dots .dot {
+    width: 10px;
+    height: 10px;
+    background-color: #fff;
+    border-radius: 50%;
+    animation: bounce 1.4s infinite ease-in-out;
+}
+
+.loading-dots .dot:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.loading-dots .dot:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+/* Fade-in animations for progress steps */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.progress-step {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 12px 0;
+}
+
+.fade-in-1 {
+    animation: fadeIn 0.6s ease-out 0.2s both;
+}
+
+.fade-in-2 {
+    animation: fadeIn 0.6s ease-out 0.4s both;
+}
+
+.fade-in-3 {
+    animation: fadeIn 0.6s ease-out 0.6s both;
+}
+
+/* Step icons */
+.step-icon,
+.step-icon-pending {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.step-icon {
+    background-color: rgba(76, 175, 80, 0.3);
+    color: #4caf50;
+}
+
+.step-icon-pending {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* Rotating animation for the loading step */
+@keyframes rotate {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.fade-in-2 .step-icon {
+    background-color: rgba(33, 150, 243, 0.3);
+    color: #2196f3;
+    animation: rotate 1.5s linear infinite;
+}
+
+/* Container styles */
+.training-initializing-container {
+    animation: fadeIn 0.8s ease-out;
+}

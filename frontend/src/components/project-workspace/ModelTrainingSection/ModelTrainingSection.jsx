@@ -12,6 +12,7 @@ import './compact.css';
 import { trainingAPI, releasesAPI } from '../../../services/api';
 import TerminalPanel from './Terminal/TerminalPanel';
 import LiveTrainingDashboard from './Dashboard/LiveTrainingDashboard';
+import TrainingInitializing from './Dashboard/TrainingInitializing';
 
 const { Title, Text } = Typography;
 
@@ -860,7 +861,11 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       label: 'Status',
                       children: (
                         <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4 }}>
-                          <LiveTrainingDashboard metrics={form.liveMetrics || {}} status={form.status} />
+                          {form.status === 'running' && (!form.liveMetrics || !form.liveMetrics.training || !form.liveMetrics.training.epoch) ? (
+                               <TrainingInitializing />
+                             ) : (
+                               <LiveTrainingDashboard metrics={form.liveMetrics || {}} status={form.status} />
+                             )}
                         </div>
                       )
                     }
