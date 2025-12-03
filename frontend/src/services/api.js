@@ -367,6 +367,13 @@ export const projectsAPI = {
     return response.data;
   },
 
+  // Delete training session
+  deleteTrainingSession: async (projectId, sessionId) => {
+    const response = await api.delete(`/api/v1/projects/${projectId}/training/sessions/${sessionId}`);
+    return response.data;
+  },
+
+
   // Duplicate project with all datasets, images, and annotations
   duplicateProject: async (projectId) => {
     const response = await api.post(`/api/v1/projects/${projectId}/duplicate`);

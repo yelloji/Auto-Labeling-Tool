@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Spin, message } from 'antd';
+import { Typography, Spin, message, Modal } from 'antd';
 import { ExperimentOutlined } from '@ant-design/icons';
 import TrainingList from './TrainingList/TrainingList';
 import { projectsAPI, handleAPIError } from '../../../services/api';
@@ -73,6 +73,38 @@ const ModelLabSection = ({ projectId }) => {
         });
     };
 
+    const handleTrainingDelete = async (training) => {
+        Modal.confirm({
+            title: 'Delete Training Session',
+            content: `Are you sure you want to delete "${training.name}"? This will permanently remove the training folder and data.`,
+            okText: 'Yes, Delete',
+            okType: 'danger',
+            cancelText: 'Cancel',
+            onOk: async () => {
+                try {
+                    await projectsAPI.deleteTrainingSession(projectId, training.id);
+                    message.success(`Training "${training.name}" deleted successfully`);
+                    
+                    // Remove from list
+                    setTrainings(prev => prev.filter(t => t.id !== training.id));
+                    
+                    // Clear selection if deleted
+                    if (selectedTraining?.id === training.id) {
+                        setSelectedTraining(null);
+                    }
+                    
+                    logInfo('app.frontend.ui', 'training_deleted', 'Training deleted', {
+                        trainingId: training.id,
+                        trainingName: training.name
+                    });
+                } catch (error) {
+                    handleAPIError(error, 'Failed to delete training session');
+                    logError('app.frontend.ui', 'training_delete_error', 'Delete failed', error);
+                }
+            }
+        });
+    };
+
     if (loading) {
         return (
             <div style={{ textAlign: 'center', padding: '50px' }}>
@@ -102,6 +134,7 @@ const ModelLabSection = ({ projectId }) => {
                     <TrainingList
                         trainings={trainings}
                         onTrainingSelect={handleTrainingSelect}
+                        onTrainingDelete={handleTrainingDelete}
                     />
                 </div>
 

@@ -12,8 +12,9 @@ import './TrainingCard.css';
  * @param {Object} training - Training data object
  * @param {boolean} isSelected - Whether this card is currently selected
  * @param {Function} onClick - Click handler
+ * @param {Function} onDelete - Delete handler
  */
-const TrainingCard = ({ training, isSelected, onClick }) => {
+const TrainingCard = ({ training, isSelected, onClick, onDelete }) => {
     const {
         name,
         taskType,
@@ -36,17 +37,26 @@ const TrainingCard = ({ training, isSelected, onClick }) => {
 
     // Get status icon
     const getStatusIcon = () => {
-        if (status === 'completed') return '✅';
-        if (status === 'failed') return '❌';
-        if (status === 'running') return '⏳';
-        return '❓';
+        switch (status) {
+            case 'completed':
+                return '✅';
+            case 'failed':
+                return '⏸️';
+            case 'running':
+                return '🔄';
+            default:
+                return '⚪';
+        }
+    };
+
+    // Get task type icon
+    const getTaskIcon = () => {
+        return taskType === 'detection' ? '🔬' : '🎯';
     };
 
     // Get task type label
     const getTaskLabel = () => {
-        if (taskType === 'detection') return 'Detection';
-        if (taskType === 'segmentation') return 'Segmentation';
-        return taskType || 'Unknown';
+        return taskType === 'detection' ? 'Detection' : 'Segmentation';
     };
 
     return (
@@ -61,12 +71,27 @@ const TrainingCard = ({ training, isSelected, onClick }) => {
                 }
             }}
         >
-            {/* Header: Name + Status */}
+            {/* Header: Icon + Name + Status */}
             <div className="training-card-header">
+                <span className="training-card-icon">{getTaskIcon()}</span>
                 <span className="training-card-name">{name}</span>
-                <span className={`status-icon status-${status}`}>
-                    {getStatusIcon()}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {onDelete && (
+                        <button
+                            className="training-card-delete"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onDelete(training);
+                            }}
+                            title="Delete"
+                        >
+                            🗑️
+                        </button>
+                    )}
+                    <span className={`status-icon status-${status}`}>
+                        {getStatusIcon()}
+                    </span>
+                </div>
             </div>
 
             {/* Date */}
@@ -98,16 +123,17 @@ const TrainingCard = ({ training, isSelected, onClick }) => {
 
 TrainingCard.propTypes = {
     training: PropTypes.shape({
-        id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
+        id: PropTypes.number.isRequired,
         name: PropTypes.string.isRequired,
-        taskType: PropTypes.string,
-        status: PropTypes.string,
-        epochs: PropTypes.number,
-        date: PropTypes.string,
+        taskType: PropTypes.oneOf(['detection', 'segmentation']).isRequired,
+        status: PropTypes.oneOf(['completed', 'failed']).isRequired,
+        epochs: PropTypes.number.isRequired,
+        date: PropTypes.string.isRequired,
         metrics: PropTypes.object
     }).isRequired,
     isSelected: PropTypes.bool.isRequired,
-    onClick: PropTypes.func.isRequired
+    onClick: PropTypes.func.isRequired,
+    onDelete: PropTypes.func
 };
 
 export default TrainingCard;

@@ -12,7 +12,7 @@ import './TrainingList.css';
  * @param {Array} trainings - Array of training objects
  * @param {Function} onTrainingSelect - Callback when training is selected
  */
-const TrainingList = ({ trainings, onTrainingSelect }) => {
+const TrainingList = ({ trainings, onTrainingSelect, onTrainingDelete }) => {
     const [selectedId, setSelectedId] = useState(null);
 
     const handleCardClick = (training) => {
@@ -61,6 +61,7 @@ const TrainingList = ({ trainings, onTrainingSelect }) => {
                         training={training}
                         isSelected={selectedId === training.id}
                         onClick={() => handleCardClick(training)}
+                        onDelete={onTrainingDelete}
                     />
                 ))}
             </div>
@@ -79,7 +80,8 @@ TrainingList.propTypes = {
             date: PropTypes.string.isRequired
         })
     ).isRequired,
-    onTrainingSelect: PropTypes.func.isRequired
+    onTrainingSelect: PropTypes.func.isRequired,
+    onTrainingDelete: PropTypes.func
 };
 
 export default TrainingList;

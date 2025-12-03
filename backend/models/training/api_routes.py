@@ -24,6 +24,7 @@ import asyncio
 import os
 import hashlib
 import yaml
+import shutil
 from core.config import settings
 
 router = APIRouter()
@@ -793,3 +794,72 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/projects/{project_id}/training/sessions/{session_id}")
+async def delete_training_session(
+    project_id: int,
+    session_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a training session (DB record + file system folder)
+    
+    Args:
+        project_id: Project ID
+        session_id: Can be numeric (managed) or string like 'unmanaged_xxx'
+    """
+    try:
+        # Get project
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Check if session_id is numeric (managed) or unmanaged
+        is_managed = session_id.isdigit()
+        
+        if is_managed:
+            # Managed session - delete from DB + FS
+            session = db.query(TrainingSession).filter(
+                TrainingSession.id == int(session_id),
+                TrainingSession.project_id == project_id
+            ).first()
+            
+            if not session:
+                raise HTTPException(status_code=404, detail="Training session not found")
+            
+            # Get folder path
+            training_dir = settings.PROJECTS_DIR / project.name / "model" / "training" / session.name
+            
+            # Delete folder if exists
+            if training_dir.exists():
+                shutil.rmtree(training_dir)
+            
+            # Delete DB record
+            db.delete(session)
+            db.commit()
+            
+            return {"message": f"Training session '{session.name}' deleted successfully"}
+        else:
+            # Unmanaged session - delete from FS only
+            if not session_id.startswith("unmanaged_"):
+                raise HTTPException(status_code=400, detail="Invalid session ID format")
+            
+            # Extract name
+            session_name = session_id.replace("unmanaged_", "")
+            
+            # Get folder path
+            training_dir = settings.PROJECTS_DIR / project.name / "model" / "training" / session_name
+            
+            # Delete folder if exists
+            if not training_dir.exists():
+                raise HTTPException(status_code=404, detail="Training folder not found")
+            
+            shutil.rmtree(training_dir)
+            
+            return {"message": f"Training session '{session_name}' deleted successfully"}
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
