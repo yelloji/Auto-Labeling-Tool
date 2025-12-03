@@ -30,8 +30,8 @@ const ModelLabSection = () => {
         <div className="model-lab-container">
             {/* Header */}
             <div className="model-lab-header">
-                <Title level={2} className="model-lab-title">
-                    <ExperimentOutlined style={{ marginRight: '8px' }} />
+                <Title level={2} className="model-lab-title" style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
+                    <ExperimentOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
                     Model Lab
                 </Title>
                 <p className="model-lab-subtitle">

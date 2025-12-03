@@ -695,8 +695,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Title level={4} style={{ margin: 0 }}>
-            <ThunderboltOutlined style={{ marginRight: 8 }} />
+          <Title level={2} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
+            <ThunderboltOutlined style={{ marginRight: 8, color: '#1890ff' }} />
             Model Training
           </Title>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

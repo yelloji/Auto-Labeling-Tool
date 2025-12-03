@@ -56,39 +56,39 @@ const { Option } = Select;
  */
 const UploadSection = ({ projectId }) => {
   // ==================== STATE VARIABLES ====================
-  
+
   // Batch naming and tagging
   const [batchName, setBatchName] = useState(''); // User-defined batch name for uploads
   const [tags, setTags] = useState([]); // Selected dataset tags for categorization
-  
+
   // Upload management
   const [uploadedFiles, setUploadedFiles] = useState([]); // List of successfully uploaded files
   const [uploading, setUploading] = useState(false); // Upload in progress flag
   const [uploadProgress, setUploadProgress] = useState(0); // Upload progress percentage (0-100)
   const [uploadTimeout, setUploadTimeout] = useState(null); // Timeout for batch upload processing
-  
+
   // Data and UI state
   const [availableDatasets, setAvailableDatasets] = useState([]); // Available datasets for tagging
   const [recentImages, setRecentImages] = useState([]); // Recently uploaded images for display
   const [batchNameModalVisible, setBatchNameModalVisible] = useState(false); // Modal visibility state
-  
+
   // Upload type and file handling
   const [uploadType, setUploadType] = useState('files'); // Current upload type: 'files' or 'folder'
   const [pendingFiles, setPendingFiles] = useState([]); // Files waiting for batch name confirmation
-  
+
   // Video upload state
   const [videoFile, setVideoFile] = useState(null); // Selected video file
   const [selectedFPS, setSelectedFPS] = useState(2); // Selected frames per second
   const [selectedImageFormat, setSelectedImageFormat] = useState('jpeg'); // Selected output image format
   const [videoProcessing, setVideoProcessing] = useState(false); // Video processing status
   const [extractedFrames, setExtractedFrames] = useState([]); // Extracted image frames
-  
+
   // ==================== REFS ====================
   const fileInputRef = useRef(null); // Reference to hidden file input element
   const folderInputRef = useRef(null); // Reference to hidden folder input element
 
   // ==================== COMPONENT INITIALIZATION ====================
-  
+
   useEffect(() => {
     // Validate project ID
     if (!projectId) {
@@ -99,18 +99,18 @@ const UploadSection = ({ projectId }) => {
       });
       return;
     }
-    
+
     logInfo('app.frontend.ui', 'upload_section_initialized', 'UploadSection component initialized', {
       timestamp: new Date().toISOString(),
       projectId: projectId
     });
-    
+
     loadAvailableDatasets();
     loadRecentImages();
   }, [projectId]);
 
   // ==================== API FUNCTIONS ====================
-  
+
   /**
    * Load available datasets for the project to populate the tags dropdown
    * Fetches datasets from the backend and formats them for Select component
@@ -120,7 +120,7 @@ const UploadSection = ({ projectId }) => {
       timestamp: new Date().toISOString(),
       projectId: projectId
     });
-    
+
     try {
       const response = await projectsAPI.getProjectDatasets(projectId);
       const datasets = response.datasets || response || [];
@@ -129,7 +129,7 @@ const UploadSection = ({ projectId }) => {
         label: dataset.name
       }));
       setAvailableDatasets(options);
-      
+
       logInfo('app.frontend.interactions', 'load_datasets_success', 'Successfully loaded available datasets', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
@@ -155,11 +155,11 @@ const UploadSection = ({ projectId }) => {
       timestamp: new Date().toISOString(),
       projectId: projectId
     });
-    
+
     try {
       const images = await projectsAPI.getRecentImages(projectId, 6);
       setRecentImages(images);
-      
+
       logInfo('app.frontend.interactions', 'load_recent_images_success', 'Successfully loaded recent images', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
@@ -177,7 +177,7 @@ const UploadSection = ({ projectId }) => {
   };
 
   // ==================== EVENT HANDLERS ====================
-  
+
   /**
    * Handle file selection button click
    * Shows batch name modal if no tags are selected, otherwise opens file dialog directly
@@ -190,7 +190,7 @@ const UploadSection = ({ projectId }) => {
       uploadType: 'files',
       tagsSelected: tags.length > 0
     });
-    
+
     setUploadType('files');
     // Only show batch name modal if no tags are selected
     if (tags.length === 0) {
@@ -224,7 +224,7 @@ const UploadSection = ({ projectId }) => {
       projectId: projectId,
       uploadType: 'folder'
     });
-    
+
     setUploadType('folder');
     if (folderInputRef.current) {
       folderInputRef.current.click();
@@ -237,7 +237,7 @@ const UploadSection = ({ projectId }) => {
    */
   const handleBatchNameConfirm = () => {
     logUserClick('batch_name_confirm_button_clicked', 'User clicked batch name confirm button');
-    
+
     // Validate batch name
     if (!batchName.trim()) {
       logError('app.frontend.validation', 'batch_name_empty', 'Batch name validation failed: empty name', {
@@ -249,21 +249,21 @@ const UploadSection = ({ projectId }) => {
       message.error('Batch name cannot be empty');
       return;
     }
-    
+
     logInfo('app.frontend.interactions', 'batch_name_confirmed', 'Batch name confirmed', {
       timestamp: new Date().toISOString(),
       projectId: projectId,
       batchName: batchName,
       pendingFilesCount: pendingFiles.length
     });
-    
+
     setBatchNameModalVisible(false);
-    
+
     // Check if we have pending files from drag & drop
     if (pendingFiles.length > 0) {
       // Process pending drag & drop files
       const batchNameToUse = batchName;
-      
+
       pendingFiles.forEach(async ({ file, onSuccess, onError, onProgress }) => {
         try {
           // Simulate progress
@@ -272,22 +272,22 @@ const UploadSection = ({ projectId }) => {
             percent = Math.min(99, percent + 10);
             onProgress({ percent });
           }, 200);
-          
+
           // Upload the file
           await uploadFile(file, batchNameToUse);
-          
+
           // Clear interval and set progress to 100%
           clearInterval(interval);
           onProgress({ percent: 100 });
           onSuccess("ok", null);
-          
+
           // Reload recent images
           loadRecentImages();
         } catch (error) {
           onError(error);
         }
       });
-      
+
       // Clear pending files
       setPendingFiles([]);
     } else {
@@ -319,25 +319,25 @@ const UploadSection = ({ projectId }) => {
    */
   const processDragDropFiles = (files) => {
     const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
-    
+
     // Process files using the existing upload logic
     files.forEach(file => {
       const fileObj = {
         file,
-        onSuccess: () => {},
-        onError: () => {},
-        onProgress: () => {}
+        onSuccess: () => { },
+        onError: () => { },
+        onProgress: () => { }
       };
-      
+
       // Add to pending files for batch processing
       setPendingFiles(prev => {
         const newFiles = [...prev, fileObj];
-        
+
         // Clear existing timeout
         if (uploadTimeout) {
           clearTimeout(uploadTimeout);
         }
-        
+
         // Set new timeout to upload after 500ms
         const newTimeout = setTimeout(async () => {
           try {
@@ -355,7 +355,7 @@ const UploadSection = ({ projectId }) => {
             setUploadProgress(100);
 
             setUploadedFiles(prev => [...prev, ...newFiles.map(item => ({ ...result, file: item.file }))]);
-            
+
             loadRecentImages();
             setPendingFiles([]);
           } catch (error) {
@@ -365,7 +365,7 @@ const UploadSection = ({ projectId }) => {
             setUploadProgress(0);
           }
         }, 500);
-        
+
         setUploadTimeout(newTimeout);
         return newFiles;
       });
@@ -373,7 +373,7 @@ const UploadSection = ({ projectId }) => {
   };
 
   // ==================== EFFECTS ====================
-  
+
   /**
    * Initialize component data when projectId changes
    * Loads available datasets and recent images
@@ -402,7 +402,7 @@ const UploadSection = ({ projectId }) => {
       });
       throw new Error('Invalid file');
     }
-    
+
     logInfo('app.frontend.interactions', 'single_file_upload_started', 'Started single file upload', {
       timestamp: new Date().toISOString(),
       projectId: projectId,
@@ -412,11 +412,11 @@ const UploadSection = ({ projectId }) => {
       batchName: batchNameToUse,
       tagsSelected: tags.length > 0
     });
-    
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('batch_name', batchNameToUse);
-    
+
     // Add dataset IDs if tags are selected
     if (tags.length > 0) {
       formData.append('dataset_ids', JSON.stringify(tags));
@@ -425,7 +425,7 @@ const UploadSection = ({ projectId }) => {
     try {
       const result = await projectsAPI.uploadImagesToProject(projectId, formData);
       message.success(`${file.name} uploaded successfully to "${batchNameToUse}"!`);
-      
+
       logInfo('app.frontend.interactions', 'single_file_upload_success', 'Single file upload successful', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
@@ -433,7 +433,7 @@ const UploadSection = ({ projectId }) => {
         batchName: batchNameToUse,
         result: result
       });
-      
+
       return result;
     } catch (error) {
       const errorInfo = handleAPIError(error);
@@ -468,7 +468,7 @@ const UploadSection = ({ projectId }) => {
       });
       throw new Error('Invalid files array');
     }
-    
+
     logInfo('app.frontend.interactions', 'multiple_files_upload_started', 'Started multiple files upload', {
       timestamp: new Date().toISOString(),
       projectId: projectId,
@@ -478,16 +478,16 @@ const UploadSection = ({ projectId }) => {
       batchName: batchNameToUse,
       tagsSelected: tags.length > 0
     });
-    
+
     const formData = new FormData();
-    
+
     // Append all files to FormData
     files.forEach(file => {
       formData.append('files', file);
     });
-    
+
     formData.append('batch_name', batchNameToUse);
-    
+
     // Add dataset IDs if tags are selected
     if (tags.length > 0) {
       formData.append('dataset_ids', JSON.stringify(tags));
@@ -496,7 +496,7 @@ const UploadSection = ({ projectId }) => {
     try {
       const result = await projectsAPI.uploadMultipleImagesToProject(projectId, formData);
       message.success(`${files.length} files uploaded successfully to "${batchNameToUse}"!`);
-      
+
       logInfo('app.frontend.interactions', 'multiple_files_upload_success', 'Multiple files upload successful', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
@@ -504,7 +504,7 @@ const UploadSection = ({ projectId }) => {
         batchName: batchNameToUse,
         result: result
       });
-      
+
       return result;
     } catch (error) {
       const errorInfo = handleAPIError(error);
@@ -536,38 +536,38 @@ const UploadSection = ({ projectId }) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       const frames = [];
-      
+
       video.onloadedmetadata = () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        
+
         const duration = video.duration;
         const interval = 1 / fps; // Time between frames
         let currentTime = 0;
         let frameIndex = 0;
-        
+
         const extractFrame = () => {
           if (currentTime >= duration) {
             resolve(frames);
             return;
           }
-          
+
           video.currentTime = currentTime;
         };
-        
+
         video.onseeked = () => {
           // Draw current frame to canvas
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          
+
           // Get file extension and MIME type based on selected format
           const formatConfig = {
             'jpeg': { ext: 'jpg', mime: 'image/jpeg', quality: 0.8 },
             'png': { ext: 'png', mime: 'image/png', quality: 1.0 },
             'webp': { ext: 'webp', mime: 'image/webp', quality: 0.8 }
           };
-          
+
           const config = formatConfig[imageFormat] || formatConfig['jpeg'];
-          
+
           // Convert canvas to blob
           canvas.toBlob((blob) => {
             if (blob) {
@@ -578,28 +578,28 @@ const UploadSection = ({ projectId }) => {
               });
               frames.push(frameFile);
             }
-            
+
             frameIndex++;
             currentTime += interval;
             extractFrame();
           }, config.mime, config.quality);
         };
-        
+
         video.onerror = () => {
           reject(new Error('Error processing video'));
         };
-        
+
         extractFrame();
       };
-      
+
       video.onloadeddata = () => {
         // Video is ready
       };
-      
+
       video.onerror = () => {
         reject(new Error('Error loading video'));
       };
-      
+
       video.src = URL.createObjectURL(videoFile);
     });
   };
@@ -613,12 +613,12 @@ const UploadSection = ({ projectId }) => {
       timestamp: new Date().toISOString(),
       projectId: projectId
     });
-    
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.mp4,.mov,.avi,video/*';
     input.multiple = true; // Allow multiple video selection
-    
+
     input.onchange = (e) => {
       const files = Array.from(e.target.files);
       if (files.length === 0) {
@@ -628,18 +628,18 @@ const UploadSection = ({ projectId }) => {
         });
         return;
       }
-      
+
       logInfo('app.frontend.interactions', 'video_files_selected', 'Video files selected', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
         filesCount: files.length,
         fileNames: files.map(f => f.name)
       });
-      
+
       // Validate all video files
       const validVideos = [];
       const invalidFiles = [];
-      
+
       for (const file of files) {
         if (!file.type.startsWith('video/')) {
           logError('app.frontend.validation', 'video_file_invalid_type', 'Video file validation failed: invalid file type', {
@@ -653,7 +653,7 @@ const UploadSection = ({ projectId }) => {
           invalidFiles.push({ file, reason: 'invalid_type' });
           continue;
         }
-        
+
         // Check file size (1GB limit for videos)
         const isLt1GB = file.size / 1024 / 1024 < 1024;
         if (!isLt1GB) {
@@ -669,15 +669,15 @@ const UploadSection = ({ projectId }) => {
           invalidFiles.push({ file, reason: 'too_large' });
           continue;
         }
-        
+
         validVideos.push(file);
       }
-      
+
       if (validVideos.length > 0) {
         // Always store as array for consistent handling
         setVideoFile(validVideos);
         message.success(`${validVideos.length} video file(s) selected`);
-        
+
         logInfo('app.frontend.interactions', 'video_files_validated', 'Video files validated successfully', {
           timestamp: new Date().toISOString(),
           projectId: projectId,
@@ -694,7 +694,7 @@ const UploadSection = ({ projectId }) => {
         });
       }
     };
-    
+
     input.click();
   };
 
@@ -707,7 +707,7 @@ const UploadSection = ({ projectId }) => {
       timestamp: new Date().toISOString(),
       projectId: projectId
     });
-    
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.mp4,.mov,.avi,video/*';
@@ -715,7 +715,7 @@ const UploadSection = ({ projectId }) => {
     input.directory = true;
     input.mozdirectory = true;
     input.multiple = true;
-    
+
     input.onchange = (e) => {
       const files = Array.from(e.target.files);
       if (files.length === 0) {
@@ -725,18 +725,18 @@ const UploadSection = ({ projectId }) => {
         });
         return;
       }
-      
+
       logInfo('app.frontend.interactions', 'video_folder_files_selected', 'Video folder files selected', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
         totalFiles: files.length,
         fileNames: files.map(f => f.name)
       });
-      
+
       // Filter and validate video files
       const validVideos = [];
       const invalidFiles = [];
-      
+
       for (const file of files) {
         if (!file.type.startsWith('video/')) {
           logInfo('app.frontend.interactions', 'video_folder_non_video_skipped', 'Non-video file skipped in folder selection', {
@@ -747,7 +747,7 @@ const UploadSection = ({ projectId }) => {
           });
           continue; // Skip non-video files silently
         }
-        
+
         // Check file size (1GB limit for videos)
         const isLt1GB = file.size / 1024 / 1024 < 1024;
         if (!isLt1GB) {
@@ -763,21 +763,21 @@ const UploadSection = ({ projectId }) => {
           invalidFiles.push({ file, reason: 'too_large' });
           continue;
         }
-        
+
         validVideos.push(file);
       }
-      
+
       if (validVideos.length > 0) {
         // Store videos with folder info
         setVideoFile(validVideos);
-        
+
         // Extract folder name from first file's path
         const firstFile = validVideos[0];
         const pathParts = firstFile.webkitRelativePath.split('/');
         const folderName = pathParts[0] || 'VideoFolder';
-        
+
         message.success(`${validVideos.length} video file(s) selected from folder "${folderName}"`);
-        
+
         logInfo('app.frontend.interactions', 'video_folder_files_validated', 'Video folder files validated successfully', {
           timestamp: new Date().toISOString(),
           projectId: projectId,
@@ -796,7 +796,7 @@ const UploadSection = ({ projectId }) => {
         message.warning('No valid video files found in the selected folder');
       }
     };
-    
+
     input.click();
   };
 
@@ -805,7 +805,7 @@ const UploadSection = ({ projectId }) => {
    */
   const processVideoUpload = async () => {
     logUserClick('process_video_upload_button_clicked', 'User clicked process video upload button');
-    
+
     // Validate video processing parameters
     if (!videoFile || !Array.isArray(videoFile) || videoFile.length === 0) {
       logError('app.frontend.validation', 'video_processing_no_video_selected', 'Video processing validation failed: no video selected', {
@@ -816,7 +816,7 @@ const UploadSection = ({ projectId }) => {
       message.error('Please select video file(s) and FPS');
       return;
     }
-    
+
     if (!selectedFPS) {
       logError('app.frontend.validation', 'video_processing_no_fps_selected', 'Video processing validation failed: no FPS selected', {
         timestamp: new Date().toISOString(),
@@ -826,7 +826,7 @@ const UploadSection = ({ projectId }) => {
       message.error('Please select video file(s) and FPS');
       return;
     }
-    
+
     logInfo('app.frontend.interactions', 'video_processing_started', 'Video processing started', {
       timestamp: new Date().toISOString(),
       projectId: projectId,
@@ -835,29 +835,29 @@ const UploadSection = ({ projectId }) => {
       selectedImageFormat: selectedImageFormat,
       videoNames: videoFile.map(v => v.name)
     });
-    
+
     setVideoProcessing(true);
-    
+
     try {
       const totalVideos = videoFile.length;
       let totalFramesExtracted = 0;
-      
+
       message.info(`Processing ${totalVideos} video file(s)...`);
-      
+
       // Determine if videos are from a folder (check if first video has webkitRelativePath)
       const isFromFolder = videoFile[0].webkitRelativePath && videoFile[0].webkitRelativePath.includes('/');
       let folderName = null;
-      
+
       if (isFromFolder) {
         // Extract folder name from first file's path
         const pathParts = videoFile[0].webkitRelativePath.split('/');
         folderName = pathParts[0] || 'VideoFolder';
       }
-      
+
       // Create batch name based on context
       let batchNameToUse;
       const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      
+
       if (batchName) {
         // User provided custom batch name
         batchNameToUse = batchName;
@@ -881,21 +881,21 @@ const UploadSection = ({ projectId }) => {
       for (let i = 0; i < videoFile.length; i++) {
         const currentVideo = videoFile[i];
         const videoNumber = i + 1;
-        
+
         message.info(`Extracting frames from video ${videoNumber}/${totalVideos}: ${currentVideo.name}`);
-        
+
         // Extract frames from current video with continuous numbering
         const frames = await extractFramesFromVideo(currentVideo, selectedFPS, selectedImageFormat, globalFrameIndex);
-        
+
         if (frames.length === 0) {
           message.warning(`No frames could be extracted from ${currentVideo.name}`);
           continue;
         }
-        
+
         allFrames.push(...frames);
         globalFrameIndex += frames.length;
         totalFramesExtracted += frames.length;
-        
+
         message.success(`✓ Processed ${currentVideo.name}: ${frames.length} frames extracted`);
       }
 
@@ -905,16 +905,16 @@ const UploadSection = ({ projectId }) => {
         await uploadMultipleFiles(allFrames, batchNameToUse);
         message.success(`✓ All frames uploaded to "${batchNameToUse}"`);
       }
-      
+
       message.success(`Successfully processed ${totalVideos} video(s) and uploaded ${totalFramesExtracted} total frames!`);
-      
+
       // Refresh recent images
       loadRecentImages();
-      
+
       // Reset video upload state
       setVideoFile(null);
       setExtractedFrames([]);
-      
+
     } catch (error) {
       console.error('Video processing error:', error);
       message.error(`Failed to process videos: ${error.message}`);
@@ -924,7 +924,7 @@ const UploadSection = ({ projectId }) => {
   };
 
   // ==================== UPLOAD CONFIGURATION ====================
-  
+
   /**
    * Configuration object for Ant Design Dragger component
    * Handles drag & drop uploads with batch name modal integration
@@ -932,7 +932,7 @@ const UploadSection = ({ projectId }) => {
   const uploadProps = {
     name: 'file',
     multiple: true,
-    
+
     /**
      * Custom upload handler for drag & drop files
      * Shows batch name modal if no tags are selected and no batch name is set
@@ -949,65 +949,65 @@ const UploadSection = ({ projectId }) => {
       try {
         // Create a batch name if not provided (fallback for tagged uploads)
         const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
-        
+
         // Simulate progress for better UX
         let percent = 0;
         const interval = setInterval(() => {
           percent = Math.min(99, percent + 10);
           onProgress({ percent });
         }, 200);
-        
+
         // Upload the file using our upload function
         await uploadFile(file, batchNameToUse);
-        
+
         // Complete the progress and notify success
         clearInterval(interval);
         onProgress({ percent: 100 });
         onSuccess("ok", null);
-        
+
         // Refresh recent images display
         loadRecentImages();
       } catch (error) {
         onError(error);
       }
     },
-    
+
     /**
      * Handle upload status changes and update UI accordingly
      */
     onChange(info) {
       const { status } = info.file;
-      
+
       // Show success/error messages
       if (status === 'done') {
         message.success(`${info.file.name} file uploaded successfully.`);
       } else if (status === 'error') {
         message.error(`${info.file.name} file upload failed.`);
       }
-      
+
       // Update uploaded files list for display
       setUploadedFiles(prevFiles => {
         const newFiles = [...prevFiles, { file: info.file, status }];
-        
+
         // Reset progress after a delay for visual feedback
         if (uploadTimeout) {
           clearTimeout(uploadTimeout);
         }
-        
+
         const newTimeout = setTimeout(() => {
           if (status === 'done' || status === 'error') {
             setUploadProgress(0);
           }
         }, 500);
-        
+
         setUploadTimeout(newTimeout);
         return newFiles;
       });
     },
-    
+
     // File type restrictions
     accept: 'image/*,.jpg,.jpeg,.png,.bmp,.webp,.avif',
-    
+
     /**
      * Validate files before upload
      * Checks file type and size constraints
@@ -1019,17 +1019,17 @@ const UploadSection = ({ projectId }) => {
         message.error(`${file.name} is not an image file`);
         return false;
       }
-      
+
       // Check file size (20MB limit)
       const isLt20M = file.size / 1024 / 1024 < 20;
       if (!isLt20M) {
         message.error(`${file.name} must be smaller than 20MB!`);
         return false;
       }
-      
+
       return true;
     },
-    
+
     // Upload list display configuration
     showUploadList: {
       showPreviewIcon: true,
@@ -1039,7 +1039,7 @@ const UploadSection = ({ projectId }) => {
   };
 
   // ==================== RENDER ====================
-  
+
   // Log when main component is rendered
   logInfo('app.frontend.ui', 'upload_section_rendered', 'UploadSection component rendered', {
     timestamp: new Date().toISOString(),
@@ -1048,13 +1048,13 @@ const UploadSection = ({ projectId }) => {
     videoProcessing: videoProcessing,
     batchNameModalVisible: batchNameModalVisible
   });
-  
+
   return (
     <div style={{ padding: '24px' }}>
       {/* ==================== HEADER SECTION ==================== */}
       <div style={{ marginBottom: '24px' }}>
-        <Title level={2} style={{ margin: 0, marginBottom: '8px' }}>
-          <UploadOutlined style={{ marginRight: '8px' }} />
+        <Title level={2} style={{ margin: 0, marginBottom: '8px', background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
+          <UploadOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
           Upload
         </Title>
       </div>
@@ -1067,20 +1067,20 @@ const UploadSection = ({ projectId }) => {
             <div style={{ marginBottom: '16px' }}>
               <Text strong>Batch Name:</Text>
             </div>
-            <Input 
+            <Input
               placeholder={`Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`}
               value={batchName}
               onChange={(e) => {
                 const newBatchName = e.target.value;
                 setBatchName(newBatchName);
-                
+
                 logInfo('app.frontend.ui', 'batch_name_changed', 'Batch name input changed', {
                   timestamp: new Date().toISOString(),
                   projectId: projectId,
                   newBatchName: newBatchName,
                   previousTagsCount: tags.length
                 });
-                
+
                 // Clear tags when batch name is entered (mutual exclusivity)
                 if (newBatchName.trim() && tags.length > 0) {
                   logInfo('app.frontend.ui', 'tags_cleared_for_batch_name', 'Tags cleared due to batch name entry', {
@@ -1092,13 +1092,13 @@ const UploadSection = ({ projectId }) => {
                 }
               }}
               disabled={tags.length > 0} // Disabled when tags are selected
-              style={{ 
+              style={{
                 marginBottom: '16px',
                 opacity: tags.length > 0 ? 0.6 : 1
               }}
             />
           </Col>
-          
+
           {/* Tags/Dataset Selection */}
           <Col span={12}>
             <div style={{ marginBottom: '16px' }}>
@@ -1109,7 +1109,7 @@ const UploadSection = ({ projectId }) => {
             </div>
             <Select
               mode="multiple"
-              style={{ 
+              style={{
                 width: '100%',
                 opacity: batchName.trim() ? 0.6 : 1
               }}
@@ -1117,14 +1117,14 @@ const UploadSection = ({ projectId }) => {
               value={tags}
               onChange={(selectedTags) => {
                 setTags(selectedTags);
-                
+
                 logInfo('app.frontend.ui', 'tags_selection_changed', 'Tags selection changed', {
                   timestamp: new Date().toISOString(),
                   projectId: projectId,
                   selectedTags: selectedTags,
                   previousBatchName: batchName
                 });
-                
+
                 // Clear batch name when tags are selected (mutual exclusivity)
                 if (selectedTags.length > 0 && batchName.trim()) {
                   logInfo('app.frontend.ui', 'batch_name_cleared_for_tags', 'Batch name cleared due to tags selection', {
@@ -1155,12 +1155,12 @@ const UploadSection = ({ projectId }) => {
             Drag and drop file(s) to upload, or:
           </p>
         </Dragger>
-        
+
         {/* Upload Buttons */}
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <Button 
-            type="primary" 
-            icon={<FolderOutlined />} 
+          <Button
+            type="primary"
+            icon={<FolderOutlined />}
             style={{ marginRight: '8px' }}
             onClick={(e) => {
               e.stopPropagation();
@@ -1169,7 +1169,7 @@ const UploadSection = ({ projectId }) => {
           >
             Select File(s)
           </Button>
-          <Button 
+          <Button
             icon={<FolderOutlined />}
             style={{ marginRight: '8px' }}
             onClick={(e) => {
@@ -1183,10 +1183,10 @@ const UploadSection = ({ projectId }) => {
 
         {/* Video FPS Selection - Shows when video is selected */}
         {videoFile && Array.isArray(videoFile) && videoFile.length > 0 && (
-          <div style={{ 
-            marginBottom: '24px', 
-            padding: '16px', 
-            backgroundColor: '#f6f6f6', 
+          <div style={{
+            marginBottom: '24px',
+            padding: '16px',
+            backgroundColor: '#f6f6f6',
             borderRadius: '8px',
             border: '1px solid #d9d9d9'
           }}>
@@ -1207,7 +1207,7 @@ const UploadSection = ({ projectId }) => {
                 </div>
               )}
             </div>
-            
+
             <Row gutter={16} style={{ marginBottom: '12px' }}>
               <Col span={12}>
                 <div style={{ marginBottom: '8px' }}>
@@ -1258,19 +1258,19 @@ const UploadSection = ({ projectId }) => {
                 </Select>
               </Col>
             </Row>
-            
+
             <Row gutter={16} align="middle">
               <Col span={24} style={{ textAlign: 'center' }}>
                 <Space>
-                  <Button 
-                    type="primary" 
+                  <Button
+                    type="primary"
                     loading={videoProcessing}
                     onClick={processVideoUpload}
                     style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
                   >
                     {videoProcessing ? 'Processing...' : 'Extract Frames'}
                   </Button>
-                  <Button 
+                  <Button
                     onClick={() => {
                       logUserClick('video_processing_cancel_button_clicked', 'User clicked video processing cancel button');
                       logInfo('app.frontend.ui', 'video_processing_cancelled', 'Video processing cancelled by user', {
@@ -1287,7 +1287,7 @@ const UploadSection = ({ projectId }) => {
                 </Space>
               </Col>
             </Row>
-            
+
             <div style={{ marginTop: '12px' }}>
               <Text type="secondary" style={{ fontSize: '12px' }}>
                 <strong>Note:</strong> Higher FPS will extract more frames. JPEG offers smaller files, PNG preserves quality, WebP provides modern compression. For most use cases, 2-5 FPS with JPEG format provides good coverage.
@@ -1295,129 +1295,129 @@ const UploadSection = ({ projectId }) => {
             </div>
           </div>
         )}
-          
-          {/* ==================== HIDDEN FILE INPUTS ==================== */}
-          
-          {/* Hidden input for file selection */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-            multiple
-            accept="image/*,.jpg,.jpeg,.png,.bmp,.webp,.avif"
-            onChange={async (e) => {
-              const files = Array.from(e.target.files);
-              if (files.length === 0) {
-                logInfo('app.frontend.interactions', 'file_selection_cancelled', 'File selection cancelled by user', {
-                  timestamp: new Date().toISOString(),
-                  projectId: projectId
-                });
-                return;
+
+        {/* ==================== HIDDEN FILE INPUTS ==================== */}
+
+        {/* Hidden input for file selection */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: 'none' }}
+          multiple
+          accept="image/*,.jpg,.jpeg,.png,.bmp,.webp,.avif"
+          onChange={async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) {
+              logInfo('app.frontend.interactions', 'file_selection_cancelled', 'File selection cancelled by user', {
+                timestamp: new Date().toISOString(),
+                projectId: projectId
+              });
+              return;
+            }
+
+            logInfo('app.frontend.interactions', 'files_selected_for_upload', 'Files selected for upload via file input', {
+              timestamp: new Date().toISOString(),
+              projectId: projectId,
+              filesCount: files.length,
+              fileNames: files.map(f => f.name),
+              batchName: batchName
+            });
+
+            setUploading(true);
+            const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
+
+            try {
+              // Use bulk upload for multiple files, single upload for one file
+              if (files.length > 1) {
+                await uploadMultipleFiles(files, batchNameToUse);
+              } else {
+                // For single file, use the uploadFile function
+                for (const file of files) {
+                  await uploadFile(file, batchNameToUse);
+                }
               }
 
-              logInfo('app.frontend.interactions', 'files_selected_for_upload', 'Files selected for upload via file input', {
+              // Refresh UI after successful upload
+              loadRecentImages();
+              message.success(`${files.length} file(s) uploaded successfully to "${batchNameToUse}"!`);
+            } catch (error) {
+              logError('app.frontend.interactions', 'file_upload_error', 'File upload error via file input', {
                 timestamp: new Date().toISOString(),
                 projectId: projectId,
                 filesCount: files.length,
-                fileNames: files.map(f => f.name),
-                batchName: batchName
+                batchName: batchNameToUse,
+                error: error.message
               });
+              console.error('Batch upload error:', error);
+            } finally {
+              setUploading(false);
+              // Clear the input value to allow re-uploading the same file
+              e.target.value = '';
+            }
+          }}
+        />
 
-              setUploading(true);
-              const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
-              
-              try {
-                // Use bulk upload for multiple files, single upload for one file
-                if (files.length > 1) {
-                  await uploadMultipleFiles(files, batchNameToUse);
-                } else {
-                  // For single file, use the uploadFile function
-                  for (const file of files) {
-                    await uploadFile(file, batchNameToUse);
-                  }
-                }
-                
-                // Refresh UI after successful upload
-                loadRecentImages();
-                message.success(`${files.length} file(s) uploaded successfully to "${batchNameToUse}"!`);
-              } catch (error) {
-                logError('app.frontend.interactions', 'file_upload_error', 'File upload error via file input', {
-                  timestamp: new Date().toISOString(),
-                  projectId: projectId,
-                  filesCount: files.length,
-                  batchName: batchNameToUse,
-                  error: error.message
-                });
-                console.error('Batch upload error:', error);
-              } finally {
-                setUploading(false);
-                // Clear the input value to allow re-uploading the same file
-                e.target.value = '';
-              }
-            }}
-          />
-          
-          {/* Hidden input for folder selection */}
-          <input
-            type="file"
-            ref={folderInputRef}
-            style={{ display: 'none' }}
-            webkitdirectory="" // Enable folder selection
-            directory=""
-            mozdirectory=""
-            multiple
-            accept=".jpg,.jpeg,.png,.bmp,.webp,.avif"
-            onChange={async (e) => {
-              const files = Array.from(e.target.files);
-              if (files.length === 0) {
-                logInfo('app.frontend.interactions', 'folder_selection_cancelled', 'Folder selection cancelled by user', {
-                  timestamp: new Date().toISOString(),
-                  projectId: projectId
-                });
-                return;
+        {/* Hidden input for folder selection */}
+        <input
+          type="file"
+          ref={folderInputRef}
+          style={{ display: 'none' }}
+          webkitdirectory="" // Enable folder selection
+          directory=""
+          mozdirectory=""
+          multiple
+          accept=".jpg,.jpeg,.png,.bmp,.webp,.avif"
+          onChange={async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) {
+              logInfo('app.frontend.interactions', 'folder_selection_cancelled', 'Folder selection cancelled by user', {
+                timestamp: new Date().toISOString(),
+                projectId: projectId
+              });
+              return;
+            }
+
+            // Extract folder name from the first file's path
+            const firstFile = files[0];
+            const pathParts = firstFile.webkitRelativePath.split('/');
+            const folderName = pathParts[0] || `Folder_${new Date().toLocaleDateString()}`;
+
+            logInfo('app.frontend.interactions', 'folder_selected_for_upload', 'Folder selected for upload', {
+              timestamp: new Date().toISOString(),
+              projectId: projectId,
+              filesCount: files.length,
+              folderName: folderName,
+              fileNames: files.map(f => f.name)
+            });
+
+            setUploading(true);
+
+            try {
+              // Upload all files in the folder using folder name as batch name
+              for (const file of files) {
+                await uploadFile(file, folderName);
               }
 
-              // Extract folder name from the first file's path
-              const firstFile = files[0];
-              const pathParts = firstFile.webkitRelativePath.split('/');
-              const folderName = pathParts[0] || `Folder_${new Date().toLocaleDateString()}`;
-              
-              logInfo('app.frontend.interactions', 'folder_selected_for_upload', 'Folder selected for upload', {
+              // Refresh UI after successful upload
+              loadRecentImages();
+              message.success(`${files.length} file(s) uploaded successfully to "${folderName}"!`);
+            } catch (error) {
+              logError('app.frontend.interactions', 'folder_upload_error', 'Folder upload error', {
                 timestamp: new Date().toISOString(),
                 projectId: projectId,
                 filesCount: files.length,
                 folderName: folderName,
-                fileNames: files.map(f => f.name)
+                error: error.message
               });
-              
-              setUploading(true);
-              
-              try {
-                // Upload all files in the folder using folder name as batch name
-                for (const file of files) {
-                  await uploadFile(file, folderName);
-                }
-                
-                // Refresh UI after successful upload
-                loadRecentImages();
-                message.success(`${files.length} file(s) uploaded successfully to "${folderName}"!`);
-              } catch (error) {
-                logError('app.frontend.interactions', 'folder_upload_error', 'Folder upload error', {
-                  timestamp: new Date().toISOString(),
-                  projectId: projectId,
-                  filesCount: files.length,
-                  folderName: folderName,
-                  error: error.message
-                });
-                console.error('Folder upload error:', error);
-              } finally {
-                setUploading(false);
-                // Clear the input value to allow re-uploading the same folder
-                e.target.value = '';
-              }
-            }}
-          />
-        
+              console.error('Folder upload error:', error);
+            } finally {
+              setUploading(false);
+              // Clear the input value to allow re-uploading the same folder
+              e.target.value = '';
+            }
+          }}
+        />
+
         {/* ==================== SUPPORTED FORMATS SECTION ==================== */}
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <Title level={4} style={{ color: '#666' }}>Supported Formats</Title>
@@ -1439,7 +1439,7 @@ const UploadSection = ({ projectId }) => {
                 </div>
               </div>
             </Col>
-            
+
             {/* Annotations Format */}
             <Col>
               <div style={{ textAlign: 'center' }}>
@@ -1457,7 +1457,7 @@ const UploadSection = ({ projectId }) => {
                 </div>
               </div>
             </Col>
-            
+
             {/* Videos Format */}
             <Col>
               <div style={{ textAlign: 'center' }}>
@@ -1486,7 +1486,7 @@ const UploadSection = ({ projectId }) => {
         {/* ==================== ADDITIONAL UPLOAD OPTIONS ==================== */}
         <div style={{ marginBottom: '24px' }}>
           <Title level={5}>Need images to get started? We've got you covered.</Title>
-          
+
           {/* Video Upload Section */}
           <Card size="small" style={{ marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -1500,8 +1500,8 @@ const UploadSection = ({ projectId }) => {
               </div>
             </div>
             <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <Button 
-                type="primary" 
+              <Button
+                type="primary"
                 icon={<YoutubeOutlined />}
                 loading={videoProcessing}
                 onClick={handleVideoSelect}
@@ -1509,7 +1509,7 @@ const UploadSection = ({ projectId }) => {
               >
                 {videoProcessing ? 'Processing...' : 'Select Video File(s)'}
               </Button>
-              <Button 
+              <Button
                 icon={<FolderOutlined />}
                 loading={videoProcessing}
                 onClick={handleVideoFolderSelect}
@@ -1533,7 +1533,7 @@ const UploadSection = ({ projectId }) => {
                 <Text strong>Import YouTube Video</Text>
               </div>
             </div>
-            <Input 
+            <Input
               placeholder="e.g. https://www.youtube.com/watch?v=dQw4w9WgXcQ"
               suffix={<Button type="primary" size="small">→</Button>}
               style={{ marginTop: '12px' }}
@@ -1572,7 +1572,7 @@ const UploadSection = ({ projectId }) => {
               <Progress percent={uploadProgress} status="active" />
             </div>
           )}
-          
+
           {/* Recently Uploaded Files Display */}
           {(uploadedFiles.length > 0 || recentImages.length > 0) && (
             <div>
@@ -1584,18 +1584,18 @@ const UploadSection = ({ projectId }) => {
                     <Card
                       size="small"
                       cover={
-                        <div style={{ 
-                          height: '80px', 
-                          background: '#f5f5f5', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center' 
+                        <div style={{
+                          height: '80px',
+                          background: '#f5f5f5',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
                         }}>
                           {/* Show thumbnail if available, otherwise show placeholder icon */}
                           {fileInfo.thumbnail_url ? (
-                            <img 
-                              src={fileInfo.thumbnail_url} 
-                              alt={fileInfo.filename || 'Image'} 
+                            <img
+                              src={fileInfo.thumbnail_url}
+                              alt={fileInfo.filename || 'Image'}
                               style={{ maxHeight: '80px', maxWidth: '100%' }}
                             />
                           ) : (
@@ -1604,7 +1604,7 @@ const UploadSection = ({ projectId }) => {
                         </div>
                       }
                     >
-                      <Card.Meta 
+                      <Card.Meta
                         title={
                           <Text ellipsis style={{ fontSize: '12px' }}>
                             {fileInfo.filename || fileInfo.file?.name || 'Unknown'}
@@ -1620,7 +1620,7 @@ const UploadSection = ({ projectId }) => {
                   </Col>
                 ))}
               </Row>
-              
+
               {/* Show "View all" button if more than 6 files */}
               {(recentImages.length > 6 || uploadedFiles.length > 6) && (
                 <div style={{ textAlign: 'center', marginTop: '16px' }}>
