@@ -862,10 +862,10 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       children: (
                         <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4 }}>
                           {form.status === 'running' && (!form.liveMetrics || !form.liveMetrics.training || !form.liveMetrics.training.epoch) ? (
-                               <TrainingInitializing />
-                             ) : (
-                               <LiveTrainingDashboard metrics={form.liveMetrics || {}} status={form.status} />
-                             )}
+                            <TrainingInitializing />
+                          ) : (
+                            <LiveTrainingDashboard metrics={form.liveMetrics || {}} status={form.status} />
+                          )}
                         </div>
                       )
                     }
