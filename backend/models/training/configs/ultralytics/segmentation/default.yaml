@@ -41,7 +41,7 @@ train:
 val:
   enabled: true
   split: "val"
-  save_json: false
+  save_json: true
   conf: 0.25
   iou: 0.5
   max_det: 300
