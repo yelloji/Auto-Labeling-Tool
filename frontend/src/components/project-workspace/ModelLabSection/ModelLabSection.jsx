@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Typography, Spin, message, Modal } from 'antd';
 import { ExperimentOutlined } from '@ant-design/icons';
 import TrainingList from './TrainingList/TrainingList';
+import OverviewView from './OverviewView/OverviewView';
 import { projectsAPI, handleAPIError } from '../../../services/api';
 import { logInfo, logError } from '../../../utils/professional_logger';
 import './ModelLabSection.css';
@@ -47,7 +48,8 @@ const ModelLabSection = ({ projectId }) => {
                         status: session.status,
                         epochs: metrics.epochs || session.best_epoch || 0,
                         date: session.created_at,
-                        metrics: metrics
+                        metrics: metrics,
+                        projectId: projectId
                     };
                 });
 
@@ -84,15 +86,15 @@ const ModelLabSection = ({ projectId }) => {
                 try {
                     await projectsAPI.deleteTrainingSession(projectId, training.id);
                     message.success(`Training "${training.name}" deleted successfully`);
-                    
+
                     // Remove from list
                     setTrainings(prev => prev.filter(t => t.id !== training.id));
-                    
+
                     // Clear selection if deleted
                     if (selectedTraining?.id === training.id) {
                         setSelectedTraining(null);
                     }
-                    
+
                     logInfo('app.frontend.ui', 'training_deleted', 'Training deleted', {
                         trainingId: training.id,
                         trainingName: training.name
@@ -141,30 +143,7 @@ const ModelLabSection = ({ projectId }) => {
                 {/* Right Panel - Details */}
                 <div className="model-lab-right-panel">
                     {selectedTraining ? (
-                        <div className="model-lab-details-container">
-                            <div className="details-header">
-                                <div className="details-title-row">
-                                    <Title level={3} style={{ margin: 0 }}>{selectedTraining.name}</Title>
-                                    <span className={`status-badge ${selectedTraining.status}`}>
-                                        {selectedTraining.status ? selectedTraining.status.toUpperCase() : 'UNKNOWN'}
-                                    </span>
-                                </div>
-                                <p className="details-subtitle">
-                                    Task: <strong>{selectedTraining.taskType}</strong> •
-                                    Epochs: <strong>{selectedTraining.epochs}</strong> •
-                                    Date: {selectedTraining.date ? new Date(selectedTraining.date).toLocaleDateString() : 'N/A'}
-                                </p>
-                            </div>
-
-                            <div className="details-content-placeholder">
-                                <div className="placeholder-message">
-                                    <ExperimentOutlined style={{ fontSize: '48px', color: '#d1d5db', marginBottom: '16px' }} />
-                                    <h3>Detailed Metrics & Visualization</h3>
-                                    <p>Full training analysis coming in Task 2A</p>
-                                </div>
-                                <pre className="debug-data">{JSON.stringify(selectedTraining, null, 2)}</pre>
-                            </div>
-                        </div>
+                        <OverviewView training={selectedTraining} />
                     ) : (
                         <div className="model-lab-empty-state">
                             <div className="empty-state-icon">

@@ -6,4 +6,4 @@ logInfo('app.frontend.ui', 'model_lab_section_module_loaded', 'ModelLabSection m
   components: ['ModelLabSection']
 });
 
-export { default } from './ModelLabSection.jsx';
+export { default } from './ModelLabSection';

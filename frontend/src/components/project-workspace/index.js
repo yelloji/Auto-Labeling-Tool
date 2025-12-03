@@ -6,7 +6,7 @@ import ReleaseSection from './ReleaseSection';
 import AnalyticsSection from './AnalyticsSection';
 import ModelsSection from './ModelsSection';
 import ModelTrainingSection from './ModelTrainingSection/ModelTrainingSection.jsx';
-import ModelLabSection from './ModelLabSection';
+import ModelLabSection from './ModelLabSection/ModelLabSection';
 import DeploymentsSection from './DeploymentsSection';
 import ActiveLearningSection from './ActiveLearningSection';
 

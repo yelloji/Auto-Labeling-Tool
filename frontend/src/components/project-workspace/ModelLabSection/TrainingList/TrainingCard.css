@@ -135,6 +135,7 @@
 .training-card:active {
     transform: translateY(0);
 }
+
 .training-card:focus {
     outline: none;
 }
