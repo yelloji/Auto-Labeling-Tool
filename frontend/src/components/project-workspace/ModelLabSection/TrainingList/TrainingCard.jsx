@@ -34,14 +34,19 @@ const TrainingCard = ({ training, isSelected, onClick }) => {
         });
     };
 
-    // Get status icon (only completed or failed in Model Lab)
+    // Get status icon
     const getStatusIcon = () => {
-        return status === 'completed' ? '✅' : '❌';
+        if (status === 'completed') return '✅';
+        if (status === 'failed') return '❌';
+        if (status === 'running') return '⏳';
+        return '❓';
     };
 
     // Get task type label
     const getTaskLabel = () => {
-        return taskType === 'detection' ? 'Detection' : 'Segmentation';
+        if (taskType === 'detection') return 'Detection';
+        if (taskType === 'segmentation') return 'Segmentation';
+        return taskType || 'Unknown';
     };
 
     return (
@@ -93,12 +98,12 @@ const TrainingCard = ({ training, isSelected, onClick }) => {
 
 TrainingCard.propTypes = {
     training: PropTypes.shape({
-        id: PropTypes.number.isRequired,
+        id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
         name: PropTypes.string.isRequired,
-        taskType: PropTypes.oneOf(['detection', 'segmentation']).isRequired,
-        status: PropTypes.oneOf(['completed', 'failed']).isRequired,
-        epochs: PropTypes.number.isRequired,
-        date: PropTypes.string.isRequired,
+        taskType: PropTypes.string,
+        status: PropTypes.string,
+        epochs: PropTypes.number,
+        date: PropTypes.string,
         metrics: PropTypes.object
     }).isRequired,
     isSelected: PropTypes.bool.isRequired,

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { Typography } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Typography, Spin, message } from 'antd';
 import { ExperimentOutlined } from '@ant-design/icons';
 import TrainingList from './TrainingList/TrainingList';
-import { mockTrainings } from './TrainingList/mockTrainingData';
-import { logInfo } from '../../../utils/professional_logger';
+import { projectsAPI, handleAPIError } from '../../../services/api';
+import { logInfo, logError } from '../../../utils/professional_logger';
 import './ModelLabSection.css';
 
 const { Title } = Typography;
@@ -14,8 +14,55 @@ const { Title } = Typography;
  * Main container for Model Lab feature
  * Two-panel layout: Training List (left) + Details Panel (right)
  */
-const ModelLabSection = () => {
+const ModelLabSection = ({ projectId }) => {
     const [selectedTraining, setSelectedTraining] = useState(null);
+    const [trainings, setTrainings] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchTrainings = async () => {
+            if (!projectId) return;
+
+            setLoading(true);
+            try {
+                const data = await projectsAPI.getTrainingSessions(projectId);
+
+                // Map API data to UI format
+                const mappedTrainings = data.map(session => {
+                    let metrics = {};
+                    if (session.metrics) {
+                        try {
+                            metrics = typeof session.metrics === 'string'
+                                ? JSON.parse(session.metrics)
+                                : session.metrics;
+                        } catch (e) {
+                            console.error("Failed to parse metrics", e);
+                        }
+                    }
+
+                    return {
+                        id: session.id,
+                        name: session.name,
+                        taskType: session.task || 'unknown',
+                        status: session.status,
+                        epochs: metrics.epochs || session.best_epoch || 0,
+                        date: session.created_at,
+                        metrics: metrics
+                    };
+                });
+
+                setTrainings(mappedTrainings);
+                logInfo('app.frontend.ui', 'trainings_loaded', 'Loaded training sessions', { count: mappedTrainings.length });
+            } catch (error) {
+                handleAPIError(error, 'Failed to load training sessions');
+                logError('app.frontend.ui', 'trainings_load_error', 'Failed to load trainings', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchTrainings();
+    }, [projectId]);
 
     const handleTrainingSelect = (training) => {
         setSelectedTraining(training);
@@ -25,6 +72,15 @@ const ModelLabSection = () => {
             taskType: training.taskType
         });
     };
+
+    if (loading) {
+        return (
+            <div style={{ textAlign: 'center', padding: '50px' }}>
+                <Spin size="large" />
+                <div style={{ marginTop: 16 }}>Loading training sessions...</div>
+            </div>
+        );
+    }
 
     return (
         <div className="model-lab-container">
@@ -44,7 +100,7 @@ const ModelLabSection = () => {
                 {/* Left Panel - Training List */}
                 <div className="model-lab-left-panel">
                     <TrainingList
-                        trainings={mockTrainings}
+                        trainings={trainings}
                         onTrainingSelect={handleTrainingSelect}
                     />
                 </div>
@@ -57,13 +113,13 @@ const ModelLabSection = () => {
                                 <div className="details-title-row">
                                     <Title level={3} style={{ margin: 0 }}>{selectedTraining.name}</Title>
                                     <span className={`status-badge ${selectedTraining.status}`}>
-                                        {selectedTraining.status.toUpperCase()}
+                                        {selectedTraining.status ? selectedTraining.status.toUpperCase() : 'UNKNOWN'}
                                     </span>
                                 </div>
                                 <p className="details-subtitle">
                                     Task: <strong>{selectedTraining.taskType}</strong> •
                                     Epochs: <strong>{selectedTraining.epochs}</strong> •
-                                    Date: {new Date(selectedTraining.date).toLocaleDateString()}
+                                    Date: {selectedTraining.date ? new Date(selectedTraining.date).toLocaleDateString() : 'N/A'}
                                 </p>
                             </div>
 

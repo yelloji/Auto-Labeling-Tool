@@ -144,3 +144,10 @@
 .training-card * {
     transition: all 0.2s ease;
 }
+
+/* Default Hover (for unknown types) */
+.training-card:hover {
+    background: #e5e7eb;
+    border-color: #9ca3af;
+    transform: translateY(-3px);
+}

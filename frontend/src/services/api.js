@@ -24,7 +24,7 @@ api.interceptors.request.use(
   (config) => {
     const startTime = Date.now();
     config.metadata = { startTime };
-    
+
     // Log API request
     logInfo('app.frontend.interactions', 'api_request', `API Request: ${config.method?.toUpperCase()} ${config.url}`, {
       method: config.method?.toUpperCase(),
@@ -36,7 +36,7 @@ api.interceptors.request.use(
       data: config.data,
       timestamp: new Date().toISOString()
     });
-    
+
     // Add timestamp to prevent caching for GET requests
     if (config.method === 'get') {
       config.params = {
@@ -44,7 +44,7 @@ api.interceptors.request.use(
         _t: Date.now()
       };
     }
-    
+
     return config;
   },
   (error) => {
@@ -62,7 +62,7 @@ api.interceptors.response.use(
     const endTime = Date.now();
     const startTime = response.config.metadata?.startTime;
     const responseTime = startTime ? endTime - startTime : null;
-    
+
     // Log API response
     logInfo('app.frontend.interactions', 'api_response', `API Response: ${response.status} ${response.config.url}`, {
       method: response.config.method?.toUpperCase(),
@@ -74,14 +74,14 @@ api.interceptors.response.use(
       headers: response.headers,
       timestamp: new Date().toISOString()
     });
-    
+
     return response;
   },
   (error) => {
     const endTime = Date.now();
     const startTime = error.config?.metadata?.startTime;
     const responseTime = startTime ? endTime - startTime : null;
-    
+
     // Log API response error
     logError('app.frontend.validation', 'api_response_error', 'API Response Error', error, {
       method: error.config?.method?.toUpperCase(),
@@ -93,7 +93,7 @@ api.interceptors.response.use(
       errorData: error.response?.data,
       timestamp: new Date().toISOString()
     });
-    
+
     return Promise.reject(error);
   }
 );
@@ -115,7 +115,7 @@ export const handleAPIError = (error, defaultMessage = 'API request failed') => 
     // If detail is an object, stringify safely
     try { errorMessage = JSON.stringify(errorMessage); } catch { errorMessage = defaultMessage; }
   }
-  
+
   // Log API error using professional logger
   logError('app.frontend.validation', 'api_error_handled', `API Error: ${defaultMessage}`, error, {
     errorMessage: errorMessage,
@@ -126,7 +126,7 @@ export const handleAPIError = (error, defaultMessage = 'API request failed') => 
     errorData: error.response?.data,
     timestamp: new Date().toISOString()
   });
-  
+
   // Return error information object that components expect
   return {
     message: errorMessage,
@@ -361,6 +361,12 @@ export const projectsAPI = {
     return data;
   },
 
+  // Get project training sessions
+  getTrainingSessions: async (projectId) => {
+    const response = await api.get(`/api/v1/projects/${projectId}/training/sessions`);
+    return response.data;
+  },
+
   // Duplicate project with all datasets, images, and annotations
   duplicateProject: async (projectId) => {
     const response = await api.post(`/api/v1/projects/${projectId}/duplicate`);
@@ -442,8 +448,8 @@ export const projectsAPI = {
 
   // Get project dataset images (for Dataset section)
   getProjectDatasetImages: async (projectId, splitType = null, limit = 50, offset = 0) => {
-    const params = { 
-      limit, 
+    const params = {
+      limit,
       offset,
       ...(splitType && { split_type: splitType })
     };
@@ -496,7 +502,7 @@ export const imageTransformationsAPI = {
       const params = {};
       if (releaseVersion) params.release_version = releaseVersion;
       if (transformationType) params.transformation_type = transformationType;
-      
+
       const response = await api.get('/api/image-transformations/', { params });
       return response.data;
     } catch (error) {
@@ -504,7 +510,7 @@ export const imageTransformationsAPI = {
       throw error;
     }
   },
-  
+
   // Create a new transformation
   createTransformation: async (transformationData) => {
     try {
@@ -515,7 +521,7 @@ export const imageTransformationsAPI = {
       throw error;
     }
   },
-  
+
   // Create multiple transformations in batch
   createTransformationsBatch: async (transformationsData) => {
     try {
@@ -526,7 +532,7 @@ export const imageTransformationsAPI = {
       throw error;
     }
   },
-  
+
   // Get a specific transformation
   getTransformation: async (transformationId) => {
     try {
@@ -537,7 +543,7 @@ export const imageTransformationsAPI = {
       throw error;
     }
   },
-  
+
   // Update a transformation
   updateTransformation: async (transformationId, updateData) => {
     try {
@@ -548,7 +554,7 @@ export const imageTransformationsAPI = {
       throw error;
     }
   },
-  
+
   // Delete a transformation
   deleteTransformation: async (transformationId) => {
     try {
@@ -559,13 +565,13 @@ export const imageTransformationsAPI = {
       throw error;
     }
   },
-  
+
   // Get transformations by version
   getTransformationsByVersion: async (releaseVersion, status = null) => {
     try {
       const params = {};
       if (status) params.status = status;
-      
+
       const response = await api.get(`/api/image-transformations/version/${releaseVersion}`, { params });
       return response.data;
     } catch (error) {
@@ -573,7 +579,7 @@ export const imageTransformationsAPI = {
       throw error;
     }
   },
-  
+
   // Get pending transformations
   getPendingTransformations: async () => {
     try {
@@ -584,7 +590,7 @@ export const imageTransformationsAPI = {
       throw error;
     }
   },
-  
+
   // Update release version name
   updateReleaseVersion: async (oldVersion, newVersion) => {
     try {
@@ -604,7 +610,7 @@ export const imageTransformationsAPI = {
     try {
       const params = {};
       if (status) params.status = status;
-      
+
       const response = await api.get('/api/image-transformations/release-versions', { params });
       return response.data;
     } catch (error) {
@@ -623,7 +629,7 @@ export const imageTransformationsAPI = {
       throw error;
     }
   },
-  
+
   // Reorder transformations
   reorderTransformations: async (transformationIds) => {
     try {
@@ -634,7 +640,7 @@ export const imageTransformationsAPI = {
       throw error;
     }
   },
-  
+
   // Generate a new version ID
   generateVersion: async () => {
     try {
@@ -671,7 +677,7 @@ export const releasesAPI = {
       throw error;
     }
   },
-  
+
   // Get release history for a dataset
   getReleaseHistory: async (datasetId) => {
     try {
@@ -682,7 +688,7 @@ export const releasesAPI = {
       throw error;
     }
   },
-  
+
   // Rename a release
   renameRelease: async (releaseId, newName) => {
     try {
@@ -693,7 +699,7 @@ export const releasesAPI = {
       throw error;
     }
   },
-  
+
   // Get download information for a release
   getDownloadInfo: async (releaseId) => {
     try {
@@ -988,7 +994,7 @@ export const datasetsAPI = {
   getDatasets: async (projectId = null, skip = 0, limit = 100) => {
     const params = { skip, limit };
     if (projectId) params.project_id = projectId;
-    
+
     const response = await api.get('/api/v1/datasets/', { params });
     return response.data;
   },
@@ -1065,7 +1071,7 @@ export const datasetsAPI = {
     const response = await api.get(`/api/v1/datasets/${datasetId}/stats`);
     return response.data;
   },
-  
+
   // Assign labeled images to dataset splits (train/val/test)
   assignImagesToSplits: async (datasetId, splitData) => {
     // Use the dataset splits endpoint
@@ -1194,9 +1200,9 @@ export const checkBackendHealth = async () => {
     await healthCheck();
     return { available: true };
   } catch (error) {
-    return { 
-      available: false, 
-      error: handleAPIError(error) 
+    return {
+      available: false,
+      error: handleAPIError(error)
     };
   }
 };

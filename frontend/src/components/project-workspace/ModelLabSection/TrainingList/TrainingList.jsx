@@ -71,7 +71,7 @@ const TrainingList = ({ trainings, onTrainingSelect }) => {
 TrainingList.propTypes = {
     trainings: PropTypes.arrayOf(
         PropTypes.shape({
-            id: PropTypes.number.isRequired,
+            id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
             name: PropTypes.string.isRequired,
             taskType: PropTypes.string.isRequired,
             status: PropTypes.string.isRequired,

@@ -23,6 +23,8 @@ import uuid
 import asyncio
 import os
 import hashlib
+import yaml
+from core.config import settings
 
 router = APIRouter()
 
@@ -655,3 +657,139 @@ async def get_last_completed_session(
         print(f"Error in get_last_completed_session: {str(e)}")  # Log error to console
         raise HTTPException(status_code=500, detail=str(e))    
     
+@router.get("/projects/{project_id}/training/sessions")
+async def get_project_training_sessions(project_id: int, db: Session = Depends(get_db)):
+    """
+    Get all training sessions for a project.
+    Combines DB records and file system folders.
+    """
+    try:
+        # 1. Get Project
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # 2. Get DB Sessions
+        db_sessions = db.query(TrainingSession).filter(TrainingSession.project_id == project_id).all()
+        sessions_map = {s.name: s for s in db_sessions}
+
+        # 3. Scan File System
+        # Path: projects/{project_name}/model/training/
+        training_dir = settings.PROJECTS_DIR / project.name / "model" / "training"
+        
+        found_sessions = []
+        
+        if training_dir.exists():
+            for item in training_dir.iterdir():
+                if item.is_dir():
+                    session_name = item.name
+                    
+                    # If in DB, use DB record
+                    if session_name in sessions_map:
+                        s = sessions_map[session_name]
+                        
+                        # Parse and normalize metrics
+                        metrics_data = {}
+                        if s.metrics_json:
+                            try:
+                                metrics_data = json.loads(s.metrics_json)
+                            except:
+                                pass
+                        
+                        # Ensure epochs is present
+                        if 'epochs' not in metrics_data:
+                            if 'training' in metrics_data and 'total_epochs' in metrics_data['training']:
+                                metrics_data['epochs'] = metrics_data['training']['total_epochs']
+                            elif 'training' in metrics_data and 'epoch' in metrics_data['training']:
+                                metrics_data['epochs'] = metrics_data['training']['epoch']
+
+                        found_sessions.append({
+                            "id": s.id,
+                            "name": s.name,
+                            "task": s.task,
+                            "status": s.status,
+                            "created_at": s.created_at,
+                            "is_managed": True,
+                            "metrics": json.dumps(metrics_data)
+                        })
+                    else:
+                        # Unmanaged session
+                        # Check for best.pt to guess status
+                        has_weights = (item / "weights" / "best.pt").exists()
+                        status = "completed" if has_weights else "unknown"
+                        
+                        # Try to get task and epochs from args.yaml
+                        task = "unknown"
+                        epochs = 0
+                        args_path = item / "args.yaml"
+                        if args_path.exists():
+                            try:
+                                with open(args_path, 'r') as f:
+                                    args = yaml.safe_load(f)
+                                    task = args.get('task', 'unknown')
+                                    epochs = args.get('epochs', 0)
+                            except:
+                                pass
+                        
+                        # Map YOLO task names to UI names if needed
+                        if task == 'detect':
+                            task = 'detection'
+                        elif task == 'segment':
+                            task = 'segmentation'
+                        
+                        # Try to get creation time from folder
+                        try:
+                            ctime = item.stat().st_ctime
+                            created_at = datetime.fromtimestamp(ctime)
+                        except:
+                            created_at = datetime.utcnow()
+
+                        # Create metrics dict
+                        metrics = {"epochs": epochs}
+
+                        found_sessions.append({
+                            "id": f"unmanaged_{session_name}",
+                            "name": session_name,
+                            "task": task,
+                            "status": status,
+                            "created_at": created_at,
+                            "is_managed": False,
+                            "metrics": json.dumps(metrics)
+                        })
+        
+        # Add any DB sessions that weren't found on disk (e.g. queued but not started, or deleted manually)
+        for s in db_sessions:
+            if not any(fs['name'] == s.name for fs in found_sessions):
+                 # Parse and normalize metrics
+                 metrics_data = {}
+                 if s.metrics_json:
+                     try:
+                         metrics_data = json.loads(s.metrics_json)
+                     except:
+                         pass
+                 
+                 # Ensure epochs is present
+                 if 'epochs' not in metrics_data:
+                     if 'training' in metrics_data and 'total_epochs' in metrics_data['training']:
+                         metrics_data['epochs'] = metrics_data['training']['total_epochs']
+                     elif 'training' in metrics_data and 'epoch' in metrics_data['training']:
+                         metrics_data['epochs'] = metrics_data['training']['epoch']
+
+                 found_sessions.append({
+                    "id": s.id,
+                    "name": s.name,
+                    "task": s.task,
+                    "status": s.status,
+                    "created_at": s.created_at,
+                    "is_managed": True,
+                    "metrics": json.dumps(metrics_data)
+                })
+
+        # Sort by created_at desc
+        found_sessions.sort(key=lambda x: x['created_at'] or datetime.min, reverse=True)
+        
+        return found_sessions
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
