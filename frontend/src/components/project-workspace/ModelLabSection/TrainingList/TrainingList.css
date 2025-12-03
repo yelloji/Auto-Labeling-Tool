@@ -1,0 +1,94 @@
+/* Training List Styles */
+
+.training-list-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Header - DARK TO LIGHT GRADIENT */
+.training-list-header {
+    padding: 20px;
+    border-bottom: 2px solid #e5e7eb;
+    background: linear-gradient(135deg, #667eea 0%, #a78bfa 100%);
+    border-radius: 8px 8px 0 0;
+}
+
+.training-list-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.training-count {
+    font-size: 14px;
+    font-weight: 600;
+    color: #667eea;
+    background: #ffffff;
+    padding: 3px 10px;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* List Body */
+.training-list-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    background: #ffffff;
+    padding-bottom: 32px;
+}
+
+/* Custom Scrollbar */
+.training-list-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.training-list-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.training-list-body::-webkit-scrollbar-thumb {
+    background: #a78bfa;
+    border-radius: 4px;
+}
+
+.training-list-body::-webkit-scrollbar-thumb:hover {
+    background: #722ed1;
+}
+
+/* Empty State */
+.training-list-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    color: #9ca3af;
+    text-align: center;
+    padding: 20px;
+}
+
+.training-list-empty-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.training-list-empty-text {
+    font-size: 16px;
+    font-weight: 500;
+    color: #6b7280;
+    margin-bottom: 8px;
+}
+
+.training-list-empty-subtext {
+    font-size: 14px;
+    color: #9ca3af;
+}

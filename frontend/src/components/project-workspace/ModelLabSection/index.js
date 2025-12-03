@@ -1,9 +1,9 @@
 import { logInfo } from '../../../utils/professional_logger';
 
 // Log module loading
-logInfo('app.frontend.ui', 'visualize_section_module_loaded', 'VisualizeSection module loaded', {
+logInfo('app.frontend.ui', 'model_lab_section_module_loaded', 'ModelLabSection module loaded', {
   timestamp: new Date().toISOString(),
-  components: ['VisualizeSection']
+  components: ['ModelLabSection']
 });
 
-export { default } from './ModelLabSection';
+export { default } from './ModelLabSection.jsx';
