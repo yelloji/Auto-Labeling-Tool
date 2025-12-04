@@ -353,11 +353,42 @@ const OverviewView = ({ training }) => {
                     Visual heatmap showing prediction accuracy. Diagonal cells show correct predictions, off-diagonal shows confusion between classes.
                 </Text>
                 <div className="confusion-matrix-container">
-                    <Tooltip title="Visual representation of prediction accuracy across all classes">
+                    <Tooltip title="Click to view full size">
                         <img
                             src={`/api/v1/projects/${training.projectId}/training/${training.id}/confusion_matrix.png`}
                             alt="Confusion Matrix"
-                            className="confusion-matrix-image"
+                            className="confusion-matrix-image confusion-matrix-thumbnail"
+                            onClick={() => {
+                                // Open image in modal with loading state
+                                const modal = document.createElement('div');
+                                modal.className = 'confusion-matrix-modal';
+                                modal.innerHTML = `
+                                    <div class="confusion-matrix-modal-backdrop">
+                                        <div class="confusion-matrix-modal-content">
+                                            <button class="confusion-matrix-modal-close">✕</button>
+                                            <div class="confusion-matrix-loading">
+                                                <div class="spinner"></div>
+                                                <p>Loading confusion matrix...</p>
+                                            </div>
+                                            <img 
+                                                src="/api/v1/projects/${training.projectId}/training/${training.id}/confusion_matrix.png" 
+                                                alt="Confusion Matrix Full Size" 
+                                                style="display: none;" 
+                                                onload="this.style.display='block'; this.previousElementSibling.style.display='none';"
+                                            />
+                                        </div>
+                                    </div>
+                                `;
+                                document.body.appendChild(modal);
+                                
+                                // Close on click
+                                modal.querySelector('.confusion-matrix-modal-backdrop').addEventListener('click', (e) => {
+                                    if (e.target.classList.contains('confusion-matrix-modal-backdrop') || 
+                                        e.target.classList.contains('confusion-matrix-modal-close')) {
+                                        document.body.removeChild(modal);
+                                    }
+                                });
+                            }}
                             onError={(e) => {
                                 e.target.style.display = 'none';
                                 e.target.nextSibling.style.display = 'block';

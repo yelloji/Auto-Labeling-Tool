@@ -863,3 +863,63 @@ async def delete_training_session(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/projects/{project_id}/training/{training_id}/confusion_matrix.png")
+async def get_confusion_matrix(
+    project_id: int,
+    training_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Serve the confusion matrix PNG file for a specific training session.
+    training_id can be either the database ID or the session name.
+    """
+    from fastapi.responses import FileResponse
+    
+    try:
+        # Get project
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Try to get session name
+        session_name = training_id
+        
+        # If training_id is numeric, it's a database ID - look up the name
+        if training_id.isdigit():
+            session = db.query(TrainingSession).filter(
+                TrainingSession.id == int(training_id),
+                TrainingSession.project_id == project_id
+            ).first()
+            if session:
+                session_name = session.name
+            else:
+                # If not in DB, training_id might be the folder name directly
+                session_name = training_id
+        
+        # Build path to confusion matrix
+        confusion_matrix_path = (
+            settings.PROJECTS_DIR / 
+            project.name / 
+            "model" / 
+            "training" / 
+            session_name / 
+            "confusion_matrix.png"
+        )
+        
+        # Check if file exists
+        if not confusion_matrix_path.exists():
+            raise HTTPException(status_code=404, detail="Confusion matrix not found")
+        
+        # Return the PNG file
+        return FileResponse(
+            path=str(confusion_matrix_path),
+            media_type="image/png",
+            filename="confusion_matrix.png"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
