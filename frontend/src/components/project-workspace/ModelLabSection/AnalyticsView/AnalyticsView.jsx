@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Card, Typography, Spin } from 'antd';
+import { Card, Typography, Spin, Checkbox } from 'antd';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import './AnalyticsView.css';
 
@@ -17,6 +17,33 @@ const AnalyticsView = ({ training }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [expanded, setExpanded] = useState(false);
+
+    // State for line visibility (only used in expanded view)
+    const [visibleLines, setVisibleLines] = useState({
+        train_box: true,
+        train_seg: true,
+        train_cls: true,
+        val_box: true,
+        val_seg: true,
+        val_cls: true,
+        box_map50: true,
+        box_map50_95: true,
+        box_precision: true,
+        box_recall: true,
+        mask_map50: true,
+        mask_map50_95: true,
+        mask_precision: true,
+        mask_recall: true,
+        train_avg: true,
+        val_avg: true
+    });
+
+    const toggleLine = (lineKey) => {
+        setVisibleLines(prev => ({
+            ...prev,
+            [lineKey]: !prev[lineKey]
+        }));
+    };
 
     useEffect(() => {
         if (!training) return;
@@ -100,16 +127,30 @@ const AnalyticsView = ({ training }) => {
                 {/* Chart 1: Training Loss */}
                 <div className={`chart-wrapper ${size}`}>
                     <Text strong className="chart-title">Training Loss</Text>
+                    {size === 'large' && (
+                        <div className="chart-filters">
+                            <Checkbox checked={visibleLines.train_box} onChange={() => toggleLine('train_box')}>
+                                <span style={{ color: '#3b82f6', fontSize: '16px', fontWeight: 'bold' }}>●</span> Box Loss
+                            </Checkbox>
+                            {is_segmentation && (
+                                <Checkbox checked={visibleLines.train_seg} onChange={() => toggleLine('train_seg')}>
+                                    <span style={{ color: '#8b5cf6', fontSize: '16px', fontWeight: 'bold' }}>●</span> Seg Loss
+                                </Checkbox>
+                            )}
+                            <Checkbox checked={visibleLines.train_cls} onChange={() => toggleLine('train_cls')}>
+                                <span style={{ color: '#ef4444', fontSize: '16px', fontWeight: 'bold' }}>●</span> Cls Loss
+                            </Checkbox>
+                        </div>
+                    )}
                     <ResponsiveContainer width="100%" height={chartHeight}>
                         <LineChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="epoch" tick={{ fontSize }} />
-                            <YAxis tick={{ fontSize }} />
+                            <XAxis dataKey="epoch" tick={{ fontSize }} label={{ value: 'Epochs', position: 'insideBottom', offset: 0 }} />
+                            <YAxis tick={{ fontSize }} label={{ value: 'Loss', angle: -90, position: 'insideLeft' }} />
                             <Tooltip />
-                            {size === 'large' && <Legend />}
-                            <Line type="monotone" dataKey="train_box" stroke="#3b82f6" name="Box Loss" strokeWidth={2} />
-                            {is_segmentation && <Line type="monotone" dataKey="train_seg" stroke="#8b5cf6" name="Seg Loss" strokeWidth={2} />}
-                            <Line type="monotone" dataKey="train_cls" stroke="#ef4444" name="Cls Loss" strokeWidth={2} />
+                            {visibleLines.train_box && <Line type="monotone" dataKey="train_box" stroke="#3b82f6" name="Box Loss" strokeWidth={2} />}
+                            {is_segmentation && visibleLines.train_seg && <Line type="monotone" dataKey="train_seg" stroke="#8b5cf6" name="Seg Loss" strokeWidth={2} />}
+                            {visibleLines.train_cls && <Line type="monotone" dataKey="train_cls" stroke="#ef4444" name="Cls Loss" strokeWidth={2} />}
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
@@ -117,68 +158,143 @@ const AnalyticsView = ({ training }) => {
                 {/* Chart 2: Validation Loss */}
                 <div className={`chart-wrapper ${size}`}>
                     <Text strong className="chart-title">Validation Loss</Text>
+                    {size === 'large' && (
+                        <div className="chart-filters">
+                            <Checkbox checked={visibleLines.val_box} onChange={() => toggleLine('val_box')}>
+                                <span style={{ color: '#3b82f6', fontSize: '16px', fontWeight: 'bold' }}>●</span> Box Loss
+                            </Checkbox>
+                            {is_segmentation && (
+                                <Checkbox checked={visibleLines.val_seg} onChange={() => toggleLine('val_seg')}>
+                                    <span style={{ color: '#8b5cf6', fontSize: '16px', fontWeight: 'bold' }}>●</span> Seg Loss
+                                </Checkbox>
+                            )}
+                            <Checkbox checked={visibleLines.val_cls} onChange={() => toggleLine('val_cls')}>
+                                <span style={{ color: '#ef4444', fontSize: '16px', fontWeight: 'bold' }}>●</span> Cls Loss
+                            </Checkbox>
+                        </div>
+                    )}
                     <ResponsiveContainer width="100%" height={chartHeight}>
                         <LineChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="epoch" tick={{ fontSize }} />
-                            <YAxis tick={{ fontSize }} />
+                            <XAxis dataKey="epoch" tick={{ fontSize }} label={{ value: 'Epochs', position: 'insideBottom', offset: 0 }} />
+                            <YAxis tick={{ fontSize }} label={{ value: 'Loss', angle: -90, position: 'insideLeft' }} />
                             <Tooltip />
-                            {size === 'large' && <Legend />}
-                            <Line type="monotone" dataKey="val_box" stroke="#3b82f6" name="Box Loss" strokeWidth={2} />
-                            {is_segmentation && <Line type="monotone" dataKey="val_seg" stroke="#8b5cf6" name="Seg Loss" strokeWidth={2} />}
-                            <Line type="monotone" dataKey="val_cls" stroke="#ef4444" name="Cls Loss" strokeWidth={2} />
+                            {visibleLines.val_box && <Line type="monotone" dataKey="val_box" stroke="#3b82f6" name="Box Loss" strokeWidth={2} />}
+                            {is_segmentation && visibleLines.val_seg && <Line type="monotone" dataKey="val_seg" stroke="#8b5cf6" name="Seg Loss" strokeWidth={2} />}
+                            {visibleLines.val_cls && <Line type="monotone" dataKey="val_cls" stroke="#ef4444" name="Cls Loss" strokeWidth={2} />}
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
 
-                {/* Chart 3: Box/mAP Metrics */}
+                {/* Chart 3: Precision & Recall (Segmentation) OR mAP only (Detection) */}
                 <div className={`chart-wrapper ${size}`}>
-                    <Text strong className="chart-title">{is_segmentation ? 'Box Metrics' : 'Accuracy (mAP)'}</Text>
+                    <Text strong className="chart-title">{is_segmentation ? 'Precision & Recall Comparison' : 'Accuracy (mAP)'}</Text>
+                    {size === 'large' && (
+                        <div className="chart-filters">
+                            {is_segmentation ? (
+                                <>
+                                    <Checkbox checked={visibleLines.box_precision} onChange={() => toggleLine('box_precision')}>
+                                        <span style={{ color: '#f59e0b', fontSize: '16px', fontWeight: 'bold' }}>●</span> Box Precision
+                                    </Checkbox>
+                                    <Checkbox checked={visibleLines.box_recall} onChange={() => toggleLine('box_recall')}>
+                                        <span style={{ color: '#ec4899', fontSize: '16px', fontWeight: 'bold' }}>●</span> Box Recall
+                                    </Checkbox>
+                                    <Checkbox checked={visibleLines.mask_precision} onChange={() => toggleLine('mask_precision')}>
+                                        <span style={{ color: '#10b981', fontSize: '16px', fontWeight: 'bold' }}>●</span> Mask Precision
+                                    </Checkbox>
+                                    <Checkbox checked={visibleLines.mask_recall} onChange={() => toggleLine('mask_recall')}>
+                                        <span style={{ color: '#06b6d4', fontSize: '16px', fontWeight: 'bold' }}>●</span> Mask Recall
+                                    </Checkbox>
+                                </>
+                            ) : (
+                                <>
+                                    <Checkbox checked={visibleLines.box_map50} onChange={() => toggleLine('box_map50')}>
+                                        <span style={{ color: '#10b981', fontSize: '16px', fontWeight: 'bold' }}>●</span> mAP@50
+                                    </Checkbox>
+                                    <Checkbox checked={visibleLines.box_map50_95} onChange={() => toggleLine('box_map50_95')}>
+                                        <span style={{ color: '#06b6d4', fontSize: '16px', fontWeight: 'bold' }}>●</span> mAP@50-95
+                                    </Checkbox>
+                                </>
+                            )}
+                        </div>
+                    )}
                     <ResponsiveContainer width="100%" height={chartHeight}>
                         <LineChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="epoch" tick={{ fontSize }} />
-                            <YAxis tick={{ fontSize }} />
+                            <XAxis dataKey="epoch" tick={{ fontSize }} label={{ value: 'Epochs', position: 'insideBottom', offset: 0 }} />
+                            <YAxis tick={{ fontSize }} label={{ value: 'Score', angle: -90, position: 'insideLeft' }} />
                             <Tooltip />
-                            {size === 'large' && <Legend />}
-                            <Line type="monotone" dataKey="box_map50" stroke="#10b981" name="mAP@50" strokeWidth={2} />
-                            <Line type="monotone" dataKey="box_map50_95" stroke="#06b6d4" name="mAP@50-95" strokeWidth={2} />
-                            <Line type="monotone" dataKey="box_precision" stroke="#f59e0b" name="Precision" strokeWidth={2} />
-                            <Line type="monotone" dataKey="box_recall" stroke="#ec4899" name="Recall" strokeWidth={2} />
+                            {is_segmentation ? (
+                                <>
+                                    {visibleLines.box_precision && <Line type="monotone" dataKey="box_precision" stroke="#f59e0b" name="Box Precision" strokeWidth={2} />}
+                                    {visibleLines.box_recall && <Line type="monotone" dataKey="box_recall" stroke="#ec4899" name="Box Recall" strokeWidth={2} />}
+                                    {visibleLines.mask_precision && <Line type="monotone" dataKey="mask_precision" stroke="#10b981" name="Mask Precision" strokeWidth={2} />}
+                                    {visibleLines.mask_recall && <Line type="monotone" dataKey="mask_recall" stroke="#06b6d4" name="Mask Recall" strokeWidth={2} />}
+                                </>
+                            ) : (
+                                <>
+                                    {visibleLines.box_map50 && <Line type="monotone" dataKey="box_map50" stroke="#10b981" name="mAP@50" strokeWidth={2} />}
+                                    {visibleLines.box_map50_95 && <Line type="monotone" dataKey="box_map50_95" stroke="#06b6d4" name="mAP@50-95" strokeWidth={2} />}
+                                </>
+                            )}
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
 
-                {/* Chart 4: Precision/Recall or Mask Metrics */}
+                {/* Chart 4: mAP Comparison */}
                 {is_segmentation ? (
                     <div className={`chart-wrapper ${size}`}>
-                        <Text strong className="chart-title">Mask Metrics</Text>
+                        <Text strong className="chart-title">mAP Comparison</Text>
+                        {size === 'large' && (
+                            <div className="chart-filters">
+                                <Checkbox checked={visibleLines.box_map50} onChange={() => toggleLine('box_map50')}>
+                                    <span style={{ color: '#10b981', fontSize: '16px', fontWeight: 'bold' }}>●</span> Box mAP@50
+                                </Checkbox>
+                                <Checkbox checked={visibleLines.box_map50_95} onChange={() => toggleLine('box_map50_95')}>
+                                    <span style={{ color: '#06b6d4', fontSize: '16px', fontWeight: 'bold' }}>●</span> Box mAP@50-95
+                                </Checkbox>
+                                <Checkbox checked={visibleLines.mask_map50} onChange={() => toggleLine('mask_map50')}>
+                                    <span style={{ color: '#f59e0b', fontSize: '16px', fontWeight: 'bold' }}>●</span> Mask mAP@50
+                                </Checkbox>
+                                <Checkbox checked={visibleLines.mask_map50_95} onChange={() => toggleLine('mask_map50_95')}>
+                                    <span style={{ color: '#ec4899', fontSize: '16px', fontWeight: 'bold' }}>●</span> Mask mAP@50-95
+                                </Checkbox>
+                            </div>
+                        )}
                         <ResponsiveContainer width="100%" height={chartHeight}>
                             <LineChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="epoch" tick={{ fontSize }} />
-                                <YAxis tick={{ fontSize }} />
+                                <XAxis dataKey="epoch" tick={{ fontSize }} label={{ value: 'Epochs', position: 'insideBottom', offset: 0 }} />
+                                <YAxis tick={{ fontSize }} label={{ value: 'Score', angle: -90, position: 'insideLeft' }} />
                                 <Tooltip />
-                                {size === 'large' && <Legend />}
-                                <Line type="monotone" dataKey="mask_map50" stroke="#10b981" name="mAP@50" strokeWidth={2} />
-                                <Line type="monotone" dataKey="mask_map50_95" stroke="#06b6d4" name="mAP@50-95" strokeWidth={2} />
-                                <Line type="monotone" dataKey="mask_precision" stroke="#f59e0b" name="Precision" strokeWidth={2} />
-                                <Line type="monotone" dataKey="mask_recall" stroke="#ec4899" name="Recall" strokeWidth={2} />
+                                {visibleLines.box_map50 && <Line type="monotone" dataKey="box_map50" stroke="#10b981" name="Box mAP@50" strokeWidth={2} />}
+                                {visibleLines.box_map50_95 && <Line type="monotone" dataKey="box_map50_95" stroke="#06b6d4" name="Box mAP@50-95" strokeWidth={2} />}
+                                {visibleLines.mask_map50 && <Line type="monotone" dataKey="mask_map50" stroke="#f59e0b" name="Mask mAP@50" strokeWidth={2} />}
+                                {visibleLines.mask_map50_95 && <Line type="monotone" dataKey="mask_map50_95" stroke="#ec4899" name="Mask mAP@50-95" strokeWidth={2} />}
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
                 ) : (
                     <div className={`chart-wrapper ${size}`}>
                         <Text strong className="chart-title">Precision & Recall</Text>
+                        {size === 'large' && (
+                            <div className="chart-filters">
+                                <Checkbox checked={visibleLines.box_precision} onChange={() => toggleLine('box_precision')}>
+                                    <span style={{ color: '#f59e0b', fontSize: '16px', fontWeight: 'bold' }}>●</span> Precision
+                                </Checkbox>
+                                <Checkbox checked={visibleLines.box_recall} onChange={() => toggleLine('box_recall')}>
+                                    <span style={{ color: '#ec4899', fontSize: '16px', fontWeight: 'bold' }}>●</span> Recall
+                                </Checkbox>
+                            </div>
+                        )}
                         <ResponsiveContainer width="100%" height={chartHeight}>
                             <LineChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="epoch" tick={{ fontSize }} />
-                                <YAxis tick={{ fontSize }} />
+                                <XAxis dataKey="epoch" tick={{ fontSize }} label={{ value: 'Epochs', position: 'insideBottom', offset: 0 }} />
+                            <YAxis tick={{ fontSize }} label={{ value: 'Score', angle: -90, position: 'insideLeft' }} />
                                 <Tooltip />
-                                {size === 'large' && <Legend />}
-                                <Line type="monotone" dataKey="box_precision" stroke="#f59e0b" name="Precision" strokeWidth={2} />
-                                <Line type="monotone" dataKey="box_recall" stroke="#ec4899" name="Recall" strokeWidth={2} />
+                                {visibleLines.box_precision && <Line type="monotone" dataKey="box_precision" stroke="#f59e0b" name="Precision" strokeWidth={2} />}
+                                {visibleLines.box_recall && <Line type="monotone" dataKey="box_recall" stroke="#ec4899" name="Recall" strokeWidth={2} />}
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
@@ -187,15 +303,24 @@ const AnalyticsView = ({ training }) => {
                 {/* Chart 5: Overfitting Check */}
                 <div className={`chart-wrapper ${size} full-width`}>
                     <Text strong className="chart-title">Overfitting Check</Text>
+                    {size === 'large' && (
+                        <div className="chart-filters">
+                            <Checkbox checked={visibleLines.train_avg} onChange={() => toggleLine('train_avg')}>
+                                <span style={{ color: '#3b82f6', fontSize: '16px', fontWeight: 'bold' }}>●</span> Avg Train Loss
+                            </Checkbox>
+                            <Checkbox checked={visibleLines.val_avg} onChange={() => toggleLine('val_avg')}>
+                                <span style={{ color: '#ef4444', fontSize: '16px', fontWeight: 'bold' }}>●</span> Avg Val Loss
+                            </Checkbox>
+                        </div>
+                    )}
                     <ResponsiveContainer width="100%" height={chartHeight}>
                         <LineChart data={overfitData}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="epoch" tick={{ fontSize }} />
-                            <YAxis tick={{ fontSize }} />
+                            <XAxis dataKey="epoch" tick={{ fontSize }} label={{ value: 'Epochs', position: 'insideBottom', offset: 0 }} />
+                            <YAxis tick={{ fontSize }} label={{ value: 'Average Loss', angle: -90, position: 'insideLeft' }} />
                             <Tooltip />
-                            {size === 'large' && <Legend />}
-                            <Line type="monotone" dataKey="train_avg" stroke="#3b82f6" name="Avg Train Loss" strokeWidth={2} />
-                            <Line type="monotone" dataKey="val_avg" stroke="#ef4444" name="Avg Val Loss" strokeWidth={2} />
+                            {visibleLines.train_avg && <Line type="monotone" dataKey="train_avg" stroke="#3b82f6" name="Avg Train Loss" strokeWidth={2} />}
+                            {visibleLines.val_avg && <Line type="monotone" dataKey="val_avg" stroke="#ef4444" name="Avg Val Loss" strokeWidth={2} />}
                         </LineChart>
                     </ResponsiveContainer>
                 </div>

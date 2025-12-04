@@ -25,10 +25,13 @@
     position: relative;
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    grid-auto-rows: minmax(90px, auto);  /* Changed from 120px to 90px */
-    gap: 2px;                             /* Changed from 4px to 2px */
+    grid-auto-rows: minmax(90px, auto);
+    /* Changed from 120px to 90px */
+    gap: 2px;
+    /* Changed from 4px to 2px */
     background: white;
-    padding: 4px;                         /* Changed from 8px to 4px */
+    padding: 4px;
+    /* Changed from 8px to 4px */
     border-radius: 8px;
     border: 1px solid #e5e7eb;
     cursor: pointer;
@@ -74,11 +77,13 @@
 }
 
 .chart-wrapper.small {
-    height: 90px;  /* Compact view - small charts */
+    height: 90px;
+    /* Compact view - small charts */
 }
 
 .chart-wrapper.large {
-    height: 450px;  /* Expanded view - tall enough for 400px chart + legend + axes */
+    height: 500px;
+    /* Increased from 450px to accommodate filters */
 }
 
 .chart-wrapper.full-width {
@@ -93,16 +98,30 @@
 }
 
 .chart-wrapper.large {
-    min-height: 350px; /* Make expanded charts taller */
+    min-height: 350px;
+    /* Make expanded charts taller */
 }
 
 .chart-wrapper.small {
-    max-height: 120px;    /* Makes each chart small */
+    max-height: 120px;
+    /* Makes each chart small */
 }
 
 .chart-wrapper.large .chart-title {
     font-size: 14px;
     margin-bottom: 8px;
+}
+
+/* Chart Filters */
+.chart-filters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.chart-filters .ant-checkbox-wrapper {
+    font-size: 12px;
 }
 
 /* Modal */
@@ -130,8 +149,10 @@
 
 .analytics-modal-content {
     position: relative;
-    width: 90vw;  /* Use 90% of screen width */
-    height: 90vh; /* Use 90% of screen height */
+    width: 90vw;
+    /* Use 90% of screen width */
+    height: 90vh;
+    /* Use 90% of screen height */
     background: white;
     border-radius: 8px;
     padding: 30px;
