@@ -1,5 +1,5 @@
 .overview-container {
-    padding: 24px;
+    padding: 8px 12px;
     height: 100%;
     overflow-y: auto;
 }
@@ -17,14 +17,14 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 24px;
-    padding-bottom: 16px;
-    border-bottom: 2px solid #e5e7eb;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e5e7eb;
 }
 
 /* Quick Stats */
 .quick-stats {
-    margin-bottom: 32px;
+    margin-bottom: 16px;
 }
 
 .quick-stats h4 {
@@ -32,48 +32,93 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
 }
 
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
+    gap: 8px;
 }
 
 .stat-card {
     text-align: center;
-    border-radius: 8px;
-    border: 1px solid #e5e7eb;
     transition: all 0.2s;
+    background: transparent;
+    border: none;
 }
 
-.stat-card:hover {
-    border-color: #3b82f6;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-    transform: translateY(-2px);
+.stat-card .ant-card-body {
+    padding: 0 !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.stat-card:hover .stat-icon-circle {
+    transform: scale(1.1);
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+}
+
+.stat-icon-circle {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+    transition: all 0.3s ease;
+}
+
+.stat-icon-circle::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    padding: 2px;
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.6;
+}
+
+.stat-card:hover .stat-icon-circle {
+    transform: translateY(-4px);
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(139, 92, 246, 0.12) 100%);
+}
+
+.stat-card:hover .stat-icon-circle::before {
+    opacity: 1;
 }
 
 .stat-icon {
-    font-size: 32px;
-    margin-bottom: 8px;
+    font-size: 28px;
+    margin-bottom: 0;
 }
 
 .stat-value {
-    font-size: 28px;
+    font-size: 18px;
     font-weight: bold;
     color: #1f2937;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .stat-label {
-    font-size: 14px;
+    font-size: 11px;
     color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 /* Validation Results */
 .validation-results {
-    margin-bottom: 32px;
+    margin-bottom: 16px;
 }
 
 .validation-results h4 {
@@ -81,13 +126,13 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
 }
 
 .metrics-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 16px;
+    gap: 12px;
 }
 
 .metrics-card {
@@ -119,7 +164,7 @@
 
 /* Class-wise Results */
 .classwise-results {
-    margin-bottom: 32px;
+    margin-bottom: 16px;
 }
 
 .classwise-results h4 {
@@ -127,7 +172,7 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
 }
 
 .classwise-results .ant-table {
@@ -143,7 +188,7 @@
 
 /* Confusion Matrix */
 .confusion-matrix-section {
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 }
 
 .confusion-matrix-section h4 {
@@ -151,12 +196,12 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
 }
 
 .confusion-matrix-container {
     background: white;
-    padding: 16px;
+    padding: 12px;
     border-radius: 8px;
     border: 1px solid #e5e7eb;
     display: flex;

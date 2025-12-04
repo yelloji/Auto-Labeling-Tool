@@ -1,6 +1,6 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Card, Typography, Table, Tag } from 'antd';
+import { Card, Typography, Table, Tag, Tooltip } from 'antd';
 import './OverviewView.css';
 
 const { Title, Text } = Typography;
@@ -51,7 +51,7 @@ const OverviewView = ({ training }) => {
         { label: 'Instances', value: validation.instances || 0, icon: '🎯' },
         { label: 'Images', value: validation.images || 0, icon: '🖼️' },
         { label: 'Epochs', value: training.epochs || trainingMetrics.total_epochs || 0, icon: '🔄' },
-        { label: 'Classes', value: classes.length || 0, icon: '📂' }
+        { label: 'Classes', value: classes.length || 0, icon: '🏷️' }
     ];
 
     // Helper to format percentage
@@ -67,7 +67,11 @@ const OverviewView = ({ training }) => {
     // Class-wise table columns
     const classColumns = [
         {
-            title: 'Class',
+            title: () => (
+                <Tooltip title="Object class name">
+                    <span>Class</span>
+                </Tooltip>
+            ),
             dataIndex: 'class',
             key: 'class',
             fixed: 'left',
@@ -76,31 +80,51 @@ const OverviewView = ({ training }) => {
         },
         // Box Metrics
         {
-            title: 'Box Precision',
+            title: () => (
+                <Tooltip title="Precision measures how many predicted boxes are correct for this class">
+                    <span>Box Precision</span>
+                </Tooltip>
+            ),
             dataIndex: 'box_p',
             key: 'box_p',
             render: (val) => toPercent(val)
         },
         {
-            title: 'Box Recall',
+            title: () => (
+                <Tooltip title="Recall measures how many actual objects of this class were detected">
+                    <span>Box Recall</span>
+                </Tooltip>
+            ),
             dataIndex: 'box_r',
             key: 'box_r',
             render: (val) => toPercent(val)
         },
         {
-            title: 'Box F1',
+            title: () => (
+                <Tooltip title="F1-Score is the harmonic mean of Precision and Recall for this class">
+                    <span>Box F1</span>
+                </Tooltip>
+            ),
             dataIndex: 'box_f1',
             key: 'box_f1',
             render: (val) => toPercent(val)
         },
         {
-            title: 'Box mAP@50',
+            title: () => (
+                <Tooltip title="Mean Average Precision for boxes at 50% IoU threshold for this class">
+                    <span>Box mAP@50</span>
+                </Tooltip>
+            ),
             dataIndex: 'box_map50',
             key: 'box_map50',
             render: (val) => val?.toFixed(3) || 'N/A'
         },
         {
-            title: 'Box mAP@50-95',
+            title: () => (
+                <Tooltip title="Mean Average Precision for boxes averaged across IoU thresholds 50% to 95% for this class">
+                    <span>Box mAP@50-95</span>
+                </Tooltip>
+            ),
             dataIndex: 'box_map50_95',
             key: 'box_map50_95',
             render: (val) => val?.toFixed(3) || 'N/A'
@@ -111,31 +135,51 @@ const OverviewView = ({ training }) => {
     if (isSeg) {
         classColumns.push(
             {
-                title: 'Mask Precision',
+                title: () => (
+                    <Tooltip title="Precision measures how many predicted masks are correct for this class">
+                        <span>Mask Precision</span>
+                    </Tooltip>
+                ),
                 dataIndex: 'mask_p',
                 key: 'mask_p',
                 render: (val) => toPercent(val)
             },
             {
-                title: 'Mask Recall',
+                title: () => (
+                    <Tooltip title="Recall measures how many actual masks of this class were detected">
+                        <span>Mask Recall</span>
+                    </Tooltip>
+                ),
                 dataIndex: 'mask_r',
                 key: 'mask_r',
                 render: (val) => toPercent(val)
             },
             {
-                title: 'Mask F1',
+                title: () => (
+                    <Tooltip title="F1-Score is the harmonic mean of Precision and Recall for masks of this class">
+                        <span>Mask F1</span>
+                    </Tooltip>
+                ),
                 dataIndex: 'mask_f1',
                 key: 'mask_f1',
                 render: (val) => toPercent(val)
             },
             {
-                title: 'Mask mAP@50',
+                title: () => (
+                    <Tooltip title="Mean Average Precision for masks at 50% IoU threshold for this class">
+                        <span>Mask mAP@50</span>
+                    </Tooltip>
+                ),
                 dataIndex: 'mask_map50',
                 key: 'mask_map50',
                 render: (val) => val?.toFixed(3) || 'N/A'
             },
             {
-                title: 'Mask mAP@50-95',
+                title: () => (
+                    <Tooltip title="Mean Average Precision for masks averaged across IoU thresholds 50% to 95% for this class">
+                        <span>Mask mAP@50-95</span>
+                    </Tooltip>
+                ),
                 dataIndex: 'mask_map50_95',
                 key: 'mask_map50_95',
                 render: (val) => val?.toFixed(3) || 'N/A'
@@ -156,7 +200,7 @@ const OverviewView = ({ training }) => {
             {/* Header */}
             <div className="overview-header">
                 <div>
-                    <Title level={3} style={{ margin: 0 }}>{training.name}</Title>
+                    <Title level={4} style={{ margin: 0, marginBottom: 4 }}>{training.name}</Title>
                     <Text type="secondary">
                         {training.taskType === 'detection' ? 'Object Detection' : 'Instance Segmentation'} •
                         Created {new Date(training.date).toLocaleDateString()}
@@ -170,68 +214,117 @@ const OverviewView = ({ training }) => {
             {/* Quick Stats */}
             <div className="quick-stats">
                 <Title level={4}>Quick Stats</Title>
+                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+                    Key overview numbers from your training and validation datasets
+                </Text>
                 <div className="stats-grid">
-                    {quickStats.map((stat, idx) => (
-                        <Card key={idx} className="stat-card">
-                            <div className="stat-icon">{stat.icon}</div>
-                            <div className="stat-value">{stat.value}</div>
-                            <div className="stat-label">{stat.label}</div>
-                        </Card>
-                    ))}
+                    {quickStats.map((stat, idx) => {
+                        let tooltipText = '';
+                        switch (stat.label) {
+                            case 'Instances':
+                                tooltipText = 'Total number of object instances in validation dataset';
+                                break;
+                            case 'Images':
+                                tooltipText = 'Total number of images in validation dataset';
+                                break;
+                            case 'Epochs':
+                                tooltipText = 'Total number of training epochs completed';
+                                break;
+                            case 'Classes':
+                                tooltipText = 'Total number of object classes in training dataset';
+                                break;
+                            default:
+                                tooltipText = `Total number of ${stat.label.toLowerCase()}`;
+                        }
+                        return (
+                            <Tooltip key={idx} title={tooltipText} placement="top">
+                                <Card className="stat-card">
+                                    <div className="stat-icon-circle">
+                                        <div className="stat-icon">{stat.icon}</div>
+                                    </div>
+                                    <div className="stat-value">{stat.value}</div>
+                                    <div className="stat-label">{stat.label}</div>
+                                </Card>
+                            </Tooltip>
+                        );
+                    })}
                 </div>
             </div>
 
             {/* Validation Results */}
             <div className="validation-results">
                 <Title level={4}>Final Validation Metrics</Title>
+                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+                    Performance scores showing how well your model detects objects. Higher values (closer to 100%) indicate better accuracy.
+                </Text>
                 <div className="metrics-grid">
                     {/* Box Detection Metrics */}
                     <Card title="Box Detection" className="metrics-card">
-                        <div className="metric-row">
-                            <Text>Precision:</Text>
-                            <Text strong>{toPercent(validation.box_p)}</Text>
-                        </div>
-                        <div className="metric-row">
-                            <Text>Recall:</Text>
-                            <Text strong>{toPercent(validation.box_r)}</Text>
-                        </div>
-                        <div className="metric-row">
-                            <Text>F1-Score:</Text>
-                            <Text strong>{toPercent(boxF1)}</Text>
-                        </div>
-                        <div className="metric-row">
-                            <Text>mAP@50:</Text>
-                            <Text strong>{validation.box_map50?.toFixed(3) || 'N/A'}</Text>
-                        </div>
-                        <div className="metric-row">
-                            <Text>mAP@50-95:</Text>
-                            <Text strong>{validation.box_map50_95?.toFixed(3) || 'N/A'}</Text>
-                        </div>
+                        <Tooltip title="Precision measures how many predicted boxes are correct">
+                            <div className="metric-row">
+                                <Text>Precision:</Text>
+                                <Text strong>{toPercent(validation.box_p)}</Text>
+                            </div>
+                        </Tooltip>
+                        <Tooltip title="Recall measures how many actual objects were detected">
+                            <div className="metric-row">
+                                <Text>Recall:</Text>
+                                <Text strong>{toPercent(validation.box_r)}</Text>
+                            </div>
+                        </Tooltip>
+                        <Tooltip title="F1-Score is the harmonic mean of Precision and Recall">
+                            <div className="metric-row">
+                                <Text>F1-Score:</Text>
+                                <Text strong>{toPercent(boxF1)}</Text>
+                            </div>
+                        </Tooltip>
+                        <Tooltip title="Mean Average Precision at 50% IoU threshold">
+                            <div className="metric-row">
+                                <Text>mAP@50:</Text>
+                                <Text strong>{validation.box_map50?.toFixed(3) || 'N/A'}</Text>
+                            </div>
+                        </Tooltip>
+                        <Tooltip title="Mean Average Precision averaged across IoU thresholds 50% to 95%">
+                            <div className="metric-row">
+                                <Text>mAP@50-95:</Text>
+                                <Text strong>{validation.box_map50_95?.toFixed(3) || 'N/A'}</Text>
+                            </div>
+                        </Tooltip>
                     </Card>
 
                     {/* Mask Segmentation Metrics (if applicable) */}
                     {training.taskType === 'segmentation' && validation.mask_p !== undefined && (
                         <Card title="Mask Segmentation" className="metrics-card">
-                            <div className="metric-row">
-                                <Text>Precision:</Text>
-                                <Text strong>{toPercent(validation.mask_p)}</Text>
-                            </div>
-                            <div className="metric-row">
-                                <Text>Recall:</Text>
-                                <Text strong>{toPercent(validation.mask_r)}</Text>
-                            </div>
-                            <div className="metric-row">
-                                <Text>F1-Score:</Text>
-                                <Text strong>{toPercent(maskF1)}</Text>
-                            </div>
-                            <div className="metric-row">
-                                <Text>mAP@50:</Text>
-                                <Text strong>{validation.mask_map50?.toFixed(3) || 'N/A'}</Text>
-                            </div>
-                            <div className="metric-row">
-                                <Text>mAP@50-95:</Text>
-                                <Text strong>{validation.mask_map50_95?.toFixed(3) || 'N/A'}</Text>
-                            </div>
+                            <Tooltip title="Precision measures how many predicted masks are correct">
+                                <div className="metric-row">
+                                    <Text>Precision:</Text>
+                                    <Text strong>{toPercent(validation.mask_p)}</Text>
+                                </div>
+                            </Tooltip>
+                            <Tooltip title="Recall measures how many actual masks were detected">
+                                <div className="metric-row">
+                                    <Text>Recall:</Text>
+                                    <Text strong>{toPercent(validation.mask_r)}</Text>
+                                </div>
+                            </Tooltip>
+                            <Tooltip title="F1-Score is the harmonic mean of Precision and Recall for masks">
+                                <div className="metric-row">
+                                    <Text>F1-Score:</Text>
+                                    <Text strong>{toPercent(maskF1)}</Text>
+                                </div>
+                            </Tooltip>
+                            <Tooltip title="Mean Average Precision for masks at 50% IoU threshold">
+                                <div className="metric-row">
+                                    <Text>mAP@50:</Text>
+                                    <Text strong>{validation.mask_map50?.toFixed(3) || 'N/A'}</Text>
+                                </div>
+                            </Tooltip>
+                            <Tooltip title="Mean Average Precision for masks averaged across IoU thresholds 50% to 95%">
+                                <div className="metric-row">
+                                    <Text>mAP@50-95:</Text>
+                                    <Text strong>{validation.mask_map50_95?.toFixed(3) || 'N/A'}</Text>
+                                </div>
+                            </Tooltip>
                         </Card>
                     )}
                 </div>
@@ -241,6 +334,9 @@ const OverviewView = ({ training }) => {
             {classData.length > 0 && (
                 <div className="classwise-results">
                     <Title level={4}>Class-wise Performance</Title>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+                        Detailed performance breakdown for each object class. Shows how well your model identifies specific types of objects.
+                    </Text>
                     <Table
                         dataSource={classData}
                         columns={classColumns}
@@ -253,16 +349,21 @@ const OverviewView = ({ training }) => {
             {/* Confusion Matrix */}
             <div className="confusion-matrix-section">
                 <Title level={4}>Confusion Matrix</Title>
+                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+                    Visual heatmap showing prediction accuracy. Diagonal cells show correct predictions, off-diagonal shows confusion between classes.
+                </Text>
                 <div className="confusion-matrix-container">
-                    <img
-                        src={`/api/v1/projects/${training.projectId}/training/${training.id}/confusion_matrix.png`}
-                        alt="Confusion Matrix"
-                        className="confusion-matrix-image"
-                        onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.nextSibling.style.display = 'block';
-                        }}
-                    />
+                    <Tooltip title="Visual representation of prediction accuracy across all classes">
+                        <img
+                            src={`/api/v1/projects/${training.projectId}/training/${training.id}/confusion_matrix.png`}
+                            alt="Confusion Matrix"
+                            className="confusion-matrix-image"
+                            onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'block';
+                            }}
+                        />
+                    </Tooltip>
                     <div className="confusion-matrix-placeholder" style={{ display: 'none' }}>
                         <Text type="secondary">Confusion matrix not available</Text>
                     </div>
