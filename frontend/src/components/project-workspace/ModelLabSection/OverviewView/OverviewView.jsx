@@ -1,6 +1,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import { Card, Typography, Table, Tag, Tooltip } from 'antd';
+import AnalyticsView from '../AnalyticsView/AnalyticsView';
 import './OverviewView.css';
 
 const { Title, Text } = Typography;
@@ -400,6 +401,8 @@ const OverviewView = ({ training }) => {
                     </div>
                 </div>
             </div>
+            {/* Analytics Section */}
+            <AnalyticsView training={training} />
         </div>
     );
 };

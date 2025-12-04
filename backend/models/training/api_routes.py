@@ -795,6 +795,7 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.delete("/projects/{project_id}/training/sessions/{session_id}")
 async def delete_training_session(
     project_id: int,
@@ -917,6 +918,126 @@ async def get_confusion_matrix(
             media_type="image/png",
             filename="confusion_matrix.png"
         )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/projects/{project_id}/training/{training_id}/analytics")
+async def get_training_analytics(
+    project_id: int,
+    training_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Parse results.csv and return chart data for Analytics view.
+    Returns epoch-wise training/validation losses and metrics.
+    """
+    import csv
+    
+    try:
+        # Get project
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get session name from DB if training_id is numeric
+        session_name = training_id
+        if training_id.isdigit():
+            session = db.query(TrainingSession).filter(
+                TrainingSession.id == int(training_id),
+                TrainingSession.project_id == project_id
+            ).first()
+            if session:
+                session_name = session.name
+        
+        # Build path to results.csv
+        results_csv_path = (
+            settings.PROJECTS_DIR /
+            project.name /
+            "model" /
+            "training" /
+            session_name /
+            "results.csv"
+        )
+        
+        if not results_csv_path.exists():
+            raise HTTPException(status_code=404, detail="Training results not found")
+        
+        # Parse CSV
+        epochs = []
+        train_losses = {"box": [], "seg": [], "cls": []}
+        val_losses = {"box": [], "seg": [], "cls": []}
+        metrics = {
+            "box_map50": [], "box_map50_95": [],
+            "box_precision": [], "box_recall": [],
+            "mask_map50": [], "mask_map50_95": [],
+            "mask_precision": [], "mask_recall": []
+        }
+        
+        with open(results_csv_path, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Skip empty rows or rows with empty epoch
+                if not row.get('epoch') or not row.get('epoch').strip():
+                    continue
+                
+                try:
+                    epochs.append(int(float(row['epoch'].strip())))
+                except (ValueError, KeyError):
+                    continue
+                
+                # Helper function to safely get float value
+                def safe_float(key, default=0.0):
+                    try:
+                        val = row.get(key, '').strip()
+                        return float(val) if val else default
+                    except (ValueError, AttributeError):
+                        return default
+                
+                # Training losses
+                train_losses["box"].append(safe_float('train/box_loss'))
+                train_losses["cls"].append(safe_float('train/cls_loss'))
+                if 'train/seg_loss' in row and row.get('train/seg_loss', '').strip():
+                    train_losses["seg"].append(safe_float('train/seg_loss'))
+                
+                # Validation losses
+                val_losses["box"].append(safe_float('val/box_loss'))
+                val_losses["cls"].append(safe_float('val/cls_loss'))
+                if 'val/seg_loss' in row and row.get('val/seg_loss', '').strip():
+                    val_losses["seg"].append(safe_float('val/seg_loss'))
+                
+                # Metrics
+                metrics["box_precision"].append(safe_float('metrics/precision(B)'))
+                metrics["box_recall"].append(safe_float('metrics/recall(B)'))
+                metrics["box_map50"].append(safe_float('metrics/mAP50(B)'))
+                metrics["box_map50_95"].append(safe_float('metrics/mAP50-95(B)'))
+                
+                # Mask metrics (if segmentation)
+                if 'metrics/precision(M)' in row and row.get('metrics/precision(M)', '').strip():
+                    metrics["mask_precision"].append(safe_float('metrics/precision(M)'))
+                    metrics["mask_recall"].append(safe_float('metrics/recall(M)'))
+                    metrics["mask_map50"].append(safe_float('metrics/mAP50(M)'))
+                    metrics["mask_map50_95"].append(safe_float('metrics/mAP50-95(M)'))
+        
+        # Determine if segmentation
+        is_segmentation = len(train_losses["seg"]) > 0
+        
+        # Clean up empty arrays for detection tasks
+        if not is_segmentation:
+            train_losses.pop("seg", None)
+            val_losses.pop("seg", None)
+            metrics = {k: v for k, v in metrics.items() if not k.startswith("mask")}
+        
+        return {
+            "epochs": epochs,
+            "train_losses": train_losses,
+            "val_losses": val_losses,
+            "metrics": metrics,
+            "is_segmentation": is_segmentation
+        }
         
     except HTTPException:
         raise
