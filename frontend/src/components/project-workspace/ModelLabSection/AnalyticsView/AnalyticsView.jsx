@@ -291,7 +291,7 @@ const AnalyticsView = ({ training }) => {
                             <LineChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="epoch" tick={{ fontSize }} label={{ value: 'Epochs', position: 'insideBottom', offset: 0 }} />
-                            <YAxis tick={{ fontSize }} label={{ value: 'Score', angle: -90, position: 'insideLeft' }} />
+                                <YAxis tick={{ fontSize }} label={{ value: 'Score', angle: -90, position: 'insideLeft' }} />
                                 <Tooltip />
                                 {visibleLines.box_precision && <Line type="monotone" dataKey="box_precision" stroke="#f59e0b" name="Precision" strokeWidth={2} />}
                                 {visibleLines.box_recall && <Line type="monotone" dataKey="box_recall" stroke="#ec4899" name="Recall" strokeWidth={2} />}
