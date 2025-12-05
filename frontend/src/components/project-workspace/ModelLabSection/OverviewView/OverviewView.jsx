@@ -1,6 +1,6 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Card, Typography, Table, Tag, Tooltip } from 'antd';
+import { Card, Typography, Table, Tag, Tooltip, Tabs } from 'antd';
 import AnalyticsView from '../AnalyticsView/AnalyticsView';
 import './OverviewView.css';
 
@@ -212,6 +212,14 @@ const OverviewView = ({ training }) => {
                 </Tag>
             </div>
 
+            {/* Tabs */}
+            <Tabs defaultActiveKey="overview" items={[
+                {
+                    key: 'overview',
+                    label: 'Overview',
+                    children: (
+                        <>
+
             {/* Quick Stats */}
             <div className="quick-stats">
                 <Title level={4}>Quick Stats</Title>
@@ -381,10 +389,10 @@ const OverviewView = ({ training }) => {
                                     </div>
                                 `;
                                 document.body.appendChild(modal);
-                                
+
                                 // Close on click
                                 modal.querySelector('.confusion-matrix-modal-backdrop').addEventListener('click', (e) => {
-                                    if (e.target.classList.contains('confusion-matrix-modal-backdrop') || 
+                                    if (e.target.classList.contains('confusion-matrix-modal-backdrop') ||
                                         e.target.classList.contains('confusion-matrix-modal-close')) {
                                         document.body.removeChild(modal);
                                     }
@@ -403,6 +411,30 @@ const OverviewView = ({ training }) => {
             </div>
             {/* Analytics Section */}
             <AnalyticsView training={training} />
+                        </>
+                    )
+                },
+                {
+                    key: 'configuration',
+                    label: 'Configuration',
+                    children: (
+                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                            <h3>Training Configuration</h3>
+                            <p>Coming soon...</p>
+                        </div>
+                    )
+                },
+                {
+                    key: 'validation',
+                    label: 'Validation',
+                    children: (
+                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                            <h3>Custom Validation</h3>
+                            <p>Coming soon...</p>
+                        </div>
+                    )
+                }
+            ]} />
         </div>
     );
 };
