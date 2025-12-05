@@ -33,7 +33,28 @@ const OverviewView = ({ training }) => {
     } catch (e) {
         console.error('Failed to parse metrics:', e);
     }
-
+    // Parse training_config_snapshot (YAML format)
+    let configSnapshot = {};
+    try {
+        if (typeof training.training_config_snapshot === 'string') {
+            // Parse YAML-like format: "key: value" lines
+            const lines = training.training_config_snapshot.split('\n');
+            lines.forEach(line => {
+                const colonIndex = line.indexOf(':');
+                if (colonIndex > 0) {
+                    const key = line.substring(0, colonIndex).trim();
+                    const value = line.substring(colonIndex + 1).trim();
+                    if (key && value !== 'null') {
+                        configSnapshot[key] = value;
+                    }
+                }
+            });
+        } else {
+            configSnapshot = training.training_config_snapshot || {};
+        }
+    } catch (e) {
+        console.error('Failed to parse training_config_snapshot:', e);
+    }
     const validation = metrics.validation || {};
     const trainingMetrics = metrics.training || {};
     const classes = metrics.classes || [];
@@ -428,12 +449,83 @@ const OverviewView = ({ training }) => {
                                             <span>View Config</span>
                                         </Tooltip>
                                     ),
-                                    children: (
-                                        <div style={{ padding: '20px', textAlign: 'center' }}>
-                                            <h3>Training Configuration</h3>
-                                            <p>View training settings here...</p>
-                                        </div>
-                                    )
+                                    children: (() => {
+                                        const snapshot = configSnapshot;
+                                        const totalParams = Object.keys(snapshot).length;
+                                        
+                                        // Group 1: Basic Settings (8 params)
+                                        const basicKeys = ['task', 'mode', 'model', 'data', 'project', 'name', 'exist_ok', 'time'];
+                                        
+                                        // Group 2: Training Hyperparameters (15 params)
+                                        const trainingKeys = ['epochs', 'batch', 'imgsz', 'patience', 'device', 'workers', 
+                                                             'optimizer', 'lr0', 'lrf', 'momentum', 'weight_decay',
+                                                             'warmup_epochs', 'warmup_momentum', 'warmup_bias_lr', 'nbs'];
+                                        
+                                        // Group 3: Data Augmentation (18 params)
+                                        const augmentKeys = ['hsv_h', 'hsv_s', 'hsv_v', 'degrees', 'translate', 'scale', 
+                                                           'shear', 'perspective', 'flipud', 'fliplr', 'bgr', 
+                                                           'mosaic', 'mixup', 'cutmix', 'copy_paste', 'copy_paste_mode',
+                                                           'auto_augment', 'erasing'];
+                                        
+                                        // Group 4: Advanced Training (23 params)
+                                        const advancedKeys = ['box', 'cls', 'dfl', 'pose', 'kobj', 
+                                                            'save', 'save_period', 'cache', 'verbose', 'seed', 'deterministic',
+                                                            'single_cls', 'rect', 'cos_lr', 'close_mosaic', 'resume', 
+                                                            'amp', 'fraction', 'profile', 'freeze', 'multi_scale', 'dropout', 'plots'];
+                                        
+                                        // Group 5: Validation (7 params)
+                                        const validationKeys = ['split', 'save_json', 'conf', 'iou', 'max_det', 'half', 'dnn'];
+                                        
+                                        const renderGroup = (title, keys, emoji) => {
+                                            const items = keys
+                                                .filter(key => snapshot.hasOwnProperty(key))
+                                                .map(key => ({
+                                                    key: key,
+                                                    label: key,
+                                                    children: String(snapshot[key])
+                                                }));
+                                            
+                                            if (items.length === 0) return null;
+                                            
+                                            return (
+                                                <Card 
+                                                    size="small" 
+                                                    style={{ marginBottom: '16px' }}
+                                                    title={<span>{emoji} {title} ({items.length})</span>}
+                                                >
+                                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                                                        <tbody>
+                                                            {items.map(item => (
+                                                                <tr key={item.key} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                                                    <td style={{ padding: '4px 8px', fontWeight: '500', width: '35%' }}>
+                                                                        {item.label}
+                                                                        </td>
+                                                                    <td style={{ padding: '4px 8px', color: '#666', wordBreak: 'break-all' }}>
+                                                                        {item.children}
+                                                                        </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </Card>
+                                            );
+                                        };
+                                        
+                                        return (
+                                            <div style={{ padding: '20px' }}>
+                                                <Title level={4}>Training Configuration ({totalParams} parameters)</Title>
+                                                <Text type="secondary" style={{ display: 'block', marginBottom: '20px' }}>
+                                                    View all settings that were used for this training session
+                                                </Text>
+                                                
+                                                {renderGroup('Basic Settings', basicKeys, '⚙️')}
+                                                {renderGroup('Training Hyperparameters', trainingKeys, '🔧')}
+                                                {renderGroup('Data Augmentation', augmentKeys, '🖼️')}
+                                                {renderGroup('Advanced Training', advancedKeys, '⚡')}
+                                                {renderGroup('Validation', validationKeys, '✅')}
+                                            </div>
+                                        );
+                                    })()
                                 },
                                 {
                                     key: 'editor',

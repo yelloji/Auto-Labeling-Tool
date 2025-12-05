@@ -711,7 +711,8 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
                             "status": s.status,
                             "created_at": s.created_at,
                             "is_managed": True,
-                            "metrics": json.dumps(metrics_data)
+                            "metrics": json.dumps(metrics_data),
+                            "training_config_snapshot": s.training_config_snapshot
                         })
                     else:
                         # Unmanaged session
@@ -1043,4 +1044,3 @@ async def get_training_analytics(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

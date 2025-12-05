@@ -49,6 +49,7 @@ const ModelLabSection = ({ projectId }) => {
                         epochs: metrics.epochs || session.best_epoch || 0,
                         date: session.created_at,
                         metrics: metrics,
+                        training_config_snapshot: session.training_config_snapshot,
                         projectId: projectId
                     };
                 });
