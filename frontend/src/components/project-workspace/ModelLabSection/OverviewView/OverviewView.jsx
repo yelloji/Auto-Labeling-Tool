@@ -418,10 +418,39 @@ const OverviewView = ({ training }) => {
                     key: 'configuration',
                     label: 'Configuration',
                     children: (
-                        <div style={{ padding: '20px', textAlign: 'center' }}>
-                            <h3>Training Configuration</h3>
-                            <p>Coming soon...</p>
-                        </div>
+                        <Tabs
+                            defaultActiveKey="view"
+                            items={[
+                                {
+                                    key: 'view',
+                                    label: (
+                                        <Tooltip title="View the training settings that were used for this session">
+                                            <span>View Config</span>
+                                        </Tooltip>
+                                    ),
+                                    children: (
+                                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                                            <h3>Training Configuration</h3>
+                                            <p>View training settings here...</p>
+                                        </div>
+                                    )
+                                },
+                                {
+                                    key: 'editor',
+                                    label: (
+                                        <Tooltip title="Edit these settings to reuse in your next training. Changes here won't affect this current training - only they'll be saved for your next training">
+                                            <span>Advanced Editor</span>
+                                        </Tooltip>
+                                    ),
+                                    children: (
+                                        <div style={{ padding: '20px', textAlign: 'center' }}>
+                                            <h3>Advanced Config Editor</h3>
+                                            <p>Edit and apply to queued training...</p>
+                                        </div>
+                                    )
+                                }
+                            ]}
+                        />
                     )
                 },
                 {
