@@ -1,6 +1,6 @@
 ID,Name,Description,Project ID,Project Name,Created,Updated,Total Images,Labeled Images,Unlabeled Images,Annotations
 7c2978c8-d056-46da-8baa-8d37258021d4,animal,Images uploaded to gevis,1,gevis,2025-09-21 16:42:50,2025-11-28 08:12:59.875040,3,3,0,3
-cb17fee5-e822-4232-a2a7-b1c1a4264b71,Reject,Images uploaded to gevis,1,gevis,2025-09-22 07:07:14,2025-11-27 17:39:33.189889,1,1,0,7
+cb17fee5-e822-4232-a2a7-b1c1a4264b71,Reject,Images uploaded to gevis,1,gevis,2025-09-22 07:07:14,2025-12-09 11:01:57.180568,1,1,0,7
 859a7b3d-1fa0-4bbf-8dbc-f0dee78994f7,Reject,Images uploaded to MASMAC-O-RING,3,MASMAC-O-RING,2025-09-23 10:32:21,2025-09-30 15:28:47.702206,9,9,0,82
 70b93505-ee97-4374-abea-117769200707,rejects,Images uploaded to cuffia-ext,5,cuffia-ext,2025-09-25 07:24:30,2025-09-27 07:47:19.144652,6,6,0,28
 38ffde84-e9b2-4445-91f7-9df234238d14,rejects,Images uploaded to cuffia-int,6,cuffia-int,2025-09-25 10:15:49,2025-09-28 08:03:56.651915,6,6,0,41

@@ -50,6 +50,7 @@ const ModelLabSection = ({ projectId }) => {
                         date: session.created_at,
                         metrics: metrics,
                         training_config_snapshot: session.training_config_snapshot,
+                        resolved_config_json: session.resolved_config_json,
                         projectId: projectId
                     };
                 });

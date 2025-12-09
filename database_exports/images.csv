@@ -2,7 +2,7 @@ ID,Filename,Original Filename,File Path,Project,Dataset,Width,Height,Format,File
 812da977-4eb2-4e30-8096-9ce785ac37f0,car.jpg,car.jpg,projects\gevis\dataset\animal\val\car.jpg,gevis,animal,800,600,JPEG,57407,dataset,val,Yes,No,No,1,No,2025-09-21 16:42:50,2025-11-28 08:15:39
 333c172a-6e96-4e6d-88b6-c20c11fa83d5,cat.jpg,cat.jpg,projects\gevis\dataset\animal\val\cat.jpg,gevis,animal,800,600,JPEG,54749,dataset,val,Yes,No,No,1,No,2025-09-21 16:42:50,2025-11-28 08:14:23
 94e66fc7-b4be-4a9a-af15-756985ef9b73,dog.jpg,dog.jpg,projects\gevis\dataset\animal\train\dog.jpg,gevis,animal,800,600,JPEG,76182,dataset,train,Yes,No,No,1,No,2025-09-21 16:42:50,2025-11-28 08:14:23
-a83adae8-ae9f-480a-b7ee-7845b77c4054,0-1.bmp,0-1.bmp,projects\gevis\dataset\Reject\train\0-1.bmp,gevis,Reject,1468,1468,BMP,2156102,dataset,train,Yes,No,No,7,No,2025-09-22 07:07:14,2025-11-28 08:10:04
+a83adae8-ae9f-480a-b7ee-7845b77c4054,0-1.bmp,0-1.bmp,projects/gevis/dataset/Reject/train/0-1.bmp,gevis,Reject,1468,1468,BMP,2156102,dataset,train,Yes,No,No,7,No,2025-09-22 07:07:14,2025-12-09 11:01:57.159281
 e5e2720d-c132-4d9a-9e47-4782c90dad11,0-1.bmp,0-1.bmp,projects/MASMAC-O-RING/dataset/Reject/train/0-1.bmp,MASMAC-O-RING,Reject,1468,1468,BMP,2156102,dataset,train,Yes,No,No,10,No,2025-09-23 10:32:21,2025-09-26 11:50:52.830769
 976f9ec6-3282-4f83-b090-48c0f385ce2d,0-2.bmp,0-2.bmp,projects/MASMAC-O-RING/dataset/Reject/train/0-2.bmp,MASMAC-O-RING,Reject,1468,1468,BMP,2156102,dataset,train,Yes,No,No,10,No,2025-09-23 10:32:21,2025-09-26 11:50:52.846773
 366e8104-2e41-4da4-860c-2b80d92cea56,0.bmp,0.bmp,projects/MASMAC-O-RING/dataset/Reject/val/0.bmp,MASMAC-O-RING,Reject,1468,1468,BMP,2156102,dataset,val,Yes,No,No,10,No,2025-09-23 10:32:21,2025-09-26 11:50:52.862303

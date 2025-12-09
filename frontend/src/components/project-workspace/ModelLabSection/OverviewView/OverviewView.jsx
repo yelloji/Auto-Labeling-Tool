@@ -2,6 +2,8 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { Card, Typography, Table, Tag, Tooltip, Tabs } from 'antd';
 import AnalyticsView from '../AnalyticsView/AnalyticsView';
+import ViewConfig from '../ConfigurationView/ViewConfig';
+import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
 import './OverviewView.css';
 
 const { Title, Text } = Typography;
@@ -241,158 +243,158 @@ const OverviewView = ({ training }) => {
                     children: (
                         <>
 
-            {/* Quick Stats */}
-            <div className="quick-stats">
-                <Title level={4}>Quick Stats</Title>
-                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
-                    Key overview numbers from your training and validation datasets
-                </Text>
-                <div className="stats-grid">
-                    {quickStats.map((stat, idx) => {
-                        let tooltipText = '';
-                        switch (stat.label) {
-                            case 'Instances':
-                                tooltipText = 'Total number of object instances in validation dataset';
-                                break;
-                            case 'Images':
-                                tooltipText = 'Total number of images in validation dataset';
-                                break;
-                            case 'Epochs':
-                                tooltipText = 'Total number of training epochs completed';
-                                break;
-                            case 'Classes':
-                                tooltipText = 'Total number of object classes in training dataset';
-                                break;
-                            default:
-                                tooltipText = `Total number of ${stat.label.toLowerCase()}`;
-                        }
-                        return (
-                            <Tooltip key={idx} title={tooltipText} placement="top">
-                                <Card className="stat-card">
-                                    <div className="stat-icon-circle">
-                                        <div className="stat-icon">{stat.icon}</div>
-                                    </div>
-                                    <div className="stat-value">{stat.value}</div>
-                                    <div className="stat-label">{stat.label}</div>
-                                </Card>
-                            </Tooltip>
-                        );
-                    })}
-                </div>
-            </div>
+                            {/* Quick Stats */}
+                            <div className="quick-stats">
+                                <Title level={4}>Quick Stats</Title>
+                                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+                                    Key overview numbers from your training and validation datasets
+                                </Text>
+                                <div className="stats-grid">
+                                    {quickStats.map((stat, idx) => {
+                                        let tooltipText = '';
+                                        switch (stat.label) {
+                                            case 'Instances':
+                                                tooltipText = 'Total number of object instances in validation dataset';
+                                                break;
+                                            case 'Images':
+                                                tooltipText = 'Total number of images in validation dataset';
+                                                break;
+                                            case 'Epochs':
+                                                tooltipText = 'Total number of training epochs completed';
+                                                break;
+                                            case 'Classes':
+                                                tooltipText = 'Total number of object classes in training dataset';
+                                                break;
+                                            default:
+                                                tooltipText = `Total number of ${stat.label.toLowerCase()}`;
+                                        }
+                                        return (
+                                            <Tooltip key={idx} title={tooltipText} placement="top">
+                                                <Card className="stat-card">
+                                                    <div className="stat-icon-circle">
+                                                        <div className="stat-icon">{stat.icon}</div>
+                                                    </div>
+                                                    <div className="stat-value">{stat.value}</div>
+                                                    <div className="stat-label">{stat.label}</div>
+                                                </Card>
+                                            </Tooltip>
+                                        );
+                                    })}
+                                </div>
+                            </div>
 
-            {/* Validation Results */}
-            <div className="validation-results">
-                <Title level={4}>Final Validation Metrics</Title>
-                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
-                    Performance scores showing how well your model detects objects. Higher values (closer to 100%) indicate better accuracy.
-                </Text>
-                <div className="metrics-grid">
-                    {/* Box Detection Metrics */}
-                    <Card title="Box Detection" className="metrics-card">
-                        <Tooltip title="Precision measures how many predicted boxes are correct">
-                            <div className="metric-row">
-                                <Text>Precision:</Text>
-                                <Text strong>{toPercent(validation.box_p)}</Text>
-                            </div>
-                        </Tooltip>
-                        <Tooltip title="Recall measures how many actual objects were detected">
-                            <div className="metric-row">
-                                <Text>Recall:</Text>
-                                <Text strong>{toPercent(validation.box_r)}</Text>
-                            </div>
-                        </Tooltip>
-                        <Tooltip title="F1-Score is the harmonic mean of Precision and Recall">
-                            <div className="metric-row">
-                                <Text>F1-Score:</Text>
-                                <Text strong>{toPercent(boxF1)}</Text>
-                            </div>
-                        </Tooltip>
-                        <Tooltip title="Mean Average Precision at 50% IoU threshold">
-                            <div className="metric-row">
-                                <Text>mAP@50:</Text>
-                                <Text strong>{validation.box_map50?.toFixed(3) || 'N/A'}</Text>
-                            </div>
-                        </Tooltip>
-                        <Tooltip title="Mean Average Precision averaged across IoU thresholds 50% to 95%">
-                            <div className="metric-row">
-                                <Text>mAP@50-95:</Text>
-                                <Text strong>{validation.box_map50_95?.toFixed(3) || 'N/A'}</Text>
-                            </div>
-                        </Tooltip>
-                    </Card>
+                            {/* Validation Results */}
+                            <div className="validation-results">
+                                <Title level={4}>Final Validation Metrics</Title>
+                                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+                                    Performance scores showing how well your model detects objects. Higher values (closer to 100%) indicate better accuracy.
+                                </Text>
+                                <div className="metrics-grid">
+                                    {/* Box Detection Metrics */}
+                                    <Card title="Box Detection" className="metrics-card">
+                                        <Tooltip title="Precision measures how many predicted boxes are correct">
+                                            <div className="metric-row">
+                                                <Text>Precision:</Text>
+                                                <Text strong>{toPercent(validation.box_p)}</Text>
+                                            </div>
+                                        </Tooltip>
+                                        <Tooltip title="Recall measures how many actual objects were detected">
+                                            <div className="metric-row">
+                                                <Text>Recall:</Text>
+                                                <Text strong>{toPercent(validation.box_r)}</Text>
+                                            </div>
+                                        </Tooltip>
+                                        <Tooltip title="F1-Score is the harmonic mean of Precision and Recall">
+                                            <div className="metric-row">
+                                                <Text>F1-Score:</Text>
+                                                <Text strong>{toPercent(boxF1)}</Text>
+                                            </div>
+                                        </Tooltip>
+                                        <Tooltip title="Mean Average Precision at 50% IoU threshold">
+                                            <div className="metric-row">
+                                                <Text>mAP@50:</Text>
+                                                <Text strong>{validation.box_map50?.toFixed(3) || 'N/A'}</Text>
+                                            </div>
+                                        </Tooltip>
+                                        <Tooltip title="Mean Average Precision averaged across IoU thresholds 50% to 95%">
+                                            <div className="metric-row">
+                                                <Text>mAP@50-95:</Text>
+                                                <Text strong>{validation.box_map50_95?.toFixed(3) || 'N/A'}</Text>
+                                            </div>
+                                        </Tooltip>
+                                    </Card>
 
-                    {/* Mask Segmentation Metrics (if applicable) */}
-                    {training.taskType === 'segmentation' && validation.mask_p !== undefined && (
-                        <Card title="Mask Segmentation" className="metrics-card">
-                            <Tooltip title="Precision measures how many predicted masks are correct">
-                                <div className="metric-row">
-                                    <Text>Precision:</Text>
-                                    <Text strong>{toPercent(validation.mask_p)}</Text>
+                                    {/* Mask Segmentation Metrics (if applicable) */}
+                                    {training.taskType === 'segmentation' && validation.mask_p !== undefined && (
+                                        <Card title="Mask Segmentation" className="metrics-card">
+                                            <Tooltip title="Precision measures how many predicted masks are correct">
+                                                <div className="metric-row">
+                                                    <Text>Precision:</Text>
+                                                    <Text strong>{toPercent(validation.mask_p)}</Text>
+                                                </div>
+                                            </Tooltip>
+                                            <Tooltip title="Recall measures how many actual masks were detected">
+                                                <div className="metric-row">
+                                                    <Text>Recall:</Text>
+                                                    <Text strong>{toPercent(validation.mask_r)}</Text>
+                                                </div>
+                                            </Tooltip>
+                                            <Tooltip title="F1-Score is the harmonic mean of Precision and Recall for masks">
+                                                <div className="metric-row">
+                                                    <Text>F1-Score:</Text>
+                                                    <Text strong>{toPercent(maskF1)}</Text>
+                                                </div>
+                                            </Tooltip>
+                                            <Tooltip title="Mean Average Precision for masks at 50% IoU threshold">
+                                                <div className="metric-row">
+                                                    <Text>mAP@50:</Text>
+                                                    <Text strong>{validation.mask_map50?.toFixed(3) || 'N/A'}</Text>
+                                                </div>
+                                            </Tooltip>
+                                            <Tooltip title="Mean Average Precision for masks averaged across IoU thresholds 50% to 95%">
+                                                <div className="metric-row">
+                                                    <Text>mAP@50-95:</Text>
+                                                    <Text strong>{validation.mask_map50_95?.toFixed(3) || 'N/A'}</Text>
+                                                </div>
+                                            </Tooltip>
+                                        </Card>
+                                    )}
                                 </div>
-                            </Tooltip>
-                            <Tooltip title="Recall measures how many actual masks were detected">
-                                <div className="metric-row">
-                                    <Text>Recall:</Text>
-                                    <Text strong>{toPercent(validation.mask_r)}</Text>
-                                </div>
-                            </Tooltip>
-                            <Tooltip title="F1-Score is the harmonic mean of Precision and Recall for masks">
-                                <div className="metric-row">
-                                    <Text>F1-Score:</Text>
-                                    <Text strong>{toPercent(maskF1)}</Text>
-                                </div>
-                            </Tooltip>
-                            <Tooltip title="Mean Average Precision for masks at 50% IoU threshold">
-                                <div className="metric-row">
-                                    <Text>mAP@50:</Text>
-                                    <Text strong>{validation.mask_map50?.toFixed(3) || 'N/A'}</Text>
-                                </div>
-                            </Tooltip>
-                            <Tooltip title="Mean Average Precision for masks averaged across IoU thresholds 50% to 95%">
-                                <div className="metric-row">
-                                    <Text>mAP@50-95:</Text>
-                                    <Text strong>{validation.mask_map50_95?.toFixed(3) || 'N/A'}</Text>
-                                </div>
-                            </Tooltip>
-                        </Card>
-                    )}
-                </div>
-            </div>
+                            </div>
 
-            {/* Class-wise Results */}
-            {classData.length > 0 && (
-                <div className="classwise-results">
-                    <Title level={4}>Class-wise Performance</Title>
-                    <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
-                        Detailed performance breakdown for each object class. Shows how well your model identifies specific types of objects.
-                    </Text>
-                    <Table
-                        dataSource={classData}
-                        columns={classColumns}
-                        pagination={false}
-                        size="small"
-                    />
-                </div>
-            )}
+                            {/* Class-wise Results */}
+                            {classData.length > 0 && (
+                                <div className="classwise-results">
+                                    <Title level={4}>Class-wise Performance</Title>
+                                    <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+                                        Detailed performance breakdown for each object class. Shows how well your model identifies specific types of objects.
+                                    </Text>
+                                    <Table
+                                        dataSource={classData}
+                                        columns={classColumns}
+                                        pagination={false}
+                                        size="small"
+                                    />
+                                </div>
+                            )}
 
-            {/* Confusion Matrix */}
-            <div className="confusion-matrix-section">
-                <Title level={4}>Confusion Matrix</Title>
-                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
-                    Visual heatmap showing prediction accuracy. Diagonal cells show correct predictions, off-diagonal shows confusion between classes.
-                </Text>
-                <div className="confusion-matrix-container">
-                    <Tooltip title="Click to view full size">
-                        <img
-                            src={`/api/v1/projects/${training.projectId}/training/${training.id}/confusion_matrix.png`}
-                            alt="Confusion Matrix"
-                            className="confusion-matrix-image confusion-matrix-thumbnail"
-                            onClick={() => {
-                                // Open image in modal with loading state
-                                const modal = document.createElement('div');
-                                modal.className = 'confusion-matrix-modal';
-                                modal.innerHTML = `
+                            {/* Confusion Matrix */}
+                            <div className="confusion-matrix-section">
+                                <Title level={4}>Confusion Matrix</Title>
+                                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+                                    Visual heatmap showing prediction accuracy. Diagonal cells show correct predictions, off-diagonal shows confusion between classes.
+                                </Text>
+                                <div className="confusion-matrix-container">
+                                    <Tooltip title="Click to view full size">
+                                        <img
+                                            src={`/api/v1/projects/${training.projectId}/training/${training.id}/confusion_matrix.png`}
+                                            alt="Confusion Matrix"
+                                            className="confusion-matrix-image confusion-matrix-thumbnail"
+                                            onClick={() => {
+                                                // Open image in modal with loading state
+                                                const modal = document.createElement('div');
+                                                modal.className = 'confusion-matrix-modal';
+                                                modal.innerHTML = `
                                     <div class="confusion-matrix-modal-backdrop">
                                         <div class="confusion-matrix-modal-content">
                                             <button class="confusion-matrix-modal-close">✕</button>
@@ -409,29 +411,29 @@ const OverviewView = ({ training }) => {
                                         </div>
                                     </div>
                                 `;
-                                document.body.appendChild(modal);
+                                                document.body.appendChild(modal);
 
-                                // Close on click
-                                modal.querySelector('.confusion-matrix-modal-backdrop').addEventListener('click', (e) => {
-                                    if (e.target.classList.contains('confusion-matrix-modal-backdrop') ||
-                                        e.target.classList.contains('confusion-matrix-modal-close')) {
-                                        document.body.removeChild(modal);
-                                    }
-                                });
-                            }}
-                            onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'block';
-                            }}
-                        />
-                    </Tooltip>
-                    <div className="confusion-matrix-placeholder" style={{ display: 'none' }}>
-                        <Text type="secondary">Confusion matrix not available</Text>
-                    </div>
-                </div>
-            </div>
-            {/* Analytics Section */}
-            <AnalyticsView training={training} />
+                                                // Close on click
+                                                modal.querySelector('.confusion-matrix-modal-backdrop').addEventListener('click', (e) => {
+                                                    if (e.target.classList.contains('confusion-matrix-modal-backdrop') ||
+                                                        e.target.classList.contains('confusion-matrix-modal-close')) {
+                                                        document.body.removeChild(modal);
+                                                    }
+                                                });
+                                            }}
+                                            onError={(e) => {
+                                                e.target.style.display = 'none';
+                                                e.target.nextSibling.style.display = 'block';
+                                            }}
+                                        />
+                                    </Tooltip>
+                                    <div className="confusion-matrix-placeholder" style={{ display: 'none' }}>
+                                        <Text type="secondary">Confusion matrix not available</Text>
+                                    </div>
+                                </div>
+                            </div>
+                            {/* Analytics Section */}
+                            <AnalyticsView training={training} />
                         </>
                     )
                 },
@@ -449,97 +451,16 @@ const OverviewView = ({ training }) => {
                                             <span>View Config</span>
                                         </Tooltip>
                                     ),
-                                    children: (() => {
-                                        const snapshot = configSnapshot;
-                                        const totalParams = Object.keys(snapshot).length;
-                                        
-                                        // Group 1: Basic Settings (8 params)
-                                        const basicKeys = ['task', 'mode', 'model', 'data', 'project', 'name', 'exist_ok', 'time'];
-                                        
-                                        // Group 2: Training Hyperparameters (15 params)
-                                        const trainingKeys = ['epochs', 'batch', 'imgsz', 'patience', 'device', 'workers', 
-                                                             'optimizer', 'lr0', 'lrf', 'momentum', 'weight_decay',
-                                                             'warmup_epochs', 'warmup_momentum', 'warmup_bias_lr', 'nbs'];
-                                        
-                                        // Group 3: Data Augmentation (18 params)
-                                        const augmentKeys = ['hsv_h', 'hsv_s', 'hsv_v', 'degrees', 'translate', 'scale', 
-                                                           'shear', 'perspective', 'flipud', 'fliplr', 'bgr', 
-                                                           'mosaic', 'mixup', 'cutmix', 'copy_paste', 'copy_paste_mode',
-                                                           'auto_augment', 'erasing'];
-                                        
-                                        // Group 4: Advanced Training (23 params)
-                                        const advancedKeys = ['box', 'cls', 'dfl', 'pose', 'kobj', 
-                                                            'save', 'save_period', 'cache', 'verbose', 'seed', 'deterministic',
-                                                            'single_cls', 'rect', 'cos_lr', 'close_mosaic', 'resume', 
-                                                            'amp', 'fraction', 'profile', 'freeze', 'multi_scale', 'dropout', 'plots'];
-                                        
-                                        // Group 5: Validation (7 params)
-                                        const validationKeys = ['split', 'save_json', 'conf', 'iou', 'max_det', 'half', 'dnn'];
-                                        
-                                        const renderGroup = (title, keys, emoji) => {
-                                            const items = keys
-                                                .filter(key => snapshot.hasOwnProperty(key))
-                                                .map(key => ({
-                                                    key: key,
-                                                    label: key,
-                                                    children: String(snapshot[key])
-                                                }));
-                                            
-                                            if (items.length === 0) return null;
-                                            
-                                            return (
-                                                <Card 
-                                                    size="small" 
-                                                    style={{ marginBottom: '16px' }}
-                                                    title={<span>{emoji} {title} ({items.length})</span>}
-                                                >
-                                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                                                        <tbody>
-                                                            {items.map(item => (
-                                                                <tr key={item.key} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                                                                    <td style={{ padding: '4px 8px', fontWeight: '500', width: '35%' }}>
-                                                                        {item.label}
-                                                                        </td>
-                                                                    <td style={{ padding: '4px 8px', color: '#666', wordBreak: 'break-all' }}>
-                                                                        {item.children}
-                                                                        </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </Card>
-                                            );
-                                        };
-                                        
-                                        return (
-                                            <div style={{ padding: '20px' }}>
-                                                <Title level={4}>Training Configuration ({totalParams} parameters)</Title>
-                                                <Text type="secondary" style={{ display: 'block', marginBottom: '20px' }}>
-                                                    View all settings that were used for this training session
-                                                </Text>
-                                                
-                                                {renderGroup('Basic Settings', basicKeys, '⚙️')}
-                                                {renderGroup('Training Hyperparameters', trainingKeys, '🔧')}
-                                                {renderGroup('Data Augmentation', augmentKeys, '🖼️')}
-                                                {renderGroup('Advanced Training', advancedKeys, '⚡')}
-                                                {renderGroup('Validation', validationKeys, '✅')}
-                                            </div>
-                                        );
-                                    })()
+                                    children: <ViewConfig configSnapshot={configSnapshot} />
                                 },
                                 {
                                     key: 'editor',
                                     label: (
                                         <Tooltip title="Edit these settings to reuse in your next training. Changes here won't affect this current training - only they'll be saved for your next training">
-                                            <span>Advanced Editor</span>
+                                            <span>Advanced Config Editor</span>
                                         </Tooltip>
                                     ),
-                                    children: (
-                                        <div style={{ padding: '20px', textAlign: 'center' }}>
-                                            <h3>Advanced Config Editor</h3>
-                                            <p>Edit and apply to queued training...</p>
-                                        </div>
-                                    )
+                                    children: <AdvancedConfigEditor training={training} />
                                 }
                             ]}
                         />

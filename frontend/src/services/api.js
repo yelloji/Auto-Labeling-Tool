@@ -373,6 +373,28 @@ export const projectsAPI = {
     return response.data;
   },
 
+  // Get queued training (if exists)
+  getQueuedTraining: async (projectId) => {
+    try {
+      const response = await api.get(`/api/v1/projects/${projectId}/training/queued`);
+      return response.data;
+    } catch (error) {
+      if (error.response && error.response.status === 404) {
+        return null; // No queued training
+      }
+      throw error;
+    }
+  },
+
+  // Apply config to queued training
+  applyConfigToTraining: async (projectId, trainingId, config) => {
+    const response = await api.put(
+      `/api/v1/projects/${projectId}/training/${trainingId}/apply-config`,
+      config
+    );
+    return response.data;
+  },
+
 
   // Duplicate project with all datasets, images, and annotations
   duplicateProject: async (projectId) => {

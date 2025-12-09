@@ -354,6 +354,79 @@ async def get_training_session(project_id: int = Query(...), name: str = Query(.
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/projects/{project_id}/training/queued")
+async def get_queued_training(project_id: int, db: Session = Depends(get_db)):
+    """
+    Get queued training session for a project (if exists).
+    Used by Advanced Editor to check if there's a training to apply config to.
+    """
+    try:
+        queued = (
+            db.query(TrainingSession)
+            .filter(TrainingSession.project_id == project_id)
+            .filter(TrainingSession.status == "queued")
+            .order_by(TrainingSession.created_at.desc())
+            .first()
+        )
+        
+        if not queued:
+            raise HTTPException(status_code=404, detail="No queued training found")
+        
+        return {
+            "id": queued.id,
+            "name": queued.name,
+            "status": queued.status,
+            "created_at": queued.created_at
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/projects/{project_id}/training/{training_id}/apply-config")
+async def apply_config_to_training(
+    project_id: int,
+    training_id: int,
+    config: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Apply edited config to a queued training.
+    Updates resolved_config_json in the database.
+    """
+    try:
+        # Find the training
+        training = (
+            db.query(TrainingSession)
+            .filter(TrainingSession.id == training_id)
+            .filter(TrainingSession.project_id == project_id)
+            .filter(TrainingSession.status == "queued")
+            .first()
+        )
+        
+        if not training:
+            raise HTTPException(
+                status_code=404,
+                detail="Queued training not found"
+            )
+        
+        # Update resolved_config_json
+        training.resolved_config_json = json.dumps(config)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Config applied to training '{training.name}'"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/training/session/active")
 async def get_active_training_session(project_id: int = Query(...), db: Session = Depends(get_db)):
     try:
@@ -712,7 +785,8 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
                             "created_at": s.created_at,
                             "is_managed": True,
                             "metrics": json.dumps(metrics_data),
-                            "training_config_snapshot": s.training_config_snapshot
+                            "training_config_snapshot": s.training_config_snapshot,
+                            "resolved_config_json": s.resolved_config_json
                         })
                     else:
                         # Unmanaged session
