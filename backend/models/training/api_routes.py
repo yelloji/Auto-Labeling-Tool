@@ -871,6 +871,33 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/training/session/active")
+async def get_active_session(
+    project_id: int = Query(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Get active (queued/running) training session for a project.
+    Returns 404 if no active session exists.
+    """
+    session = db.query(TrainingSession).filter(
+        and_(
+            TrainingSession.project_id == project_id,
+            TrainingSession.status.in_(['queued', 'running'])
+        )
+    ).order_by(TrainingSession.created_at.desc()).first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="No active session found")
+    
+    return {
+        "id": session.id,
+        "name": session.name,
+        "status": session.status,
+        "created_at": session.created_at.isoformat() if session.created_at else None
+    }
+
+
 @router.delete("/projects/{project_id}/training/sessions/{session_id}")
 async def delete_training_session(
     project_id: int,

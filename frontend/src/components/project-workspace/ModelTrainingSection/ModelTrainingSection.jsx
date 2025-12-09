@@ -160,8 +160,26 @@ const ModelTrainingSection = ({ projectId, project }) => {
   useEffect(() => {
     const loadLastMetrics = async (retryCount = 0) => {
       try {
-        if (!form.projectId || form.liveMetrics) return;
-
+        if (!form.projectId || form.liveMetrics) return; 
+         
+         // Don't load if user is creating new training 
+         if (form.trainingName && form.trainingName.trim().length > 0) return; 
+         
+         // Check for active (queued/running) sessions first 
+         try { 
+           const activeSession = await trainingAPI.getActiveSession(form.projectId); 
+           if (activeSession) { 
+             // Active session exists, don't load last completed 
+             return; 
+           } 
+         } catch (error) { 
+           // 404 means no active session, continue to load last completed 
+           if (error.response?.status !== 404) { 
+             console.error('Error checking active session:', error); 
+           } 
+         }
+        
+        // Only load last completed if NO queued/running session
         const response = await fetch(`/api/v1/projects/${form.projectId}/training/last-completed`);
         if (response.ok) {
           const session = await response.json();
@@ -183,7 +201,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     };
 
     loadLastMetrics();
-  }, [form.projectId]);
+  }, [form.projectId, form.trainingName]);
 
   useEffect(() => {
     const maybeExtract = async () => {
