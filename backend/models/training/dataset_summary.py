@@ -47,10 +47,31 @@ def summarize_dataset(data_yaml_path: Path) -> Dict[str, Any]:
         names = [names[k] for k in sorted(names.keys(), key=lambda x: int(x) if str(x).isdigit() else x)]
     classes = list(names) if isinstance(names, list) else []
     nc = data_yaml.get("nc") or data_yaml.get("num_classes") or (len(classes) if classes else None)
+    
+    # Read image size from metadata/release_config.json if available
+    image_size = None
+    metadata_path = base / "metadata" / "release_config.json"
+    if metadata_path.exists():
+        try:
+            import json
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+                for transform in metadata.get("transformations", []):
+                    if transform.get("type") == "resize":
+                        params = transform.get("params", {})
+                        width = params.get("width")
+                        height = params.get("height")
+                        if width and height:
+                            image_size = width  # Use width (usually square)
+                            break
+        except Exception:
+            pass  # If metadata not available or invalid, skip
+    
     result = {
         "data_yaml_path": str(data_yaml_path),
         "classes": classes,
         "num_classes": nc,
+        "image_size": image_size,
         "splits": {
             "train": _count_images(train_p) if train_p else 0,
             "val": _count_images(val_p) if val_p else 0,

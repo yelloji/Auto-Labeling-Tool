@@ -68,6 +68,11 @@ const ModelTrainingSection = ({ projectId, project }) => {
     // Track dataset summary separately for validation
     if (patch.datasetSummary) {
       setDatasetSummary(patch.datasetSummary);
+
+      // Auto-populate image size from dataset if available
+      if (patch.datasetSummary.image_size) {
+        setForm((prev) => ({ ...prev, imgSize: patch.datasetSummary.image_size }));
+      }
     }
   };
   const [consoleVisible, setConsoleVisible] = useState(false);
