@@ -29,7 +29,7 @@ export default function GlobalTrainingNotification() {
                 if (completions && completions.length > 0 && !completion) {
                     setCompletion(completions[0]); // Show first completion
                     setVideoStage('playing');
-                    setTimeout(() => setVideoStage('showing'), 8000);
+                    setTimeout(() => setVideoStage('showing'), 5000); // 5-second video
                 }
 
                 // SMART POLLING:
