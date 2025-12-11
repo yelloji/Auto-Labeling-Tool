@@ -1182,7 +1182,17 @@ async def check_training_completions(db: Session = Depends(get_db)):
             "error_msg": session.error_msg if session.status == "failed" else None
         })
     
-    return results
+    # Check for any active trainings (only RUNNING)
+    # Queued = Draft mode, so we don't need fast polling yet
+    active_count = db.query(TrainingSession).filter(
+        TrainingSession.status == "running"
+    ).count()
+    
+    return {
+        "completions": results,
+        "has_active_trainings": active_count > 0,
+        "active_count": active_count
+    }
 
 
 @router.post("/training/session/{session_id}/acknowledge")

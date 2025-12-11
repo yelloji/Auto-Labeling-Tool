@@ -8,40 +8,51 @@ export default function GlobalTrainingNotification() {
     const [videoStage, setVideoStage] = useState('hidden'); // hidden, playing, showing
 
     useEffect(() => {
-        // Poll for completion every 30 seconds
-        const interval = setInterval(async () => {
+        let timeoutId;
+
+        const checkForCompletions = async () => {
             try {
                 const data = await trainingNotificationAPI.checkCompletions();
-                if (data && data.length > 0 && !completion) {
-                    setCompletion(data[0]); // Show first completion
-                    setVideoStage('playing');
 
-                    // After video finishes (8 seconds), show message
-                    setTimeout(() => setVideoStage('showing'), 8000);
+                // Handle both legacy array format and new object format
+                let completions = [];
+                let hasActive = false;
+
+                if (Array.isArray(data)) {
+                    completions = data;
+                } else if (data && data.completions) {
+                    completions = data.completions;
+                    hasActive = data.has_active_trainings;
                 }
-                // Keep polling even if empty - future trainings may complete!
-            } catch (error) {
-                console.error('Error checking completions:', error);
-            }
-        }, 30000); // Check every 30s
 
-        // Initial check
-        (async () => {
-            try {
-                const data = await trainingNotificationAPI.checkCompletions();
-                if (data && data.length > 0) {
-                    setCompletion(data[0]);
+                // Logic to process notifications
+                if (completions && completions.length > 0 && !completion) {
+                    setCompletion(completions[0]); // Show first completion
                     setVideoStage('playing');
                     setTimeout(() => setVideoStage('showing'), 8000);
                 }
-                // Keep polling active for future completions
+
+                // SMART POLLING:
+                // If we have active trainings OR just finished one -> Poll Fast (30s)
+                // Otherwise -> Poll Slow (2 mins) to save resources/logs
+                const nextInterval = (hasActive || (completions && completions.length > 0))
+                    ? 30000
+                    : 120000;
+
+                timeoutId = setTimeout(checkForCompletions, nextInterval);
+
             } catch (error) {
                 console.error('Error checking completions:', error);
+                // On error, retry in 30s
+                timeoutId = setTimeout(checkForCompletions, 30000);
             }
-        })();
+        };
 
-        return () => clearInterval(interval);
-    }, []); // ← EMPTY! Run only once on mount
+        // Start polling immediately
+        checkForCompletions();
+
+        return () => clearTimeout(timeoutId);
+    }, [completion]); // Re-run if completion state changes (to avoid overwriting current one)
 
     const handleDismiss = async () => {
         if (completion) {
