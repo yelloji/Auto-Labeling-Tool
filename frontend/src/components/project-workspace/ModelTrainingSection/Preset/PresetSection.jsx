@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space, Row, Col, Collapse } from 'antd';
 import { systemAPI } from '../../../../services/api';
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, max_det, taskType, disabled }) {
+
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, max_det, taskType, datasetSummary, disabled }) {
+
   const OPTIMIZER_PRESETS = {
     SGD: { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 },
     Adam: { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 },
@@ -86,6 +88,14 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
             <Col span={12}>
               <Form.Item label="Single Class" tooltip="Treat multi-class data as single-class">
                 <Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} disabled={disabled} />
+                {/* ⚠️ Warning for single-class dataset mismatch */}
+                {datasetSummary?.num_classes === 1 && !single_cls && (
+                  <div style={{ marginTop: 8 }}>
+                    <span style={{ color: '#ff4d4f', fontSize: 12 }}>
+                      ⚠️ Dataset has 1 class. {isDeveloper ? 'Consider enabling this switch.' : 'Please enable this switch.'}
+                    </span>
+                  </div>
+                )}
               </Form.Item>
             </Col>
           </Row>
@@ -200,9 +210,20 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                   })()
                 )}
               </Form.Item>
-              <Form.Item label="Single Class" tooltip="Treat data as single class (industrial setups)">
-                <Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} disabled={disabled} />
-              </Form.Item>
+              {/* Show Single Class only for 1-class datasets in User Mode */}
+              {datasetSummary?.num_classes === 1 && (
+                <Form.Item label="Single Class" tooltip="Treat data as single class (industrial setups)">
+                  <Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} disabled={disabled} />
+                  {/* ⚠️ Warning for single-class dataset mismatch */}
+                  {!single_cls && (
+                    <div style={{ marginTop: 8 }}>
+                      <span style={{ color: '#ff4d4f', fontSize: 12 }}>
+                        ⚠️ Dataset has 1 class. Please enable this switch.
+                      </span>
+                    </div>
+                  )}
+                </Form.Item>
+              )}
             </Col>
           </Row>
 

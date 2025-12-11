@@ -63,8 +63,15 @@ const ModelTrainingSection = ({ projectId, project }) => {
   const [serverConfig, setServerConfig] = useState({});
   const isTraining = form.status === 'running';
   const isDeveloper = form.mode === 'developer';
-  const handleChange = (patch) => setForm((prev) => ({ ...prev, ...patch }));
+  const handleChange = (patch) => {
+    setForm((prev) => ({ ...prev, ...patch }));
+    // Track dataset summary separately for validation
+    if (patch.datasetSummary) {
+      setDatasetSummary(patch.datasetSummary);
+    }
+  };
   const [consoleVisible, setConsoleVisible] = useState(false);
+  const [datasetSummary, setDatasetSummary] = useState(null); // Track dataset summary for validation
 
   // Refs to track previous values for Early Stop / Patience sync
   const prevEarlyStop = React.useRef(form.earlyStop);
@@ -160,25 +167,25 @@ const ModelTrainingSection = ({ projectId, project }) => {
   useEffect(() => {
     const loadLastMetrics = async (retryCount = 0) => {
       try {
-        if (!form.projectId || form.liveMetrics) return; 
-         
-         // Don't load if user is creating new training 
-         if (form.trainingName && form.trainingName.trim().length > 0) return; 
-         
-         // Check for active (queued/running) sessions first 
-         try { 
-           const activeSession = await trainingAPI.getActiveSession(form.projectId); 
-           if (activeSession) { 
-             // Active session exists, don't load last completed 
-             return; 
-           } 
-         } catch (error) { 
-           // 404 means no active session, continue to load last completed 
-           if (error.response?.status !== 404) { 
-             console.error('Error checking active session:', error); 
-           } 
-         }
-        
+        if (!form.projectId || form.liveMetrics) return;
+
+        // Don't load if user is creating new training 
+        if (form.trainingName && form.trainingName.trim().length > 0) return;
+
+        // Check for active (queued/running) sessions first 
+        try {
+          const activeSession = await trainingAPI.getActiveSession(form.projectId);
+          if (activeSession) {
+            // Active session exists, don't load last completed 
+            return;
+          }
+        } catch (error) {
+          // 404 means no active session, continue to load last completed 
+          if (error.response?.status !== 404) {
+            console.error('Error checking active session:', error);
+          }
+        }
+
         // Only load last completed if NO queued/running session
         const response = await fetch(`/api/v1/projects/${form.projectId}/training/last-completed`);
         if (response.ok) {
@@ -827,6 +834,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 val_plots={form.val_plots}
                 max_det={form.max_det}
                 isDeveloper={isDeveloper}
+                datasetSummary={datasetSummary}
                 onChange={(patch) => handleChange(patch)}
                 disabled={isTraining}
               />
@@ -848,6 +856,13 @@ const ModelTrainingSection = ({ projectId, project }) => {
                   </div>
                   <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady) || isTraining}
                     onClick={async () => {
+                      // 🚫 Preflight validation for single-class dataset
+                      if (!isDeveloper && datasetSummary?.num_classes === 1 && !form.single_cls) {
+                        const { message } = require('antd');
+                        message.error('Single-class dataset detected! Please enable Single Class switch in Training Preset.');
+                        return; // Block training in User Mode
+                      }
+
                       try {
                         if (form.projectId && form.trainingName) {
                           setForm(prev => ({ ...prev, status: 'running' }));
