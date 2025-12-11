@@ -14,10 +14,11 @@ export default function PretrainedModelSelect({ framework, taskType, projectId, 
       try {
         const list = await trainingAPI.getTrainableModels(projectId, framework, taskType);
         const items = [];
+        const modelMap = {};  // Store full model info
         const sizeTag = (name) => name?.includes('n') ? 'n' : name?.includes('s') ? 's' : name?.includes('m') ? 'm' : name?.includes('l') ? 'l' : 'x';
         for (const m of Array.isArray(list) ? list : []) {
           const filePath = String(m?.file_path || '');
-          const name = String(m?.name || filePath || '').split(/[\\/]/).pop();
+          const name = String(m?.name || filePath || '').split(/[\\\/]/).pop();
           const scope = m?.project_id ? (m?.project_name || 'project') : 'global';
           if (!filePath.toLowerCase().endsWith('.pt')) continue;
           const size = sizeTag(name.toLowerCase());
@@ -26,9 +27,17 @@ export default function PretrainedModelSelect({ framework, taskType, projectId, 
               {name} <Tag style={{ marginLeft: 6 }}>{scope}</Tag> <Tag color="blue" style={{ marginLeft: 6 }}>{size}</Tag>
             </span>
           );
-          items.push({ label, value: filePath });
+          items.push({ label, value: filePath, modelInfo: m });  // Include full model info
+          modelMap[filePath] = m;  // Store for lookup
         }
         setModelOptions(items);
+        // Store model map for parent component
+        if (onChange && value) {
+          const selectedModel = modelMap[value];
+          if (selectedModel) {
+            onChange(value, selectedModel);  // Pass both file path and model info
+          }
+        }
       } catch {
         setModelOptions([]);
       } finally {
@@ -48,7 +57,10 @@ export default function PretrainedModelSelect({ framework, taskType, projectId, 
             value={value}
             placeholder={modelOptions.length ? 'Select a pretrained model' : 'No compatible models found'}
             options={modelOptions}
-            onChange={onChange}
+            onChange={(val) => {
+              const selected = modelOptions.find(opt => opt.value === val);
+              onChange(val, selected?.modelInfo);  // Pass file path and model info
+            }}
             showSearch
             disabled={disabled || !modelOptions.length}
           />

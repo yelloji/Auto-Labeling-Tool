@@ -69,14 +69,15 @@ const ModelTrainingSection = ({ projectId, project }) => {
     if (patch.datasetSummary) {
       setDatasetSummary(patch.datasetSummary);
 
-      // Auto-populate image size from dataset if available
-      if (patch.datasetSummary.image_size) {
+      // Auto-populate image size from dataset if available (only if not in Resume mode)
+      if (patch.datasetSummary.image_size && !form.resume) {
         setForm((prev) => ({ ...prev, imgSize: patch.datasetSummary.image_size }));
       }
     }
   };
   const [consoleVisible, setConsoleVisible] = useState(false);
   const [datasetSummary, setDatasetSummary] = useState(null); // Track dataset summary for validation
+  const [selectedModelInfo, setSelectedModelInfo] = useState(null); // Track selected model metadata
 
   // Refs to track previous values for Early Stop / Patience sync
   const prevEarlyStop = React.useRef(form.earlyStop);
@@ -109,6 +110,22 @@ const ModelTrainingSection = ({ projectId, project }) => {
     }, 200);
     return () => clearTimeout(timer);
   }, [form.projectId, form.trainingName, form.description, form.hydratedIdentity]);
+
+  // Auto-populate image size from model training config when Resume enabled (Priority 1)
+  useEffect(() => {
+    if (form.resume && selectedModelInfo?.training_input_size) {
+      // Resume ON: Use model's training size
+      const [width] = selectedModelInfo.training_input_size;
+      if (width && width !== form.imgSize) {
+        setForm((prev) => ({ ...prev, imgSize: width }));
+      }
+    } else if (!form.resume && datasetSummary?.image_size) {
+      // Resume OFF: Revert to dataset size
+      if (datasetSummary.image_size !== form.imgSize) {
+        setForm((prev) => ({ ...prev, imgSize: datasetSummary.image_size }));
+      }
+    }
+  }, [form.resume, selectedModelInfo, datasetSummary, form.imgSize]);
 
   useEffect(() => {
     const resumeActive = async () => {
@@ -770,7 +787,10 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 taskType={form.taskType}
                 projectId={form.projectId}
                 value={form.pretrainedModel}
-                onChange={(value) => handleChange({ pretrainedModel: value })}
+                onChange={(value, modelInfo) => {
+                  handleChange({ pretrainedModel: value });
+                  setSelectedModelInfo(modelInfo);  // Track model metadata
+                }}
                 disabled={isTraining}
               />
             </Card>
