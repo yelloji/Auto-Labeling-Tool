@@ -1236,6 +1236,31 @@ export const checkBackendHealth = async () => {
   }
 };
 
+// Training notification API
+export const trainingNotificationAPI = {
+  // Check for training completions
+  checkCompletions: async () => {
+    try {
+      const response = await api.get('/api/v1/training/completion-check');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to check training completions:', error);
+      return [];
+    }
+  },
+
+  // Acknowledge training completion
+  acknowledgeCompletion: async (sessionId) => {
+    try {
+      const response = await api.post(`/api/v1/training/session/${sessionId}/acknowledge`);
+      return response.data;
+    } catch (error) {
+      handleAPIError(error, 'Failed to acknowledge training completion');
+      throw error;
+    }
+  }
+};
+
 export const systemAPI = {
   getHardware: async () => {
     try {

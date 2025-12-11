@@ -586,6 +586,7 @@ class TrainingSession(Base):
     started_at = Column(DateTime)
     last_update_at = Column(DateTime)
     completed_at = Column(DateTime)
+    acknowledged = Column(Boolean, default=False)  # Track if completion notification was dismissed
     error_msg = Column(Text, nullable=True)
 
     __table_args__ = (

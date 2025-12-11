@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Typography, Spin, message, Modal } from 'antd';
 import { ExperimentOutlined } from '@ant-design/icons';
+import { useLocation } from 'react-router-dom';
 import TrainingList from './TrainingList/TrainingList';
 import OverviewView from './OverviewView/OverviewView';
 import { projectsAPI, handleAPIError } from '../../../services/api';
@@ -16,6 +17,7 @@ const { Title } = Typography;
  * Two-panel layout: Training List (left) + Details Panel (right)
  */
 const ModelLabSection = ({ projectId }) => {
+    const location = useLocation();
     const [selectedTraining, setSelectedTraining] = useState(null);
     const [trainings, setTrainings] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -56,6 +58,21 @@ const ModelLabSection = ({ projectId }) => {
                 });
 
                 setTrainings(mappedTrainings);
+
+                // Auto-select training from URL parameter
+                const searchParams = new URLSearchParams(location.search);
+                const trainingId = searchParams.get('trainingId');
+                if (trainingId) {
+                    const training = mappedTrainings.find(t => t.id === parseInt(trainingId));
+                    if (training) {
+                        setSelectedTraining(training);
+                        logInfo('app.frontend.ui', 'training_auto_selected', 'Training auto-selected from URL', {
+                            trainingId: training.id,
+                            trainingName: training.name
+                        });
+                    }
+                }
+
                 logInfo('app.frontend.ui', 'trainings_loaded', 'Loaded training sessions', { count: mappedTrainings.length });
             } catch (error) {
                 handleAPIError(error, 'Failed to load training sessions');
@@ -66,7 +83,7 @@ const ModelLabSection = ({ projectId }) => {
         };
 
         fetchTrainings();
-    }, [projectId]);
+    }, [projectId, location.search]);
 
     const handleTrainingSelect = (training) => {
         setSelectedTraining(training);

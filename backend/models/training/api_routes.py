@@ -18,7 +18,7 @@ from sqlalchemy import and_
 from database.models import Release
 from database.models import Project
 from database.models import DevModeSetting
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import asyncio
 import os
@@ -1145,3 +1145,58 @@ async def get_training_analytics(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Training completion notification endpoints
+
+@router.get("/training/completion-check")
+async def check_training_completions(db: Session = Depends(get_db)):
+    """
+    Check for completed or failed trainings that haven't been acknowledged.
+    Returns all unacknowledged completed/failed trainings.
+    """
+    recent_completions = db.query(TrainingSession).filter(
+        TrainingSession.status.in_(["completed", "failed"]),  # Both success AND failure!
+        TrainingSession.acknowledged == False
+    ).all()
+    
+    results = []
+    for session in recent_completions:
+        duration = None
+        if session.started_at and session.completed_at:
+            delta = session.completed_at - session.started_at
+            hours, remainder = divmod(int(delta.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            if hours > 0:
+                duration = f"{hours}h {minutes}m"
+            else:
+                duration = f"{minutes}m {seconds}s"
+        
+        results.append({
+            "id": session.id,
+            "name": session.name,
+            "project_id": session.project_id,
+            "project_name": session.project_name,
+            "status": session.status,  # ← Include status so frontend knows!
+            "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+            "duration": duration,
+            "error_msg": session.error_msg if session.status == "failed" else None
+        })
+    
+    return results
+
+
+@router.post("/training/session/{session_id}/acknowledge")
+async def acknowledge_training_completion(
+    session_id: int,
+    db: Session = Depends(get_db)
+):
+    """Mark a training session as acknowledged (notification dismissed)."""
+    session = db.query(TrainingSession).filter(TrainingSession.id == session_id).first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Training session not found")
+    
+    session.acknowledged = True
+    db.commit()
+    
+    return {"success": True, "session_id": session_id}
