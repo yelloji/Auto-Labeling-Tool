@@ -125,7 +125,7 @@ const ModelsSection = ({ projectId, project }) => {
     // Filter models based on search term and type
     let filtered = models;
     if (searchTerm) {
-      filtered = filtered.filter(model => 
+      filtered = filtered.filter(model =>
         (model.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (model.description || '').toLowerCase().includes(searchTerm.toLowerCase())
       );
@@ -178,14 +178,13 @@ const ModelsSection = ({ projectId, project }) => {
         width: '80px',
         height: '80px',
         borderRadius: '8px',
-        background: `linear-gradient(135deg, ${
-          typeInfo.color === 'blue' ? '#1890ff, #40a9ff' : 
-          typeInfo.color === 'green' ? '#52c41a, #73d13d' : 
-          typeInfo.color === 'orange' ? '#fa8c16, #ffa940' :
-          typeInfo.color === 'red' ? '#f5222d, #ff4d4f' :
-          typeInfo.color === 'purple' ? '#722ed1, #9254de' :
-          typeInfo.color === 'cyan' ? '#13c2c2, #36cfc9' : '#d9d9d9, #f0f0f0'
-        })`,
+        background: `linear-gradient(135deg, ${typeInfo.color === 'blue' ? '#1890ff, #40a9ff' :
+          typeInfo.color === 'green' ? '#52c41a, #73d13d' :
+            typeInfo.color === 'orange' ? '#fa8c16, #ffa940' :
+              typeInfo.color === 'red' ? '#f5222d, #ff4d4f' :
+                typeInfo.color === 'purple' ? '#722ed1, #9254de' :
+                  typeInfo.color === 'cyan' ? '#13c2c2, #36cfc9' : '#d9d9d9, #f0f0f0'
+          })`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -307,8 +306,8 @@ const ModelsSection = ({ projectId, project }) => {
 
     const moreMenu = (
       <Menu>
-        <Menu.Item 
-          key="view" 
+        <Menu.Item
+          key="view"
           icon={<EyeOutlined />}
           onClick={() => {
             openModelDetails(model);
@@ -323,40 +322,41 @@ const ModelsSection = ({ projectId, project }) => {
           const isPretrained = typeof model?.is_pretrained !== 'undefined' ? Boolean(model?.is_pretrained) : null;
           const isCustom = Boolean(model?.is_custom) || src === 'custom' || scope === 'project' || (isProjectScoped && isPretrained === false);
           return isCustom ? (
-          <Menu.Item 
-            key="download" 
-            icon={<DownloadOutlined />}
-            onClick={() => {
-              const hide = message.loading('Preparing download...', 0);
-              modelsAPI.downloadModel(model.manager_id || model.id)
-                .then(({ blob, filename }) => {
-                  try {
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    const extMap = { pytorch: '.pt', onnx: '.onnx', engine: '.engine' };
-                    const fallbackExt = extMap[(model.format || '').toLowerCase()] || '';
-                    const safeName = (model.name || `model_${model.id || 'download'}`).replace(/\s+/g, '_');
-                    const fallbackFilename = `${safeName}${fallbackExt}`;
-                    link.download = filename || fallbackFilename;
-                    document.body.appendChild(link);
-                    link.click();
-                    link.remove();
-                    window.URL.revokeObjectURL(url);
-                    message.success(`Downloading ${filename || fallbackFilename}`);
-                  } finally {
+            <Menu.Item
+              key="download"
+              icon={<DownloadOutlined />}
+              onClick={() => {
+                const hide = message.loading('Preparing download...', 0);
+                modelsAPI.downloadModel(model.manager_id || model.id)
+                  .then(({ blob, filename }) => {
+                    try {
+                      const url = window.URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      const extMap = { pytorch: '.pt', onnx: '.onnx', engine: '.engine' };
+                      const fallbackExt = extMap[(model.format || '').toLowerCase()] || '';
+                      const safeName = (model.name || `model_${model.id || 'download'}`).replace(/\s+/g, '_');
+                      const fallbackFilename = `${safeName}${fallbackExt}`;
+                      link.download = filename || fallbackFilename;
+                      document.body.appendChild(link);
+                      link.click();
+                      link.remove();
+                      window.URL.revokeObjectURL(url);
+                      message.success(`Downloading ${filename || fallbackFilename}`);
+                    } finally {
+                      hide();
+                    }
+                  })
+                  .catch((error) => {
                     hide();
-                  }
-                })
-                .catch((error) => {
-                  hide();
-                  handleAPIError(error, 'Download Model');
-                });
-            }}
-          >
-            Download Model
-          </Menu.Item>
-        ) : null; })()}
+                    handleAPIError(error, 'Download Model');
+                  });
+              }}
+            >
+              Download Model
+            </Menu.Item>
+          ) : null;
+        })()}
         {(() => {
           const src = String(model?.source || model?.origin || '').toLowerCase();
           const scope = String(model?.scope || '').toLowerCase();
@@ -364,27 +364,28 @@ const ModelsSection = ({ projectId, project }) => {
           const isPretrained = typeof model?.is_pretrained !== 'undefined' ? Boolean(model?.is_pretrained) : null;
           const isCustom = Boolean(model?.is_custom) || src === 'custom' || scope === 'project' || (isProjectScoped && isPretrained === false);
           return isCustom ? (
-          <>
-            <Menu.Divider />
-            <Menu.Item 
-              key="delete" 
-              icon={<DeleteOutlined />}
-              danger
-              onClick={() => {
-                Modal.confirm({
-                  title: 'Delete Model',
-                  content: `Are you sure you want to delete "${model.name}"? This action cannot be undone.`,
-                  okText: 'Delete',
-                  okType: 'danger',
-                  cancelText: 'Cancel',
-                  onOk: () => handleDelete(model.manager_id || model.id),
-                });
-              }}
-            >
-              Delete Model
-            </Menu.Item>
-          </>
-        ) : null; })()}
+            <>
+              <Menu.Divider />
+              <Menu.Item
+                key="delete"
+                icon={<DeleteOutlined />}
+                danger
+                onClick={() => {
+                  Modal.confirm({
+                    title: 'Delete Model',
+                    content: `Are you sure you want to delete "${model.name}"? This action cannot be undone.`,
+                    okText: 'Delete',
+                    okType: 'danger',
+                    cancelText: 'Cancel',
+                    onOk: () => handleDelete(model.manager_id || model.id),
+                  });
+                }}
+              >
+                Delete Model
+              </Menu.Item>
+            </>
+          ) : null;
+        })()}
       </Menu>
     );
 
@@ -498,25 +499,29 @@ const ModelsSection = ({ projectId, project }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div>
           <Title level={2} style={{ margin: 0, fontSize: '28px', fontWeight: 600 }}>
-            🤖 AI Models {project?.name ? `· ${project.name}` : ''}
+            <span style={{ marginRight: '8px' }}>🤖</span>
+            <span style={{ background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+              AI Models
+            </span>
+            {project?.name && <span style={{ marginLeft: '12px', fontSize: '20px', color: '#999', fontWeight: 400 }}>{project.name}</span>}
           </Title>
           <Text type="secondary" style={{ fontSize: '16px' }}>
             Manage models for auto-labeling in this project
           </Text>
         </div>
         <Space size="middle">
-          <Button 
+          <Button
             icon={<ReloadOutlined />}
             onClick={() => loadModels(includeGlobal)}
             style={{ borderRadius: '6px', height: '36px' }}
           >
             Refresh
           </Button>
-          <Button 
-            type="primary" 
+          <Button
+            type="primary"
             icon={<CloudUploadOutlined />}
             onClick={() => setUploadModalVisible(true)}
-            style={{ borderRadius: '6px', height: '36px', fontSize: '14px', background: '#722ed1', borderColor: '#722ed1' }}
+            style={{ borderRadius: '6px', height: '36px', fontSize: '14px', background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', border: 'none' }}
           >
             Upload Model
           </Button>
@@ -593,8 +598,8 @@ const ModelsSection = ({ projectId, project }) => {
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={
-              searchTerm || filterType !== 'all' 
-                ? 'No models match your filters' 
+              searchTerm || filterType !== 'all'
+                ? 'No models match your filters'
                 : 'No models available for this project'
             }
           >

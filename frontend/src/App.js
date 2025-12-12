@@ -16,6 +16,7 @@ import ProjectWorkspace from './pages/project-workspace/ProjectWorkspace';
 import AnnotateLauncher from './pages/annotation/AnnotateLauncher';
 import AnnotateProgress from './pages/annotation/AnnotateProgress';
 import ManualLabeling from './pages/annotation/ManualLabeling';
+import GlobalTrainingNotification from './components/GlobalTrainingNotification';
 // Removed: Datasets, DatasetDetailModern, ActiveLearningDashboard, Annotate (old)
 // These will be integrated into Projects
 
@@ -87,7 +88,7 @@ function App() {
       <Routes>
         {/* Project Workspace - Full screen layout without navbar */}
         <Route path="/projects/:projectId/workspace" element={<ProjectWorkspace />} />
-        
+
         {/* Main app layout with navbar */}
         <Route path="/*" element={
           <Layout style={{ minHeight: '100vh' }}>
@@ -111,6 +112,9 @@ function App() {
           </Layout>
         } />
       </Routes>
+
+      {/* Global Training Completion Notification */}
+      <GlobalTrainingNotification />
     </Router>
   );
 }

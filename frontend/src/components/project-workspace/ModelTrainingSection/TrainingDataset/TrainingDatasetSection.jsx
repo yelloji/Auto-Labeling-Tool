@@ -52,7 +52,7 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
             const sum = await trainingAPI.datasetSummary({ releaseDir: info.target_dir });
             setSummary(sum);
             if (Array.isArray(sum?.classes)) {
-              onChange({ classes: sum.classes });
+              onChange({ classes: sum.classes, datasetSummary: sum });
             }
           } catch (e) {
             setSummary(null);
@@ -79,7 +79,7 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
         const sum = await trainingAPI.datasetSummary({ releaseDir: dir });
         setSummary(sum);
         if (Array.isArray(sum?.classes)) {
-          onChange({ classes: sum.classes });
+          onChange({ classes: sum.classes, datasetSummary: sum });
         }
       } catch (e) { }
     };

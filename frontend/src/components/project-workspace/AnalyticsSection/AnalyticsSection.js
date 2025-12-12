@@ -112,7 +112,7 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
     const totalImages = datasets.reduce((sum, dataset) => sum + (dataset.total_images || 0), 0);
     const labeledImages = datasets.reduce((sum, dataset) => sum + (dataset.labeled_images || 0), 0);
     const unlabeledImages = datasets.reduce((sum, dataset) => sum + (dataset.unlabeled_images || 0), 0);
-    
+
     return {
       totalDatasets: datasets.length,
       totalImages,
@@ -208,9 +208,9 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
             />
           </Col>
         </Row>
-        
+
         <Divider />
-        
+
         <Row gutter={16} align="middle">
           <Col span={8}>
             <Progress
@@ -295,13 +295,13 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
         key: 'name',
         render: (name, record) => (
           <Space>
-            <div 
-              style={{ 
-                width: 16, 
-                height: 16, 
-                backgroundColor: record.color, 
-                borderRadius: 2 
-              }} 
+            <div
+              style={{
+                width: 16,
+                height: 16,
+                backgroundColor: record.color,
+                borderRadius: 2
+              }}
             />
             <Text strong>{name}</Text>
           </Space>
@@ -417,8 +417,8 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
         title: 'Progress',
         key: 'progress',
         render: (_, record) => {
-          const progress = record.total_images > 0 
-            ? Math.round(((record.labeled_images || 0) / record.total_images) * 100) 
+          const progress = record.total_images > 0
+            ? Math.round(((record.labeled_images || 0) / record.total_images) * 100)
             : 0;
           return <Progress percent={progress} size="small" />;
         }
@@ -428,8 +428,8 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
         dataIndex: 'status',
         key: 'status',
         render: (status) => {
-          const color = status === 'completed' ? 'green' : 
-                       status === 'in_progress' ? 'blue' : 'orange';
+          const color = status === 'completed' ? 'green' :
+            status === 'in_progress' ? 'blue' : 'orange';
           return <Tag color={color}>{status || 'pending'}</Tag>;
         }
       }
@@ -475,8 +475,11 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
         });
         return null;
       })()}
-      <div style={{ marginBottom: 24 }}>
-        <Title level={2}>Project Analytics</Title>
+      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'baseline', gap: '12px' }}>
+        <Title level={2} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
+          <BarChartOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+          Project Analytics
+        </Title>
         <Text type="secondary">
           Comprehensive overview of your project's datasets, labels, and annotation progress.
         </Text>

@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space, Row, Col, Collapse } from 'antd';
 import { systemAPI } from '../../../../services/api';
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_plots, taskType, disabled }) {
+
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, max_det, taskType, datasetSummary, disabled }) {
+
   const OPTIMIZER_PRESETS = {
     SGD: { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 },
     Adam: { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 },
@@ -86,25 +88,33 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
             <Col span={12}>
               <Form.Item label="Single Class" tooltip="Treat multi-class data as single-class">
                 <Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} disabled={disabled} />
+                {/* ⚠️ Warning for single-class dataset mismatch */}
+                {datasetSummary?.num_classes === 1 && !single_cls && (
+                  <div style={{ marginTop: 8 }}>
+                    <span style={{ color: '#ff4d4f', fontSize: 12 }}>
+                      ⚠️ Dataset has 1 class. {isDeveloper ? 'Consider enabling this switch.' : 'Please enable this switch.'}
+                    </span>
+                  </div>
+                )}
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item label="Epochs" tooltip="Maximum number of training epochs" required>
-                <InputNumber min={1} max={500} value={epochs} onChange={(v) => onChange({ epochs: v })} disabled={disabled} />
+                <InputNumber min={1} max={10000} value={epochs} onChange={(v) => onChange({ epochs: v })} disabled={disabled} />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item label="Batch Size" tooltip="Images per batch">
-                <InputNumber min={1} placeholder={2} value={typeof batchSize === 'number' ? batchSize : undefined} onChange={(v) => onChange({ batchSize: v })} disabled={disabled} />
+              <Form.Item label="Batch Size" tooltip="Images per batch. Use 2 for small datasets, -1 for auto, higher for large datasets">
+                <InputNumber min={-1} placeholder={2} value={typeof batchSize === 'number' ? batchSize : undefined} onChange={(v) => onChange({ batchSize: v })} disabled={disabled} />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item label="Image Size" tooltip="Input image size (px)" required>
-                <InputNumber min={64} max={2048} step={64} value={imgSize} onChange={(v) => onChange({ imgSize: v })} disabled={disabled} />
+                <InputNumber min={64} max={8192} step={64} value={imgSize} onChange={(v) => onChange({ imgSize: v })} disabled={disabled} />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -143,13 +153,13 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                 )}
               </Form.Item>
               <Form.Item label="Epochs" tooltip="Maximum number of training epochs" required>
-                <InputNumber min={1} max={500} value={epochs} onChange={(v) => onChange({ epochs: v })} disabled={disabled} />
+                <InputNumber min={1} max={10000} value={epochs} onChange={(v) => onChange({ epochs: v })} disabled={disabled} />
               </Form.Item>
               <Form.Item label="Image Size" tooltip="Input image size (px)" required>
-                <InputNumber min={64} max={2048} step={64} value={imgSize} onChange={(v) => onChange({ imgSize: v })} disabled={disabled} />
+                <InputNumber min={64} max={8192} step={64} value={imgSize} onChange={(v) => onChange({ imgSize: v })} disabled={disabled} />
               </Form.Item>
-              <Form.Item label="Batch Size" tooltip="Images per batch">
-                <InputNumber min={1} placeholder={2} value={typeof batchSize === 'number' ? batchSize : undefined} onChange={(v) => onChange({ batchSize: v })} disabled={disabled} />
+              <Form.Item label="Batch Size" tooltip="Images per batch. Use 2 for small datasets, -1 for auto, higher for large datasets">
+                <InputNumber min={-1} placeholder={2} value={typeof batchSize === 'number' ? batchSize : undefined} onChange={(v) => onChange({ batchSize: v })} disabled={disabled} />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -200,9 +210,20 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                   })()
                 )}
               </Form.Item>
-              <Form.Item label="Single Class" tooltip="Treat data as single class (industrial setups)">
-                <Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} disabled={disabled} />
-              </Form.Item>
+              {/* Show Single Class only for 1-class datasets in User Mode */}
+              {datasetSummary?.num_classes === 1 && (
+                <Form.Item label="Single Class" tooltip="Treat data as single class (industrial setups)">
+                  <Switch checked={single_cls} onChange={(v) => onChange({ single_cls: v })} disabled={disabled} />
+                  {/* ⚠️ Warning for single-class dataset mismatch */}
+                  {!single_cls && (
+                    <div style={{ marginTop: 8 }}>
+                      <span style={{ color: '#ff4d4f', fontSize: 12 }}>
+                        ⚠️ Dataset has 1 class. Please enable this switch.
+                      </span>
+                    </div>
+                  )}
+                </Form.Item>
+              )}
             </Col>
           </Row>
 
@@ -258,7 +279,7 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                   )}
                 </Form.Item>
                 <Form.Item label="Learning Rate (lr0)" tooltip="Initial learning rate">
-                  <InputNumber min={0} step={0.0001} placeholder={0.0007} value={lr0} onChange={(v) => onChange({ lr0: v })} disabled={disabled} />
+                  <InputNumber min={0} max={0.1} step={0.0001} placeholder={0.0007} value={lr0} onChange={(v) => onChange({ lr0: v })} disabled={disabled} />
                 </Form.Item>
                 <Form.Item label="Final LR Factor (lrf)" tooltip="Final LR = lr0 × lrf (cosine schedule end)">
                   <InputNumber min={0} max={1} step={0.001} placeholder={0.01} value={lrf} onChange={(v) => onChange({ lrf: v })} disabled={disabled} />
@@ -267,7 +288,7 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                   <InputNumber min={0} max={1} step={0.001} placeholder={0.937} value={momentum} onChange={(v) => onChange({ momentum: v })} disabled={disabled} />
                 </Form.Item>
                 <Form.Item label="Weight Decay" tooltip="L2 regularization strength">
-                  <InputNumber min={0} step={0.0001} placeholder={0.0005} value={weight_decay} onChange={(v) => onChange({ weight_decay: v })} disabled={disabled} />
+                  <InputNumber min={0} max={0.001} step={0.0001} placeholder={0.0005} value={weight_decay} onChange={(v) => onChange({ weight_decay: v })} disabled={disabled} />
                 </Form.Item>
               </Col>
               <Col span={12}>
@@ -281,7 +302,7 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                   <InputNumber min={0} max={1} step={0.01} placeholder={0.8} value={warmup_momentum} onChange={(v) => onChange({ warmup_momentum: v })} disabled={disabled} />
                 </Form.Item>
                 <Form.Item label="Warmup Bias LR" tooltip="Initial bias lr for warmup">
-                  <InputNumber min={0} step={0.01} placeholder={0.1} value={warmup_bias_lr} onChange={(v) => onChange({ warmup_bias_lr: v })} disabled={disabled} />
+                  <InputNumber min={0} max={1.0} step={0.01} placeholder={0.1} value={warmup_bias_lr} onChange={(v) => onChange({ warmup_bias_lr: v })} disabled={disabled} />
                 </Form.Item>
                 <Form.Item label="Patience (Early Stop)" tooltip="Epochs to wait without improvement before stopping">
                   <InputNumber min={0} placeholder={30} value={patience} onChange={(v) => onChange({ patience: v })} disabled={disabled} />
@@ -297,25 +318,25 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
           </Collapse.Panel>
           <Collapse.Panel header="Loss Weights" key="loss">
             <Row gutter={12}>
-              <Col span={8}><Form.Item label="Box" tooltip="Weight of bounding-box regression loss"><InputNumber min={0} step={0.1} placeholder={10.0} value={box} onChange={(v) => onChange({ box: v })} disabled={disabled} /></Form.Item></Col>
-              <Col span={8}><Form.Item label="Cls" tooltip="Weight of classification loss"><InputNumber min={0} step={0.1} placeholder={0.3} value={cls} onChange={(v) => onChange({ cls: v })} disabled={disabled} /></Form.Item></Col>
-              <Col span={8}><Form.Item label="DFL" tooltip="Weight of distribution focal loss (box quality)"><InputNumber min={0} step={0.1} placeholder={2.0} value={dfl} onChange={(v) => onChange({ dfl: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={8}><Form.Item label="Box" tooltip="Weight of bounding-box regression loss"><InputNumber min={0} step={0.1} placeholder={7.5} value={box} onChange={(v) => onChange({ box: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={8}><Form.Item label="Cls" tooltip="Weight of classification loss"><InputNumber min={0} step={0.1} placeholder={0.5} value={cls} onChange={(v) => onChange({ cls: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={8}><Form.Item label="DFL" tooltip="Weight of distribution focal loss (box quality)"><InputNumber min={0} step={0.1} placeholder={1.5} value={dfl} onChange={(v) => onChange({ dfl: v })} disabled={disabled} /></Form.Item></Col>
             </Row>
           </Collapse.Panel>
           <Collapse.Panel header="Augmentation" key="aug">
             <Row gutter={12}>
-              <Col span={6}><Form.Item label="Mosaic" tooltip="Mosaic augmentation probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.3} value={mosaic} onChange={(v) => onChange({ mosaic: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Mosaic" tooltip="Mosaic augmentation probability"><InputNumber min={0} max={1} step={0.01} placeholder={1.0} value={mosaic} onChange={(v) => onChange({ mosaic: v })} disabled={disabled} /></Form.Item></Col>
               {isDeveloper && (
                 <Col span={6}>
                   <Form.Item label="Close Mosaic (final epochs)" tooltip="Disable mosaic for last N epochs (0 = disabled)">
-                    <InputNumber min={0} max={500} step={1} placeholder={20} value={typeof close_mosaic === 'number' ? close_mosaic : undefined} onChange={(v) => onChange({ close_mosaic: v })} disabled={disabled} />
+                    <InputNumber min={0} max={500} step={1} placeholder={10} value={typeof close_mosaic === 'number' ? close_mosaic : undefined} onChange={(v) => onChange({ close_mosaic: v })} disabled={disabled} />
                   </Form.Item>
                 </Col>
               )}
-              <Col span={6}><Form.Item label="Mixup" tooltip="Mixup augmentation probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.03} value={mixup} onChange={(v) => onChange({ mixup: v })} disabled={disabled} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="HSV H" tooltip="Hue augmentation"><InputNumber min={0} max={1} step={0.001} placeholder={0.005} value={hsv_h} onChange={(v) => onChange({ hsv_h: v })} disabled={disabled} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="HSV S" tooltip="Saturation augmentation"><InputNumber min={0} max={1} step={0.01} placeholder={0.1} value={hsv_s} onChange={(v) => onChange({ hsv_s: v })} disabled={disabled} /></Form.Item></Col>
-              <Col span={4}><Form.Item label="HSV V" tooltip="Value/Brightness augmentation"><InputNumber min={0} max={1} step={0.01} placeholder={0.05} value={hsv_v} onChange={(v) => onChange({ hsv_v: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Mixup" tooltip="Mixup augmentation probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.0} value={mixup} onChange={(v) => onChange({ mixup: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="HSV H" tooltip="Hue augmentation"><InputNumber min={0} max={1} step={0.001} placeholder={0.015} value={hsv_h} onChange={(v) => onChange({ hsv_h: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="HSV S" tooltip="Saturation augmentation"><InputNumber min={0} max={1} step={0.01} placeholder={0.7} value={hsv_s} onChange={(v) => onChange({ hsv_s: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={4}><Form.Item label="HSV V" tooltip="Value/Brightness augmentation"><InputNumber min={0} max={1} step={0.01} placeholder={0.4} value={hsv_v} onChange={(v) => onChange({ hsv_v: v })} disabled={disabled} /></Form.Item></Col>
             </Row>
             <Row gutter={12}>
               <Col span={4}><Form.Item label="FlipUD" tooltip="Vertical flip probability"><InputNumber min={0} max={1} step={0.01} placeholder={0.0} value={flipud} onChange={(v) => onChange({ flipud: v })} disabled={disabled} /></Form.Item></Col>
@@ -331,14 +352,16 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
             <Row gutter={12}>
               <Col span={6}><Form.Item label="Rectangular" tooltip="Rectangular batches"><Switch checked={rect} onChange={(v) => onChange({ rect: v })} disabled={disabled} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Overlap Mask" tooltip="Merge masks into single image mask"><Switch checked={overlap_mask} onChange={(v) => onChange({ overlap_mask: v })} disabled={disabled} /></Form.Item></Col>
-              <Col span={6}><Form.Item label="Mask Ratio" tooltip="Mask downsample ratio"><InputNumber min={1} step={1} placeholder={2} value={mask_ratio} onChange={(v) => onChange({ mask_ratio: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Mask Ratio" tooltip="Mask downsample ratio"><InputNumber min={1} step={1} placeholder={4} value={mask_ratio} onChange={(v) => onChange({ mask_ratio: v })} disabled={disabled} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Freeze Layers" tooltip="Freeze first N layers"><InputNumber min={0} step={1} placeholder={0} value={freeze} onChange={(v) => onChange({ freeze: v })} disabled={disabled} /></Form.Item></Col>
             </Row>
           </Collapse.Panel>
           <Collapse.Panel header="Validation" key="val">
             <Row gutter={12}>
-              <Col span={12}><Form.Item label="Val IoU" tooltip="IoU threshold used in validation"><InputNumber min={0} max={1} step={0.01} placeholder={0.5} value={val_iou} onChange={(v) => onChange({ val_iou: v })} disabled={disabled} /></Form.Item></Col>
-              <Col span={12}><Form.Item label="Val Plots" tooltip="Save validation plots"><Switch checked={val_plots} onChange={(v) => onChange({ val_plots: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Val IoU" tooltip="IoU threshold used in validation"><InputNumber min={0} max={1} step={0.01} placeholder={0.5} value={val_iou} onChange={(v) => onChange({ val_iou: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Val Conf" tooltip="Confidence threshold for validation (default 0.001)"><InputNumber min={0} max={1} step={0.01} placeholder={0.25} value={val_conf} onChange={(v) => onChange({ val_conf: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Max Det" tooltip="Maximum detections per image (default 300)"><InputNumber min={1} step={1} placeholder={300} value={max_det} onChange={(v) => onChange({ max_det: v })} disabled={disabled} /></Form.Item></Col>
+              <Col span={6}><Form.Item label="Val Plots" tooltip="Save validation plots"><Switch checked={val_plots} onChange={(v) => onChange({ val_plots: v })} disabled={disabled} /></Form.Item></Col>
             </Row>
           </Collapse.Panel>
         </Collapse>

@@ -2,23 +2,24 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Spin, 
-  message, 
-  Typography, 
-  Input, 
-  Select, 
-  Row, 
-  Col, 
+import {
+  Spin,
+  message,
+  Typography,
+  Input,
+  Select,
+  Row,
+  Col,
   Button,
   Space,
-  Pagination 
+  Pagination
 } from 'antd';
-import { 
-  SearchOutlined, 
+import {
+  DatabaseOutlined,
+  SearchOutlined,
   ReloadOutlined,
   FilterOutlined,
-  ExportOutlined 
+  ExportOutlined
 } from '@ant-design/icons';
 import { projectsAPI } from '../../../services/api';
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
@@ -81,8 +82,8 @@ const DatasetSection = ({ projectId }) => {
       projectId: projectId,
       destination: 'release_section'
     });
-    navigate(`/projects/${projectId}/workspace`, { 
-      state: { selectedSection: 'versions', openCreateModal: true } 
+    navigate(`/projects/${projectId}/workspace`, {
+      state: { selectedSection: 'versions', openCreateModal: true }
     });
   };
 
@@ -97,28 +98,28 @@ const DatasetSection = ({ projectId }) => {
       // Fetch all images with split_type=dataset filter (client-side pagination)
       const response = await projectsAPI.getProjectDatasetImages(projectId, 'dataset', 10000, 0);
       console.log('Dataset images response:', response);
-      
+
       // Store all dataset images for client-side filtering and pagination
       const datasetImages = response.images || [];
       setAllImages(datasetImages);
-      
+
       // Fetch all datasets (including empty ones) for complete dropdown
       const datasetsResponse = await projectsAPI.getProjectDatasets(projectId);
       const allDatasets = datasetsResponse.datasets || [];
-      
+
       // Extract dataset names from images
       const datasetsWithImages = [...new Set(datasetImages.map(img => img.dataset_name))].filter(Boolean);
-      
+
       // Combine all dataset names (from both API calls) to ensure empty datasets appear
       const allDatasetNames = [...new Set([
         ...allDatasets.map(dataset => dataset.name),
         ...datasetsWithImages
       ])].filter(Boolean);
-      
+
       setAvailableDatasets(allDatasetNames);
-      
+
       // Note: Available classes will be updated based on filtered images in separate useEffect
-      
+
       console.log('Dataset images loaded:', datasetImages.length);
       console.log('All datasets loaded:', allDatasets.length);
       console.log('Available datasets:', allDatasetNames);
@@ -181,18 +182,18 @@ const DatasetSection = ({ projectId }) => {
     // Filter images by all criteria except class filter
     const filteredImagesForClasses = allImages.filter(img => {
       // Search filter
-      const matchesSearch = search === '' || 
+      const matchesSearch = search === '' ||
         img.name?.toLowerCase().includes(search.toLowerCase()) ||
         img.filename?.toLowerCase().includes(search.toLowerCase());
-      
+
       // Split section filter (train/validation/test)
-      const matchesSplitSection = filterSplitSection === 'all' || 
+      const matchesSplitSection = filterSplitSection === 'all' ||
         img.split_section === filterSplitSection;
-      
+
       // Dataset filter
-      const matchesDataset = filterDataset === 'all' || 
+      const matchesDataset = filterDataset === 'all' ||
         img.dataset_name === filterDataset;
-      
+
       return matchesSearch && matchesSplitSection && matchesDataset;
     });
 
@@ -211,12 +212,12 @@ const DatasetSection = ({ projectId }) => {
         img.class_names.forEach(className => allClasses.add(className));
       }
     });
-    
+
     const uniqueClasses = Array.from(allClasses).sort();
     setAvailableClasses(uniqueClasses);
-    
+
     console.log('Available classes updated based on filters:', uniqueClasses);
-    
+
     // Reset class filter if current selection is no longer available
     if (filterClass !== 'all' && !uniqueClasses.includes(filterClass)) {
       logInfo('app.frontend.ui', 'class_filter_reset', 'Class filter reset due to unavailable class', {
@@ -235,23 +236,23 @@ const DatasetSection = ({ projectId }) => {
 
     let filteredImages = allImages.filter(img => {
       // Search filter
-      const matchesSearch = search === '' || 
+      const matchesSearch = search === '' ||
         img.name?.toLowerCase().includes(search.toLowerCase()) ||
         img.filename?.toLowerCase().includes(search.toLowerCase());
-      
+
       // Split section filter (train/validation/test)
-      const matchesSplitSection = filterSplitSection === 'all' || 
+      const matchesSplitSection = filterSplitSection === 'all' ||
         img.split_section === filterSplitSection;
-      
+
       // Dataset filter
-      const matchesDataset = filterDataset === 'all' || 
+      const matchesDataset = filterDataset === 'all' ||
         img.dataset_name === filterDataset;
-      
+
       // Class filter - check if image contains annotations with the selected class
       const matchesClass = filterClass === 'all' || (() => {
         // Check in annotations array
         if (img.annotations && Array.isArray(img.annotations)) {
-          return img.annotations.some(annotation => 
+          return img.annotations.some(annotation =>
             annotation.class_name === filterClass
           );
         }
@@ -261,7 +262,7 @@ const DatasetSection = ({ projectId }) => {
         }
         return false;
       })();
-      
+
       return matchesSearch && matchesSplitSection && matchesDataset && matchesClass;
     });
 
@@ -287,7 +288,7 @@ const DatasetSection = ({ projectId }) => {
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
     const paginatedImages = filteredImages.slice(startIndex, endIndex);
-    
+
     setImages(paginatedImages);
     setTotalImages(filteredImages.length);
 
@@ -320,9 +321,9 @@ const DatasetSection = ({ projectId }) => {
     });
     // Navigate to manual labeling page
     navigate(`/annotate/${image.dataset_id}/manual`, {
-      state: { 
+      state: {
         imageId: image.id,
-        projectId: projectId 
+        projectId: projectId
       }
     });
   };
@@ -394,8 +395,8 @@ const DatasetSection = ({ projectId }) => {
     });
     return (
       <div className="dataset-container">
-        <div style={{ 
-          textAlign: 'center', 
+        <div style={{
+          textAlign: 'center',
           padding: '60px 20px',
           background: '#fafafa',
           borderRadius: '8px',
@@ -425,9 +426,10 @@ const DatasetSection = ({ projectId }) => {
         return null;
       })()}
       {/* Header */}
-      <div className="dataset-header">
-        <div>
-          <Title level={2} style={{ margin: 0, marginBottom: '8px' }}>
+      <div className="dataset-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+          <Title level={2} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
+            <DatabaseOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
             Dataset
           </Title>
           <Text type="secondary">
@@ -440,14 +442,14 @@ const DatasetSection = ({ projectId }) => {
             icon={<ExportOutlined />}
             onClick={handleCreateRelease}
             style={{
-              background: '#1890ff',
-              borderColor: '#1890ff',
+              background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)',
+              border: 'none',
               fontWeight: '500'
             }}
           >
             Create New Release
           </Button>
-          <Button 
+          <Button
             icon={<ReloadOutlined />}
             onClick={handleRefreshClick}
             loading={loading}
@@ -458,10 +460,10 @@ const DatasetSection = ({ projectId }) => {
       </div>
 
       {/* Filters and Search */}
-      <div style={{ 
-        background: '#fafafa', 
-        padding: '16px', 
-        borderRadius: '8px', 
+      <div style={{
+        background: '#fafafa',
+        padding: '16px',
+        borderRadius: '8px',
         marginTop: '16px',
         border: '1px solid #f0f0f0'
       }}>
@@ -529,7 +531,7 @@ const DatasetSection = ({ projectId }) => {
           <Col xs={24} sm={12} md={6}>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <Text type="secondary" style={{ lineHeight: '32px' }}>
-                {totalImages > pageSize ? 
+                {totalImages > pageSize ?
                   `Page ${currentPage} of ${Math.ceil(totalImages / pageSize)} (${totalImages} total images)` :
                   `${images.length} of ${totalImages} dataset images`
                 }
@@ -542,9 +544,9 @@ const DatasetSection = ({ projectId }) => {
       {/* Image Grid */}
       <div className="image-grid" style={{ marginTop: '24px' }}>
         {images.map((image) => (
-          <DatasetImageCard 
-            key={image.id} 
-            image={image} 
+          <DatasetImageCard
+            key={image.id}
+            image={image}
             onClick={() => handleImageClick(image)}
           />
         ))}
@@ -552,9 +554,9 @@ const DatasetSection = ({ projectId }) => {
 
       {/* Pagination */}
       {totalImages > pageSize && (
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
           marginTop: '32px',
           marginBottom: '24px'
         }}>
@@ -565,7 +567,7 @@ const DatasetSection = ({ projectId }) => {
             onChange={handlePageChange}
             showSizeChanger={false}
             showQuickJumper={totalImages > 100}
-            showTotal={(total, range) => 
+            showTotal={(total, range) =>
               `${range[0]}-${range[1]} of ${total} images`
             }
           />
@@ -662,8 +664,8 @@ const DatasetImageCard = ({ image, onClick }) => {
         <img
           src={imageUrl}
           alt={image.filename || image.name}
-          style={{ 
-            width: '180px', 
+          style={{
+            width: '180px',
             height: 'auto',
             borderRadius: '6px',
             display: imageLoaded ? 'block' : 'none'
@@ -699,7 +701,7 @@ const DatasetImageCard = ({ image, onClick }) => {
             });
           }}
         />
-        
+
         {/* Split section tag */}
         {image.split_section && imageLoaded && (
           <div
@@ -721,7 +723,7 @@ const DatasetImageCard = ({ image, onClick }) => {
             {splitInfo.label}
           </div>
         )}
-        
+
         {!imageLoaded && (
           <div style={{
             width: '180px',
@@ -753,14 +755,14 @@ const DatasetImageCard = ({ image, onClick }) => {
           >
             {annotations.map((annotation, index) => {
               console.log(`Processing annotation ${index}:`, annotation);
-              
+
               // Check if annotation has segmentation data (polygon)
               if (annotation.segmentation && annotation.segmentation.length > 0) {
                 console.log(`Found polygon annotation with segmentation:`, annotation.segmentation);
-                
+
                 let points = annotation.segmentation;
                 let pointsString = '';
-                
+
                 // Parse JSON string if needed
                 if (typeof points === 'string') {
                   try {
@@ -770,7 +772,7 @@ const DatasetImageCard = ({ image, onClick }) => {
                     return null;
                   }
                 }
-                
+
                 // Handle different segmentation formats
                 if (Array.isArray(points)) {
                   if (points.length > 0 && typeof points[0] === 'object' && points[0].x !== undefined) {
@@ -804,7 +806,7 @@ const DatasetImageCard = ({ image, onClick }) => {
                   const firstPoint = points[0];
                   const labelX = typeof firstPoint === 'object' ? firstPoint.x : points[0];
                   const labelY = typeof firstPoint === 'object' ? firstPoint.y : points[1];
-                  
+
                   return (
                     <g key={`polygon-${annotation.id || index}`}>
                       <polygon
@@ -831,14 +833,14 @@ const DatasetImageCard = ({ image, onClick }) => {
                   );
                 }
               }
-              
+
               // Also check for type === 'polygon' with segmentation
               if (annotation.type === 'polygon' && annotation.segmentation) {
                 console.log(`Found type=polygon annotation:`, annotation);
-                
+
                 const points = annotation.segmentation;
                 let pointsString = '';
-                
+
                 if (Array.isArray(points)) {
                   if (Array.isArray(points[0])) {
                     pointsString = points[0].reduce((acc, point, i) => {
@@ -885,19 +887,19 @@ const DatasetImageCard = ({ image, onClick }) => {
                   );
                 }
               }
-              
+
               // Bounding box annotation - check for bounding box coordinates
-              if (annotation.x_min !== undefined && annotation.y_min !== undefined && 
-                  annotation.x_max !== undefined && annotation.y_max !== undefined) {
+              if (annotation.x_min !== undefined && annotation.y_min !== undefined &&
+                annotation.x_max !== undefined && annotation.y_max !== undefined) {
                 // Convert normalized coordinates to pixel coordinates
                 const imageWidth = image.width || imageDimensions.width;
                 const imageHeight = image.height || imageDimensions.height;
-                
+
                 const x = annotation.x_min * imageWidth;
                 const y = annotation.y_min * imageHeight;
                 const width = (annotation.x_max - annotation.x_min) * imageWidth;
                 const height = (annotation.y_max - annotation.y_min) * imageHeight;
-                
+
                 return (
                   <g key={`box-${annotation.id || index}`}>
                     <rect
@@ -925,10 +927,10 @@ const DatasetImageCard = ({ image, onClick }) => {
                   </g>
                 );
               }
-              
+
               // Legacy format support - if annotation has x, y, width, height directly
-              if (annotation.x !== undefined && annotation.y !== undefined && 
-                  annotation.width !== undefined && annotation.height !== undefined) {
+              if (annotation.x !== undefined && annotation.y !== undefined &&
+                annotation.width !== undefined && annotation.height !== undefined) {
                 return (
                   <g key={`legacy-box-${annotation.id || index}`}>
                     <rect
@@ -956,13 +958,13 @@ const DatasetImageCard = ({ image, onClick }) => {
                   </g>
                 );
               }
-              
+
               return null;
             })}
           </svg>
         )}
       </div>
-      
+
       {/* Image filename below thumbnail */}
       <div style={{
         width: '180px',

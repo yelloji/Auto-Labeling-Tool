@@ -31,15 +31,15 @@ import { logInfo, logError, logUserClick } from '../../../utils/professional_log
 const { Title, Text } = Typography;
 
 // DatasetCard Component - Extracted from original ProjectWorkspace.js renderDatasetCard function
-const DatasetCard = ({ 
-  dataset, 
-  status, 
-  onDatasetClick, 
-  onRenameDataset, 
-  onMoveToUnassigned, 
-  onMoveToAnnotating, 
-  onMoveToDataset, 
-  onDeleteDataset 
+const DatasetCard = ({
+  dataset,
+  status,
+  onDatasetClick,
+  onRenameDataset,
+  onMoveToUnassigned,
+  onMoveToAnnotating,
+  onMoveToDataset,
+  onDeleteDataset
 }) => {
   const getStatusIcon = () => {
     switch (status) {
@@ -52,15 +52,15 @@ const DatasetCard = ({
 
   const getProgressPercent = () => {
     if (dataset.total_images === 0) return 0;
-    
+
     if (status === 'annotating' || status === 'unassigned') {
       return Math.round((dataset.labeled_images / dataset.total_images) * 100);
     }
-    
+
     if (status === 'completed') {
       return 100;
     }
-    
+
     return Math.round((dataset.labeled_images / dataset.total_images) * 100);
   };
 
@@ -159,7 +159,7 @@ const DatasetCard = ({
     <Card
       key={dataset.id}
       size="small"
-      style={{ 
+      style={{
         marginBottom: '12px',
         cursor: 'pointer',
         transition: 'all 0.3s ease',
@@ -170,23 +170,23 @@ const DatasetCard = ({
       bodyStyle={{ padding: '12px' }}
       onClick={handleCardClick}
     >
-      <div style={{ 
-        position: 'absolute', 
-        top: '8px', 
-        right: '8px', 
-        zIndex: 10 
+      <div style={{
+        position: 'absolute',
+        top: '8px',
+        right: '8px',
+        zIndex: 10
       }}>
         <Dropdown
           menu={{ items: menuItems }}
           trigger={['click']}
           placement="bottomRight"
         >
-          <Button 
-            type="text" 
-            icon={<MoreOutlined />} 
+          <Button
+            type="text"
+            icon={<MoreOutlined />}
             size="small"
             onClick={handleMoreButtonClick}
-            style={{ 
+            style={{
               border: 'none',
               boxShadow: 'none',
               padding: '4px'
@@ -201,16 +201,16 @@ const DatasetCard = ({
           {dataset.name}
         </Text>
       </div>
-      
+
       <div style={{ marginBottom: '8px' }}>
         <Text type="secondary" style={{ fontSize: '12px' }}>
           {dataset.total_images} images
         </Text>
         {(status === 'annotating' || status === 'unassigned') && (
           <div style={{ marginTop: '4px' }}>
-            <Progress 
-              percent={getProgressPercent()} 
-              size="small" 
+            <Progress
+              percent={getProgressPercent()}
+              size="small"
               status={getProgressPercent() === 100 ? 'success' : 'active'}
             />
             <Text type="secondary" style={{ fontSize: '11px' }}>
@@ -225,9 +225,9 @@ const DatasetCard = ({
         )}
         {status === 'completed' && (
           <div style={{ marginTop: '4px' }}>
-            <Progress 
-              percent={100} 
-              size="small" 
+            <Progress
+              percent={100}
+              size="small"
               status="success"
             />
             <Text type="secondary" style={{ fontSize: '11px' }}>
@@ -247,11 +247,11 @@ const DatasetCard = ({
 };
 
 // Main ManagementSection Component - Extracted from original ProjectWorkspace.js renderManagementContent function
-const ManagementSection = ({ 
-  projectId, 
-  setSelectedKey, 
-  project, 
-  loadProject 
+const ManagementSection = ({
+  projectId,
+  setSelectedKey,
+  project,
+  loadProject
 }) => {
   const navigate = useNavigate();
   const [managementData, setManagementData] = useState(null);
@@ -263,12 +263,12 @@ const ManagementSection = ({
       timestamp: new Date().toISOString(),
       projectId: projectId
     });
-    
+
     setLoadingManagement(true);
     try {
       const data = await projectsAPI.getProjectManagementData(projectId);
       setManagementData(data);
-      
+
       logInfo('app.frontend.interactions', 'management_data_loading_success', 'Successfully loaded management data', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
@@ -303,7 +303,7 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     if (projectId) {
       logInfo('app.frontend.ui', 'management_section_initialized', 'ManagementSection component initialized', {
         timestamp: new Date().toISOString(),
@@ -346,7 +346,7 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     // Validate status
     const validStatuses = ['unassigned', 'annotating', 'completed'];
     if (!validStatuses.includes(status)) {
@@ -361,7 +361,7 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     logInfo('app.frontend.interactions', 'dataset_click_handled', 'Dataset click handled', {
       timestamp: new Date().toISOString(),
       projectId: projectId,
@@ -369,7 +369,7 @@ const ManagementSection = ({
       datasetName: dataset.name,
       status: status
     });
-    
+
     if (status === 'annotating') {
       handleStartAnnotating(dataset);
     } else if (status === 'unassigned') {
@@ -400,26 +400,26 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     logInfo('app.frontend.interactions', 'assign_dataset_to_annotating_started', 'Started assigning dataset to annotating', {
       timestamp: new Date().toISOString(),
       projectId: projectId,
       datasetId: dataset.id,
       datasetName: dataset.name
     });
-    
+
     try {
       message.info(`Assigning dataset to annotating: ${dataset.name}`);
       await projectsAPI.assignDatasetToAnnotating(projectId, dataset.id);
       message.success(`Dataset assigned to annotating: ${dataset.name}`);
-      
+
       logInfo('app.frontend.interactions', 'assign_dataset_to_annotating_success', 'Successfully assigned dataset to annotating', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
         datasetId: dataset.id,
         datasetName: dataset.name
       });
-      
+
       loadManagementData(); // Reload data
     } catch (error) {
       logError('app.frontend.interactions', 'assign_dataset_to_annotating_failed', 'Failed to assign dataset to annotating', {
@@ -440,7 +440,7 @@ const ManagementSection = ({
       datasetId: dataset.id,
       datasetName: dataset.name
     });
-    
+
     // Validate dataset object
     if (!dataset || !dataset.id || !dataset.name) {
       logError('app.frontend.validation', 'rename_dataset_invalid_dataset', 'Dataset rename validation failed: invalid dataset object', {
@@ -452,10 +452,10 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     // Handle dataset rename with modal input
     const newName = prompt(`Enter new name for dataset "${dataset.name}":`, dataset.name);
-    
+
     // Validation checks
     if (!newName || newName.trim() === '') {
       logError('app.frontend.validation', 'rename_dataset_empty_name', 'Dataset rename validation failed: empty name', {
@@ -468,7 +468,7 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     if (newName === dataset.name) {
       logError('app.frontend.validation', 'rename_dataset_same_name', 'Dataset rename validation failed: same name', {
         timestamp: new Date().toISOString(),
@@ -480,7 +480,7 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     // Name length validation
     if (newName.length > 100) {
       logError('app.frontend.validation', 'rename_dataset_name_too_long', 'Dataset rename validation failed: name too long', {
@@ -494,7 +494,7 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     // Name format validation - check for invalid characters
     const invalidChars = /[<>:"/\\|?*]/;
     if (invalidChars.test(newName)) {
@@ -509,7 +509,7 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     // Name format validation - check for leading/trailing spaces
     if (newName !== newName.trim()) {
       logError('app.frontend.validation', 'rename_dataset_leading_trailing_spaces', 'Dataset rename validation failed: leading/trailing spaces', {
@@ -522,7 +522,7 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     if (newName && newName !== dataset.name) {
       logInfo('app.frontend.interactions', 'rename_dataset_started', 'Started renaming dataset', {
         timestamp: new Date().toISOString(),
@@ -531,13 +531,13 @@ const ManagementSection = ({
         oldName: dataset.name,
         newName: newName
       });
-      
+
       try {
         message.loading(`Renaming dataset to: ${newName}...`, 0);
         await projectsAPI.renameDataset(projectId, dataset.id, newName);
         message.destroy(); // Clear loading message
         message.success(`Dataset renamed to: ${newName}`);
-        
+
         logInfo('app.frontend.interactions', 'rename_dataset_success', 'Successfully renamed dataset', {
           timestamp: new Date().toISOString(),
           projectId: projectId,
@@ -545,7 +545,7 @@ const ManagementSection = ({
           oldName: dataset.name,
           newName: newName
         });
-        
+
         // Add a small delay to ensure backend operations complete
         setTimeout(() => {
           loadManagementData(); // Reload data
@@ -579,20 +579,20 @@ const ManagementSection = ({
       datasetId: dataset.id,
       datasetName: dataset.name
     });
-    
+
     try {
       message.loading(`Moving dataset to unassigned: ${dataset.name}...`, 0);
       await projectsAPI.moveDatasetToUnassigned(projectId, dataset.id);
       message.destroy(); // Clear loading message
       message.success(`Dataset moved to unassigned: ${dataset.name}`);
-      
+
       logInfo('app.frontend.interactions', 'move_dataset_to_unassigned_success', 'Successfully moved dataset to unassigned', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
         datasetId: dataset.id,
         datasetName: dataset.name
       });
-      
+
       // Add a small delay to ensure backend operations complete
       setTimeout(() => {
         loadManagementData(); // Reload data
@@ -617,20 +617,20 @@ const ManagementSection = ({
       datasetId: dataset.id,
       datasetName: dataset.name
     });
-    
+
     try {
       message.loading(`Moving dataset to annotating: ${dataset.name}...`, 0);
       await projectsAPI.assignDatasetToAnnotating(projectId, dataset.id);
       message.destroy(); // Clear loading message
       message.success(`Dataset moved to annotating: ${dataset.name}`);
-      
+
       logInfo('app.frontend.interactions', 'move_dataset_to_annotating_success', 'Successfully moved dataset to annotating', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
         datasetId: dataset.id,
         datasetName: dataset.name
       });
-      
+
       // Add a small delay to ensure backend operations complete
       setTimeout(() => {
         loadManagementData(); // Reload data
@@ -655,20 +655,20 @@ const ManagementSection = ({
       datasetId: dataset.id,
       datasetName: dataset.name
     });
-    
+
     try {
       message.loading(`Moving dataset to completed: ${dataset.name}...`, 0);
       await projectsAPI.moveDatasetToCompleted(projectId, dataset.id);
       message.destroy(); // Clear loading message
       message.success(`Dataset moved to completed: ${dataset.name}`);
-      
+
       logInfo('app.frontend.interactions', 'move_dataset_to_completed_success', 'Successfully moved dataset to completed', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
         datasetId: dataset.id,
         datasetName: dataset.name
       });
-      
+
       // Add a small delay to ensure backend operations complete
       setTimeout(() => {
         loadManagementData(); // Reload data
@@ -693,19 +693,19 @@ const ManagementSection = ({
       datasetId: dataset.id,
       datasetName: dataset.name
     });
-    
+
     try {
       message.info(`Deleting dataset: ${dataset.name}`);
       await projectsAPI.deleteProjectDataset(projectId, dataset.id);
       message.success(`Dataset deleted: ${dataset.name}`);
-      
+
       logInfo('app.frontend.interactions', 'delete_dataset_success', 'Successfully deleted dataset', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
         datasetId: dataset.id,
         datasetName: dataset.name
       });
-      
+
       loadManagementData(); // Reload data
     } catch (error) {
       logError('app.frontend.interactions', 'delete_dataset_failed', 'Failed to delete dataset', {
@@ -732,7 +732,7 @@ const ManagementSection = ({
       });
       return;
     }
-    
+
     logInfo('app.frontend.ui', 'management_sort_changed', 'Management sort option changed', {
       timestamp: new Date().toISOString(),
       projectId: projectId,
@@ -774,7 +774,7 @@ const ManagementSection = ({
       timestamp: new Date().toISOString(),
       projectId: projectId
     });
-    
+
     return (
       <div style={{ padding: '24px', textAlign: 'center' }}>
         <Spin size="large" />
@@ -799,8 +799,8 @@ const ManagementSection = ({
     <div style={{ padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <Title level={2} style={{ margin: 0, marginBottom: '8px' }}>
-            <TagOutlined style={{ marginRight: '8px' }} />
+          <Title level={2} style={{ margin: 0, marginBottom: '8px', background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
+            <TagOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
             Management
           </Title>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -822,7 +822,7 @@ const ManagementSection = ({
       <Row gutter={[24, 24]}>
         {/* Unassigned Section */}
         <Col span={8}>
-          <Card 
+          <Card
             title={
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text strong>Unassigned</Text>
@@ -836,7 +836,7 @@ const ManagementSection = ({
                 Upload More Images
               </Button>
             </div>
-            
+
             {managementData?.unassigned?.datasets?.length > 0 ? (
               managementData.unassigned.datasets.map(dataset => (
                 <DatasetCard
@@ -861,7 +861,7 @@ const ManagementSection = ({
 
         {/* Annotating Section */}
         <Col span={8}>
-          <Card 
+          <Card
             title={
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text strong>Annotating</Text>
@@ -894,7 +894,7 @@ const ManagementSection = ({
 
         {/* Dataset Section */}
         <Col span={8}>
-          <Card 
+          <Card
             title={
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text strong>Dataset</Text>

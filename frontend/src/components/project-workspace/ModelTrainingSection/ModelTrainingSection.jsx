@@ -11,6 +11,8 @@ import PresetSection from './Preset/PresetSection';
 import './compact.css';
 import { trainingAPI, releasesAPI } from '../../../services/api';
 import TerminalPanel from './Terminal/TerminalPanel';
+import LiveTrainingDashboard from './Dashboard/LiveTrainingDashboard';
+import TrainingInitializing from './Dashboard/TrainingInitializing';
 
 const { Title, Text } = Typography;
 
@@ -41,6 +43,7 @@ const initialFormState = {
   warmup_momentum: 0.8,
   warmup_bias_lr: 0.1,
   cos_lr: false,
+  val_plots: true,
   hydratedIdentity: false
 };
 
@@ -56,11 +59,25 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
 
   const [form, setForm] = useState({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
+  const [activeTab, setActiveTab] = useState('config');
   const [serverConfig, setServerConfig] = useState({});
   const isTraining = form.status === 'running';
   const isDeveloper = form.mode === 'developer';
-  const handleChange = (patch) => setForm((prev) => ({ ...prev, ...patch }));
+  const handleChange = (patch) => {
+    setForm((prev) => ({ ...prev, ...patch }));
+    // Track dataset summary separately for validation
+    if (patch.datasetSummary) {
+      setDatasetSummary(patch.datasetSummary);
+
+      // Auto-populate image size from dataset if available (only if not in Resume mode)
+      if (patch.datasetSummary.image_size && !form.resume) {
+        setForm((prev) => ({ ...prev, imgSize: patch.datasetSummary.image_size }));
+      }
+    }
+  };
   const [consoleVisible, setConsoleVisible] = useState(false);
+  const [datasetSummary, setDatasetSummary] = useState(null); // Track dataset summary for validation
+  const [selectedModelInfo, setSelectedModelInfo] = useState(null); // Track selected model metadata
 
   // Refs to track previous values for Early Stop / Patience sync
   const prevEarlyStop = React.useRef(form.earlyStop);
@@ -94,6 +111,22 @@ const ModelTrainingSection = ({ projectId, project }) => {
     return () => clearTimeout(timer);
   }, [form.projectId, form.trainingName, form.description, form.hydratedIdentity]);
 
+  // Auto-populate image size from model training config when Resume enabled (Priority 1)
+  useEffect(() => {
+    if (form.resume && selectedModelInfo?.training_input_size) {
+      // Resume ON: Use model's training size
+      const [width] = selectedModelInfo.training_input_size;
+      if (width && width !== form.imgSize) {
+        setForm((prev) => ({ ...prev, imgSize: width }));
+      }
+    } else if (!form.resume && datasetSummary?.image_size) {
+      // Resume OFF: Revert to dataset size
+      if (datasetSummary.image_size !== form.imgSize) {
+        setForm((prev) => ({ ...prev, imgSize: datasetSummary.image_size }));
+      }
+    }
+  }, [form.resume, selectedModelInfo, datasetSummary, form.imgSize]);
+
   useEffect(() => {
     const resumeActive = async () => {
       try {
@@ -105,6 +138,98 @@ const ModelTrainingSection = ({ projectId, project }) => {
       } catch (_) { }
     };
     resumeActive();
+  }, [form.projectId, form.trainingName]);
+
+  // Poll for live metrics every 1 second during training 
+  useEffect(() => {
+
+    if (!form.sessionId) return;
+
+    // Stop polling if training is completed (to preserve final metrics)
+    const interval = setInterval(async () => {
+      try {
+        const session = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
+        if (session?.metrics_json) {
+          const newMetrics = JSON.parse(session.metrics_json);
+          setForm(prev => ({
+            ...prev,
+            liveMetrics: newMetrics,
+            status: session.status || prev.status,
+            finalMetricsFetched: session.status === 'completed'
+          }));
+          // Stop polling after fetching completed metrics
+          if (session.status === 'completed') {
+            clearInterval(interval);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch metrics:', e);
+      }
+    }, 500);
+    return () => clearInterval(interval);
+
+  }, [form.sessionId, form.projectId, form.trainingName]);
+
+  // Clear live metrics only when user enters a NEW training name (not empty)
+  const prevTrainingName = React.useRef(form.trainingName);
+  useEffect(() => {
+    // Only clear if:
+    // 1. Previous name existed
+    // 2. New name is different
+    // 3. New name is NOT empty (not a reset)
+    if (prevTrainingName.current &&
+      prevTrainingName.current !== form.trainingName &&
+      form.trainingName.trim().length > 0) {
+      setForm(prev => ({ ...prev, liveMetrics: null }));
+    }
+    prevTrainingName.current = form.trainingName;
+  }, [form.trainingName]);
+
+  // Load last completed training's metrics on page mount
+  useEffect(() => {
+    const loadLastMetrics = async (retryCount = 0) => {
+      try {
+        if (!form.projectId || form.liveMetrics) return;
+
+        // Don't load if user is creating new training 
+        if (form.trainingName && form.trainingName.trim().length > 0) return;
+
+        // Check for active (queued/running) sessions first 
+        try {
+          const activeSession = await trainingAPI.getActiveSession(form.projectId);
+          if (activeSession) {
+            // Active session exists, don't load last completed 
+            return;
+          }
+        } catch (error) {
+          // 404 means no active session, continue to load last completed 
+          if (error.response?.status !== 404) {
+            console.error('Error checking active session:', error);
+          }
+        }
+
+        // Only load last completed if NO queued/running session
+        const response = await fetch(`/api/v1/projects/${form.projectId}/training/last-completed`);
+        if (response.ok) {
+          const session = await response.json();
+          if (session?.metrics_json) {
+            setForm(prev => ({
+              ...prev,
+              liveMetrics: JSON.parse(session.metrics_json),
+              status: 'completed'
+            }));
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load last metrics:', e);
+        // Retry once if first attempt fails
+        if (retryCount < 1) {
+          setTimeout(() => loadLastMetrics(retryCount + 1), 2000);
+        }
+      }
+    };
+
+    loadLastMetrics();
   }, [form.projectId, form.trainingName]);
 
   useEffect(() => {
@@ -158,7 +283,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
     if (wasTraining && !isTraining && (form.status === 'completed' || form.status === 'failed')) {
       // Training just finished - reset form to initial state
-      setForm({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
+      setForm(prev => ({ ...initialFormState, projectId, sessionId: null, status: 'queued', liveMetrics: prev.liveMetrics }));
       sessionStorage.removeItem('wasTraining');
 
       logInfo('app.frontend.ui', 'training_completed_form_reset', 'Form reset after training completion', {
@@ -382,7 +507,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
             if (isValidValue(a.close_mosaic)) patch.close_mosaic = a.close_mosaic;
 
             if (isValidValue(v.iou)) patch.val_iou = v.iou;
+            if (isValidValue(v.conf)) patch.val_conf = v.conf;
             if (isValidValue(v.plots)) patch.val_plots = v.plots;
+            if (isValidValue(v.max_det)) patch.max_det = v.max_det;
             if (Array.isArray(d.classes)) patch.classes = d.classes;
             window.__resolvedServerConfig = cfg;
             if (typeof cfg.framework === 'string') patch.framework = cfg.framework;
@@ -474,7 +601,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
           },
           val: {
             iou: form.val_iou,
+            conf: form.val_conf,
             plots: form.val_plots,
+            max_det: form.max_det,
           },
           // omit dataset from config preview; use train.data (data.yaml)
         };
@@ -540,7 +669,9 @@ const ModelTrainingSection = ({ projectId, project }) => {
     form.shear,
     form.perspective,
     form.val_iou,
+    form.val_conf,
     form.val_plots,
+    form.max_det,
     form.datasetZipPath,
     form.classes,
     form.datasetReleaseDir,
@@ -611,8 +742,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Title level={4} style={{ margin: 0 }}>
-            <ThunderboltOutlined style={{ marginRight: 8 }} />
+          <Title level={2} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
+            <ThunderboltOutlined style={{ marginRight: 8, color: '#1890ff' }} />
             Model Training
           </Title>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -656,7 +787,10 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 taskType={form.taskType}
                 projectId={form.projectId}
                 value={form.pretrainedModel}
-                onChange={(value) => handleChange({ pretrainedModel: value })}
+                onChange={(value, modelInfo) => {
+                  handleChange({ pretrainedModel: value });
+                  setSelectedModelInfo(modelInfo);  // Track model metadata
+                }}
                 disabled={isTraining}
               />
             </Card>
@@ -721,8 +855,11 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 mask_ratio={form.mask_ratio}
                 freeze={form.freeze}
                 val_iou={form.val_iou}
+                val_conf={form.val_conf}
                 val_plots={form.val_plots}
+                max_det={form.max_det}
                 isDeveloper={isDeveloper}
+                datasetSummary={datasetSummary}
                 onChange={(patch) => handleChange(patch)}
                 disabled={isTraining}
               />
@@ -744,10 +881,18 @@ const ModelTrainingSection = ({ projectId, project }) => {
                   </div>
                   <Button type="primary" block style={{ marginTop: 8 }} disabled={!(readiness.nameReady && readiness.datasetReady && readiness.modelReady) || isTraining}
                     onClick={async () => {
+                      // 🚫 Preflight validation for single-class dataset
+                      if (!isDeveloper && datasetSummary?.num_classes === 1 && !form.single_cls) {
+                        const { message } = require('antd');
+                        message.error('Single-class dataset detected! Please enable Single Class switch in Training Preset.');
+                        return; // Block training in User Mode
+                      }
+
                       try {
                         if (form.projectId && form.trainingName) {
                           setForm(prev => ({ ...prev, status: 'running' }));
                           await trainingAPI.startSession({ projectId: form.projectId, name: form.trainingName });
+                          setActiveTab('status'); // Auto-switch to status tab
                         }
                       } catch (e) {
                         setForm(prev => ({ ...prev, status: 'queued' }));
@@ -756,7 +901,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                   >{isTraining ? 'Training...' : 'Start Training'}</Button>
                 </Card>
                 <Card size="small" style={{ marginTop: 12 }} bodyStyle={{ padding: 12 }}>
-                  <Tabs defaultActiveKey="config" items={[
+                  <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
                     {
                       key: 'config',
                       label: 'Config Preview',
@@ -773,7 +918,13 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       key: 'status',
                       label: 'Status',
                       children: (
-                        <div style={{ color: '#888' }}>Training status will appear here (progress, logs)</div>
+                        <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4 }}>
+                          {form.status === 'running' && (!form.liveMetrics || !form.liveMetrics.training || !form.liveMetrics.training.epoch) ? (
+                            <TrainingInitializing />
+                          ) : (
+                            <LiveTrainingDashboard metrics={form.liveMetrics || {}} status={form.status} />
+                          )}
+                        </div>
                       )
                     }
                   ]} />

@@ -1,5 +1,5 @@
 {
-  "export_timestamp": "2025-11-24T17:44:44.353690",
+  "export_timestamp": "2025-12-11T16:52:05.414969",
   "database_path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\database.db",
   "projects": [
     {
@@ -22,7 +22,7 @@
           "name": "animal",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-21 16:42:50",
-          "updated_at": "2025-11-19 08:01:14.694470",
+          "updated_at": "2025-12-11 11:22:38.621843",
           "statistics": {
             "total_images": 3,
             "labeled_images": 3,
@@ -34,38 +34,38 @@
               "id": "812da977-4eb2-4e30-8096-9ce785ac37f0",
               "filename": "car.jpg",
               "original_filename": "car.jpg",
-              "file_path": "projects/gevis/dataset/animal/train/car.jpg",
+              "file_path": "projects/gevis/dataset/animal/val/car.jpg",
               "width": 800,
               "height": 600,
               "format": "JPEG",
               "file_size": 57407,
               "split_type": "dataset",
-              "split_section": "train",
+              "split_section": "val",
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-11-19 08:01:14.656290",
+              "updated_at": "2025-12-11 11:22:38.578200",
               "file_exists": false
             },
             {
               "id": "333c172a-6e96-4e6d-88b6-c20c11fa83d5",
               "filename": "cat.jpg",
               "original_filename": "cat.jpg",
-              "file_path": "projects/gevis/dataset/animal/train/cat.jpg",
+              "file_path": "projects/gevis/dataset/animal/val/cat.jpg",
               "width": 800,
               "height": 600,
               "format": "JPEG",
               "file_size": 54749,
               "split_type": "dataset",
-              "split_section": "train",
+              "split_section": "val",
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-11-19 08:01:14.669141",
+              "updated_at": "2025-12-11 11:22:38.594711",
               "file_exists": false
             },
             {
@@ -84,7 +84,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-11-19 08:01:14.681144",
+              "updated_at": "2025-12-11 11:22:38.608119",
               "file_exists": false
             }
           ]
@@ -94,7 +94,7 @@
           "name": "Reject",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-22 07:07:14",
-          "updated_at": "2025-11-18 11:42:58.997437",
+          "updated_at": "2025-12-09 11:01:57.180568",
           "statistics": {
             "total_images": 1,
             "labeled_images": 1,
@@ -106,19 +106,19 @@
               "id": "a83adae8-ae9f-480a-b7ee-7845b77c4054",
               "filename": "0-1.bmp",
               "original_filename": "0-1.bmp",
-              "file_path": "projects/gevis/dataset/Reject/test/0-1.bmp",
+              "file_path": "projects/gevis/dataset/Reject/train/0-1.bmp",
               "width": 1468,
               "height": 1468,
               "format": "BMP",
               "file_size": 2156102,
               "split_type": "dataset",
-              "split_section": "test",
+              "split_section": "train",
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-22 07:07:14",
-              "updated_at": "2025-11-18 11:42:58.983392",
+              "updated_at": "2025-12-09 11:01:57.159281",
               "file_exists": false
             }
           ]

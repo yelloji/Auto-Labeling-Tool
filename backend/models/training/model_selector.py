@@ -28,5 +28,6 @@ def get_trainable_models(db: Session, project_id: Optional[int], framework: str,
             "project_id": m.project_id,
             "project_name": getattr(m, "project_name", None),
             "scope": "project" if m.project_id is not None else "global",
+            "training_input_size": getattr(m, "training_input_size", None),  # For Resume validation
         })
     return out

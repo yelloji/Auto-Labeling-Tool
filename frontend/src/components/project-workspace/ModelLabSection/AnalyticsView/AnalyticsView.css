@@ -1,0 +1,206 @@
+/* Analytics Section */
+.analytics-section {
+    margin-bottom: 16px;
+}
+
+.analytics-section h4 {
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+}
+
+.analytics-loading,
+.analytics-error {
+    padding: 40px;
+    text-align: center;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+/* Compact Grid */
+.analytics-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: minmax(90px, auto);
+    /* Changed from 120px to 90px */
+    gap: 2px;
+    /* Changed from 4px to 2px */
+    background: white;
+    padding: 4px;
+    /* Changed from 8px to 4px */
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.analytics-grid:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.analytics-grid:hover .analytics-overlay {
+    opacity: 1;
+}
+
+.analytics-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+    border-radius: 8px;
+}
+
+.analytics-overlay span {
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* Chart Wrappers */
+.chart-wrapper {
+    background: #fafafa;
+    border-radius: 6px;
+    padding: 4px;
+    border: 1px solid #e5e7eb;
+}
+
+.chart-wrapper.small {
+    height: 90px;
+    /* Compact view - small charts */
+}
+
+.chart-wrapper.large {
+    height: 500px;
+    /* Increased from 450px to accommodate filters */
+}
+
+.chart-wrapper.full-width {
+    grid-column: 1 / -1;
+}
+
+.chart-title {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.chart-wrapper.large {
+    min-height: 350px;
+    /* Make expanded charts taller */
+}
+
+.chart-wrapper.small {
+    max-height: 120px;
+    /* Makes each chart small */
+}
+
+.chart-wrapper.large .chart-title {
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+/* Chart Filters */
+.chart-filters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.chart-filters .ant-checkbox-wrapper {
+    font-size: 12px;
+}
+
+/* Modal */
+.analytics-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+}
+
+.analytics-modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+
+.analytics-modal-content {
+    position: relative;
+    width: 90vw;
+    /* Use 90% of screen width */
+    height: 90vh;
+    /* Use 90% of screen height */
+    background: white;
+    border-radius: 8px;
+    padding: 30px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    overflow-y: auto;
+}
+
+.analytics-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #ff4d4f;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+    transition: background 0.2s;
+}
+
+.analytics-modal-close:hover {
+    background: #ff7875;
+}
+
+/* Large Grid (in modal) */
+.analytics-grid-large {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: minmax(350px, auto);
+    gap: 30px;
+    margin-top: 20px;
+}
+
+.analytics-grid-large .chart-wrapper {
+    padding: 16px;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+
+    .analytics-grid,
+    .analytics-grid-large {
+        grid-template-columns: 1fr;
+    }
+}

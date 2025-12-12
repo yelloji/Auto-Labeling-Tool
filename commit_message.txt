@@ -1,0 +1,5 @@
+ui: Add tooltips and clearer labels for loss metrics
+
+- Changed loss labels: "Box" → "Box Loss", "Seg" → "Seg Loss", etc.
+- Added tooltips with full names on hover (Bounding Box Loss, Segmentation Loss, etc.)
+- Added help cursor for better UX

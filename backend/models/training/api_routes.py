@@ -18,11 +18,14 @@ from sqlalchemy import and_
 from database.models import Release
 from database.models import Project
 from database.models import DevModeSetting
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import asyncio
 import os
 import hashlib
+import yaml
+import shutil
+from core.config import settings
 
 router = APIRouter()
 
@@ -343,10 +346,84 @@ async def get_training_session(project_id: int = Query(...), name: str = Query(.
             "dataset_release_dir": ts.dataset_release_dir,
             "dataset_summary_json": ts.dataset_summary_json,
             "resolved_config_json": ts.resolved_config_json,
+            "metrics_json": ts.metrics_json,
         }
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/projects/{project_id}/training/queued")
+async def get_queued_training(project_id: int, db: Session = Depends(get_db)):
+    """
+    Get queued training session for a project (if exists).
+    Used by Advanced Editor to check if there's a training to apply config to.
+    """
+    try:
+        queued = (
+            db.query(TrainingSession)
+            .filter(TrainingSession.project_id == project_id)
+            .filter(TrainingSession.status == "queued")
+            .order_by(TrainingSession.created_at.desc())
+            .first()
+        )
+        
+        if not queued:
+            raise HTTPException(status_code=404, detail="No queued training found")
+        
+        return {
+            "id": queued.id,
+            "name": queued.name,
+            "status": queued.status,
+            "created_at": queued.created_at
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/projects/{project_id}/training/{training_id}/apply-config")
+async def apply_config_to_training(
+    project_id: int,
+    training_id: int,
+    config: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Apply edited config to a queued training.
+    Updates resolved_config_json in the database.
+    """
+    try:
+        # Find the training
+        training = (
+            db.query(TrainingSession)
+            .filter(TrainingSession.id == training_id)
+            .filter(TrainingSession.project_id == project_id)
+            .filter(TrainingSession.status == "queued")
+            .first()
+        )
+        
+        if not training:
+            raise HTTPException(
+                status_code=404,
+                detail="Queued training not found"
+            )
+        
+        # Update resolved_config_json
+        training.resolved_config_json = json.dumps(config)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Config applied to training '{training.name}'"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -375,6 +452,7 @@ async def get_active_training_session(project_id: int = Query(...), db: Session 
             "dataset_release_dir": ts.dataset_release_dir,
             "dataset_summary_json": ts.dataset_summary_json,
             "resolved_config_json": ts.resolved_config_json,
+            "metrics_json": ts.metrics_json,
         }
     except HTTPException:
         raise
@@ -619,3 +697,516 @@ async def dataset_summary(release_dir: Optional[str] = None, data_yaml_path: Opt
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/projects/{project_id}/training/last-completed")
+async def get_last_completed_session(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get the most recent completed training session for a project"""
+    try:
+        # Get project
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get last completed session
+        session = db.query(TrainingSession).filter(
+            TrainingSession.project_id == project_id,
+            TrainingSession.status == "completed"
+        ).order_by(TrainingSession.last_update_at.desc()).first()
+        
+        if not session:
+            return None
+        
+        return {
+            "id": session.id,
+            "name": session.name,
+            "status": session.status,
+            "metrics_json": session.metrics_json,
+            "created_at": session.created_at.isoformat() if session.created_at else None,
+            "last_update_at": session.last_update_at.isoformat() if session.last_update_at else None
+        }
+    except Exception as e:
+        print(f"Error in get_last_completed_session: {str(e)}")  # Log error to console
+        raise HTTPException(status_code=500, detail=str(e))    
+    
+@router.get("/projects/{project_id}/training/sessions")
+async def get_project_training_sessions(project_id: int, db: Session = Depends(get_db)):
+    """
+    Get all training sessions for a project.
+    Combines DB records and file system folders.
+    """
+    try:
+        # 1. Get Project
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # 2. Get DB Sessions
+        db_sessions = db.query(TrainingSession).filter(TrainingSession.project_id == project_id).all()
+        sessions_map = {s.name: s for s in db_sessions}
+
+        # 3. Scan File System
+        # Path: projects/{project_name}/model/training/
+        training_dir = settings.PROJECTS_DIR / project.name / "model" / "training"
+        
+        found_sessions = []
+        
+        if training_dir.exists():
+            for item in training_dir.iterdir():
+                if item.is_dir():
+                    session_name = item.name
+                    
+                    # If in DB, use DB record
+                    if session_name in sessions_map:
+                        s = sessions_map[session_name]
+                        
+                        # Parse and normalize metrics
+                        metrics_data = {}
+                        if s.metrics_json:
+                            try:
+                                metrics_data = json.loads(s.metrics_json)
+                            except:
+                                pass
+                        
+                        # Ensure epochs is present
+                        if 'epochs' not in metrics_data:
+                            if 'training' in metrics_data and 'total_epochs' in metrics_data['training']:
+                                metrics_data['epochs'] = metrics_data['training']['total_epochs']
+                            elif 'training' in metrics_data and 'epoch' in metrics_data['training']:
+                                metrics_data['epochs'] = metrics_data['training']['epoch']
+
+                        found_sessions.append({
+                            "id": s.id,
+                            "name": s.name,
+                            "task": s.task,
+                            "status": s.status,
+                            "created_at": s.created_at,
+                            "is_managed": True,
+                            "metrics": json.dumps(metrics_data),
+                            "training_config_snapshot": s.training_config_snapshot,
+                            "resolved_config_json": s.resolved_config_json
+                        })
+                    else:
+                        # Unmanaged session
+                        # Check for best.pt to guess status
+                        has_weights = (item / "weights" / "best.pt").exists()
+                        status = "completed" if has_weights else "unknown"
+                        
+                        # Try to get task and epochs from args.yaml
+                        task = "unknown"
+                        epochs = 0
+                        args_path = item / "args.yaml"
+                        if args_path.exists():
+                            try:
+                                with open(args_path, 'r') as f:
+                                    args = yaml.safe_load(f)
+                                    task = args.get('task', 'unknown')
+                                    epochs = args.get('epochs', 0)
+                            except:
+                                pass
+                        
+                        # Map YOLO task names to UI names if needed
+                        if task == 'detect':
+                            task = 'detection'
+                        elif task == 'segment':
+                            task = 'segmentation'
+                        
+                        # Try to get creation time from folder
+                        try:
+                            ctime = item.stat().st_ctime
+                            created_at = datetime.fromtimestamp(ctime)
+                        except:
+                            created_at = datetime.utcnow()
+
+                        # Create metrics dict
+                        metrics = {"epochs": epochs}
+
+                        found_sessions.append({
+                            "id": f"unmanaged_{session_name}",
+                            "name": session_name,
+                            "task": task,
+                            "status": status,
+                            "created_at": created_at,
+                            "is_managed": False,
+                            "metrics": json.dumps(metrics)
+                        })
+        
+        # Add any DB sessions that weren't found on disk (e.g. queued but not started, or deleted manually)
+        for s in db_sessions:
+            if not any(fs['name'] == s.name for fs in found_sessions):
+                 # Parse and normalize metrics
+                 metrics_data = {}
+                 if s.metrics_json:
+                     try:
+                         metrics_data = json.loads(s.metrics_json)
+                     except:
+                         pass
+                 
+                 # Ensure epochs is present
+                 if 'epochs' not in metrics_data:
+                     if 'training' in metrics_data and 'total_epochs' in metrics_data['training']:
+                         metrics_data['epochs'] = metrics_data['training']['total_epochs']
+                     elif 'training' in metrics_data and 'epoch' in metrics_data['training']:
+                         metrics_data['epochs'] = metrics_data['training']['epoch']
+
+                 found_sessions.append({
+                    "id": s.id,
+                    "name": s.name,
+                    "task": s.task,
+                    "status": s.status,
+                    "created_at": s.created_at,
+                    "is_managed": True,
+                    "metrics": json.dumps(metrics_data)
+                })
+
+        # Sort by created_at desc
+        found_sessions.sort(key=lambda x: x['created_at'] or datetime.min, reverse=True)
+        
+        return found_sessions
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/training/session/active")
+async def get_active_session(
+    project_id: int = Query(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Get active (queued/running) training session for a project.
+    Returns 404 if no active session exists.
+    """
+    session = db.query(TrainingSession).filter(
+        and_(
+            TrainingSession.project_id == project_id,
+            TrainingSession.status.in_(['queued', 'running'])
+        )
+    ).order_by(TrainingSession.created_at.desc()).first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="No active session found")
+    
+    return {
+        "id": session.id,
+        "name": session.name,
+        "status": session.status,
+        "created_at": session.created_at.isoformat() if session.created_at else None
+    }
+
+
+@router.delete("/projects/{project_id}/training/sessions/{session_id}")
+async def delete_training_session(
+    project_id: int,
+    session_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a training session (DB record + file system folder)
+    
+    Args:
+        project_id: Project ID
+        session_id: Can be numeric (managed) or string like 'unmanaged_xxx'
+    """
+    try:
+        # Get project
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Check if session_id is numeric (managed) or unmanaged
+        is_managed = session_id.isdigit()
+        
+        if is_managed:
+            # Managed session - delete from DB + FS
+            session = db.query(TrainingSession).filter(
+                TrainingSession.id == int(session_id),
+                TrainingSession.project_id == project_id
+            ).first()
+            
+            if not session:
+                raise HTTPException(status_code=404, detail="Training session not found")
+            
+            # Get folder path
+            training_dir = settings.PROJECTS_DIR / project.name / "model" / "training" / session.name
+            
+            # Delete folder if exists
+            if training_dir.exists():
+                shutil.rmtree(training_dir)
+            
+            # Delete DB record
+            db.delete(session)
+            db.commit()
+            
+            return {"message": f"Training session '{session.name}' deleted successfully"}
+        else:
+            # Unmanaged session - delete from FS only
+            if not session_id.startswith("unmanaged_"):
+                raise HTTPException(status_code=400, detail="Invalid session ID format")
+            
+            # Extract name
+            session_name = session_id.replace("unmanaged_", "")
+            
+            # Get folder path
+            training_dir = settings.PROJECTS_DIR / project.name / "model" / "training" / session_name
+            
+            # Delete folder if exists
+            if not training_dir.exists():
+                raise HTTPException(status_code=404, detail="Training folder not found")
+            
+            shutil.rmtree(training_dir)
+            
+            return {"message": f"Training session '{session_name}' deleted successfully"}
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/projects/{project_id}/training/{training_id}/confusion_matrix.png")
+async def get_confusion_matrix(
+    project_id: int,
+    training_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Serve the confusion matrix PNG file for a specific training session.
+    training_id can be either the database ID or the session name.
+    """
+    from fastapi.responses import FileResponse
+    
+    try:
+        # Get project
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Try to get session name
+        session_name = training_id
+        
+        # If training_id is numeric, it's a database ID - look up the name
+        if training_id.isdigit():
+            session = db.query(TrainingSession).filter(
+                TrainingSession.id == int(training_id),
+                TrainingSession.project_id == project_id
+            ).first()
+            if session:
+                session_name = session.name
+            else:
+                # If not in DB, training_id might be the folder name directly
+                session_name = training_id
+        
+        # Build path to confusion matrix
+        confusion_matrix_path = (
+            settings.PROJECTS_DIR / 
+            project.name / 
+            "model" / 
+            "training" / 
+            session_name / 
+            "confusion_matrix.png"
+        )
+        
+        # Check if file exists
+        if not confusion_matrix_path.exists():
+            raise HTTPException(status_code=404, detail="Confusion matrix not found")
+        
+        # Return the PNG file
+        return FileResponse(
+            path=str(confusion_matrix_path),
+            media_type="image/png",
+            filename="confusion_matrix.png"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/projects/{project_id}/training/{training_id}/analytics")
+async def get_training_analytics(
+    project_id: int,
+    training_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Parse results.csv and return chart data for Analytics view.
+    Returns epoch-wise training/validation losses and metrics.
+    """
+    import csv
+    
+    try:
+        # Get project
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get session name from DB if training_id is numeric
+        session_name = training_id
+        if training_id.isdigit():
+            session = db.query(TrainingSession).filter(
+                TrainingSession.id == int(training_id),
+                TrainingSession.project_id == project_id
+            ).first()
+            if session:
+                session_name = session.name
+        
+        # Build path to results.csv
+        results_csv_path = (
+            settings.PROJECTS_DIR /
+            project.name /
+            "model" /
+            "training" /
+            session_name /
+            "results.csv"
+        )
+        
+        if not results_csv_path.exists():
+            raise HTTPException(status_code=404, detail="Training results not found")
+        
+        # Parse CSV
+        epochs = []
+        train_losses = {"box": [], "seg": [], "cls": []}
+        val_losses = {"box": [], "seg": [], "cls": []}
+        metrics = {
+            "box_map50": [], "box_map50_95": [],
+            "box_precision": [], "box_recall": [],
+            "mask_map50": [], "mask_map50_95": [],
+            "mask_precision": [], "mask_recall": []
+        }
+        
+        with open(results_csv_path, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Skip empty rows or rows with empty epoch
+                if not row.get('epoch') or not row.get('epoch').strip():
+                    continue
+                
+                try:
+                    epochs.append(int(float(row['epoch'].strip())))
+                except (ValueError, KeyError):
+                    continue
+                
+                # Helper function to safely get float value
+                def safe_float(key, default=0.0):
+                    try:
+                        val = row.get(key, '').strip()
+                        return float(val) if val else default
+                    except (ValueError, AttributeError):
+                        return default
+                
+                # Training losses
+                train_losses["box"].append(safe_float('train/box_loss'))
+                train_losses["cls"].append(safe_float('train/cls_loss'))
+                if 'train/seg_loss' in row and row.get('train/seg_loss', '').strip():
+                    train_losses["seg"].append(safe_float('train/seg_loss'))
+                
+                # Validation losses
+                val_losses["box"].append(safe_float('val/box_loss'))
+                val_losses["cls"].append(safe_float('val/cls_loss'))
+                if 'val/seg_loss' in row and row.get('val/seg_loss', '').strip():
+                    val_losses["seg"].append(safe_float('val/seg_loss'))
+                
+                # Metrics
+                metrics["box_precision"].append(safe_float('metrics/precision(B)'))
+                metrics["box_recall"].append(safe_float('metrics/recall(B)'))
+                metrics["box_map50"].append(safe_float('metrics/mAP50(B)'))
+                metrics["box_map50_95"].append(safe_float('metrics/mAP50-95(B)'))
+                
+                # Mask metrics (if segmentation)
+                if 'metrics/precision(M)' in row and row.get('metrics/precision(M)', '').strip():
+                    metrics["mask_precision"].append(safe_float('metrics/precision(M)'))
+                    metrics["mask_recall"].append(safe_float('metrics/recall(M)'))
+                    metrics["mask_map50"].append(safe_float('metrics/mAP50(M)'))
+                    metrics["mask_map50_95"].append(safe_float('metrics/mAP50-95(M)'))
+        
+        # Determine if segmentation
+        is_segmentation = len(train_losses["seg"]) > 0
+        
+        # Clean up empty arrays for detection tasks
+        if not is_segmentation:
+            train_losses.pop("seg", None)
+            val_losses.pop("seg", None)
+            metrics = {k: v for k, v in metrics.items() if not k.startswith("mask")}
+        
+        return {
+            "epochs": epochs,
+            "train_losses": train_losses,
+            "val_losses": val_losses,
+            "metrics": metrics,
+            "is_segmentation": is_segmentation
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Training completion notification endpoints
+
+@router.get("/training/completion-check")
+async def check_training_completions(db: Session = Depends(get_db)):
+    """
+    Check for completed or failed trainings that haven't been acknowledged.
+    Returns all unacknowledged completed/failed trainings.
+    """
+    recent_completions = db.query(TrainingSession).filter(
+        TrainingSession.status.in_(["completed", "failed"]),  # Both success AND failure!
+        TrainingSession.acknowledged == False
+    ).all()
+    
+    results = []
+    for session in recent_completions:
+        duration = None
+        if session.started_at and session.completed_at:
+            delta = session.completed_at - session.started_at
+            hours, remainder = divmod(int(delta.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            if hours > 0:
+                duration = f"{hours}h {minutes}m"
+            else:
+                duration = f"{minutes}m {seconds}s"
+        
+        results.append({
+            "id": session.id,
+            "name": session.name,
+            "project_id": session.project_id,
+            "project_name": session.project_name,
+            "status": session.status,  # ← Include status so frontend knows!
+            "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+            "duration": duration,
+            "error_msg": session.error_msg if session.status == "failed" else None
+        })
+    
+    # Check for any active trainings (only RUNNING)
+    # Queued = Draft mode, so we don't need fast polling yet
+    active_count = db.query(TrainingSession).filter(
+        TrainingSession.status == "running"
+    ).count()
+    
+    return {
+        "completions": results,
+        "has_active_trainings": active_count > 0,
+        "active_count": active_count
+    }
+
+
+@router.post("/training/session/{session_id}/acknowledge")
+async def acknowledge_training_completion(
+    session_id: int,
+    db: Session = Depends(get_db)
+):
+    """Mark a training session as acknowledged (notification dismissed)."""
+    session = db.query(TrainingSession).filter(TrainingSession.id == session_id).first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Training session not found")
+    
+    session.acknowledged = True
+    db.commit()
+    
+    return {"success": True, "session_id": session_id}

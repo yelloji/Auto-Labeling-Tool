@@ -1,0 +1,215 @@
+/* Model Lab Section - Main Container Styles */
+
+.model-lab-container {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #f9fafb;
+    overflow: hidden;
+}
+
+/* Header */
+.model-lab-header {
+    padding: 24px;
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.model-lab-header h2 {
+    margin-bottom: 4px;
+}
+
+/* Model Lab Title - SAME GRADIENT AS DATASET RELEASES */
+.model-lab-title {
+    background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+    display: inline-block !important;
+}
+
+.model-lab-subtitle {
+    margin: 0;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+/* Two-Panel Layout */
+.model-lab-content {
+    flex: 1;
+    display: flex;
+    gap: 0;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* Left Panel - Training List */
+.model-lab-left-panel {
+    width: 320px;
+    height: 100%;
+    background: white;
+    border-right: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* Right Panel - Details */
+.model-lab-right-panel {
+    flex: 1;
+    background: white;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+/* Placeholder (temporary) */
+.model-lab-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #9ca3af;
+    text-align: center;
+}
+
+.placeholder-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.model-lab-placeholder h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #4b5563;
+    margin-bottom: 8px;
+}
+
+.model-lab-placeholder p {
+    font-size: 14px;
+    color: #9ca3af;
+}
+
+.model-lab-placeholder pre {
+    margin-top: 20px;
+    padding: 16px;
+    background: #f3f4f6;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 12px;
+    color: #374151;
+    max-width: 500px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .model-lab-content {
+        flex-direction: column;
+    }
+
+    .model-lab-left-panel {
+        width: 100%;
+        height: 300px;
+        border-right: none;
+        border-bottom: 1px solid #e5e7eb;
+    }
+}
+
+
+/* Empty State */
+.model-lab-empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #6b7280;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    color: #e5e7eb;
+    margin-bottom: 24px;
+}
+
+.model-lab-empty-state h3 {
+    margin: 0 0 8px 0;
+    color: #374151;
+    font-size: 18px;
+}
+
+.model-lab-empty-state p {
+    max-width: 400px;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Details Header */
+.details-header {
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 20px;
+    margin-bottom: 24px;
+}
+
+.details-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.status-badge {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-badge.completed {
+    background: #ecfdf5;
+    color: #059669;
+}
+
+.status-badge.failed {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.details-subtitle {
+    color: #6b7280;
+    margin: 0;
+    font-size: 14px;
+}
+
+.details-content-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    background: #f9fafb;
+    border-radius: 8px;
+    border: 1px dashed #d1d5db;
+    text-align: center;
+}
+
+.placeholder-message h3 {
+    margin: 0 0 8px 0;
+    color: #4b5563;
+}
+
+.debug-data {
+    margin-top: 24px;
+    text-align: left;
+    background: #1f2937;
+    color: #e5e7eb;
+    padding: 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    width: 100%;
+    max-height: 200px;
+    overflow: auto;
+}
