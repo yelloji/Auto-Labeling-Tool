@@ -46,6 +46,7 @@ const ModelLabSection = ({ projectId }) => {
                     return {
                         id: session.id,
                         name: session.name,
+                        training_uid: session.training_uid,
                         taskType: session.task || 'unknown',
                         status: session.status,
                         epochs: metrics.epochs || session.best_epoch || 0,

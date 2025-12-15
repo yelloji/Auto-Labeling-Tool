@@ -4,6 +4,7 @@ import { Card, Typography, Table, Tag, Tooltip, Tabs } from 'antd';
 import AnalyticsView from '../AnalyticsView/AnalyticsView';
 import ViewConfig from '../ConfigurationView/ViewConfig';
 import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
+import ModelManagerView from '../ModelManagerView/ModelManagerView';
 import './OverviewView.css';
 
 const { Title, Text } = Typography;
@@ -463,6 +464,17 @@ const OverviewView = ({ training }) => {
                                     children: <AdvancedConfigEditor training={training} />
                                 }
                             ]}
+                        />
+                    )
+                },
+                {
+                    key: 'model-manager',
+                    label: 'Model Manager',
+                    children: (
+                        <ModelManagerView
+                            projectId={training.projectId}
+                            trainingId={training.id}
+                            sessionName={training.name}
                         />
                     )
                 },

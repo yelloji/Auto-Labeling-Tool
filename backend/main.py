@@ -138,8 +138,11 @@ app.include_router(release_detail_view.router, prefix="/api/v1", tags=["release-
 app.include_router(training_api.router, prefix="/api/v1", tags=["training"])
 
 # Include model lab routes
+print("🔍 About to import model_lab_model_router...")
 from models.training import model_lab_model_router
+print(f"✅ Imported model_lab_model_router with {len(model_lab_model_router.router.routes)} routes")
 app.include_router(model_lab_model_router.router, prefix="/api/v1", tags=["model-lab"])
+print("✅ model_lab_model_router registered!")
 
 app.include_router(dev_password.router, prefix="/api/v1", tags=["dev-auth"])
 

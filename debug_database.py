@@ -859,7 +859,8 @@ class DatabaseDebugger:
         # Fetch and display entries
         cursor.execute("""
             SELECT id, name, type, format, file_path, project_id, project_name, nc, classes, 
-                   training_input_size, input_size_default, created_at, updated_at
+                   training_input_size, input_size_default, source_type, training_session_id, 
+                   notes, is_best, created_at, updated_at
             FROM ai_models
             ORDER BY created_at
         """)
@@ -895,6 +896,12 @@ class DatabaseDebugger:
             ids = row['input_size_default']
             print(f"   📏 Training Input Size: {tis if tis is not None else 'N/A'}")
             print(f"   📏 Input Size Default: {ids if ids is not None else 'N/A'}")
+
+            # New columns
+            print(f"   📌 Source Type: {row['source_type'] if row['source_type'] else 'N/A'}")
+            print(f"   🔗 Training Session ID: {row['training_session_id'] if row['training_session_id'] else 'N/A'}")
+            print(f"   📝 Notes: {row['notes'] if row['notes'] else 'N/A'}")
+            print(f"   🏆 Is Best: {'Yes' if row['is_best'] else 'No'}")
 
             # Timestamps
             print(f"   📅 Created: {row['created_at']}")

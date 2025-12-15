@@ -56,6 +56,11 @@ class ModelInfo:
     file_size: int = 0  # in bytes
     is_ready: bool = False
     is_training: bool = False
+    # Training-specific metadata (optional, for deployed models)
+    source_type: str = "custom"  # "custom", "training", "default"
+    training_session_id: Optional[int] = None
+    notes: str = ""
+    is_best: bool = False
 
 
 class ModelManager:
@@ -105,7 +110,11 @@ class ModelManager:
                 "is_custom": model_info.is_custom,
                 "file_size": getattr(model_info, "file_size", 0),
                 "is_ready": getattr(model_info, "is_ready", False),
-                "is_training": getattr(model_info, "is_training", False)
+                "is_training": getattr(model_info, "is_training", False),
+                "source_type": getattr(model_info, "source_type", "custom"),
+                "training_session_id": getattr(model_info, "training_session_id", None),
+                "notes": getattr(model_info, "notes", ""),
+                "is_best": getattr(model_info, "is_best", False)
             }
         
         with open(self.models_config_file, 'w') as f:

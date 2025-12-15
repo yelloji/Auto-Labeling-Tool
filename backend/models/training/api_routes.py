@@ -780,6 +780,7 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
                         found_sessions.append({
                             "id": s.id,
                             "name": s.name,
+                            "training_uid": s.training_uid,
                             "task": s.task,
                             "status": s.status,
                             "created_at": s.created_at,
