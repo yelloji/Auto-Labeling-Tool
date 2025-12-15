@@ -101,7 +101,6 @@
     "is_training": false,
     "source_type": "custom",
     "training_session_id": null,
-    "notes": "",
     "is_best": false
   },
   "yolo11s": {
@@ -206,7 +205,6 @@
     "is_training": false,
     "source_type": "custom",
     "training_session_id": null,
-    "notes": "",
     "is_best": false
   },
   "yolo11n-seg": {
@@ -311,7 +309,6 @@
     "is_training": false,
     "source_type": "custom",
     "training_session_id": null,
-    "notes": "",
     "is_best": false
   },
   "yolo11s-seg": {
@@ -416,7 +413,6 @@
     "is_training": false,
     "source_type": "custom",
     "training_session_id": null,
-    "notes": "",
     "is_best": false
   },
   "custom_myglobel": {
@@ -442,7 +438,6 @@
     "is_training": false,
     "source_type": "custom",
     "training_session_id": null,
-    "notes": "",
     "is_best": false
   },
   "custom_myglobelsecond": {
@@ -468,7 +463,6 @@
     "is_training": false,
     "source_type": "custom",
     "training_session_id": null,
-    "notes": "",
     "is_best": false
   },
   "custom_gevis_hope-1": {
@@ -496,8 +490,61 @@
     "is_training": false,
     "source_type": "custom",
     "training_session_id": null,
-    "notes": "",
     "is_best": false
+  },
+  "trained_gevis_srl_obje-1_best-1": {
+    "id": "trained_gevis_srl_obje-1_best-1",
+    "name": "srl_obje-1_best-1",
+    "type": "object_detection",
+    "format": "pytorch",
+    "path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\projects\\gevis\\model\\srl_obje-1_best-1.pt",
+    "classes": [
+      "cat",
+      "defect",
+      "dog"
+    ],
+    "input_size": [
+      640,
+      640
+    ],
+    "confidence_threshold": 0.5,
+    "iou_threshold": 0.45,
+    "description": "Trained model from srl_obje-1",
+    "created_at": "2025-12-15T15:43:05.904572",
+    "is_custom": true,
+    "file_size": 5467987,
+    "is_ready": true,
+    "is_training": false,
+    "source_type": "training",
+    "training_session_id": 18,
+    "is_best": true
+  },
+  "trained_gevis_new_best-1": {
+    "id": "trained_gevis_new_best-1",
+    "name": "new_best-1",
+    "type": "instance_segmentation",
+    "format": "pytorch",
+    "path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\projects\\gevis\\model\\new_best-1.pt",
+    "classes": [
+      "cat",
+      "defect",
+      "dog"
+    ],
+    "input_size": [
+      640,
+      640
+    ],
+    "confidence_threshold": 0.5,
+    "iou_threshold": 0.45,
+    "description": "Trained model from new",
+    "created_at": "2025-12-15T15:53:51.904943",
+    "is_custom": true,
+    "file_size": 5995677,
+    "is_ready": true,
+    "is_training": false,
+    "source_type": "training",
+    "training_session_id": 47,
+    "is_best": true
   },
   "custom_gevis_hope-2": {
     "id": "custom_gevis_hope-2",
@@ -516,43 +563,14 @@
     ],
     "confidence_threshold": 0.5,
     "iou_threshold": 0.45,
-    "description": "",
-    "created_at": "2025-12-15T12:55:07.444015",
+    "description": "lets hope best",
+    "created_at": "2025-12-15T16:57:20.658012",
     "is_custom": true,
     "file_size": 20505629,
     "is_ready": true,
     "is_training": false,
     "source_type": "custom",
     "training_session_id": null,
-    "notes": "",
-    "is_best": false
-  },
-  "custom_gevis_vio2_last": {
-    "id": "custom_gevis_vio2_last",
-    "name": "vio2_last",
-    "type": "instance_segmentation",
-    "format": "pytorch",
-    "path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\projects\\gevis\\model\\vio2_last.pt",
-    "classes": [
-      "cat",
-      "defect",
-      "dog"
-    ],
-    "input_size": [
-      640,
-      640
-    ],
-    "confidence_threshold": 0.5,
-    "iou_threshold": 0.45,
-    "description": "Trained model from vio2",
-    "created_at": "2025-12-15T15:24:24.477547",
-    "is_custom": true,
-    "file_size": 5995421,
-    "is_ready": true,
-    "is_training": false,
-    "source_type": "training",
-    "training_session_id": 45,
-    "notes": "Trained model from vio2",
     "is_best": false
   }
 }

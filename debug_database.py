@@ -860,7 +860,7 @@ class DatabaseDebugger:
         cursor.execute("""
             SELECT id, name, type, format, file_path, project_id, project_name, nc, classes, 
                    training_input_size, input_size_default, source_type, training_session_id, 
-                   notes, is_best, created_at, updated_at
+                   description, is_best, created_at, updated_at
             FROM ai_models
             ORDER BY created_at
         """)
@@ -900,7 +900,7 @@ class DatabaseDebugger:
             # New columns
             print(f"   📌 Source Type: {row['source_type'] if row['source_type'] else 'N/A'}")
             print(f"   🔗 Training Session ID: {row['training_session_id'] if row['training_session_id'] else 'N/A'}")
-            print(f"   📝 Notes: {row['notes'] if row['notes'] else 'N/A'}")
+            print(f"   📝 Description: {row['description'] if row['description'] else 'N/A'}")
             print(f"   🏆 Is Best: {'Yes' if row['is_best'] else 'No'}")
 
             # Timestamps

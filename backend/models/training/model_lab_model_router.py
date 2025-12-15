@@ -22,10 +22,7 @@ from core.config import settings
 router = APIRouter()
 logger = get_professional_logger()
 
-# Startup verification
-print("=" * 60)
-print("🚀 MODEL LAB ROUTER LOADED - Using training_id (integer)")
-print("=" * 60)
+
 
 
 class UpdateNotesRequest(BaseModel):
@@ -350,7 +347,7 @@ async def deploy_model_to_project(
     # Update training-specific fields that upsert_ai_model doesn't handle
     new_model.source_type = "training"
     new_model.training_session_id = session.id
-    new_model.notes = request.description or ""
+    new_model.description = request.description or ""
     new_model.is_best = (request.model_type == "best")
     db.commit()
     db.refresh(new_model)
@@ -382,10 +379,10 @@ async def deploy_model_to_project(
         else:
             mt = ModelType.OBJECT_DETECTION  # default
         
-        # Generate model ID (same pattern as import_custom_model)
+        # Generate model ID (use 'trained_' prefix to distinguish from uploaded models)
         slug = new_model.name.lower().strip().replace(' ', '_')
         slug = ''.join(ch for ch in slug if ch.isalnum() or ch in ['_', '-'])
-        model_id = f"custom_{project.name}_{slug}"
+        model_id = f"trained_{project.name}_{slug}"
         
         # Manually create ModelInfo (file is already in place, don't copy again!)
         model_info = ModelInfo(
@@ -404,7 +401,6 @@ async def deploy_model_to_project(
             # Training-specific fields
             source_type="training",
             training_session_id=session.id,
-            notes=request.description or "",
             is_best=(request.model_type == "best")
         )
         
@@ -421,9 +417,6 @@ async def deploy_model_to_project(
         })
     except Exception as e:
         # Log but don't fail deployment if registration fails
-        print(f"❌ MODEL REGISTRATION FAILED: {str(e)}")  # Console output for debugging
-        import traceback
-        traceback.print_exc()  # Print full error trace
         logger.error("app.backend", f"Failed to register model in model_manager: {str(e)}", "model_registration_error", {
             "model_id": new_model.id,
             "error": str(e)

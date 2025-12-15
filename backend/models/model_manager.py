@@ -59,7 +59,7 @@ class ModelInfo:
     # Training-specific metadata (optional, for deployed models)
     source_type: str = "custom"  # "custom", "training", "default"
     training_session_id: Optional[int] = None
-    notes: str = ""
+    description: str = ""  # Renamed from notes for consistency
     is_best: bool = False
 
 
@@ -89,6 +89,9 @@ class ModelManager:
             with open(self.models_config_file, 'r') as f:
                 config = json.load(f)
                 for model_id, model_data in config.items():
+                    # Backward compatibility: rename 'notes' to 'description' if present
+                    if 'notes' in model_data and 'description' not in model_data:
+                        model_data['description'] = model_data.pop('notes')
                     self.models_info[model_id] = ModelInfo(**model_data)
     
     def _save_models_config(self):
@@ -113,7 +116,7 @@ class ModelManager:
                 "is_training": getattr(model_info, "is_training", False),
                 "source_type": getattr(model_info, "source_type", "custom"),
                 "training_session_id": getattr(model_info, "training_session_id", None),
-                "notes": getattr(model_info, "notes", ""),
+                "description": getattr(model_info, "description", ""),
                 "is_best": getattr(model_info, "is_best", False)
             }
         

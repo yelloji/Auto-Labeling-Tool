@@ -238,7 +238,7 @@ class AiModel(Base):
     # Model source and training metadata
     source_type = Column(String(20), nullable=True)  # 'default', 'custom', 'local', 'training'
     training_session_id = Column(String, ForeignKey("training_sessions.id", ondelete="SET NULL"), nullable=True)
-    notes = Column(Text, nullable=True)  # User notes for the model
+    description = Column(Text, nullable=True)  # User description for the model
     is_best = Column(Boolean, default=False)  # True for best.pt, False for last.pt
 
     # Timestamps

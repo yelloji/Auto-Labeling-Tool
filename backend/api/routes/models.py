@@ -509,6 +509,7 @@ async def import_custom_model(
                         classes=model_info.classes,
                         input_size_default=list(model_info.input_size) if isinstance(model_info.input_size, tuple) else model_info.input_size,
                         training_input_size=training_size_list,
+                        description=model_info.description,  # Save description to database
                     )
                     try:
                         from sqlalchemy import text as sql_text
