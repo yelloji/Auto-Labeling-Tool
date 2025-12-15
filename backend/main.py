@@ -136,6 +136,11 @@ app.include_router(enhanced_export.router, prefix="/api/v1/enhanced-export", tag
 app.include_router(releases.router, prefix="/api/v1", tags=["releases"])
 app.include_router(release_detail_view.router, prefix="/api/v1", tags=["release-details"])
 app.include_router(training_api.router, prefix="/api/v1", tags=["training"])
+
+# Include model lab routes
+from models.training import model_lab_model_router
+app.include_router(model_lab_model_router.router, prefix="/api/v1", tags=["model-lab"])
+
 app.include_router(dev_password.router, prefix="/api/v1", tags=["dev-auth"])
 
 # Include new feature routes

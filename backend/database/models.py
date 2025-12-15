@@ -235,6 +235,12 @@ class AiModel(Base):
     training_input_size = Column(JSON, nullable=True)  # [w, h] if known
     input_size_default = Column(JSON, nullable=False, default=[640, 640])  # [w, h]
 
+    # Model source and training metadata
+    source_type = Column(String(20), nullable=True)  # 'default', 'custom', 'local', 'training'
+    training_session_id = Column(String, ForeignKey("training_sessions.id", ondelete="SET NULL"), nullable=True)
+    notes = Column(Text, nullable=True)  # User notes for the model
+    is_best = Column(Boolean, default=False)  # True for best.pt, False for last.pt
+
     # Timestamps
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
