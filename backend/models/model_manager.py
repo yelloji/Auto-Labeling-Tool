@@ -96,14 +96,28 @@ class ModelManager:
     
     def _save_models_config(self):
         """Save models configuration to JSON file"""
+        from core.config import settings
         config = {}
         for model_id, model_info in self.models_info.items():
+            # Convert absolute paths to relative for portability
+            path_to_save = model_info.path
+            try:
+                path_obj = Path(model_info.path)
+                if path_obj.is_absolute():
+                    base_dir = Path(settings.BASE_DIR).resolve()
+                    abs_path = path_obj.resolve()
+                    if str(abs_path).lower().startswith(str(base_dir).lower()):
+                        rel_path = abs_path.relative_to(base_dir)
+                        path_to_save = str(rel_path).replace('\\', '/')
+            except Exception:
+                pass
+            
             config[model_id] = {
                 "id": model_info.id,
                 "name": model_info.name,
                 "type": model_info.type,
                 "format": model_info.format,
-                "path": model_info.path,
+                "path": path_to_save,
                 "classes": model_info.classes,
                 "input_size": model_info.input_size,
                 "confidence_threshold": model_info.confidence_threshold,
@@ -125,8 +139,12 @@ class ModelManager:
 
     def _refresh_model_metadata(self, model_info: ModelInfo) -> None:
         """Ensure runtime metadata fields like file_size, is_ready, and created_at are populated"""
+        from core.config import settings
         try:
+            # Support both relative and absolute paths
             path = Path(model_info.path)
+            if not path.is_absolute():
+                path = Path(settings.BASE_DIR) / model_info.path
             if path.exists():
                 # File exists => model is ready
                 model_info.is_ready = True
@@ -476,8 +494,11 @@ class ModelManager:
         if not model_info.is_custom:
             raise ValueError("Cannot delete pre-trained models")
         
-        # Remove model file
+        # Remove model file (handle both relative and absolute paths)
+        from core.config import settings
         model_path = Path(model_info.path)
+        if not model_path.is_absolute():
+            model_path = Path(settings.BASE_DIR) / model_info.path
         if model_path.exists():
             model_path.unlink()
         

@@ -966,6 +966,9 @@ async def download_model(model_id: str):
 
         model_info = model_manager.models_info[model_id]
         file_path = Path(model_info.path)
+        # Handle relative paths
+        if not file_path.is_absolute():
+            file_path = Path(settings.BASE_DIR) / model_info.path
 
         # Ensure file exists
         logger.debug("operations.operations", f"Validating model file path", "model_file_path_validation", {
