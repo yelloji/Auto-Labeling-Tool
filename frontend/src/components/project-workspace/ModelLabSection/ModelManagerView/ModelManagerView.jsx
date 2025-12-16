@@ -137,17 +137,28 @@ const ModelManagerView = ({ projectId, trainingId, sessionName }) => {
     const isEditing = editingNotes[modelType];
     const modelNotes = notes[modelType];
 
+    // Card styles for each model type
+    const cardStyle = modelType === 'best'
+      ? {
+        background: 'linear-gradient(135deg, #fff2e8 20%, #f6ffed 80%)',
+        borderLeft: `4px solid #FFD700`
+      }
+      : {
+        background: 'linear-gradient(135deg, #f9f0ff 20%, #f6ffed 80%)',
+        borderLeft: `4px solid #722ed1`
+      };
+
     return (
       <Card
         className="model-card"
-        style={{ borderLeft: `4px solid ${color}` }}
+        style={cardStyle}
       >
         <div className="model-card-header">
           <div className="model-card-title">
             {icon}
             <span>{title}</span>
           </div>
-          <Tag color={color}>{modelType.toUpperCase()}</Tag>
+          <Tag color={modelType === 'best' ? 'gold' : 'cyan'}>{modelType.toUpperCase()}</Tag>
         </div>
 
         <div className="model-card-info">
