@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Form, Alert, Tag, Space, Select, Button, Card, Typography } from 'antd';
 import { releasesAPI, trainingAPI } from '../../../../services/api';
 
-export default function TrainingDatasetSection({ projectId, datasetSource, datasetReleaseId, datasetZipPath, datasetReleaseDir, classes, datasetSummary, isDeveloper, hydratedIdentity, onChange, disabled }) {
+export default function TrainingDatasetSection({ projectId, taskType, datasetSource, datasetReleaseId, datasetZipPath, datasetReleaseDir, classes, datasetSummary, isDeveloper, hydratedIdentity, onChange, disabled }) {
   const [loadingReleases, setLoadingReleases] = useState(false);
   const [projectReleases, setProjectReleases] = useState([]);
   const [checkingExtract, setCheckingExtract] = useState(false);
@@ -19,8 +19,29 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
       setLoadingReleases(true);
       try {
         const releases = await releasesAPI.getProjectReleases(projectId);
-        setProjectReleases(Array.isArray(releases) ? releases : []);
-        const firstZip = (Array.isArray(releases) ? releases : [])
+        const allReleases = Array.isArray(releases) ? releases : [];
+
+        // Map UI task type to possible database values (handle inconsistent naming)
+        const taskTypeVariations = {
+          'detection': ['object_detection', 'detection'],
+          'segmentation': ['instance_segmentation', 'segmentation']
+        };
+        const acceptedTypes = taskTypeVariations[taskType] || [taskType];
+
+        // Filter by task type - accept any variation
+        const filteredReleases = taskType
+          ? allReleases.filter(r => acceptedTypes.includes(r?.task_type))
+          : allReleases;
+
+
+        setProjectReleases(filteredReleases);
+
+        // Clear selection if current dataset is not in filtered list (task type mismatch)
+        if (datasetReleaseId && !filteredReleases.find(r => String(r?.id) === String(datasetReleaseId))) {
+          onChange({ datasetReleaseId: null, datasetZipPath: '', datasetReleaseDir: '' });
+        }
+
+        const firstZip = filteredReleases
           .find((r) => String(getZipPath(r) || '').toLowerCase().endsWith('.zip'));
         if (firstZip && hydratedIdentity && !datasetZipPath && !datasetReleaseDir && !datasetReleaseId) {
           onChange({ datasetReleaseId: firstZip.id, datasetZipPath: getZipPath(firstZip) });
@@ -33,7 +54,7 @@ export default function TrainingDatasetSection({ projectId, datasetSource, datas
       }
     };
     loadReleases();
-  }, [projectId, hydratedIdentity, datasetReleaseDir, datasetZipPath, datasetReleaseId]);
+  }, [projectId, taskType, hydratedIdentity, datasetReleaseDir, datasetZipPath, datasetReleaseId]);
 
   useEffect(() => {
     const check = async () => {

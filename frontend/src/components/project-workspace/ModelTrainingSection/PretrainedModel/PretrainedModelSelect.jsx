@@ -15,22 +15,26 @@ export default function PretrainedModelSelect({ framework, taskType, projectId, 
         const list = await trainingAPI.getTrainableModels(projectId, framework, taskType);
         const items = [];
         const modelMap = {};  // Store full model info
-        const sizeTag = (name) => name?.includes('n') ? 'n' : name?.includes('s') ? 's' : name?.includes('m') ? 'm' : name?.includes('l') ? 'l' : 'x';
         for (const m of Array.isArray(list) ? list : []) {
           const filePath = String(m?.file_path || '');
           const name = String(m?.name || filePath || '').split(/[\\\/]/).pop();
           const scope = m?.project_id ? (m?.project_name || 'project') : 'global';
           if (!filePath.toLowerCase().endsWith('.pt')) continue;
-          const size = sizeTag(name.toLowerCase());
           const label = (
             <span>
-              {name} <Tag style={{ marginLeft: 6 }}>{scope}</Tag> <Tag color="blue" style={{ marginLeft: 6 }}>{size}</Tag>
+              {name} <Tag style={{ marginLeft: 6 }}>{scope}</Tag>
             </span>
           );
           items.push({ label, value: filePath, modelInfo: m });  // Include full model info
           modelMap[filePath] = m;  // Store for lookup
         }
         setModelOptions(items);
+
+        // Clear selection if current model is not compatible with new task type
+        if (value && !items.find(item => item.value === value)) {
+          onChange('', null);  // Clear model selection
+        }
+
         // Store model map for parent component
         if (onChange && value) {
           const selectedModel = modelMap[value];
