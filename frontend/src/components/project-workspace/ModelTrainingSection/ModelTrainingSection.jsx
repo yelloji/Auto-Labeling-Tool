@@ -125,7 +125,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
         setForm((prev) => ({ ...prev, imgSize: datasetSummary.image_size }));
       }
     }
-  }, [form.resume, selectedModelInfo, datasetSummary, form.imgSize]);
+  }, [form.resume, selectedModelInfo, datasetSummary]);
 
   useEffect(() => {
     const resumeActive = async () => {
