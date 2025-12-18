@@ -1337,9 +1337,17 @@ async def run_validation_task(experiment_id: str, training_id: int, params: Dict
         if not dataset_yaml:
             raise FileNotFoundError(f"Could not find data.yaml for training {ts.name}")
 
-        # 3. Output Folder: projects/{project}/model/training/{session}/experiments/{experiment_id}
+        # 3. Output Folder: projects/{project}/model/training/{session}/experiments/{experiment_name}_{timestamp}
+        # Sanitize experiment name for filesystem safety
+        import re
+        from datetime import datetime
+        
+        safe_name = re.sub(r'[^\w\-_]', '_', experiment.name or 'unnamed')
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        folder_name = f"{safe_name}_{timestamp}"
+        
         project = db.query(Project).filter(Project.id == ts.project_id).first()
-        rel_output_dir = Path(ts.run_dir) / "experiments" / experiment_id
+        rel_output_dir = Path(ts.run_dir) / "experiments" / folder_name
         abs_output_dir = project_root / rel_output_dir
         
         # Run Validator
@@ -1393,6 +1401,9 @@ async def init_validation(training_id: int, payload: ValidationRequest, db: Sess
     if not ts:
         raise HTTPException(status_code=404, detail="Training session not found")
     
+    # Get project for denormalized name
+    project = db.query(Project).filter(Project.id == ts.project_id).first()
+    
     # Calculate image_count from dataset_summary_json
     image_count = None
     if ts.dataset_summary_json:
@@ -1407,6 +1418,8 @@ async def init_validation(training_id: int, payload: ValidationRequest, db: Sess
         id=str(uuid.uuid4()),
         training_id=ts.id,
         project_id=ts.project_id,
+        project_name=project.name if project else None,
+        training_name=ts.name,
         name=payload.name or "",
         experiment_type="validation",
         framework=ts.framework or "ultralytics",
@@ -1458,10 +1471,15 @@ async def trigger_validation(
         experiment.custom_params = payload.custom_params
     else:
         # Fallback if UI somehow triggered without init
+        # Get project for denormalized name
+        project = db.query(Project).filter(Project.id == ts.project_id).first()
+        
         experiment = ModelExperiment(
             id=str(uuid.uuid4()),
             training_id=ts.id,
             project_id=ts.project_id,
+            project_name=project.name if project else None,
+            training_name=ts.name,
             name=payload.name,
             experiment_type="validation",
             framework=ts.framework or "ultralytics",

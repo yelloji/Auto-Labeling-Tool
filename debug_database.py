@@ -184,28 +184,54 @@ class DatabaseDebugger:
             """)
             for row in cursor.fetchall():
                 print(f"\n   🔬 EXPERIMENT: {row['id']} [{row['experiment_type']}]")
-                print(f"      Status: {row['status']}")
-                print(f"      Created: {row['created_at']}")
                 
-                for cn in _col_names:
-                    if cn in ('id', 'experiment_type', 'status', 'created_at'): continue
-                    val = row[cn]
-                    
-                    json_fields = (
-                        'custom_params', 'validation_metrics', 'per_class_metrics', 
-                        'confusion_matrix', 'input_images', 'predictions'
-                    )
-                    
-                    if cn in json_fields and val:
-                        try:
-                            _parsed = json.loads(val) if isinstance(val, str) else val
-                            print(f"      {cn}:")
-                            for _line in json.dumps(_parsed, indent=2, default=str).splitlines():
-                                print(f"         {_line}")
-                        except Exception:
-                            print(f"      {cn}: (could not parse)")
-                    else:
-                        print(f"      {cn}: {val if val not in (None, '') else 'N/A'}")
+                print(f"\n      ├─ Identification")
+                print(f"      │ Status: {row['status']}")
+                print(f"      │ Name: {row['name'] or 'N/A'}")
+                print(f"      │ Project: {row['project_name'] or 'N/A'} (ID: {row['project_id']})")
+                print(f"      │ Training: {row['training_name'] or 'N/A'} (ID: {row['training_id']})")
+                print(f"      │ Created: {row['created_at']}")
+                
+                print(f"\n      ├─ Configuration")
+                print(f"      │ Dataset Split: {row['dataset_source']}")
+                print(f"      │ Image Count: {row['image_count'] if row['image_count'] is not None else 'N/A'}")
+                print(f"      │ Confidence: {row['confidence']}")
+                print(f"      │ IoU Threshold: {row['iou_threshold']}")
+                print(f"      │ Image Size: {row['imgsz']}")
+                print(f"      │ Weights Type: {row['weights_type']}")
+                print(f"      │ Task: {row['task'] or 'N/A'}")
+                print(f"      │ Framework: {row['framework'] or 'N/A'}")
+                print(f"      │ Max Detections: {row['max_detections'] if row['max_detections'] is not None else 'N/A'}")
+                print(f"      │ Custom Params: {row['custom_params'] or 'N/A'}")
+                print(f"      │ Is Default: {bool(row['is_default'])}")
+                
+                print(f"\n      ├─ Results")
+                if row['validation_metrics']:
+                    try:
+                        m = json.loads(row['validation_metrics']) if isinstance(row['validation_metrics'], str) else row['validation_metrics']
+                        print(f"      │ Metrics: {json.dumps(m, indent=2)}")
+                    except: print(f"      │ Metrics: (Raw) {row['validation_metrics']}")
+                else:
+                    print(f"      │ Metrics: N/A")
+                
+                print(f"      │ Per-Class Metrics: {'Available' if row['per_class_metrics'] else 'N/A'}")
+                print(f"      │ Predictions: {'Available' if row['predictions'] else 'N/A'}")
+                print(f"      │ Input Images: {'Available' if row['input_images'] else 'N/A'}")
+                print(f"      │ Confusion Matrix: {'Available' if row['confusion_matrix'] else 'N/A'}")
+                
+                print(f"\n      ├─ Timing")
+                print(f"      │ Started: {row['started_at'] or 'N/A'}")
+                print(f"      │ Completed: {row['completed_at'] or 'N/A'}")
+                print(f"      │ Duration: {row['duration_sec'] if row['duration_sec'] is not None else 'N/A'} sec")
+                
+                print(f"\n      └─ Paths & Notes")
+                print(f"         Dataset Path: {row['dataset_path'] or 'N/A'}")
+                print(f"         Output Folder: {row['output_folder'] or 'N/A'}")
+                print(f"         User Notes: {row['user_notes'] or 'N/A'}")
+                
+                if row['error_message']:
+                    print(f"\n      ❌ Error: {row['error_message']}")
+
     
     def get_projects_overview(self):
         """Get overview of all projects"""

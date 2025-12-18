@@ -31,9 +31,15 @@ class UltralyticsValidator(BaseValidator):
             
             dataset_base = os.path.dirname(dataset_yaml)
             
+            # Convert relative 'path' to absolute if needed
+            dataset_path = data_config.get('path', dataset_base)
+            if not os.path.isabs(dataset_path):
+                # Path is relative to the original data.yaml location
+                dataset_path = os.path.abspath(os.path.join(dataset_base, dataset_path))
+            
             # Map selected split to "val" for YOLO validation
             temp_data_config = {
-                'path': data_config.get('path', dataset_base),
+                'path': dataset_path,  # Now always absolute!
                 'nc': data_config['nc'],
                 'names': data_config['names'],
                 'val': f'{dataset_source}/images', 

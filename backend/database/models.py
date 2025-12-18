@@ -613,6 +613,11 @@ class ModelExperiment(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     training_id = Column(Integer, ForeignKey("training_sessions.id", ondelete="CASCADE"), nullable=False)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    
+    # Denormalized names for easier querying (no joins needed)
+    project_name = Column(String, nullable=True)
+    training_name = Column(String, nullable=True)
+    
     name = Column(String, nullable=True)  # Custom experiment name
     weights_type = Column(String, default="best") # 'best' or 'last'
     

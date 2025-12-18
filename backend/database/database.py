@@ -180,10 +180,12 @@ async def init_db():
                     cols = conn.execute(text("PRAGMA table_info(model_experiments)")).fetchall()
                     existing = {c[1] for c in cols}
                     
-                    # Add missing columns needed for draft persistence
+                    # Add missing columns needed for draft persistence and denormalization
                     add_map = {
                         "name": "ALTER TABLE model_experiments ADD COLUMN name VARCHAR",
-                        "weights_type": "ALTER TABLE model_experiments ADD COLUMN weights_type VARCHAR DEFAULT 'best'"
+                        "weights_type": "ALTER TABLE model_experiments ADD COLUMN weights_type VARCHAR DEFAULT 'best'",
+                        "project_name": "ALTER TABLE model_experiments ADD COLUMN project_name VARCHAR",
+                        "training_name": "ALTER TABLE model_experiments ADD COLUMN training_name VARCHAR"
                     }
                     
                     for col, sql_stmt in add_map.items():
