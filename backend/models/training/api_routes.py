@@ -792,7 +792,8 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
                             "is_managed": True,
                             "metrics": json.dumps(metrics_data),
                             "training_config_snapshot": s.training_config_snapshot,
-                            "resolved_config_json": s.resolved_config_json
+                            "resolved_config_json": s.resolved_config_json,
+                            "dataset_summary_json": s.dataset_summary_json
                         })
                     else:
                         # Unmanaged session
@@ -866,7 +867,8 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
                     "is_managed": True,
                     "metrics": json.dumps(metrics_data),
                     "training_config_snapshot": s.training_config_snapshot,
-                    "resolved_config_json": s.resolved_config_json
+                    "resolved_config_json": s.resolved_config_json,
+                    "dataset_summary_json": s.dataset_summary_json
                 })
 
         # Sort by created_at desc

@@ -123,9 +123,26 @@ const ValidationView = ({ training }) => {
                         }
                     }
 
+                    // Determine default split based on what's available
+                    let defaultSplit = 'val';
+                    if (training.dataset_summary_json) {
+                        try {
+                            const summary = typeof training.dataset_summary_json === 'string'
+                                ? JSON.parse(training.dataset_summary_json)
+                                : training.dataset_summary_json;
+                            const splits = summary?.splits || {};
+                            // Prefer val, then train, then test
+                            if (splits.val > 0) defaultSplit = 'val';
+                            else if (splits.train > 0) defaultSplit = 'train';
+                            else if (splits.test > 0) defaultSplit = 'test';
+                        } catch (e) {
+                            console.error("Failed to detect default split", e);
+                        }
+                    }
+
                     setParams({
                         name: '', // Empty experiment name by default
-                        dataset_source: 'val',
+                        dataset_source: defaultSplit,
                         task: training.taskType || 'detection',
                         imgsz: detectedImgsz,
                         confidence: 0.25,
@@ -145,6 +162,34 @@ const ValidationView = ({ training }) => {
     const [activeExperiment, setActiveExperiment] = useState(null);
     const [loading, setLoading] = useState(false);
     const [running, setRunning] = useState(false);
+
+    // Compute available dataset splits from training session
+    const availableSplits = React.useMemo(() => {
+        if (!training?.dataset_summary_json) {
+            return ['val', 'train', 'test'];
+        }
+
+        try {
+            const summary = typeof training.dataset_summary_json === 'string'
+                ? JSON.parse(training.dataset_summary_json)
+                : training.dataset_summary_json;
+
+            const splits = summary?.splits || {};
+
+            const available = [];
+
+            // Only include splits with images (count > 0)
+            if (splits.train > 0) available.push('train');
+            if (splits.val > 0) available.push('val');
+            if (splits.test > 0) available.push('test');
+
+            // Fallback: if no splits found, show all
+            return available.length > 0 ? available : ['val', 'train', 'test'];
+        } catch (e) {
+            console.error('❌ Failed to parse dataset_summary_json:', e);
+            return ['val', 'train', 'test'];
+        }
+    }, [training?.dataset_summary_json]);
 
     // Polling interval ref
     const pollingIntervalRef = useRef(null);
@@ -499,9 +544,9 @@ const ValidationView = ({ training }) => {
                                         style={{ width: '100%', marginTop: 4 }}
                                         onChange={v => updateParam('dataset_source', v)}
                                     >
-                                        <Option value="val">Validation</Option>
-                                        <Option value="test">Test</Option>
-                                        <Option value="train">Train</Option>
+                                        {availableSplits.includes('val') && <Option value="val">Validation</Option>}
+                                        {availableSplits.includes('train') && <Option value="train">Train</Option>}
+                                        {availableSplits.includes('test') && <Option value="test">Test</Option>}
                                     </Select>
                                 </div>
 
