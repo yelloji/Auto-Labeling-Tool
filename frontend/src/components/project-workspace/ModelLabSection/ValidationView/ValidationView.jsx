@@ -31,15 +31,17 @@ const { Option } = Select;
  * - Right: History
  */
 const ValidationView = ({ training }) => {
+
     // State for configuration
     const [params, setParams] = useState({
-        name: `Val_${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).replace(':', '')}`,
+        name: '', // Start empty as requested
         dataset_source: 'val',
         confidence: 0.25,
         iou_threshold: 0.45,
-        imgsz: training?.imgsz || 640,
+        imgsz: 640,
         max_detections: 300,
-        task: training?.taskType || 'detection'
+        task: training?.taskType || 'detection',
+        weights_type: 'best'
     });
 
     const lastTrainingId = useRef(null);
@@ -48,14 +50,30 @@ const ValidationView = ({ training }) => {
     useEffect(() => {
         if (training && training.id !== lastTrainingId.current) {
             lastTrainingId.current = training.id;
+
+            // Senior approach: Parse config purely from DB record
+            let detectedImgsz = 640;
+            if (training.resolved_config_json) {
+                try {
+                    const config = typeof training.resolved_config_json === 'string'
+                        ? JSON.parse(training.resolved_config_json)
+                        : training.resolved_config_json;
+                    // Most configs store it in 'train' block, but handles root too
+                    detectedImgsz = config.train?.imgsz || config.imgsz || 640;
+                } catch (e) {
+                    console.error("Failed to parse config for imgsz", e);
+                }
+            }
+
             setParams(prev => ({
                 ...prev,
-                name: `Val_${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).replace(':', '')}`,
+                name: '', // Reset name to empty on model switch
                 task: training.taskType || 'detection',
-                imgsz: training.imgsz || 640
+                imgsz: detectedImgsz,
+                weights_type: 'best'
             }));
         }
-    }, [training]);
+    }, [training, training?.id]);
 
     // State for data
     const [experiments, setExperiments] = useState([]);
@@ -86,6 +104,11 @@ const ValidationView = ({ training }) => {
                         }
                         if (updated.status === 'completed') {
                             message.success("Validation completed!");
+                            // Fresh UI reset: clear the name for next run
+                            setParams(prev => ({
+                                ...prev,
+                                name: '',
+                            }));
                         } else {
                             message.error("Validation failed: " + updated.error_message);
                         }
@@ -123,7 +146,7 @@ const ValidationView = ({ training }) => {
             // Add a temporary pending experiment to history
             const tempExp = {
                 id: expId,
-                status: 'pending',
+                status: 'queued',
                 created_at: new Date().toISOString(),
                 ...params
             };
@@ -289,7 +312,20 @@ const ValidationView = ({ training }) => {
                                         style={{ marginTop: 4 }}
                                         onChange={e => setParams({ ...params, name: e.target.value })}
                                         placeholder="Enter experiment name..."
+                                        autoComplete="off"
                                     />
+                                </div>
+
+                                <div className="v-form-item" style={{ marginBottom: 16 }}>
+                                    <Text strong>Select Validation Model</Text>
+                                    <Select
+                                        value={params.weights_type}
+                                        style={{ width: '100%', marginTop: 4 }}
+                                        onChange={v => setParams({ ...params, weights_type: v })}
+                                    >
+                                        <Option value="best">Best Weights (Recommended)</Option>
+                                        <Option value="last">Last Weights (Most Recent)</Option>
+                                    </Select>
                                 </div>
 
                                 {training?.taskType === 'segmentation' && (
@@ -446,7 +482,8 @@ const ValidationView = ({ training }) => {
                                     <div className="v-history-content">
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <Text strong>{item.name || new Date(item.created_at).toLocaleTimeString()}</Text>
-                                            {item.status === 'pending' ? <SyncOutlined spin style={{ color: '#1890ff' }} /> :
+                                            {(item.status === 'queued' || item.status === 'running' || item.status === 'pending') ?
+                                                <SyncOutlined spin style={{ color: '#1890ff' }} /> :
                                                 item.status === 'failed' ? <CloseCircleOutlined style={{ color: '#ff4d4f' }} /> :
                                                     <CheckCircleOutlined style={{ color: '#52c41a' }} />}
                                         </div>

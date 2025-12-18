@@ -842,29 +842,31 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
         # Add any DB sessions that weren't found on disk (e.g. queued but not started, or deleted manually)
         for s in db_sessions:
             if not any(fs['name'] == s.name for fs in found_sessions):
-                 # Parse and normalize metrics
-                 metrics_data = {}
-                 if s.metrics_json:
-                     try:
-                         metrics_data = json.loads(s.metrics_json)
-                     except:
-                         pass
-                 
-                 # Ensure epochs is present
-                 if 'epochs' not in metrics_data:
-                     if 'training' in metrics_data and 'total_epochs' in metrics_data['training']:
-                         metrics_data['epochs'] = metrics_data['training']['total_epochs']
-                     elif 'training' in metrics_data and 'epoch' in metrics_data['training']:
-                         metrics_data['epochs'] = metrics_data['training']['epoch']
+                # Parse and normalize metrics
+                metrics_data = {}
+                if s.metrics_json:
+                    try:
+                        metrics_data = json.loads(s.metrics_json)
+                    except:
+                        pass
+                
+                # Ensure epochs is present
+                if 'epochs' not in metrics_data:
+                    if 'training' in metrics_data and 'total_epochs' in metrics_data['training']:
+                        metrics_data['epochs'] = metrics_data['training']['total_epochs']
+                    elif 'training' in metrics_data and 'epoch' in metrics_data['training']:
+                        metrics_data['epochs'] = metrics_data['training']['epoch']
 
-                 found_sessions.append({
+                found_sessions.append({
                     "id": s.id,
                     "name": s.name,
                     "task": s.task,
                     "status": s.status,
                     "created_at": s.created_at,
                     "is_managed": True,
-                    "metrics": json.dumps(metrics_data)
+                    "metrics": json.dumps(metrics_data),
+                    "training_config_snapshot": s.training_config_snapshot,
+                    "resolved_config_json": s.resolved_config_json
                 })
 
         # Sort by created_at desc
@@ -1228,6 +1230,7 @@ class ValidationRequest(BaseModel):
     batch: int = 16
     device: str = "0"
     max_detections: int = 300
+    weights_type: str = "best"
     custom_params: Optional[Dict[str, Any]] = None
 
 async def run_validation_task(experiment_id: str, training_id: int, params: Dict[str, Any]):
@@ -1249,13 +1252,17 @@ async def run_validation_task(experiment_id: str, training_id: int, params: Dict
         backend_dir = next(p for p in current_file.parents if p.name == "backend")
         project_root = backend_dir.parent
         
-        # 1. Weights: first try weights_dir/best.pt, then run_dir/weights/best.pt
+        # 1. Weights: choose best.pt (default) or last.pt
+        weights_filename = "best.pt"
+        if params.get('weights_type') == 'last':
+            weights_filename = "last.pt"
+
         weights_path = None
         candidates = []
         if ts.weights_dir:
-            candidates.append(project_root / ts.weights_dir / "best.pt")
+            candidates.append(project_root / ts.weights_dir / weights_filename)
         if ts.run_dir:
-            candidates.append(project_root / ts.run_dir / "weights" / "best.pt")
+            candidates.append(project_root / ts.run_dir / "weights" / weights_filename)
             
         for c in candidates:
             if c.exists():
@@ -1338,15 +1345,16 @@ async def trigger_validation(
         confidence=payload.confidence,
         iou_threshold=payload.iou_threshold,
         imgsz=payload.imgsz,
+        weights_type=payload.weights_type,
         custom_params=payload.custom_params,
-        status="pending"
+        status="queued"
     )
     db.add(experiment)
     db.commit()
 
     background_tasks.add_task(run_validation_task, experiment_id, training_id, payload.dict())
     
-    return {"experiment_id": experiment_id, "status": "pending"}
+    return {"experiment_id": experiment_id, "status": "queued"}
 
 @router.get("/experiments/{experiment_id}")
 async def get_experiment_details(experiment_id: str, db: Session = Depends(get_db)):

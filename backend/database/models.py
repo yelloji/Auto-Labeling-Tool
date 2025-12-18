@@ -614,6 +614,7 @@ class ModelExperiment(Base):
     training_id = Column(Integer, ForeignKey("training_sessions.id", ondelete="CASCADE"), nullable=False)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     name = Column(String, nullable=True)  # Custom experiment name
+    weights_type = Column(String, default="best") # 'best' or 'last'
     
     # Classification
     experiment_type = Column(String, nullable=False)  # 'validation' or 'prediction'
