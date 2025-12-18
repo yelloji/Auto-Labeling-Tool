@@ -520,6 +520,47 @@ export const projectsAPI = {
     const response = await api.delete(`/api/v1/projects/${projectId}/labels/${labelId}`);
     return response.data;
   },
+
+  // Get all experiments for a training session
+  getTrainingExperiments: async (trainingId) => {
+    const response = await api.get(`/api/v1/training/${trainingId}/experiments`);
+    return response.data;
+  },
+
+  // Start validation
+  validateTraining: async (trainingId, payload) => {
+    const response = await api.post(`/api/v1/training/${trainingId}/validate`, payload);
+    return response.data;
+  },
+
+  // Get active queued draft for a model
+  getQueuedValidation: async (trainingId) => {
+    try {
+      const response = await api.get(`/api/v1/training/${trainingId}/validation/queued`);
+      return response.data;
+    } catch (error) {
+      if (error.response && error.response.status === 404) return null;
+      throw error;
+    }
+  },
+
+  // Initialize a validation draft
+  initValidation: async (trainingId, payload) => {
+    const response = await api.post(`/api/v1/training/${trainingId}/validation/init`, payload);
+    return response.data;
+  },
+
+  // Sync draft settings to DB (real-time)
+  updateValidationDraft: async (experimentId, payload) => {
+    const response = await api.patch(`/api/v1/experiments/${experimentId}`, payload);
+    return response.data;
+  },
+
+  // Delete an experiment
+  deleteExperiment: async (experimentId) => {
+    const response = await api.delete(`/api/v1/experiments/${experimentId}`);
+    return response.data;
+  },
 };
 
 // ==================== IMAGE TRANSFORMATIONS API ====================

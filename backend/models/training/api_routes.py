@@ -1233,6 +1233,59 @@ class ValidationRequest(BaseModel):
     weights_type: str = "best"
     custom_params: Optional[Dict[str, Any]] = None
 
+class ValidationUpdate(BaseModel):
+    name: Optional[str] = None
+    dataset_source: Optional[str] = None
+    confidence: Optional[float] = None
+    iou_threshold: Optional[float] = None
+    imgsz: Optional[int] = None
+    weights_type: Optional[str] = None
+    max_detections: Optional[int] = None
+    custom_params: Optional[Dict[str, Any]] = None
+
+@router.get("/training/{training_id}/validation/queued")
+async def get_queued_validation(training_id: int, db: Session = Depends(get_db)):
+    """Find existing queued validation experiment for a model."""
+    exp = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+    return exp
+
+@router.patch("/experiments/{experiment_id}")
+async def update_experiment(experiment_id: str, payload: ValidationUpdate, db: Session = Depends(get_db)):
+    """Update specific fields of an experiment (real-time sync)."""
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    update_data = payload.dict(exclude_unset=True)
+    
+    # If dataset_source changed, recalculate image_count
+    if 'dataset_source' in update_data:
+        ts = db.query(TrainingSession).filter(TrainingSession.id == exp.training_id).first()
+        if ts and ts.dataset_summary_json:
+            try:
+                summary = json.loads(ts.dataset_summary_json) if isinstance(ts.dataset_summary_json, str) else ts.dataset_summary_json
+                splits = summary.get('splits', {})
+                new_count = splits.get(update_data['dataset_source'], None)
+                if new_count is not None:
+                    exp.image_count = new_count
+            except Exception as e:
+                logger.warning("errors.system", f"Failed to recalculate image_count: {e}", "update_experiment_image_count_failed")
+    
+    for key, value in update_data.items():
+        setattr(exp, key, value)
+        
+    db.commit()
+    db.refresh(exp)
+    return exp
+
+
 async def run_validation_task(experiment_id: str, training_id: int, params: Dict[str, Any]):
     """Background task to run validation"""
     db = SessionLocal()
@@ -1320,6 +1373,57 @@ async def run_validation_task(experiment_id: str, training_id: int, params: Dict
     finally:
         db.close()
 
+@router.post("/training/{training_id}/validation/init")
+async def init_validation(training_id: int, payload: ValidationRequest, db: Session = Depends(get_db)):
+    """Initialize a new validation record or return existing queued one."""
+    existing = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+    if existing:
+        return existing
+        
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+    
+    # Calculate image_count from dataset_summary_json
+    image_count = None
+    if ts.dataset_summary_json:
+        try:
+            summary = json.loads(ts.dataset_summary_json) if isinstance(ts.dataset_summary_json, str) else ts.dataset_summary_json
+            splits = summary.get('splits', {})
+            image_count = splits.get(payload.dataset_source, None)
+        except Exception as e:
+            logger.warning("errors.system", f"Failed to parse dataset_summary_json: {e}", "init_validation_summary_parse_failed")
+        
+    exp = ModelExperiment(
+        id=str(uuid.uuid4()),
+        training_id=ts.id,
+        project_id=ts.project_id,
+        name=payload.name or "",
+        experiment_type="validation",
+        framework=ts.framework or "ultralytics",
+        task=ts.task,
+        dataset_source=payload.dataset_source,
+        dataset_path=ts.dataset_release_dir,
+        image_count=image_count,
+        confidence=payload.confidence,
+        iou_threshold=payload.iou_threshold,
+        imgsz=payload.imgsz,
+        weights_type=payload.weights_type,
+        status="queued"
+    )
+    
+    db.add(exp)
+    db.commit()
+    db.refresh(exp)
+    return exp
+
 @router.post("/training/{training_id}/validate")
 async def trigger_validation(
     training_id: int, 
@@ -1331,30 +1435,51 @@ async def trigger_validation(
     if not ts:
         raise HTTPException(status_code=404, detail="Training session not found")
 
-    experiment_id = str(uuid.uuid4())
-    experiment = ModelExperiment(
-        id=experiment_id,
-        training_id=ts.id,
-        project_id=ts.project_id,
-        name=payload.name,
-        experiment_type="validation",
-        framework=ts.framework or "ultralytics",
-        task=ts.task,
-        dataset_source=payload.dataset_source,
-        dataset_path=ts.dataset_release_dir,
-        confidence=payload.confidence,
-        iou_threshold=payload.iou_threshold,
-        imgsz=payload.imgsz,
-        weights_type=payload.weights_type,
-        custom_params=payload.custom_params,
-        status="queued"
+    # Resume existing draft if available
+    experiment = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.status == "queued"
+        )
+        .first()
     )
-    db.add(experiment)
-    db.commit()
-
-    background_tasks.add_task(run_validation_task, experiment_id, training_id, payload.dict())
     
-    return {"experiment_id": experiment_id, "status": "queued"}
+    if experiment:
+        # Finalize settings from UI
+        experiment.name = payload.name
+        experiment.dataset_source = payload.dataset_source
+        experiment.confidence = payload.confidence
+        experiment.iou_threshold = payload.iou_threshold
+        experiment.imgsz = payload.imgsz
+        experiment.weights_type = payload.weights_type
+        experiment.custom_params = payload.custom_params
+    else:
+        # Fallback if UI somehow triggered without init
+        experiment = ModelExperiment(
+            id=str(uuid.uuid4()),
+            training_id=ts.id,
+            project_id=ts.project_id,
+            name=payload.name,
+            experiment_type="validation",
+            framework=ts.framework or "ultralytics",
+            task=ts.task,
+            dataset_source=payload.dataset_source,
+            dataset_path=ts.dataset_release_dir,
+            confidence=payload.confidence,
+            iou_threshold=payload.iou_threshold,
+            imgsz=payload.imgsz,
+            weights_type=payload.weights_type,
+            status="queued"
+        )
+        db.add(experiment)
+    
+    db.commit()
+    db.refresh(experiment)
+
+    background_tasks.add_task(run_validation_task, experiment.id, training_id, payload.dict())
+    
+    return {"experiment_id": experiment.id, "status": "queued"}
 
 @router.get("/experiments/{experiment_id}")
 async def get_experiment_details(experiment_id: str, db: Session = Depends(get_db)):
@@ -1367,3 +1492,32 @@ async def get_experiment_details(experiment_id: str, db: Session = Depends(get_d
 async def list_training_experiments(training_id: int, db: Session = Depends(get_db)):
     exps = db.query(ModelExperiment).filter(ModelExperiment.training_id == training_id).order_by(ModelExperiment.created_at.desc()).all()
     return exps
+
+@router.delete("/experiments/{experiment_id}")
+async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
+    """Delete an experiment record (DB only for now, filesystem cleanup TODO)."""
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    # Safety: Don't allow deleting running experiments
+    if exp.status == "running":
+        raise HTTPException(status_code=400, detail="Cannot delete a running experiment. Please wait for it to complete or fail.")
+    
+    # Delete the database record
+    db.delete(exp)
+    db.commit()
+    
+    # TODO: Add filesystem cleanup for output_folder when validation runs are ready
+    # if exp.output_folder:
+    #     output_path = project_root / exp.output_folder
+    #     if output_path.exists():
+    #         shutil.rmtree(output_path)
+    
+    logger.info("operations.validation", f"Deleted experiment {experiment_id}", "experiment_deleted", {
+        "experiment_id": experiment_id,
+        "training_id": exp.training_id,
+        "status": exp.status
+    })
+    
+    return {"success": True, "message": "Experiment deleted successfully"}

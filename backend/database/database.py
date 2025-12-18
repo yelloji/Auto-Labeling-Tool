@@ -173,10 +173,29 @@ async def init_db():
         except Exception as ts_err:
             logger.warning("errors.system", f"Training sessions migration failed: {ts_err}", "training_sessions_migration_failed", {"error": str(ts_err)})
 
-        # Model experiments schema verification (log details)
+        # Model experiments schema verification & migration (additive)
         try:
             with engine.begin() as conn:
                 if "model_experiments" in {t[0] for t in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}:
+                    cols = conn.execute(text("PRAGMA table_info(model_experiments)")).fetchall()
+                    existing = {c[1] for c in cols}
+                    
+                    # Add missing columns needed for draft persistence
+                    add_map = {
+                        "name": "ALTER TABLE model_experiments ADD COLUMN name VARCHAR",
+                        "weights_type": "ALTER TABLE model_experiments ADD COLUMN weights_type VARCHAR DEFAULT 'best'"
+                    }
+                    
+                    for col, sql_stmt in add_map.items():
+                        if col not in existing:
+                            try:
+                                conn.execute(text(sql_stmt))
+                                logger.info("app.database", f"Added missing column {col} to model_experiments", "model_experiments_add_column")
+                                print(f"Migration: Added missing column '{col}' to model_experiments table.")
+                            except Exception as e:
+                                logger.warning("errors.system", f"Could not add column {col} to model_experiments: {e}", "model_experiments_add_column_failed", {"error": str(e), "column": col})
+
+                    # Re-verify after potential migration
                     cols = conn.execute(text("PRAGMA table_info(model_experiments)")).fetchall()
                     existing = {c[1] for c in cols}
                     logger.info("app.database", "Verified model_experiments schema", "model_experiments_verification", {
@@ -185,7 +204,7 @@ async def init_db():
                     })
                     print(f"Verified model_experiments: {len(existing)} columns found.")
         except Exception as me_err:
-            logger.warning("errors.system", f"Model experiments verification failed: {me_err}", "model_experiments_verification_failed", {"error": str(me_err)})
+            logger.warning("errors.system", f"Model experiments verification/migration failed: {me_err}", "model_experiments_verification_failed", {"error": str(me_err)})
 
         
 

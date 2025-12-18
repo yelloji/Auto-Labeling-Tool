@@ -493,32 +493,5 @@
     "source_type": "training",
     "training_session_id": 47,
     "is_best": true
-  },
-  "trained_gevis_trained-modle-2-obj": {
-    "id": "trained_gevis_trained-modle-2-obj",
-    "name": "trained-modle-2-obj",
-    "type": "object_detection",
-    "format": "pytorch",
-    "path": "projects/gevis/model/trained-modle-2-obj.pt",
-    "classes": [
-      "cat",
-      "defect",
-      "dog"
-    ],
-    "input_size": [
-      640,
-      640
-    ],
-    "confidence_threshold": 0.5,
-    "iou_threshold": 0.45,
-    "description": "Trained model from srl_obje-1",
-    "created_at": "2025-12-16T09:08:16.546832",
-    "is_custom": true,
-    "file_size": 5467987,
-    "is_ready": true,
-    "is_training": false,
-    "source_type": "training",
-    "training_session_id": 18,
-    "is_best": true
   }
 }
