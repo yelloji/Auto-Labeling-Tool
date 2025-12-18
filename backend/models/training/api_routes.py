@@ -1,5 +1,5 @@
-from typing import Optional, Dict, Any
-from fastapi import APIRouter, Depends, Query, HTTPException
+from typing import Optional, List, Any, Dict
+from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -26,6 +26,11 @@ import hashlib
 import yaml
 import shutil
 from core.config import settings
+from database.models import ModelExperiment
+from models.training.validator import ValidatorRegistry
+from logging_system.professional_logger import get_professional_logger
+
+logger = get_professional_logger()
 
 router = APIRouter()
 
@@ -1211,3 +1216,146 @@ async def acknowledge_training_completion(
     db.commit()
     
     return {"success": True, "session_id": session_id}
+
+# --- Validation and Prediction API ---
+
+class ValidationRequest(BaseModel):
+    name: Optional[str] = None
+    dataset_source: str = "val"  # 'val' or 'test'
+    confidence: float = 0.25
+    iou_threshold: float = 0.45
+    imgsz: int = 640
+    batch: int = 16
+    device: str = "0"
+    max_detections: int = 300
+    custom_params: Optional[Dict[str, Any]] = None
+
+async def run_validation_task(experiment_id: str, training_id: int, params: Dict[str, Any]):
+    """Background task to run validation"""
+    db = SessionLocal()
+    try:
+        experiment = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+        ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+        
+        if not experiment or not ts:
+            return
+
+        experiment.status = "running"
+        experiment.started_at = datetime.utcnow()
+        db.commit()
+
+        # Resolve paths
+        current_file = Path(__file__).resolve()
+        backend_dir = next(p for p in current_file.parents if p.name == "backend")
+        project_root = backend_dir.parent
+        
+        # 1. Weights: first try weights_dir/best.pt, then run_dir/weights/best.pt
+        weights_path = None
+        candidates = []
+        if ts.weights_dir:
+            candidates.append(project_root / ts.weights_dir / "best.pt")
+        if ts.run_dir:
+            candidates.append(project_root / ts.run_dir / "weights" / "best.pt")
+            
+        for c in candidates:
+            if c.exists():
+                weights_path = str(c)
+                break
+        
+        if not weights_path:
+            raise FileNotFoundError(f"Could not find best.pt for training {ts.name}")
+
+        # 2. Dataset YAML: usually in project_root / ts.dataset_release_dir / "data.yaml"
+        dataset_yaml = None
+        if ts.dataset_release_dir:
+            y_path = project_root / ts.dataset_release_dir / "data.yaml"
+            if y_path.exists():
+                dataset_yaml = str(y_path)
+        
+        if not dataset_yaml:
+            raise FileNotFoundError(f"Could not find data.yaml for training {ts.name}")
+
+        # 3. Output Folder: projects/{project}/model/training/{session}/experiments/{experiment_id}
+        project = db.query(Project).filter(Project.id == ts.project_id).first()
+        rel_output_dir = Path(ts.run_dir) / "experiments" / experiment_id
+        abs_output_dir = project_root / rel_output_dir
+        
+        # Run Validator
+        validator = ValidatorRegistry.get_validator(ts.framework or "ultralytics")
+        results = validator.validate(
+            model_path=weights_path,
+            dataset_yaml=dataset_yaml,
+            output_folder=str(abs_output_dir),
+            params=params
+        )
+
+        # Update Experiment
+        experiment.status = "completed"
+        experiment.completed_at = datetime.utcnow()
+        experiment.duration_sec = (experiment.completed_at - experiment.started_at).total_seconds()
+        experiment.validation_metrics = results['metrics']
+        experiment.per_class_metrics = results['per_class_metrics']
+        experiment.confusion_matrix = results['confusion_matrix']
+        experiment.predictions = results['results_json']
+        experiment.output_folder = str(rel_output_dir)
+        db.commit()
+
+    except Exception as e:
+        if experiment:
+            experiment.status = "failed"
+            experiment.error_message = str(e)
+            db.commit()
+        logger.error("errors.system", f"Validation task failed: {str(e)}", "validation_task_failure", {
+            "training_id": training_id,
+            "experiment_id": experiment_id,
+            "error": str(e)
+        })
+    finally:
+        db.close()
+
+@router.post("/training/{training_id}/validate")
+async def trigger_validation(
+    training_id: int, 
+    payload: ValidationRequest, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    experiment_id = str(uuid.uuid4())
+    experiment = ModelExperiment(
+        id=experiment_id,
+        training_id=ts.id,
+        project_id=ts.project_id,
+        name=payload.name,
+        experiment_type="validation",
+        framework=ts.framework or "ultralytics",
+        task=ts.task,
+        dataset_source=payload.dataset_source,
+        dataset_path=ts.dataset_release_dir,
+        confidence=payload.confidence,
+        iou_threshold=payload.iou_threshold,
+        imgsz=payload.imgsz,
+        custom_params=payload.custom_params,
+        status="pending"
+    )
+    db.add(experiment)
+    db.commit()
+
+    background_tasks.add_task(run_validation_task, experiment_id, training_id, payload.dict())
+    
+    return {"experiment_id": experiment_id, "status": "pending"}
+
+@router.get("/experiments/{experiment_id}")
+async def get_experiment_details(experiment_id: str, db: Session = Depends(get_db)):
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    return exp
+
+@router.get("/training/{training_id}/experiments")
+async def list_training_experiments(training_id: int, db: Session = Depends(get_db)):
+    exps = db.query(ModelExperiment).filter(ModelExperiment.training_id == training_id).order_by(ModelExperiment.created_at.desc()).all()
+    return exps

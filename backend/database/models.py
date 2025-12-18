@@ -604,6 +604,65 @@ class TrainingSession(Base):
     def __repr__(self):
         return f"<TrainingSession(id='{self.id}', name='{self.name}', project='{self.project_name}', status='{self.status}')>"
 
+class ModelExperiment(Base):
+    """
+    Model for tracking validation and prediction experiments
+    """
+    __tablename__ = "model_experiments"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    training_id = Column(Integer, ForeignKey("training_sessions.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=True)  # Custom experiment name
+    
+    # Classification
+    experiment_type = Column(String, nullable=False)  # 'validation' or 'prediction'
+    framework = Column(String, nullable=False)        # 'ultralytics', 'mmdetection', etc.
+    task = Column(String, nullable=True)             # 'detect' or 'segment'
+    
+    # Dataset
+    dataset_source = Column(String, nullable=False)   # 'val', 'test', 'upload', 'filesystem'
+    dataset_path = Column(String, nullable=True)
+    image_count = Column(Integer, nullable=True)
+    
+    # Parameters
+    confidence = Column(Float, default=0.25)
+    iou_threshold = Column(Float, default=0.45)
+    imgsz = Column(Integer, default=640)
+    custom_params = Column(JSON, nullable=True)
+    
+    # Validation Results
+    max_detections = Column(Integer, default=300)
+    validation_metrics = Column(JSON, nullable=True)
+    per_class_metrics = Column(JSON, nullable=True)
+    confusion_matrix = Column(JSON, nullable=True)
+    
+    # Prediction Results
+    input_images = Column(JSON, nullable=True)
+    output_folder = Column(String, nullable=True)
+    predictions = Column(JSON, nullable=True)
+    
+    # Execution Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    duration_sec = Column(Float, nullable=True)
+    
+    # Status
+    status = Column(String, default='pending')        # 'pending', 'running', 'completed', 'failed'
+    error_message = Column(Text, nullable=True)
+    
+    # Extra
+    user_notes = Column(Text, nullable=True)
+    is_default = Column(Boolean, default=False)
+
+    # Relationships
+    project = relationship("Project")
+    training = relationship("TrainingSession")
+
+    def __repr__(self):
+        return f"<ModelExperiment(id={self.id}, type={self.experiment_type}, status={self.status})>"
+
 
 class DevModeSetting(Base):
     __tablename__ = "dev_mode_settings"

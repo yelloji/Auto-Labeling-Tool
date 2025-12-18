@@ -149,6 +149,64 @@ class DatabaseDebugger:
                     else:
                         print(f"         {cn}: {val if val not in (None, '') else 'N/A'}")
     
+    def get_model_experiments_table(self):
+        """Detailed info about model_experiments table"""
+        cursor = self.conn.cursor()
+        self.print_header("MODEL EXPERIMENTS TABLE")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='model_experiments'")
+        if not cursor.fetchone():
+            print("❌ model_experiments table does not exist!")
+            return
+        
+        print("\n📐 Schema:")
+        cursor.execute("PRAGMA table_info('model_experiments')")
+        for col in cursor.fetchall():
+            col_info = f"   - {col[1]} ({col[2]})"
+            if col[3]: col_info += " NOT NULL"
+            if col[4] is not None: col_info += f" DEFAULT {col[4]}"
+            if col[5]: col_info += " PRIMARY KEY"
+            print(col_info)
+            
+        cursor.execute("SELECT COUNT(*) FROM model_experiments")
+        count = cursor.fetchone()[0]
+        print(f"\n📊 Total rows: {count}")
+        
+        if count:
+            print("\n🧪 Recent Experiments:")
+            cursor.execute("PRAGMA table_info('model_experiments')")
+            _cols_info = cursor.fetchall()
+            _col_names = [c[1] for c in _cols_info]
+            
+            cursor.execute("""
+                SELECT * FROM model_experiments 
+                ORDER BY created_at DESC 
+                LIMIT 15
+            """)
+            for row in cursor.fetchall():
+                print(f"\n   🔬 EXPERIMENT: {row['id']} [{row['experiment_type']}]")
+                print(f"      Status: {row['status']}")
+                print(f"      Created: {row['created_at']}")
+                
+                for cn in _col_names:
+                    if cn in ('id', 'experiment_type', 'status', 'created_at'): continue
+                    val = row[cn]
+                    
+                    json_fields = (
+                        'custom_params', 'validation_metrics', 'per_class_metrics', 
+                        'confusion_matrix', 'input_images', 'predictions'
+                    )
+                    
+                    if cn in json_fields and val:
+                        try:
+                            _parsed = json.loads(val) if isinstance(val, str) else val
+                            print(f"      {cn}:")
+                            for _line in json.dumps(_parsed, indent=2, default=str).splitlines():
+                                print(f"         {_line}")
+                        except Exception:
+                            print(f"      {cn}: (could not parse)")
+                    else:
+                        print(f"      {cn}: {val if val not in (None, '') else 'N/A'}")
+    
     def get_projects_overview(self):
         """Get overview of all projects"""
         cursor = self.conn.cursor()
@@ -1363,6 +1421,7 @@ class DatabaseDebugger:
             self.get_table_info()
             self.get_ai_models_table()  # Add AI models table analysis
             self.get_dev_mode_settings_table()  # Show dev-mode settings
+            self.get_model_experiments_table()  # Show model experiments
             self.get_training_sessions_table()  # Training sessions table analysis
             self.get_projects_overview()
             self.get_datasets_detailed()
@@ -1394,6 +1453,7 @@ def main():
     parser.add_argument('--db', type=str, default='database.db', help='Path to database file')
     parser.add_argument('--labels', action='store_true', help='Show only labels table data')
     parser.add_argument('--ai-models', action='store_true', help='Show only ai_models table data')
+    parser.add_argument('--experiments', action='store_true', help='Show model_experiments table data')
     parser.add_argument('--training-sessions', action='store_true', help='Show training_sessions table data')
     parser.add_argument('--projects', action='store_true', help='Show projects overview')
     parser.add_argument('--datasets', action='store_true', help='Show datasets detailed view')
@@ -1424,6 +1484,7 @@ def main():
     targets = [
         args.labels,
         args.ai_models,
+        args.experiments,
         args.training_sessions,
         args.projects,
         args.datasets,
@@ -1444,6 +1505,8 @@ def main():
                 debugger.get_labels_table()
             if args.ai_models:
                 debugger.get_ai_models_table()
+            if args.experiments:
+                debugger.get_model_experiments_table()
             if args.training_sessions:
                 debugger.get_training_sessions_table()
             if args.projects:

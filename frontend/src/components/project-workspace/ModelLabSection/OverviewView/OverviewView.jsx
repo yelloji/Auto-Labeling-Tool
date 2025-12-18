@@ -5,6 +5,7 @@ import AnalyticsView from '../AnalyticsView/AnalyticsView';
 import ViewConfig from '../ConfigurationView/ViewConfig';
 import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
 import ModelManagerView from '../ModelManagerView/ModelManagerView';
+import ValidationView from '../ValidationView/ValidationView';
 import './OverviewView.css';
 
 const { Title, Text } = Typography;
@@ -481,12 +482,7 @@ const OverviewView = ({ training }) => {
                 {
                     key: 'validation',
                     label: 'Validation',
-                    children: (
-                        <div style={{ padding: '20px', textAlign: 'center' }}>
-                            <h3>Custom Validation</h3>
-                            <p>Coming soon...</p>
-                        </div>
-                    )
+                    children: <ValidationView training={training} />
                 }
             ]} />
         </div>

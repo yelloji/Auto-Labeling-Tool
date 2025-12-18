@@ -48,7 +48,8 @@ async def init_db():
             AutoLabelJob,
             Label, DatasetSplit, LabelAnalytics,
             Release, ImageTransformation, ImageVariant,
-            AiModel, TrainingSession, DevModeSetting
+            AiModel, TrainingSession, DevModeSetting,
+            ModelExperiment
         )
         from .operations import AiModelOperations
         
@@ -171,6 +172,20 @@ async def init_db():
                     pass
         except Exception as ts_err:
             logger.warning("errors.system", f"Training sessions migration failed: {ts_err}", "training_sessions_migration_failed", {"error": str(ts_err)})
+
+        # Model experiments schema verification (log details)
+        try:
+            with engine.begin() as conn:
+                if "model_experiments" in {t[0] for t in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}:
+                    cols = conn.execute(text("PRAGMA table_info(model_experiments)")).fetchall()
+                    existing = {c[1] for c in cols}
+                    logger.info("app.database", "Verified model_experiments schema", "model_experiments_verification", {
+                        "columns_found": list(existing),
+                        "total_columns": len(existing)
+                    })
+                    print(f"Verified model_experiments: {len(existing)} columns found.")
+        except Exception as me_err:
+            logger.warning("errors.system", f"Model experiments verification failed: {me_err}", "model_experiments_verification_failed", {"error": str(me_err)})
 
         
 
