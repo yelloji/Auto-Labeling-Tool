@@ -12,7 +12,8 @@ import {
     DeleteOutlined,
     ArrowRightOutlined,
     SwapOutlined,
-    TableOutlined
+    TableOutlined,
+    PlusOutlined
 } from '@ant-design/icons';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { projectsAPI, handleAPIError } from '../../../../services/api';
@@ -218,10 +219,12 @@ const ValidationView = ({ training }) => {
 
     // Side effect: Monitor running experiment status transitions
     useEffect(() => {
-        if (!activeExperiment || activeExperiment.status === 'completed' || activeExperiment.status === 'failed') return;
+        // Only proceed if the UI thinks something is running
+        if (!running || !activeExperiment) return;
 
         // Check if the current active experiment in the list has finished
         const currentInList = experiments.find(e => e.id === activeExperiment.id);
+
         if (currentInList && (currentInList.status === 'completed' || currentInList.status === 'failed')) {
             setRunning(false);
             if (pollingIntervalRef.current) {
@@ -231,14 +234,19 @@ const ValidationView = ({ training }) => {
 
             if (currentInList.status === 'completed') {
                 message.success("Validation completed!");
-                // Fresh session: record is no longer 'queued' (it's completed)
-                setActiveExperimentId(null);
-                setParams(prev => ({ ...prev, name: '' }));
             } else {
                 message.error("Validation failed: " + currentInList.error_message);
             }
+
+            // UI RESET: Prepare for the next potential run by clearing the current draft session
+            // We clear the name so the user has to type a new one (triggering a new draft)
+            setActiveExperimentId(null);
+            setParams(prev => ({ ...prev, name: '' }));
+
+            // Update the active experiment state to matching the finalized result
+            setActiveExperiment(currentInList);
         }
-    }, [experiments, activeExperiment?.id]);
+    }, [experiments, activeExperiment?.id, running]);
 
     useEffect(() => {
         if (training?.id) {
@@ -482,9 +490,27 @@ const ValidationView = ({ training }) => {
                             <Card
                                 className="v-config-panel"
                                 title={
-                                    <Tooltip title="Fine-tune your model's validation parameters to test its performance under different conditions.">
-                                        <Space><ExperimentOutlined /><span>Parameters</span></Space>
-                                    </Tooltip>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                        <Tooltip title="Fine-tune your model's validation parameters to test its performance under different conditions.">
+                                            <Space><ExperimentOutlined /><span>Parameters</span></Space>
+                                        </Tooltip>
+                                        <Button
+                                            size="small"
+                                            icon={<PlusOutlined />}
+                                            onClick={() => {
+                                                setActiveExperimentId(null);
+                                                setParams({
+                                                    ...params,
+                                                    name: '',
+                                                });
+                                                setActiveExperiment(null);
+                                                message.info("Form reset for new experiment");
+                                            }}
+                                            disabled={running}
+                                        >
+                                            New
+                                        </Button>
+                                    </div>
                                 }
                             >
                                 <div style={{ marginBottom: 16 }}>

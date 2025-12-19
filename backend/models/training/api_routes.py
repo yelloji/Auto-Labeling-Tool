@@ -28,6 +28,7 @@ import shutil
 from core.config import settings
 from database.models import ModelExperiment
 from models.training.validator import ValidatorRegistry
+import re
 from logging_system.professional_logger import get_professional_logger
 
 logger = get_professional_logger()
@@ -1339,8 +1340,6 @@ async def run_validation_task(experiment_id: str, training_id: int, params: Dict
 
         # 3. Output Folder: projects/{project}/model/training/{session}/experiments/{experiment_name}_{timestamp}
         # Sanitize experiment name for filesystem safety
-        import re
-        from datetime import datetime
         
         safe_name = re.sub(r'[^\w\-_]', '_', experiment.name or 'unnamed')
         timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
