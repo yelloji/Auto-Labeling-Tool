@@ -185,7 +185,11 @@ async def init_db():
                         "name": "ALTER TABLE model_experiments ADD COLUMN name VARCHAR",
                         "weights_type": "ALTER TABLE model_experiments ADD COLUMN weights_type VARCHAR DEFAULT 'best'",
                         "project_name": "ALTER TABLE model_experiments ADD COLUMN project_name VARCHAR",
-                        "training_name": "ALTER TABLE model_experiments ADD COLUMN training_name VARCHAR"
+                        "training_name": "ALTER TABLE model_experiments ADD COLUMN training_name VARCHAR",
+                        "process_pid": "ALTER TABLE model_experiments ADD COLUMN process_pid INTEGER",
+                        "task": "ALTER TABLE model_experiments ADD COLUMN task VARCHAR",
+                        "completed_at": "ALTER TABLE model_experiments ADD COLUMN completed_at DATETIME",
+                        "duration_sec": "ALTER TABLE model_experiments ADD COLUMN duration_sec FLOAT"
                     }
                     
                     for col, sql_stmt in add_map.items():
@@ -193,7 +197,7 @@ async def init_db():
                             try:
                                 conn.execute(text(sql_stmt))
                                 logger.info("app.database", f"Added missing column {col} to model_experiments", "model_experiments_add_column")
-                                print(f"Migration: Added missing column '{col}' to model_experiments table.")
+                                # print(f"Migration: Added missing column '{col}' to model_experiments table.")
                             except Exception as e:
                                 logger.warning("errors.system", f"Could not add column {col} to model_experiments: {e}", "model_experiments_add_column_failed", {"error": str(e), "column": col})
 
@@ -204,7 +208,7 @@ async def init_db():
                         "columns_found": list(existing),
                         "total_columns": len(existing)
                     })
-                    print(f"Verified model_experiments: {len(existing)} columns found.")
+                    # print(f"Verified model_experiments: {len(existing)} columns found.")
         except Exception as me_err:
             logger.warning("errors.system", f"Model experiments verification/migration failed: {me_err}", "model_experiments_verification_failed", {"error": str(me_err)})
 

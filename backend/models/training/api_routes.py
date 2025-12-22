@@ -25,10 +25,14 @@ import os
 import hashlib
 import yaml
 import shutil
+import subprocess
+import sys
 from core.config import settings
 from database.models import ModelExperiment
 from models.training.validator import ValidatorRegistry
 import re
+import psutil
+import signal
 from logging_system.professional_logger import get_professional_logger
 
 logger = get_professional_logger()
@@ -1234,6 +1238,7 @@ class ValidationRequest(BaseModel):
     device: str = "0"
     max_detections: int = 300
     weights_type: str = "best"
+    task: str = "detection"
     custom_params: Optional[Dict[str, Any]] = None
 
 class ValidationUpdate(BaseModel):
@@ -1243,6 +1248,7 @@ class ValidationUpdate(BaseModel):
     iou_threshold: Optional[float] = None
     imgsz: Optional[int] = None
     weights_type: Optional[str] = None
+    task: Optional[str] = None
     max_detections: Optional[int] = None
     custom_params: Optional[Dict[str, Any]] = None
 
@@ -1288,99 +1294,8 @@ async def update_experiment(experiment_id: str, payload: ValidationUpdate, db: S
     db.refresh(exp)
     return exp
 
-
-async def run_validation_task(experiment_id: str, training_id: int, params: Dict[str, Any]):
-    """Background task to run validation"""
-    db = SessionLocal()
-    try:
-        experiment = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
-        ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
-        
-        if not experiment or not ts:
-            return
-
-        experiment.status = "running"
-        experiment.started_at = datetime.utcnow()
-        db.commit()
-
-        # Resolve paths
-        current_file = Path(__file__).resolve()
-        backend_dir = next(p for p in current_file.parents if p.name == "backend")
-        project_root = backend_dir.parent
-        
-        # 1. Weights: choose best.pt (default) or last.pt
-        weights_filename = "best.pt"
-        if params.get('weights_type') == 'last':
-            weights_filename = "last.pt"
-
-        weights_path = None
-        candidates = []
-        if ts.weights_dir:
-            candidates.append(project_root / ts.weights_dir / weights_filename)
-        if ts.run_dir:
-            candidates.append(project_root / ts.run_dir / "weights" / weights_filename)
-            
-        for c in candidates:
-            if c.exists():
-                weights_path = str(c)
-                break
-        
-        if not weights_path:
-            raise FileNotFoundError(f"Could not find best.pt for training {ts.name}")
-
-        # 2. Dataset YAML: usually in project_root / ts.dataset_release_dir / "data.yaml"
-        dataset_yaml = None
-        if ts.dataset_release_dir:
-            y_path = project_root / ts.dataset_release_dir / "data.yaml"
-            if y_path.exists():
-                dataset_yaml = str(y_path)
-        
-        if not dataset_yaml:
-            raise FileNotFoundError(f"Could not find data.yaml for training {ts.name}")
-
-        # 3. Output Folder: projects/{project}/model/training/{session}/experiments/{experiment_name}_{timestamp}
-        # Sanitize experiment name for filesystem safety
-        
-        safe_name = re.sub(r'[^\w\-_]', '_', experiment.name or 'unnamed')
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-        folder_name = f"{safe_name}_{timestamp}"
-        
-        project = db.query(Project).filter(Project.id == ts.project_id).first()
-        rel_output_dir = Path(ts.run_dir) / "experiments" / folder_name
-        abs_output_dir = project_root / rel_output_dir
-        
-        # Run Validator
-        validator = ValidatorRegistry.get_validator(ts.framework or "ultralytics")
-        results = validator.validate(
-            model_path=weights_path,
-            dataset_yaml=dataset_yaml,
-            output_folder=str(abs_output_dir),
-            params=params
-        )
-
-        # Update Experiment
-        experiment.status = "completed"
-        experiment.completed_at = datetime.utcnow()
-        experiment.duration_sec = (experiment.completed_at - experiment.started_at).total_seconds()
-        experiment.validation_metrics = results['metrics']
-        experiment.per_class_metrics = results['per_class_metrics']
-        experiment.confusion_matrix = results['confusion_matrix']
-        experiment.predictions = results['results_json']
-        experiment.output_folder = str(rel_output_dir)
-        db.commit()
-
-    except Exception as e:
-        if experiment:
-            experiment.status = "failed"
-            experiment.error_message = str(e)
-            db.commit()
-        logger.error("errors.system", f"Validation task failed: {str(e)}", "validation_task_failure", {
-            "training_id": training_id,
-            "experiment_id": experiment_id,
-            "error": str(e)
-        })
-    finally:
-        db.close()
+# Removed run_validation_task (Legacy Thread-based logic)
+# This has been replaced by models.training.validation_executor and subprocess calls.
 
 @router.post("/training/{training_id}/validation/init")
 async def init_validation(training_id: int, payload: ValidationRequest, db: Session = Depends(get_db)):
@@ -1496,9 +1411,105 @@ async def trigger_validation(
     db.commit()
     db.refresh(experiment)
 
-    background_tasks.add_task(run_validation_task, experiment.id, training_id, payload.dict())
-    
-    return {"experiment_id": experiment.id, "status": "queued"}
+    # --- Start Validation Subprocess ---
+    try:
+        # Resolve paths (Moved from run_validation_task)
+        current_file = Path(__file__).resolve()
+        backend_dir = next(p for p in current_file.parents if p.name == "backend")
+        project_root = backend_dir.parent
+        
+        # 1. Weights Path
+        weights_filename = "best.pt"
+        if payload.weights_type == 'last':
+            weights_filename = "last.pt"
+
+        weights_path = None
+        candidates = []
+        if ts.weights_dir:
+            candidates.append(project_root / ts.weights_dir / weights_filename)
+        if ts.run_dir:
+            candidates.append(project_root / ts.run_dir / "weights" / weights_filename)
+            
+        for c in candidates:
+            if c.exists():
+                weights_path = c.as_posix()
+                break
+        
+        if not weights_path:
+            raise FileNotFoundError(f"Weights {weights_filename} not found in {candidates}")
+
+        # 2. Dataset YAML Path
+        dataset_yaml = None
+        if ts.dataset_release_dir:
+            y_path = project_root / ts.dataset_release_dir / "data.yaml"
+            if y_path.exists():
+                dataset_yaml = y_path.as_posix()
+        
+        if not dataset_yaml:
+            raise FileNotFoundError(f"data.yaml not found for training {ts.name}")
+
+        # 3. Output Folder Path
+        safe_name = re.sub(r'[^\w\-_]', '_', experiment.name or 'unnamed')
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        folder_name = f"{safe_name}_{timestamp}"
+        
+        rel_output_dir = Path(ts.run_dir) / "experiments" / folder_name
+        abs_output_dir = project_root / rel_output_dir
+        
+        # Ensure directory exists for logger/PID files
+        os.makedirs(abs_output_dir, exist_ok=True)
+
+        # 4. Launch Subprocess
+        executor_path = (backend_dir / "models" / "training" / "validation_executor.py").as_posix()
+        params_json = json.dumps(payload.dict())
+        
+        log_file_path = abs_output_dir / "validation.log"
+        log_file = open(log_file_path, "w", encoding="utf-8")
+        
+        # Set environment for unbuffered logging and UTF-8 encoding
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        
+        command = [
+            sys.executable,
+            executor_path,
+            "--experiment_id", str(experiment.id),
+            "--weights_path", weights_path,
+            "--dataset_yaml", dataset_yaml,
+            "--output_folder", abs_output_dir.as_posix(),
+            "--params_json", params_json
+        ]
+
+        # Use CREATE_NEW_PROCESS_GROUP on Windows to avoid orphan processes if server dies
+        creation_flags = 0
+        if os.name == 'nt':
+            creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
+
+        process = subprocess.Popen(
+            command,
+            cwd=project_root.as_posix(),
+            creationflags=creation_flags,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            env=env
+        )
+        
+        # Record the PID immediately
+        experiment.process_pid = process.pid
+        experiment.status = "running"
+        db.commit()
+        
+        logger.info("operations.training", f"Started validation subprocess PID {process.pid}", "validation_subprocess_started")
+
+    except Exception as e:
+        logger.error("errors.system", f"Failed to launch validation subprocess: {str(e)}", "validation_launch_failure")
+        experiment.status = "failed"
+        experiment.error_message = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to start validation: {str(e)}")
+
+    return {"experiment_id": experiment.id, "status": "running"}
 
 @router.get("/experiments/{experiment_id}")
 async def get_experiment_details(experiment_id: str, db: Session = Depends(get_db)):
@@ -1519,19 +1530,55 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
     if not exp:
         raise HTTPException(status_code=404, detail="Experiment not found")
     
-    # Safety: Don't allow deleting running experiments
-    if exp.status == "running":
-        raise HTTPException(status_code=400, detail="Cannot delete a running experiment. Please wait for it to complete or fail.")
-    
-    # Delete the database record
+    # 1. Handle active processes safely
+    if exp.status == "running" and exp.process_pid:
+        try:
+            process = psutil.Process(exp.process_pid)
+            if process.is_running():
+                logger.info("operations.validation", f"Terminating active process {exp.process_pid} before deletion", "experiment_process_termination")
+                process.terminate()
+                process.wait(timeout=3)
+        except (Exception):
+            # Fallback to os.kill if psutil fails
+            try:
+                os.kill(exp.process_pid, signal.SIGTERM)
+            except Exception:
+                pass
+
+    # 2. Resolve project root for safe path calculation
+    current_file = Path(__file__).resolve()
+    backend_dir = next(p for p in current_file.parents if p.name == "backend")
+    project_root = backend_dir.parent
+
+    # 3. Safe Filesystem Cleanup
+    if exp.output_folder:
+        # Convert to Path object for validation
+        output_rel_path = Path(exp.output_folder)
+        
+        # SAFETY CHECK 1: Ensure it's not an absolute path pointing to system folders
+        if output_rel_path.is_absolute():
+            logger.warning("errors.validation", f"Blocked absolute path deletion: {exp.output_folder}", "unsafe_deletion_blocked")
+        else:
+            # SAFETY CHECK 2: Ensure it is inside a 'projects' and 'experiments' hierarchy
+            # This prevents someone from putting '../../' in the DB to delete the whole repo
+            full_path = (project_root / output_rel_path).resolve()
+            
+            # Must be inside project_root/projects
+            is_inside_projects = str(full_path.as_posix()).startswith((project_root / "projects").as_posix())
+            is_in_experiments = "experiments" in str(full_path.as_posix())
+            
+            if is_inside_projects and is_in_experiments and full_path.exists() and full_path.is_dir():
+                try:
+                    logger.info("operations.validation", f"Deleting experiment folder: {full_path}", "experiment_folder_deleted")
+                    shutil.rmtree(full_path)
+                except Exception as e:
+                    logger.error("errors.system", f"Failed to delete experiment folder: {str(e)}", "experiment_folder_delete_failure")
+            else:
+                logger.warning("errors.validation", f"Blocked unsafe/non-existent path deletion: {full_path}", "unsafe_deletion_blocked")
+
+    # 4. Delete the database record
     db.delete(exp)
     db.commit()
-    
-    # TODO: Add filesystem cleanup for output_folder when validation runs are ready
-    # if exp.output_folder:
-    #     output_path = project_root / exp.output_folder
-    #     if output_path.exists():
-    #         shutil.rmtree(output_path)
     
     logger.info("operations.validation", f"Deleted experiment {experiment_id}", "experiment_deleted", {
         "experiment_id": experiment_id,

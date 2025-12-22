@@ -187,6 +187,7 @@ class DatabaseDebugger:
                 
                 print(f"\n      ├─ Identification")
                 print(f"      │ Status: {row['status']}")
+                print(f"      │ PID: {row['process_pid'] or 'N/A'}")
                 print(f"      │ Name: {row['name'] or 'N/A'}")
                 print(f"      │ Project: {row['project_name'] or 'N/A'} (ID: {row['project_id']})")
                 print(f"      │ Training: {row['training_name'] or 'N/A'} (ID: {row['training_id']})")
@@ -209,15 +210,80 @@ class DatabaseDebugger:
                 if row['validation_metrics']:
                     try:
                         m = json.loads(row['validation_metrics']) if isinstance(row['validation_metrics'], str) else row['validation_metrics']
-                        print(f"      │ Metrics: {json.dumps(m, indent=2)}")
-                    except: print(f"      │ Metrics: (Raw) {row['validation_metrics']}")
+                        # Map keys to human readable labels
+                        label_map = {
+                            'map50': 'mAP50',
+                            'map50_95': 'mAP50-95',
+                            'precision': 'Precision',
+                            'recall': 'Recall',
+                            'f1': 'F1-Score'
+                        }
+                        kpis = ", ".join([f"{label_map.get(k, k)}: {v:.3f}" if isinstance(v, (int, float)) else f"{label_map.get(k, k)}: {v}" for k, v in m.items() if k in label_map])
+                        print(f"      │ Overall Summary: {kpis}")
+                    except: print(f"      │ Metrics: (Raw Error) {row['validation_metrics']}")
                 else:
-                    print(f"      │ Metrics: N/A")
+                    print(f"      │ Overall Summary: N/A")
                 
-                print(f"      │ Per-Class Metrics: {'Available' if row['per_class_metrics'] else 'N/A'}")
-                print(f"      │ Predictions: {'Available' if row['predictions'] else 'N/A'}")
-                print(f"      │ Input Images: {'Available' if row['input_images'] else 'N/A'}")
-                print(f"      │ Confusion Matrix: {'Available' if row['confusion_matrix'] else 'N/A'}")
+                # Per-Class Preview
+                if row['per_class_metrics']:
+                    try:
+                        pcm = json.loads(row['per_class_metrics']) if isinstance(row['per_class_metrics'], str) else row['per_class_metrics']
+                        class_names = [str(c.get('name', 'unknown')) for c in pcm]
+                        print(f"      │ Per-Class ({len(pcm)}): {', '.join(class_names[:5])}{'...' if len(class_names) > 5 else ''}")
+                    except: print(f"      │ Per-Class: Available (Parse Error)")
+                else:
+                    print(f"      │ Per-Class: N/A")
+
+                # Confusion Matrix Preview
+                # Confusion Matrix Preview (Render a small grid)
+                if row['confusion_matrix']:
+                    try:
+                        cm = json.loads(row['confusion_matrix']) if isinstance(row['confusion_matrix'], str) else row['confusion_matrix']
+                        unique_names = []
+                        for cell in cm:
+                            if cell['actual'] not in unique_names:
+                                unique_names.append(cell['actual'])
+                        
+                        total_samples = sum([c.get('count', 0) for c in cm])
+                        if total_samples == 0:
+                            print(f"      │ Confusion Matrix: Empty (No correct/incorrect detections to plot)")
+                        else:
+                            print(f"      │ Confusion Matrix ({len(unique_names)} classes, {total_samples} samples):")
+                            
+                            # Simple Grid Rendering
+                            if len(unique_names) <= 10: # Only grid for small matrices
+                                header = "      │    " + "".join([f"{n[:8]:>10}" for n in unique_names])
+                                print(header)
+                                for actual in unique_names:
+                                    row_str = f"      │ {actual[:8]:>8} "
+                                    for predicted in unique_names:
+                                        cell_data = next((c for c in cm if c['actual'] == actual and c['predicted'] == predicted), None)
+                                        val = cell_data['count'] if cell_data else 0
+                                        row_str += f"{val:10d}"
+                                    print(row_str)
+                            else:
+                                print(f"      │ Matrix too large for terminal grid ({len(unique_names)} classes)")
+                    except Exception as e: 
+                        print(f"      │ Confusion Matrix: Available (Render Error: {e})")
+                else:
+                    print(f"      │ Confusion Matrix: N/A")
+
+                # Predictions & Images counts
+                if row['predictions']:
+                    try:
+                        preds = json.loads(row['predictions']) if isinstance(row['predictions'], str) else row['predictions']
+                        print(f"      │ Predictions: {len(preds)} total")
+                    except: print(f"      │ Predictions: Available")
+                else:
+                    print(f"      │ Predictions: N/A")
+
+                if row['input_images']:
+                    try:
+                        imgs = json.loads(row['input_images']) if isinstance(row['input_images'], str) else row['input_images']
+                        print(f"      │ Input Images: {len(imgs)} images tracked")
+                    except: print(f"      │ Input Images: Available")
+                else:
+                    print(f"      │ Input Images: N/A")
                 
                 print(f"\n      ├─ Timing")
                 print(f"      │ Started: {row['started_at'] or 'N/A'}")

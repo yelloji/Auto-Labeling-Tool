@@ -163,6 +163,7 @@ const ValidationView = ({ training }) => {
     const [activeExperiment, setActiveExperiment] = useState(null);
     const [loading, setLoading] = useState(false);
     const [running, setRunning] = useState(false);
+    const [isWaitingForCompletion, setIsWaitingForCompletion] = useState(false);
 
     // Compute available dataset splits from training session
     const availableSplits = React.useMemo(() => {
@@ -202,12 +203,39 @@ const ValidationView = ({ training }) => {
             const data = await projectsAPI.getTrainingExperiments(training.id);
             setExperiments(data || []);
 
-            // If nothing selected yet, pick the first one from history
-            setActiveExperiment(prev => {
-                if (prev) {
-                    const updated = (data || []).find(e => e.id === prev.id);
-                    return updated || prev;
+            // AUTO-DETECT BACKGROUND RUNS: 
+            // If any experiment is actually 'running', lock the UI.
+            // Note: 'queued' is treated as a draft for this UI, so we don't lock for it.
+            const isAnyRunning = (data || []).some(e => e.status === 'running');
+            setRunning(isAnyRunning);
+
+            if (isAnyRunning) {
+                setIsWaitingForCompletion(true);
+                // Ensure polling continues
+                if (!pollingIntervalRef.current) {
+                    pollingIntervalRef.current = setInterval(() => {
+                        fetchHistory(true);
+                    }, 3000);
                 }
+            } else {
+                // No runs? Stop polling if it was active
+                if (pollingIntervalRef.current) {
+                    clearInterval(pollingIntervalRef.current);
+                    pollingIntervalRef.current = null;
+                }
+            }
+
+            // SELECTIVE AUTO-SELECTION:
+            // Ensure we don't leak the selection from a previous training session
+            setActiveExperiment(prev => {
+                if (!prev) return (data && data.length > 0) ? data[0] : null;
+
+                // Try to find the exact same experiment (for status updates)
+                const updated = (data || []).find(e => e.id === prev.id);
+                if (updated) return updated;
+
+                // ID not found? It probably belongs to a different training session.
+                // Reset to the first item of THIS session, or null if empty.
                 return (data && data.length > 0) ? data[0] : null;
             });
         } catch (error) {
@@ -219,37 +247,60 @@ const ValidationView = ({ training }) => {
 
     // Side effect: Monitor running experiment status transitions
     useEffect(() => {
-        // Only proceed if the UI thinks something is running
-        if (!running || !activeExperiment) return;
+        // Only trigger reset if we were actively waiting for this specific experiment to finish
+        if (!isWaitingForCompletion || !activeExperiment) return;
 
-        // Check if the current active experiment in the list has finished
-        const currentInList = experiments.find(e => e.id === activeExperiment.id);
+        const isFinished = activeExperiment.status === 'completed' || activeExperiment.status === 'failed';
 
-        if (currentInList && (currentInList.status === 'completed' || currentInList.status === 'failed')) {
+        if (isFinished) {
+            // 1. Alert the user
+            if (activeExperiment.status === 'completed') {
+                message.success("Validation completed!");
+            } else {
+                message.error("Validation failed: " + activeExperiment.error_message);
+            }
+
+            // 2. Unlock and clean up draft context
             setRunning(false);
             if (pollingIntervalRef.current) {
                 clearInterval(pollingIntervalRef.current);
                 pollingIntervalRef.current = null;
             }
+            setActiveExperimentId(null);
+            setIsWaitingForCompletion(false); // Task done
 
-            if (currentInList.status === 'completed') {
-                message.success("Validation completed!");
-            } else {
-                message.error("Validation failed: " + currentInList.error_message);
+            // 3. RESET SIDEBAR: Preparing for the next fresh run
+            let detectedImgsz = 640;
+            if (training?.resolved_config_json) {
+                try {
+                    const config = typeof training.resolved_config_json === 'string' ? JSON.parse(training.resolved_config_json) : training.resolved_config_json;
+                    detectedImgsz = config.train?.imgsz || config.imgsz || 640;
+                } catch (e) { }
             }
 
-            // UI RESET: Prepare for the next potential run by clearing the current draft session
-            // We clear the name so the user has to type a new one (triggering a new draft)
-            setActiveExperimentId(null);
-            setParams(prev => ({ ...prev, name: '' }));
-
-            // Update the active experiment state to matching the finalized result
-            setActiveExperiment(currentInList);
+            setParams({
+                name: '',
+                dataset_source: 'val',
+                task: training?.taskType || 'detection',
+                imgsz: detectedImgsz,
+                confidence: 0.25,
+                iou_threshold: 0.45,
+                max_detections: 300,
+                weights_type: 'best'
+            });
         }
-    }, [experiments, activeExperiment?.id, running]);
+    }, [activeExperiment?.status, activeExperiment?.id, isWaitingForCompletion, training]);
+
+    // Side effect sync: REMOVED. 
+    // We no longer force the sidebar parameters to match the active viewing experiment.
+    // The sidebar now remains a "Fresh Draft" for the next run.
 
     useEffect(() => {
         if (training?.id) {
+            // SESSION TRANSITION: Clear previous results so they don't leak into the new context
+            setActiveExperiment(null);
+            setExperiments([]);
+
             fetchHistory();
         }
         return () => {
@@ -262,6 +313,7 @@ const ValidationView = ({ training }) => {
         if (running) return;
 
         setRunning(true);
+        setIsWaitingForCompletion(true);
         logUserClick('ValidationView', 'run_validation');
         try {
             // Final sync before run
@@ -282,6 +334,9 @@ const ValidationView = ({ training }) => {
             };
             setExperiments(prev => [tempExp, ...prev]);
             setActiveExperiment(tempExp);
+
+            // Refresh history immediately
+            await fetchHistory(true);
 
             // Start polling
             if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
@@ -415,10 +470,10 @@ const ValidationView = ({ training }) => {
 
     const renderConfusionMatrix = () => {
         if (loading && !activeExperiment) return <Skeleton active paragraph={{ rows: 8 }} />;
-        if (!activeExperiment || !activeExperiment.confusion_matrix) {
+        if (!activeExperiment || !activeExperiment.confusion_matrix || activeExperiment.confusion_matrix.length === 0) {
             return (
-                <div className="v-heatmap-placeholder">
-                    <Empty description="No confusion matrix data available" />
+                <div className="v-heatmap-placeholder" style={{ padding: '40px 0', border: '1px dashed #d9d9d9', borderRadius: 8, textAlign: 'center' }}>
+                    <Empty description="No confusion matrix data available for this experiment." />
                 </div>
             );
         }
@@ -498,12 +553,31 @@ const ValidationView = ({ training }) => {
                                             size="small"
                                             icon={<PlusOutlined />}
                                             onClick={() => {
+                                                logUserClick('ValidationView', 'new_experiment');
                                                 setActiveExperimentId(null);
-                                                setParams({
-                                                    ...params,
-                                                    name: '',
-                                                });
                                                 setActiveExperiment(null);
+
+                                                // Reset to defaults
+                                                let detectedImgsz = 640;
+                                                if (training?.resolved_config_json) {
+                                                    try {
+                                                        const config = typeof training.resolved_config_json === 'string'
+                                                            ? JSON.parse(training.resolved_config_json)
+                                                            : training.resolved_config_json;
+                                                        detectedImgsz = config.train?.imgsz || config.imgsz || 640;
+                                                    } catch (e) { }
+                                                }
+
+                                                setParams({
+                                                    name: '',
+                                                    dataset_source: 'val',
+                                                    task: training?.taskType || 'detection',
+                                                    imgsz: detectedImgsz,
+                                                    confidence: 0.25,
+                                                    iou_threshold: 0.45,
+                                                    max_detections: 300,
+                                                    weights_type: 'best'
+                                                });
                                                 message.info("Form reset for new experiment");
                                             }}
                                             disabled={running}
@@ -528,6 +602,7 @@ const ValidationView = ({ training }) => {
                                         onChange={e => updateParam('name', e.target.value)}
                                         placeholder="Enter experiment name..."
                                         autoComplete="off"
+                                        disabled={running}
                                     />
                                 </div>
 
@@ -539,6 +614,7 @@ const ValidationView = ({ training }) => {
                                         value={params.weights_type}
                                         style={{ width: '100%', marginTop: 4 }}
                                         onChange={v => updateParam('weights_type', v)}
+                                        disabled={running}
                                     >
                                         <Option value="best">Best Weights (Recommended)</Option>
                                         <Option value="last">Last Weights (Most Recent)</Option>
@@ -554,6 +630,7 @@ const ValidationView = ({ training }) => {
                                             value={params.task}
                                             style={{ width: '100%', marginTop: 4 }}
                                             onChange={v => updateParam('task', v)}
+                                            disabled={running}
                                         >
                                             <Option value="segmentation">Instance Segmentation</Option>
                                             <Option value="detection">Object Detection</Option>
@@ -569,6 +646,7 @@ const ValidationView = ({ training }) => {
                                         value={params.dataset_source}
                                         style={{ width: '100%', marginTop: 4 }}
                                         onChange={v => updateParam('dataset_source', v)}
+                                        disabled={running}
                                     >
                                         {availableSplits.includes('val') && <Option value="val">Validation</Option>}
                                         {availableSplits.includes('train') && <Option value="train">Train</Option>}
@@ -586,6 +664,7 @@ const ValidationView = ({ training }) => {
                                             value={params.confidence}
                                             size="small"
                                             onChange={v => updateParam('confidence', v)}
+                                            disabled={running}
                                         />
                                     </div>
                                     <Slider
@@ -593,6 +672,7 @@ const ValidationView = ({ training }) => {
                                         value={params.confidence}
                                         style={{ margin: '8px 0' }}
                                         onChange={v => updateParam('confidence', v)}
+                                        disabled={running}
                                     />
                                 </div>
 
@@ -606,6 +686,7 @@ const ValidationView = ({ training }) => {
                                             value={params.iou_threshold}
                                             size="small"
                                             onChange={v => updateParam('iou_threshold', v)}
+                                            disabled={running}
                                         />
                                     </div>
                                     <Slider
@@ -613,6 +694,7 @@ const ValidationView = ({ training }) => {
                                         value={params.iou_threshold}
                                         style={{ margin: '8px 0' }}
                                         onChange={v => updateParam('iou_threshold', v)}
+                                        disabled={running}
                                     />
                                 </div>
 
@@ -626,6 +708,7 @@ const ValidationView = ({ training }) => {
                                         style={{ width: '100%', marginTop: 4 }}
                                         onChange={v => updateParam('imgsz', v)}
                                         placeholder={`Model default: ${training?.imgsz || 640}`}
+                                        disabled={running}
                                     />
                                 </div>
 
@@ -647,11 +730,26 @@ const ValidationView = ({ training }) => {
                         {/* Middle Content - KPIs & Heatmap */}
                         <Col span={17}>
                             <div className="v-results-panel">
-                                <div style={{ marginBottom: 16, padding: '0 4px' }}>
-                                    <Title level={5} style={{ marginBottom: 4 }}>Validation Performance</Title>
-                                    <Text type="secondary" style={{ fontSize: '12px' }}>
-                                        Performance scores showing how well your model detects objects. Higher values (closer to 100%) indicate better accuracy.
-                                    </Text>
+                                <div style={{ marginBottom: 16, padding: '0 4px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div>
+                                        <Title level={5} style={{ marginBottom: 4 }}>
+                                            {activeExperiment?.name ? `Experiment: ${activeExperiment.name}` : 'Validation Performance'}
+                                            {activeExperiment?.status === 'running' && <Badge status="processing" text="Running..." style={{ marginLeft: 12, fontSize: '12px' }} />}
+                                            {activeExperiment?.status === 'completed' && <Badge status="success" text="Completed" style={{ marginLeft: 12, fontSize: '12px' }} />}
+                                            {activeExperiment?.status === 'failed' && <Badge status="error" text="Failed" style={{ marginLeft: 12, fontSize: '12px' }} />}
+                                        </Title>
+                                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                                            {activeExperiment?.name
+                                                ? `Viewing results for ${activeExperiment.name}. Run on ${new Date(activeExperiment.created_at).toLocaleString()}.`
+                                                : 'Performance scores showing how well your model detects objects. Higher values (closer to 100%) indicate better accuracy.'
+                                            }
+                                        </Text>
+                                    </div>
+                                    {activeExperiment?.status === 'running' && (
+                                        <Tag icon={<SyncOutlined spin />} color="processing">
+                                            Calculating Metrics...
+                                        </Tag>
+                                    )}
                                 </div>
                                 {/* KPI Row */}
                                 <div className={`v-kpi-grid ${isSegmentation ? 'v-kpi-grid-10' : ''}`}>
@@ -670,7 +768,7 @@ const ValidationView = ({ training }) => {
                                             {renderKPICard('Mask F1', (metrics.mask_f1 * 100 || 0).toFixed(1) + '%', '🧬', '#ff4d4f', 'F1-Score is the harmonic mean of Precision and Recall for masks.')}
                                         </>
                                     )}
-                                </div>s
+                                </div>
 
                                 {/* Interactive Heatmap */}
                                 <Card

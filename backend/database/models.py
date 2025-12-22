@@ -656,6 +656,7 @@ class ModelExperiment(Base):
     
     # Status
     status = Column(String, default='pending')        # 'pending', 'running', 'completed', 'failed'
+    process_pid = Column(Integer, nullable=True)     # Added for subprocess tracking
     error_message = Column(Text, nullable=True)
     
     # Extra

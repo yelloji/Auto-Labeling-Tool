@@ -174,14 +174,14 @@ class ProfessionalLogger:
             "app.frontend.validation": "develop-logs/frontend/validation.log"
         }
         
-        print(f"🎯 Setting up DEVELOPER MODE - Enhanced 18-log-file system...")
+        # print(f"🎯 Setting up DEVELOPER MODE - Enhanced 18-log-file system...")
         
         for logger_name, log_file_path in log_files.items():
             self._setup_logger(logger_name, log_file_path, "developer")
         
-        print(f"🎉 DEVELOPER MODE ready! 17 loggers created in enhanced develop-logs/ structure:")
-        print(f"   📁 Backend: 13 files (app: 4, operations: 8, errors: 2)")
-        print(f"   📁 Frontend: 4 files (interactions, ui, navigation, validation)")
+        # print(f"🎉 DEVELOPER MODE ready! 18 loggers created in enhanced develop-logs/ structure:")
+        # print(f"   📁 Backend: 14 files (app: 4, operations: 8, errors: 2)")
+        # print(f"   📁 Frontend: 4 files (interactions, ui, navigation, validation)")
     
     def _setup_user_loggers(self):
         """Setup 3 simple loggers for user mode."""
@@ -193,12 +193,12 @@ class ProfessionalLogger:
             "user.info": "user-logs/info.log"
         }
         
-        print(f"🎯 Setting up USER MODE - 3-log-file system...")
+        # print(f"🎯 Setting up USER MODE - 3-log-file system...")
         
         for logger_name, log_file_path in log_files.items():
             self._setup_logger(logger_name, log_file_path, "user")
         
-        print(f"🎉 USER MODE ready! 3 loggers created in user-logs/")
+        # print(f"🎉 USER MODE ready! 3 loggers created in user-logs/")
     
     def _setup_logger(self, logger_name: str, log_file_path: str, logger_type: str):
         """Setup individual logger with rotation and formatting."""
@@ -251,7 +251,7 @@ class ProfessionalLogger:
             # Store logger
             self.loggers[logger_name] = logger
             
-            print(f"✅ Created {logger_type} logger: {logger_name} -> {full_log_path}")
+            # print(f"✅ Created {logger_type} logger: {logger_name} -> {full_log_path}")
             
         except Exception as e:
             print(f"❌ Failed to create logger {logger_name}: {e}")
