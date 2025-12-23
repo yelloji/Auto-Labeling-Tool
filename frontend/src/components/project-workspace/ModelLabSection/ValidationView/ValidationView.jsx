@@ -479,57 +479,75 @@ const ValidationView = ({ training }) => {
         }
 
         const matrix = activeExperiment.confusion_matrix;
-        // matrix is [{actual: '...', predicted: '...', count: ...}]
-        const classes = [...new Set(matrix.map(m => m.actual))];
+        // Merge all possible classes for symmetric matrix
+        const allActuals = matrix.map(m => m.actual);
+        const allPredicts = matrix.map(m => m.predicted);
+        const uniqueClasses = [...new Set([...allActuals, ...allPredicts])];
 
         return (
-            <div className="v-matrix-scroll">
-                <table className="v-matrix">
-                    <thead>
-                        <tr>
-                            <th></th>
-                            {classes.map(c => <th key={c}>{c}</th>)}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {classes.map(actual => (
-                            <tr key={actual}>
-                                <td className="v-class-label">{actual}</td>
-                                {classes.map(predicted => {
-                                    const cell = matrix.find(m => m.actual === actual && m.predicted === predicted);
-                                    const count = cell ? cell.count : 0;
-                                    // Calculate intensity (0-1)
-                                    const rowTotal = matrix.filter(m => m.actual === actual).reduce((acc, curr) => acc + curr.count, 0);
-                                    const intensity = rowTotal > 0 ? count / rowTotal : 0;
+            <div className="v-matrix-wrapper">
+                {/* Vertical Label (Actual/True) */}
+                <div className="v-axis-vertical-container">
+                    <div className="v-axis-vertical-label">ACTUAL / TRUE</div>
+                </div>
 
-                                    return (
-                                        <Tooltip
-                                            key={predicted}
-                                            title={
-                                                <div>
-                                                    <div>Actual: {actual}</div>
-                                                    <div>Predicted: {predicted}</div>
-                                                    <div>Samples: {count}</div>
-                                                    <div>Recall: {(intensity * 100).toFixed(1)}%</div>
-                                                </div>
-                                            }
-                                        >
-                                            <td
-                                                style={{
-                                                    background: `rgba(24, 144, 255, ${intensity})`,
-                                                    color: intensity > 0.5 ? 'white' : 'inherit'
-                                                }}
-                                                className="v-matrix-cell"
-                                            >
-                                                {count}
-                                            </td>
-                                        </Tooltip>
-                                    );
-                                })}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                <div className="v-matrix-content">
+                    {/* Horizontal Label (Predicted) */}
+                    <div className="v-axis-horizontal-label">PREDICTED</div>
+
+                    <div className="v-matrix-scroll">
+                        <table className="v-matrix">
+                            <thead>
+                                <tr>
+                                    <th className="v-matrix-corner"></th>
+                                    {uniqueClasses.map(c => <th key={c} className="v-matrix-header-cell">{c}</th>)}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {uniqueClasses.map(actual => (
+                                    <tr key={actual}>
+                                        <td className="v-class-label">{actual}</td>
+                                        {uniqueClasses.map(predicted => {
+                                            const cell = matrix.find(m => m.actual === actual && m.predicted === predicted);
+                                            const count = cell ? cell.count : 0;
+
+                                            // Intensity calculation (Recall-based within the row)
+                                            const rowTotal = matrix.filter(m => m.actual === actual).reduce((acc, curr) => acc + curr.count, 0);
+                                            const intensity = rowTotal > 0 ? count / rowTotal : 0;
+
+                                            return (
+                                                <Tooltip
+                                                    key={predicted}
+                                                    title={
+                                                        <div className="v-matrix-tooltip">
+                                                            <div className="v-tooltip-row"><strong>Actual:</strong> {actual}</div>
+                                                            <div className="v-tooltip-row"><strong>Predicted:</strong> {predicted}</div>
+                                                            <div className="v-tooltip-divider" />
+                                                            <div className="v-tooltip-row"><strong>Samples:</strong> {count}</div>
+                                                            <div className="v-tooltip-row"><strong>Recall:</strong> {(intensity * 100).toFixed(1)}%</div>
+                                                        </div>
+                                                    }
+                                                >
+                                                    <td
+                                                        style={{
+                                                            '--intensity': intensity,
+                                                            background: intensity > 0 ? `rgba(24, 144, 255, ${Math.max(0.05, intensity)})` : '#fdfdfd',
+                                                            color: intensity > 0.5 ? 'white' : '#1f2937',
+                                                            fontWeight: intensity > 0.1 ? '600' : '400'
+                                                        }}
+                                                        className={`v-matrix-cell ${intensity > 0.5 ? 'high-intensity' : ''}`}
+                                                    >
+                                                        {count}
+                                                    </td>
+                                                </Tooltip>
+                                            );
+                                        })}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         );
     };

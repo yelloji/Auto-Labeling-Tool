@@ -128,24 +128,23 @@ class UltralyticsValidator(BaseValidator):
             per_class_list = []
             labeled_matrix = []
             
-            try:
-                # Helper to safely convert numpy/tensor to float
-                def to_f(v):
-                    if v is None: return 0.0
-                    try: return float(v)
-                    except: return 0.0
+            # Helper to safely convert numpy/tensor to float
+            def to_f(v):
+                if v is None: return 0.0
+                try: return float(v)
+                except: return 0.0
 
+            # A. Main KPIs
+            try:
                 res_dict = results.results_dict
                 is_seg = params.get('task') == 'segmentation' or 'mask' in str(results.task).lower()
                 
-                # A. Main KPIs (Map to spec keys)
                 metrics = {
                     'map50': to_f(res_dict.get('metrics/mAP50(B)', 0)),
                     'map50_95': to_f(res_dict.get('metrics/mAP50-95(B)', 0)),
                     'precision': to_f(res_dict.get('metrics/precision(B)', 0)),
                     'recall': to_f(res_dict.get('metrics/recall(B)', 0)),
                 }
-                # F1 Score calculation
                 p, r = metrics['precision'], metrics['recall']
                 metrics['f1'] = (2 * p * r) / (p + r + 1e-6)
 
@@ -158,19 +157,34 @@ class UltralyticsValidator(BaseValidator):
                     })
                     mp, mr = metrics['mask_precision'], metrics['mask_recall']
                     metrics['mask_f1'] = (2 * mp * mr) / (mp + mr + 1e-6)
+            except Exception as e:
+                pass
 
-                # B. Per-class metrics (Array of objects for frontend Table)
+            # B. Per-class metrics
+            sorted_ids = []
+            try:
                 if results.names:
-                    # Sort class IDs to ensure consistent ordering
-                    sorted_ids = sorted(results.names.keys())
+                    # Defensive: names might be list or dict
+                    if isinstance(results.names, dict):
+                        sorted_ids = sorted(results.names.keys())
+                    else:
+                        sorted_ids = list(range(len(results.names)))
+
                     for class_id in sorted_ids:
                         class_name = results.names[class_id]
                         
-                        # Boxes
-                        b_prec = to_f(results.box.p[class_id]) if hasattr(results, 'box') and results.box.p is not None else 0.0
-                        b_rec = to_f(results.box.r[class_id]) if hasattr(results, 'box') and results.box.r is not None else 0.0
-                        b_map50 = to_f(results.box.ap50[class_id]) if hasattr(results, 'box') and results.box.ap50 is not None else 0.0
-                        b_map = to_f(results.box.ap[class_id]) if hasattr(results, 'box') and results.box.ap is not None else 0.0
+                        # Boxes (Defensive attribute checks + Index safety)
+                        box_obj = getattr(results, 'box', None)
+                        
+                        def get_val(arr, idx):
+                            if arr is not None and hasattr(arr, '__len__') and idx < len(arr):
+                                return to_f(arr[idx])
+                            return 0.0
+
+                        b_prec = get_val(getattr(box_obj, 'p', None), class_id)
+                        b_rec = get_val(getattr(box_obj, 'r', None), class_id)
+                        b_map50 = get_val(getattr(box_obj, 'ap50', None), class_id)
+                        b_map = get_val(getattr(box_obj, 'ap', None), class_id)
                         
                         item = {
                             'name': str(class_name),
@@ -181,48 +195,58 @@ class UltralyticsValidator(BaseValidator):
                             'f1': (2 * b_prec * b_rec) / (b_prec + b_rec + 1e-6)
                         }
                         
-                        if is_seg and hasattr(results, 'seg') and results.seg is not None:
-                            # Masks
+                        seg_obj = getattr(results, 'seg', None)
+                        if is_seg and seg_obj is not None:
                             item.update({
-                                'mask_precision': to_f(results.seg.p[class_id]) if results.seg.p is not None else 0.0,
-                                'mask_recall': to_f(results.seg.r[class_id]) if results.seg.r is not None else 0.0,
-                                'mask_map50': to_f(results.seg.ap50[class_id]) if results.seg.ap50 is not None else 0.0,
-                                'mask_map50_95': to_f(results.seg.ap[class_id]) if results.seg.ap is not None else 0.0,
+                                'mask_precision': get_val(getattr(seg_obj, 'p', None), class_id),
+                                'mask_recall': get_val(getattr(seg_obj, 'r', None), class_id),
+                                'mask_map50': get_val(getattr(seg_obj, 'ap50', None), class_id),
+                                'mask_map50_95': get_val(getattr(seg_obj, 'ap', None), class_id),
                             })
                             mp, mr = item.get('mask_precision', 0), item.get('mask_recall', 0)
                             item['mask_f1'] = (2 * mp * mr) / (mp + mr + 1e-6)
                             
                         per_class_list.append(item)
+            except Exception as e:
+                pass
 
-                # C. Confusion Matrix (Labeled List for frontend Heatmap)
-                # Ensure we check for existence properly (some versions might evaluate to False if empty)
+            # C. Confusion Matrix
+            try:
                 cm_obj = getattr(results, 'confusion_matrix', None)
                 if cm_obj is not None and hasattr(cm_obj, 'matrix'):
                     cm_array = cm_obj.matrix
-                    # Get class names including 'background'
-                    # Ultralytics puts background at index nc
-                    sorted_names = [results.names[idx] for idx in sorted_ids] + ['background']
                     
-                    for i, actual_name in enumerate(sorted_names):
-                        for j, pred_name in enumerate(sorted_names):
+                    # Ensure we have class names
+                    names_dict = results.names or {}
+                    
+                    # Map names including background
+                    # Ultralytics CM size is typically (nc+1, nc+1)
+                    # IMPORTANT: YOLO matrix is matrix[predicted_idx, actual_idx]
+                    actual_names = [names_dict.get(idx, f"Class_{idx}") for idx in sorted_ids] + ['background']
+                    
+                    for row_idx, prd_name in enumerate(actual_names):
+                        for col_idx, act_name in enumerate(actual_names):
                             try:
-                                count = int(cm_array[i, j])
-                                labeled_matrix.append({
-                                    'actual': str(actual_name),
-                                    'predicted': str(pred_name),
-                                    'count': count
-                                })
-                            except:
-                                continue
-            except Exception as parsing_error:
-                logger.warning("errors.validation", f"Minor error parsing validation results: {str(parsing_error)}", "result_parsing_warning")
+                                # Safe boundary check for matrix access [Predicted, Actual]
+                                if row_idx < cm_array.shape[0] and col_idx < cm_array.shape[1]:
+                                    val = int(cm_array[row_idx, col_idx])
+                                    labeled_matrix.append({
+                                        'actual': str(act_name),
+                                        'predicted': str(prd_name),
+                                        'count': val
+                                    })
+                            except: continue
+                else:
+                    pass
+            except Exception as e:
+                pass
 
             # Prepare a safe JSON string for results_json
             safe_res_json = "{}"
             try:
                 serializable_res = {str(k): to_f(v) for k, v in res_dict.items()}
                 safe_res_json = json.dumps(serializable_res)
-            except:
+            except Exception as e:
                 pass
 
             return {
