@@ -25,15 +25,22 @@
 .v-config-panel,
 .v-history-panel {
     height: 100%;
+    max-height: 850px;
+    /* Locked to 850px as requested */
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     border: 1px solid #f0f0f0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .v-config-panel .ant-card-body,
 .v-history-panel .ant-card-body {
     padding: 12px !important;
+    overflow-y: auto;
+    /* Internal scroll */
+    flex: 1;
 }
 
 .v-config-panel .ant-card-head,
