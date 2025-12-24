@@ -1050,22 +1050,22 @@ const UploadSection = ({ projectId }) => {
   });
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: '1.5rem' }}>
       {/* ==================== HEADER SECTION ==================== */}
-      <div style={{ marginBottom: '24px' }}>
-        <Title level={2} style={{ margin: 0, marginBottom: '8px', background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
-          <UploadOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+      <div style={{ marginBottom: '1.5rem' }}>
+        <Title level={2} style={{ margin: 0, marginBottom: '0.5rem', background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block', fontSize: '1.5rem' }}>
+          <UploadOutlined style={{ marginRight: '0.5rem', color: '#1890ff', fontSize: '1.5rem' }} />
           Upload
         </Title>
       </div>
 
       {/* ==================== BATCH NAME & TAGS CONFIGURATION ==================== */}
-      <Card style={{ marginBottom: '24px' }}>
-        <Row gutter={[16, 16]}>
+      <Card style={{ marginBottom: '1.5rem' }}>
+        <Row gutter={['1rem', '1rem']}>
           {/* Batch Name Input */}
           <Col span={12}>
-            <div style={{ marginBottom: '16px' }}>
-              <Text strong>Batch Name:</Text>
+            <div style={{ marginBottom: '1rem' }}>
+              <Text strong style={{ fontSize: '0.875rem' }}>Batch Name:</Text>
             </div>
             <Input
               placeholder={`Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`}
@@ -1093,17 +1093,19 @@ const UploadSection = ({ projectId }) => {
               }}
               disabled={tags.length > 0} // Disabled when tags are selected
               style={{
-                marginBottom: '16px',
-                opacity: tags.length > 0 ? 0.6 : 1
+                marginBottom: '1rem',
+                opacity: tags.length > 0 ? 0.6 : 1,
+                fontSize: '0.875rem',
+                height: '2rem'
               }}
             />
           </Col>
 
           {/* Tags/Dataset Selection */}
           <Col span={12}>
-            <div style={{ marginBottom: '16px' }}>
-              <Text strong>Tags:</Text>
-              <Text type="secondary" style={{ marginLeft: '8px' }}>
+            <div style={{ marginBottom: '1rem' }}>
+              <Text strong style={{ fontSize: '0.875rem' }}>Tags:</Text>
+              <Text type="secondary" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }}>
                 <SettingOutlined />
               </Text>
             </div>
@@ -1111,7 +1113,8 @@ const UploadSection = ({ projectId }) => {
               mode="multiple"
               style={{
                 width: '100%',
-                opacity: batchName.trim() ? 0.6 : 1
+                opacity: batchName.trim() ? 0.6 : 1,
+                minHeight: '2rem'
               }}
               placeholder="Select existing dataset or leave empty for new batch..."
               value={tags}
@@ -1147,21 +1150,21 @@ const UploadSection = ({ projectId }) => {
       {/* ==================== UPLOAD AREA ==================== */}
       <Card>
         {/* Drag & Drop Upload Area */}
-        <Dragger {...uploadProps} style={{ marginBottom: '16px' }}>
-          <p className="ant-upload-drag-icon">
-            <InboxOutlined style={{ fontSize: '48px', color: '#1890ff' }} />
+        <Dragger {...uploadProps} style={{ marginBottom: '1rem' }}>
+          <p className="ant-upload-drag-icon" style={{ margin: 0, paddingBottom: '1rem' }}>
+            <InboxOutlined style={{ fontSize: '3rem', color: '#1890ff' }} />
           </p>
-          <p className="ant-upload-text" style={{ fontSize: '18px', fontWeight: 500 }}>
+          <p className="ant-upload-text" style={{ fontSize: '1.125rem', fontWeight: 500, margin: 0 }}>
             Drag and drop file(s) to upload, or:
           </p>
         </Dragger>
 
         {/* Upload Buttons */}
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
           <Button
             type="primary"
-            icon={<FolderOutlined />}
-            style={{ marginRight: '8px' }}
+            icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
+            style={{ marginRight: '0.5rem', height: '2.25rem', fontSize: '0.875rem' }}
             onClick={(e) => {
               e.stopPropagation();
               handleFileSelect(); // Shows batch name modal first if no tags
@@ -1170,8 +1173,8 @@ const UploadSection = ({ projectId }) => {
             Select File(s)
           </Button>
           <Button
-            icon={<FolderOutlined />}
-            style={{ marginRight: '8px' }}
+            icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
+            style={{ marginRight: '0.5rem', height: '2.25rem', fontSize: '0.875rem' }}
             onClick={(e) => {
               e.stopPropagation();
               handleFolderSelect(); // Uses folder name as batch name
@@ -1184,22 +1187,22 @@ const UploadSection = ({ projectId }) => {
         {/* Video FPS Selection - Shows when video is selected */}
         {videoFile && Array.isArray(videoFile) && videoFile.length > 0 && (
           <div style={{
-            marginBottom: '24px',
-            padding: '16px',
+            marginBottom: '1.5rem',
+            padding: '1rem',
             backgroundColor: '#f6f6f6',
-            borderRadius: '8px',
-            border: '1px solid #d9d9d9'
+            borderRadius: '0.5rem',
+            border: '0.0625rem solid #d9d9d9'
           }}>
-            <div style={{ marginBottom: '12px' }}>
-              <Text strong>Selected Video{videoFile.length > 1 ? 's' : ''}: </Text>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <Text strong style={{ fontSize: '0.875rem' }}>Selected Video{videoFile.length > 1 ? 's' : ''}: </Text>
               {videoFile.length === 1 ? (
                 <Text>{videoFile[0].name}</Text>
               ) : (
-                <div style={{ marginTop: '8px' }}>
-                  <Text>{videoFile.length} videos selected</Text>
-                  <div style={{ marginTop: '4px', maxHeight: '100px', overflowY: 'auto' }}>
+                <div style={{ marginTop: '0.5rem' }}>
+                  <Text style={{ fontSize: '0.875rem' }}>{videoFile.length} videos selected</Text>
+                  <div style={{ marginTop: '0.25rem', maxHeight: '6.25rem', overflowY: 'auto' }}>
                     {videoFile.map((video, index) => (
-                      <div key={index} style={{ fontSize: '12px', color: '#666', marginBottom: '2px' }}>
+                      <div key={index} style={{ fontSize: '0.75rem', color: '#666', marginBottom: '0.125rem' }}>
                         {index + 1}. {video.name}
                       </div>
                     ))}
@@ -1208,10 +1211,10 @@ const UploadSection = ({ projectId }) => {
               )}
             </div>
 
-            <Row gutter={16} style={{ marginBottom: '12px' }}>
+            <Row gutter={['1rem', '1rem']} style={{ marginBottom: '0.75rem' }}>
               <Col span={12}>
-                <div style={{ marginBottom: '8px' }}>
-                  <Text strong>Extract frames every:</Text>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <Text strong style={{ fontSize: '0.875rem' }}>Extract frames every:</Text>
                 </div>
                 <Select
                   value={selectedFPS}
@@ -1235,8 +1238,8 @@ const UploadSection = ({ projectId }) => {
                 </Select>
               </Col>
               <Col span={12}>
-                <div style={{ marginBottom: '8px' }}>
-                  <Text strong>Output image format:</Text>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <Text strong style={{ fontSize: '0.875rem' }}>Output image format:</Text>
                 </div>
                 <Select
                   value={selectedImageFormat}
@@ -1259,18 +1262,19 @@ const UploadSection = ({ projectId }) => {
               </Col>
             </Row>
 
-            <Row gutter={16} align="middle">
+            <Row gutter={['1rem', '1rem']} align="middle">
               <Col span={24} style={{ textAlign: 'center' }}>
-                <Space>
+                <Space size="0.5rem">
                   <Button
                     type="primary"
                     loading={videoProcessing}
                     onClick={processVideoUpload}
-                    style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
+                    style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', height: '2.5rem', padding: '0 1.5rem', fontSize: '0.875rem' }}
                   >
                     {videoProcessing ? 'Processing...' : 'Extract Frames'}
                   </Button>
                   <Button
+                    style={{ height: '2.5rem', padding: '0 1.5rem', fontSize: '0.875rem' }}
                     onClick={() => {
                       logUserClick('video_processing_cancel_button_clicked', 'User clicked video processing cancel button');
                       logInfo('app.frontend.ui', 'video_processing_cancelled', 'Video processing cancelled by user', {
@@ -1288,8 +1292,8 @@ const UploadSection = ({ projectId }) => {
               </Col>
             </Row>
 
-            <div style={{ marginTop: '12px' }}>
-              <Text type="secondary" style={{ fontSize: '12px' }}>
+            <div style={{ marginTop: '0.75rem' }}>
+              <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                 <strong>Note:</strong> Higher FPS will extract more frames. JPEG offers smaller files, PNG preserves quality, WebP provides modern compression. For most use cases, 2-5 FPS with JPEG format provides good coverage.
               </Text>
             </div>
@@ -1419,21 +1423,21 @@ const UploadSection = ({ projectId }) => {
         />
 
         {/* ==================== SUPPORTED FORMATS SECTION ==================== */}
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <Title level={4} style={{ color: '#666' }}>Supported Formats</Title>
-          <Row gutter={[24, 16]} justify="center">
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          <Title level={4} style={{ color: '#666', fontSize: '1.25rem' }}>Supported Formats</Title>
+          <Row gutter={['1.5rem', '1rem']} justify="center">
             {/* Images Format */}
             <Col>
               <div style={{ textAlign: 'center' }}>
-                <PictureOutlined style={{ fontSize: '24px', color: '#1890ff' }} />
-                <div style={{ marginTop: '8px' }}>
-                  <Text strong>Images</Text>
+                <PictureOutlined style={{ fontSize: '1.5rem', color: '#1890ff' }} />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <Text strong style={{ fontSize: '0.875rem' }}>Images</Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                     .jpg, .jpeg, .png, .bmp, .webp, .avif
                   </Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '11px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
                     Common image formats
                   </Text>
                 </div>
@@ -1443,15 +1447,15 @@ const UploadSection = ({ projectId }) => {
             {/* Annotations Format */}
             <Col>
               <div style={{ textAlign: 'center' }}>
-                <TagOutlined style={{ fontSize: '24px', color: '#52c41a' }} />
-                <div style={{ marginTop: '8px' }}>
-                  <Text strong>Annotations</Text>
+                <TagOutlined style={{ fontSize: '1.5rem', color: '#52c41a' }} />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <Text strong style={{ fontSize: '0.875rem' }}>Annotations</Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                     .json, .xml, .txt
                   </Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '11px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
                     Label files
                   </Text>
                 </div>
@@ -1461,22 +1465,22 @@ const UploadSection = ({ projectId }) => {
             {/* Videos Format */}
             <Col>
               <div style={{ textAlign: 'center' }}>
-                <YoutubeOutlined style={{ fontSize: '24px', color: '#722ed1' }} />
-                <div style={{ marginTop: '8px' }}>
-                  <Text strong>Videos</Text>
+                <YoutubeOutlined style={{ fontSize: '1.5rem', color: '#722ed1' }} />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <Text strong style={{ fontSize: '0.875rem' }}>Videos</Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                     .mp4, .mov, .avi
                   </Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '11px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
                     Video files
                   </Text>
                 </div>
               </div>
             </Col>
           </Row>
-          <Text type="secondary" style={{ fontSize: '11px' }}>
+          <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
             (Max size of 20MB and 16,000 pixels for images).
           </Text>
         </div>
@@ -1484,41 +1488,41 @@ const UploadSection = ({ projectId }) => {
         <Divider />
 
         {/* ==================== ADDITIONAL UPLOAD OPTIONS ==================== */}
-        <div style={{ marginBottom: '24px' }}>
-          <Title level={5}>Need images to get started? We've got you covered.</Title>
+        <div style={{ marginBottom: '1.5rem' }}>
+          <Title level={5} style={{ fontSize: '1rem', marginBottom: '1rem' }}>Need images to get started? We've got you covered.</Title>
 
           {/* Video Upload Section */}
-          <Card size="small" style={{ marginBottom: '16px' }}>
+          <Card size="small" style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <YoutubeOutlined style={{ fontSize: '20px', color: '#722ed1', marginRight: '12px' }} />
+              <YoutubeOutlined style={{ fontSize: '1.25rem', color: '#722ed1', marginRight: '0.75rem' }} />
               <div style={{ flex: 1 }}>
-                <Text strong>Upload Videos and Extract Frames</Text>
+                <Text strong style={{ fontSize: '0.875rem' }}>Upload Videos and Extract Frames</Text>
                 <br />
-                <Text type="secondary" style={{ fontSize: '12px' }}>
+                <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                   Upload single/multiple .mp4, .mov, or .avi files or select a folder containing videos
                 </Text>
               </div>
             </div>
-            <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <Button
                 type="primary"
-                icon={<YoutubeOutlined />}
+                icon={<YoutubeOutlined style={{ fontSize: '0.875rem' }} />}
                 loading={videoProcessing}
                 onClick={handleVideoSelect}
-                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
+                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', height: '2rem', fontSize: '0.8125rem' }}
               >
                 {videoProcessing ? 'Processing...' : 'Select Video File(s)'}
               </Button>
               <Button
-                icon={<FolderOutlined />}
+                icon={<FolderOutlined style={{ fontSize: '0.875rem' }} />}
                 loading={videoProcessing}
                 onClick={handleVideoFolderSelect}
-                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', color: 'white' }}
+                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', color: 'white', height: '2rem', fontSize: '0.8125rem' }}
               >
                 {videoProcessing ? 'Processing...' : 'Select Video Folder'}
               </Button>
               {videoFile && Array.isArray(videoFile) && videoFile.length > 0 && (
-                <Text type="secondary" style={{ fontSize: '12px' }}>
+                <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                   Selected: {videoFile.length} video{videoFile.length > 1 ? 's' : ''}
                 </Text>
               )}
@@ -1526,35 +1530,35 @@ const UploadSection = ({ projectId }) => {
           </Card>
 
           {/* YouTube Video Import */}
-          <Card size="small" style={{ marginBottom: '16px' }}>
+          <Card size="small" style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <YoutubeOutlined style={{ fontSize: '20px', color: '#ff4d4f', marginRight: '12px' }} />
+              <YoutubeOutlined style={{ fontSize: '1.25rem', color: '#ff4d4f', marginRight: '0.75rem' }} />
               <div style={{ flex: 1 }}>
-                <Text strong>Import YouTube Video</Text>
+                <Text strong style={{ fontSize: '0.875rem' }}>Import YouTube Video</Text>
               </div>
             </div>
             <Input
               placeholder="e.g. https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-              suffix={<Button type="primary" size="small">→</Button>}
-              style={{ marginTop: '12px' }}
+              suffix={<Button type="primary" size="small" style={{ height: '1.5rem', border: 'none' }}>→</Button>}
+              style={{ marginTop: '0.75rem', fontSize: '0.875rem' }}
             />
           </Card>
 
           {/* API and Cloud Provider Options */}
-          <Row gutter={16}>
+          <Row gutter={['1rem', '1rem']}>
             <Col span={12}>
               <Card size="small">
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <ApiOutlined style={{ fontSize: '20px', color: '#1890ff', marginRight: '12px' }} />
-                  <Text strong>Collect Images via the Upload API</Text>
+                  <ApiOutlined style={{ fontSize: '1.25rem', color: '#1890ff', marginRight: '0.75rem' }} />
+                  <Text strong style={{ fontSize: '0.8125rem' }}>Collect Images via the Upload API</Text>
                 </div>
               </Card>
             </Col>
             <Col span={12}>
               <Card size="small">
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <CloudOutlined style={{ fontSize: '20px', color: '#52c41a', marginRight: '12px' }} />
-                  <Text strong>Import From Cloud Providers</Text>
+                  <CloudOutlined style={{ fontSize: '1.25rem', color: '#52c41a', marginRight: '0.75rem' }} />
+                  <Text strong style={{ fontSize: '0.8125rem' }}>Import From Cloud Providers</Text>
                 </div>
               </Card>
             </Col>
@@ -1564,20 +1568,20 @@ const UploadSection = ({ projectId }) => {
 
       {/* ==================== UPLOAD STATUS & PROGRESS ==================== */}
       {(uploading || uploadedFiles.length > 0 || recentImages.length > 0) && (
-        <Card title="Upload Status" style={{ marginTop: '24px' }}>
+        <Card title={<span style={{ fontSize: '1rem' }}>Upload Status</span>} style={{ marginTop: '1.5rem' }}>
           {/* Upload Progress Bar */}
           {uploading && (
-            <div style={{ marginBottom: '16px' }}>
-              <Text>Uploading files...</Text>
-              <Progress percent={uploadProgress} status="active" />
+            <div style={{ marginBottom: '1rem' }}>
+              <Text style={{ fontSize: '0.875rem' }}>Uploading files...</Text>
+              <Progress percent={uploadProgress} status="active" strokeWidth={8} />
             </div>
           )}
 
           {/* Recently Uploaded Files Display */}
           {(uploadedFiles.length > 0 || recentImages.length > 0) && (
             <div>
-              <Title level={5}>Recently Uploaded ({recentImages.length || uploadedFiles.length} files)</Title>
-              <Row gutter={[16, 16]}>
+              <Title level={5} style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>Recently Uploaded ({recentImages.length || uploadedFiles.length} files)</Title>
+              <Row gutter={['1rem', '1rem']}>
                 {/* Display recent images or uploaded files (max 6) */}
                 {(recentImages.length > 0 ? recentImages : uploadedFiles.slice(-6)).map((fileInfo, index) => (
                   <Col span={4} key={index}>
@@ -1585,7 +1589,7 @@ const UploadSection = ({ projectId }) => {
                       size="small"
                       cover={
                         <div style={{
-                          height: '80px',
+                          height: '5rem',
                           background: '#f5f5f5',
                           display: 'flex',
                           alignItems: 'center',
@@ -1596,22 +1600,22 @@ const UploadSection = ({ projectId }) => {
                             <img
                               src={fileInfo.thumbnail_url}
                               alt={fileInfo.filename || 'Image'}
-                              style={{ maxHeight: '80px', maxWidth: '100%' }}
+                              style={{ maxHeight: '5rem', maxWidth: '100%' }}
                             />
                           ) : (
-                            <PictureOutlined style={{ fontSize: '24px', color: '#999' }} />
+                            <PictureOutlined style={{ fontSize: '1.5rem', color: '#999' }} />
                           )}
                         </div>
                       }
                     >
                       <Card.Meta
                         title={
-                          <Text ellipsis style={{ fontSize: '12px' }}>
+                          <Text ellipsis style={{ fontSize: '0.75rem' }}>
                             {fileInfo.filename || fileInfo.file?.name || 'Unknown'}
                           </Text>
                         }
                         description={
-                          <Text type="secondary" style={{ fontSize: '11px' }}>
+                          <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
                             {fileInfo.file?.size ? `${(fileInfo.file.size / 1024).toFixed(1)} KB` : ''}
                           </Text>
                         }
@@ -1623,8 +1627,8 @@ const UploadSection = ({ projectId }) => {
 
               {/* Show "View all" button if more than 6 files */}
               {(recentImages.length > 6 || uploadedFiles.length > 6) && (
-                <div style={{ textAlign: 'center', marginTop: '16px' }}>
-                  <Button type="link">
+                <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                  <Button type="link" style={{ fontSize: '0.8125rem' }}>
                     View all {recentImages.length || uploadedFiles.length} uploaded files
                   </Button>
                 </div>
@@ -1659,6 +1663,7 @@ const UploadSection = ({ projectId }) => {
           onChange={(e) => setBatchName(e.target.value)}
           onPressEnter={handleBatchNameConfirm} // Allow Enter key to confirm
           autoFocus // Auto-focus on modal open
+          style={{ fontSize: '0.875rem', height: '2.5rem' }}
         />
       </Modal>
     </div>

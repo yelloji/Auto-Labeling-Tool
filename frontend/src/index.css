@@ -1,7 +1,18 @@
 html {
   /* GLOBAL SCALING ENGINE: Absolute Vector Mode */
-  /* 0.8333vw = 16px at 1920px width. min(...) caps growth on large monitors. */
-  font-size: min(0.8333vw, 16px);
+  /* 0.8333vw = 16px at 1920px width. */
+  /* clamp(12px, ...) adds a "Readability Floor" so it doesn't get too small on laptops. */
+  font-size: clamp(10px, 0.8333vw, 16px);
+}
+
+/* Ant Design Vector Overrides */
+.vector-select .ant-select-selector {
+  font-size: 0.875rem !important;
+}
+
+.vector-select-dropdown .ant-select-item {
+  font-size: 0.875rem !important;
+  min-height: 2rem !important;
 }
 
 body {
