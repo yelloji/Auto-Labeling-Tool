@@ -1053,8 +1053,8 @@ const UploadSection = ({ projectId }) => {
     <div style={{ padding: '1.5rem' }}>
       {/* ==================== HEADER SECTION ==================== */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <Title level={2} style={{ margin: 0, marginBottom: '0.5rem', background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block', fontSize: '1.5rem' }}>
-          <UploadOutlined style={{ marginRight: '0.5rem', color: '#1890ff', fontSize: '1.5rem' }} />
+        <Title level={2} style={{ margin: 0, marginBottom: '0.5rem', fontSize: '1.5rem', color: '#1890ff' }}>
+          <UploadOutlined style={{ marginRight: '0.5rem', fontSize: '1.5rem' }} />
           Upload
         </Title>
       </div>
@@ -1114,8 +1114,11 @@ const UploadSection = ({ projectId }) => {
               style={{
                 width: '100%',
                 opacity: batchName.trim() ? 0.6 : 1,
-                minHeight: '2rem'
+                minHeight: '2.25rem',
+                fontSize: '0.875rem'
               }}
+              className="vector-select"
+              popupClassName="vector-select-dropdown"
               placeholder="Select existing dataset or leave empty for new batch..."
               value={tags}
               onChange={(selectedTags) => {
@@ -1227,7 +1230,9 @@ const UploadSection = ({ projectId }) => {
                     });
                     setSelectedFPS(fps);
                   }}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', height: '2.5rem' }}
+                  className="vector-select"
+                  popupClassName="vector-select-dropdown"
                   size="large"
                 >
                   <Option value={1}>1 frame per second (1 FPS)</Option>
@@ -1252,7 +1257,9 @@ const UploadSection = ({ projectId }) => {
                     });
                     setSelectedImageFormat(format);
                   }}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', height: '2.5rem' }}
+                  className="vector-select"
+                  popupClassName="vector-select-dropdown"
                   size="large"
                 >
                   <Option value="jpeg">JPEG (.jpg) - Smaller size, good quality</Option>
@@ -1641,6 +1648,7 @@ const UploadSection = ({ projectId }) => {
       {/* ==================== BATCH NAME MODAL ==================== */}
       <Modal
         title="Enter Batch Name"
+        width="25rem"
         open={batchNameModalVisible}
         onOk={handleBatchNameConfirm}
         onCancel={() => {
@@ -1663,7 +1671,7 @@ const UploadSection = ({ projectId }) => {
           onChange={(e) => setBatchName(e.target.value)}
           onPressEnter={handleBatchNameConfirm} // Allow Enter key to confirm
           autoFocus // Auto-focus on modal open
-          style={{ fontSize: '0.875rem', height: '2.5rem' }}
+          style={{ fontSize: '0.875rem', height: '2.25rem' }}
         />
       </Modal>
     </div>
