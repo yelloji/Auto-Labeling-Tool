@@ -371,10 +371,10 @@ const ProjectWorkspace = () => {
   if (loading) {
     logInfo('app.frontend.ui', 'ProjectWorkspace loading state', { projectId });
     return (
-      <div style={{ textAlign: 'center', padding: '50px' }}>
+      <div style={{ textAlign: 'center', padding: '3.125rem' }}>
         <Spin size="large" />
-        <div style={{ marginTop: 16 }}>
-          <Text>Loading project workspace...</Text>
+        <div style={{ marginTop: '1rem' }}>
+          <Text style={{ fontSize: '0.875rem' }}>Loading project workspace...</Text>
         </div>
       </div>
     );
@@ -388,7 +388,7 @@ const ProjectWorkspace = () => {
         description="The requested project could not be found."
         type="error"
         showIcon
-        style={{ margin: '50px auto', maxWidth: '500px' }}
+        style={{ margin: '3.125rem auto', maxWidth: '31.25rem' }}
       />
     );
   }
@@ -399,11 +399,11 @@ const ProjectWorkspace = () => {
     <Layout style={{ minHeight: '100vh' }}>
       {/* Project Sidebar */}
       <Sider
-        width={280}
+        width="17.5rem"
         className="workspace-sider"
         style={{
           background: '#0C2132',
-          borderRight: '1px solid rgba(255,255,255,0.08)',
+          borderRight: '0.0625rem solid rgba(255,255,255,0.08)',
           overflow: 'auto',
           height: '100vh',
           position: 'fixed',
@@ -413,26 +413,33 @@ const ProjectWorkspace = () => {
         }}
       >
         {/* Back Button */}
-        <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0' }}>
+        <div style={{ padding: '1rem', borderBottom: '0.0625rem solid rgba(255,255,255,0.08)' }}>
           <Button
             type="text"
-            icon={<ArrowLeftOutlined />}
+            icon={<ArrowLeftOutlined style={{ fontSize: '0.875rem' }} />}
             onClick={() => {
               logUserClick('ProjectWorkspace', 'back_to_projects_button', { projectId, projectName: project.name });
               navigate('/projects');
             }}
-            style={{ marginBottom: '16px' }}
+            style={{
+              marginBottom: '1rem',
+              fontSize: '0.875rem',
+              height: 'auto',
+              padding: '0.25rem 0',
+              display: 'flex',
+              alignItems: 'center'
+            }}
           >
             Back to Projects
           </Button>
 
           {/* Project Header */}
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
               <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '8px',
+                width: '2.5rem',
+                height: '2.5rem',
+                borderRadius: '0.5rem',
                 background: `linear-gradient(135deg, ${typeInfo.color === 'blue' ? '#1890ff, #40a9ff' :
                   typeInfo.color === 'green' ? '#52c41a, #73d13d' :
                     typeInfo.color === 'purple' ? '#722ed1, #9254de' : '#d9d9d9, #f0f0f0'
@@ -441,18 +448,27 @@ const ProjectWorkspace = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'white',
-                fontSize: '18px',
-                marginRight: '12px'
+                fontSize: '1.125rem',
+                marginRight: '0.75rem'
               }}>
                 {typeInfo.color === 'blue' ? '🎯' :
                   typeInfo.color === 'green' ? '🏷️' :
                     typeInfo.color === 'purple' ? '✂️' : '📁'}
               </div>
               <div>
-                <Title level={4} style={{ margin: 0, fontSize: '16px' }}>
+                <Title level={4} style={{ margin: 0, fontSize: '1rem', lineHeight: '1.25rem', color: '#ffffff' }}>
                   {project.name}
                 </Title>
-                <Tag color={typeInfo.color} size="small">
+                <Tag
+                  color={typeInfo.color}
+                  style={{
+                    fontSize: '0.625rem',
+                    lineHeight: '0.875rem',
+                    height: 'auto',
+                    padding: '0.125rem 0.5rem',
+                    marginTop: '0.25rem'
+                  }}
+                >
                   {typeInfo.label}
                 </Tag>
               </div>
@@ -460,39 +476,42 @@ const ProjectWorkspace = () => {
           </div>
 
           {/* Project Stats */}
-          <Row gutter={[8, 8]}>
+          <Row gutter={['0.5rem', '0.5rem']}>
             <Col span={12}>
               <Statistic
-                title="Images"
+                title={<span style={{ fontSize: '0.625rem' }}>Images</span>}
                 value={project.total_images}
-                prefix={<PictureOutlined />}
-                valueStyle={{ fontSize: '14px' }}
+                prefix={<PictureOutlined style={{ fontSize: '0.75rem' }} />}
+                valueStyle={{ fontSize: '0.875rem', color: '#E6E6E6' }}
               />
             </Col>
             <Col span={12}>
               <Statistic
-                title="Datasets"
+                title={<span style={{ fontSize: '0.625rem' }}>Datasets</span>}
                 value={project.total_datasets}
-                prefix={<DatabaseOutlined />}
-                valueStyle={{ fontSize: '14px' }}
+                prefix={<DatabaseOutlined style={{ fontSize: '0.75rem' }} />}
+                valueStyle={{ fontSize: '0.875rem', color: '#E6E6E6' }}
               />
             </Col>
           </Row>
 
-          <div style={{ marginTop: '12px' }}>
-            <Text type="secondary" style={{ fontSize: '12px' }}>
+          <div style={{ marginTop: '0.75rem' }}>
+            <Text type="secondary" style={{ fontSize: '0.75rem', color: '#A3A7AD' }}>
               Progress: {project.total_images > 0
                 ? Math.round((project.labeled_images / project.total_images) * 100)
                 : 0}% annotated
             </Text>
-            <Progress
-              percent={project.total_images > 0
-                ? Math.round((project.labeled_images / project.total_images) * 100)
-                : 0}
-              size="small"
-              style={{ marginTop: '4px' }}
-            />
-
+            <div style={{ height: '0.5rem', marginTop: '0.25rem' }}>
+              <Progress
+                percent={project.total_images > 0
+                  ? Math.round((project.labeled_images / project.total_images) * 100)
+                  : 0}
+                size="small"
+                showInfo={false}
+                strokeWidth={4}
+                style={{ margin: 0, padding: 0 }}
+              />
+            </div>
           </div>
         </div>
 
@@ -500,7 +519,11 @@ const ProjectWorkspace = () => {
         <Menu
           mode="inline"
           selectedKeys={[selectedKey]}
-          style={{ border: 'none', background: 'transparent' }}
+          style={{
+            border: 'none',
+            background: 'transparent',
+            fontSize: '0.8125rem' // 13px override for vector scaling
+          }}
           items={menuItems}
           onClick={({ key }) => {
             logUserClick('ProjectWorkspace', 'workspace_menu_item', {
@@ -515,8 +538,8 @@ const ProjectWorkspace = () => {
       </Sider>
 
       {/* Main Content */}
-      <Layout style={{ marginLeft: 280 }}>
-        <Content style={{ background: '#f5f5f5', minHeight: '100vh' }}>
+      <Layout style={{ marginLeft: '17.5rem', background: '#f5f5f5', minHeight: '100vh' }}>
+        <Content style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
           {renderContent()}
         </Content>
       </Layout>

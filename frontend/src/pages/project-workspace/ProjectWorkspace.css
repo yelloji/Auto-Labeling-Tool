@@ -1,7 +1,8 @@
 /* Navy & Silver themed sidebar for Project Workspace */
 
 :root {
-  --navy: #001529; /* match Dashboard/App background */
+  --navy: #001529;
+  /* match Dashboard/App background */
   --silver: #C0C0C0;
   --silver-dim: #A3A7AD;
   --silver-hover: #D8D8D8;
@@ -12,7 +13,8 @@
 .workspace-sider {
   background-color: var(--navy) !important;
   color: var(--silver) !important;
-  border-right: 1px solid #002140; /* subtle divider to match app theme */
+  border-right: 0.0625rem solid #002140;
+  /* Proportional vector divider */
 }
 
 /* Ensure AntD menu inherits transparent background and silver text */
@@ -28,6 +30,18 @@
 
 .workspace-sider .ant-menu-item-group-title {
   color: var(--silver-dim) !important;
+  font-size: 0.75rem !important;
+  /* Force group titles to 12px/rem */
+  height: auto !important;
+  line-height: 1.5rem !important;
+}
+
+.workspace-sider .ant-menu-item,
+.workspace-sider .ant-menu-submenu-title {
+  height: auto !important;
+  line-height: 1.5rem !important;
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
 }
 
 /* Selected and hover states for readability on navy */
@@ -78,6 +92,4 @@
 }
 
 /* Keep tags’ own colors; just ensure text remains legible on navy */
-.workspace-sider .ant-tag {
-  /* no background override; AntD handles contrast */
-}
+/* AntD handles contrast automatically for tags inside the sider */
