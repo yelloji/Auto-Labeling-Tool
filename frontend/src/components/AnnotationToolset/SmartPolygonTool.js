@@ -235,7 +235,26 @@ const SmartPolygonTool = ({
       }
 
       if (clickedPIndex >= 0) {
-        setDraggedPointIndex(clickedPIndex);
+        // Toggle behavior: if already dragging this point, clicking places it
+        if (draggedPointIndex === clickedPIndex) {
+          // Place the point at current mouse position and deselect
+          const newPoints = [...currentPolygon.points];
+          newPoints[clickedPIndex] = imageCoords;
+          setCurrentPolygon({ ...currentPolygon, points: newPoints });
+          setDraggedPointIndex(-1);
+        } else {
+          // Start dragging this point
+          setDraggedPointIndex(clickedPIndex);
+        }
+        return;
+      }
+
+      // If dragging a point and clicked elsewhere, place it there
+      if (draggedPointIndex >= 0) {
+        const newPoints = [...currentPolygon.points];
+        newPoints[draggedPointIndex] = imageCoords;
+        setCurrentPolygon({ ...currentPolygon, points: newPoints });
+        setDraggedPointIndex(-1);
         return;
       }
 
@@ -258,7 +277,7 @@ const SmartPolygonTool = ({
     setRefinementPoints(newPoints);
     setPreviewPolygon(null);
     await runSegmentation(newPoints, false);
-  }, [isActive, refinementPoints, currentPolygon, editingMode, imageSize, screenToImageCoords, imageToScreenCoords, addPointOnEdge, isPointInPolygon]);
+  }, [isActive, refinementPoints, currentPolygon, editingMode, draggedPointIndex, imageSize, screenToImageCoords, imageToScreenCoords, addPointOnEdge, isPointInPolygon, runSegmentation]);
 
   const handleMouseMove = useCallback((e) => {
     const canvas = e.target;
@@ -313,7 +332,7 @@ const SmartPolygonTool = ({
         runSegmentation(pts, true);
       }
     }
-  }, [isActive, draggedPointIndex, currentPolygon, refinementPoints, screenToImageCoords, imageSize, runSegmentation, previewPolygon]);
+  }, [isActive, draggedPointIndex, currentPolygon, refinementPoints, screenToImageCoords, imageSize, runSegmentation]);
 
   const handleMouseUp = useCallback(() => {
     setDraggedPointIndex(-1);
