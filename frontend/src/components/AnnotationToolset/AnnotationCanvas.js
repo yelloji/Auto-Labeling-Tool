@@ -1212,6 +1212,9 @@ const AnnotationCanvas = ({
             if (activeTool === 'smart_polygon') smartPolygonTool.handleCanvasClick(e);
             // Standard tool clicks handled by mouseUp or specific canvas hooks
           }}
+          onMouseLeave={() => {
+            if (activeTool === 'smart_polygon') smartPolygonTool.handleMouseLeave();
+          }}
           onContextMenu={activeTool === 'smart_polygon' ? smartPolygonTool.handleRightClick : undefined}
           style={{ display: 'block' }}
         />

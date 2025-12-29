@@ -26,6 +26,7 @@ const SmartPolygonTool = ({
   const [complexity, setComplexity] = useState(0.4); // For polygon smoothing
   const processingRef = useRef(false);
   const lastHoverRequestRef = useRef(0);
+  const hoverRequestIdRef = useRef(0); // Tracks current hover request to avoid race conditions
 
   // --- Coordinate Conversions ---
   const screenToImageCoords = useCallback((screenX, screenY) => {
@@ -45,7 +46,7 @@ const SmartPolygonTool = ({
   }, [zoomLevel, imagePosition]);
 
   // --- Core Segmentation Logic ---
-  const runSegmentation = async (points, isHover = false) => {
+  const runSegmentation = async (points, isHover = false, requestId = -1) => {
     if (!imageId || points.length === 0) return;
 
     try {
@@ -69,21 +70,15 @@ const SmartPolygonTool = ({
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const result = await response.json();
 
-      console.log('🔍 Smart Polygon API Response:', {
-        isHover,
-        success: result.success,
-        pointCount: result.points?.length || 0,
-        points: result.points,
-        confidence: result.confidence
-      });
 
       if (result.success && result.points && result.points.length > 0) {
         const polyPoints = result.points.map(p => ({ x: p.x, y: p.y }));
 
-        console.log('🎨 Setting polygon:', { isHover, pointCount: polyPoints.length });
 
         if (isHover) {
-          setPreviewPolygon({ points: polyPoints, confidence: result.confidence });
+          if (requestId === hoverRequestIdRef.current) {
+            setPreviewPolygon({ points: polyPoints, confidence: result.confidence });
+          }
         } else {
           setCurrentPolygon({
             type: 'smart_polygon',
@@ -326,16 +321,23 @@ const SmartPolygonTool = ({
       refinementPoints.length === 0 &&
       !currentPolygon) {
       const now = Date.now();
-      if (now - lastHoverRequestRef.current > 150) { // Fast response for better UX
+      if (now - lastHoverRequestRef.current > 100) { // Even faster response after backend optimization
         lastHoverRequestRef.current = now;
+        hoverRequestIdRef.current += 1; // Increment request ID
+        const currentId = hoverRequestIdRef.current;
         const pts = [{ ...imageCoords, label: 1 }];
-        runSegmentation(pts, true);
+        runSegmentation(pts, true, currentId);
       }
     }
   }, [isActive, draggedPointIndex, currentPolygon, refinementPoints, screenToImageCoords, imageSize, runSegmentation]);
 
   const handleMouseUp = useCallback(() => {
     setDraggedPointIndex(-1);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    hoverRequestIdRef.current += 1; // Invalidate any pending requests
+    setPreviewPolygon(null);
   }, []);
 
   const handleRightClick = useCallback((e) => {
@@ -358,12 +360,6 @@ const SmartPolygonTool = ({
   const renderPolygon = (ctx) => {
     const baseRem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
 
-    console.log('🖌️ renderPolygon called:', {
-      hasPreview: !!previewPolygon,
-      previewPoints: previewPolygon?.points?.length || 0,
-      hasCurrent: !!currentPolygon,
-      currentPoints: currentPolygon?.points?.length || 0
-    });
 
     // Draw Blue "Ghost" Preview
     if (previewPolygon && previewPolygon.points) {
@@ -429,6 +425,7 @@ const SmartPolygonTool = ({
     handleCanvasClick,
     handleMouseMove,
     handleMouseUp,
+    handleMouseLeave,
     handleRightClick,
     renderPolygon,
     isProcessing,

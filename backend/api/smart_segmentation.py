@@ -167,11 +167,13 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
                 logger.warning("operations.annotations", "Using MockSegmentor as fallback", "sam_fallback_mock")
 
     def set_image(self, image: np.ndarray, image_id: str):
-        """Prepare the image for segmentation (compute embeddings)"""
+        """Prepare the image for segmentation"""
         self._load_model()
-        # SAM doesn't need pre-embedding in Ultralytics - just store image ID
-        self.last_image_id = image_id
-        logger.info("operations.annotations", f"Image ready for SAM segmentation: {image_id}", "sam_image_set")
+        # Only reset if it's a new image
+        if self.last_image_id != image_id:
+            self.last_image_id = image_id
+            # In a more advanced version, we would pre-compute embeddings here
+            # for the predictor, but for now we just track the ID.
         
     def segment(self, image: np.ndarray, points: List[SmartPoint]) -> Tuple[List[Dict[str, float]], float]:
         if not points:
@@ -731,66 +733,69 @@ async def get_available_models():
         ]
     }
 
+# Simple in-memory cache for the current image to avoid redundant disk I/O
+_image_cache = {
+    "image_id": None,
+    "image": None,
+    "path": None
+}
+
 @router.post("/segment-polygon", response_model=SmartPolygonResponse)
+
 async def segment_polygon(request: SmartPolygonRequest, db: Session = Depends(get_db)):
-    """
-    Smart Polygon Tool endpoint - Generate polygon from one or more points.
-    Supports real SAM interactive segmentation.
-    """
+    """Main entry point for segmentation"""
+    global _image_cache
+    
     try:
-        print(f"🔍 SAM Request: image_id={request.image_id}, points={len(request.points)}")
-        
-        image_record = ImageOperations.get_image(db, request.image_id)
-        if not image_record:
-            print(f"❌ Image not found: {request.image_id}")
-            raise HTTPException(status_code=404, detail="Image not found")
+        # Check cache first
+        if _image_cache["image_id"] == request.image_id and _image_cache["image"] is not None:
+            image = _image_cache["image"]
+            image_path = _image_cache["path"]
+        else:
+            # Not in cache, load from DB and disk
+            image_record = ImageOperations.get_image(db, request.image_id)
+            if not image_record:
+                raise HTTPException(status_code=404, detail="Image not found")
 
-        # Resolve path - handle both absolute and relative paths
-        image_path = image_record.normalized_file_path
-        print(f"📁 Image path from DB: {image_path}")
-        
-        # Try multiple possible locations
-        from pathlib import Path
-        backend_root = Path(__file__).parent.parent  # Go up to backend/ directory
-        
-        possible_paths = [
-            image_path,  # Try as-is (absolute path)
-            backend_root / image_path.lstrip('/'),  # Relative to backend root
-            backend_root / "uploads" / image_path.lstrip('/'),  # In uploads folder
-            backend_root.parent / image_path.lstrip('/'),  # Relative to project root
-        ]
-        
-        image_path = None
-        for p in possible_paths:
-            p_str = str(p)
-            if os.path.exists(p_str):
-                image_path = p_str
-                print(f"✅ Found image at: {image_path}")
-                break
-        
-        if image_path is None:
-            print(f"❌ Image not found in any location. Tried: {[str(p) for p in possible_paths]}")
-            raise HTTPException(status_code=404, detail=f"Image file not found at {image_record.normalized_file_path}")
+            # Resolve path
+            image_path_raw = image_record.normalized_file_path
+            from pathlib import Path
+            backend_root = Path(__file__).parent.parent
+            
+            possible_paths = [
+                image_path_raw,
+                backend_root / image_path_raw.lstrip('/'),
+                backend_root / "uploads" / image_path_raw.lstrip('/'),
+                backend_root.parent / image_path_raw.lstrip('/'),
+            ]
+            
+            image_path = None
+            for p in possible_paths:
+                p_str = str(p)
+                if os.path.exists(p_str):
+                    image_path = p_str
+                    break
+            
+            if image_path is None:
+                raise HTTPException(status_code=404, detail=f"Image file not found at {image_record.normalized_file_path}")
 
-        image = cv2.imread(image_path)
-        if image is None:
-            print(f"❌ Could not read image: {image_path}")
-            raise HTTPException(status_code=500, detail="Could not read image file")
-        
-        print(f"✅ Image loaded: {image.shape}")
+            image = cv2.imread(image_path)
+            if image is None:
+                raise HTTPException(status_code=500, detail="Could not read image file")
+            
+            # Update cache by value (keeps the reference stable)
+            _image_cache["image_id"] = request.image_id
+            _image_cache["image"] = image
+            _image_cache["path"] = image_path
 
         # Get segmentor
         segmentor = registry.get_current()
-        print(f"🤖 Using segmentor: {type(segmentor).__name__}")
         
         # If it's the real SAM segmentor, it might want to cache embeddings
         if hasattr(segmentor, 'set_image'):
             segmentor.set_image(image, request.image_id)
-            print(f"📸 Image set in segmentor")
 
-        print(f"🎯 Running segmentation with {len(request.points)} points...")
         points, confidence = segmentor.segment(image, request.points)
-        print(f"✅ Segmentation complete: {len(points)} points, confidence={confidence}")
 
         return SmartPolygonResponse(
             success=True,
