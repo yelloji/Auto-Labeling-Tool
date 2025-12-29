@@ -127,8 +127,8 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
                 import shutil
                 logger.info("operations.annotations", "Loading SAM model...", "sam_load_start")
                 
-                # Use model name (like YOLO) - Ultralytics will auto-download to cache
-                model_size = os.getenv("SAM_MODEL_SIZE", "sam_b.pt")  # Base for speed
+                # Use SAM2 Base - Better accuracy, still good speed
+                model_size = os.getenv("SAM_MODEL_SIZE", "sam2_b.pt")  # Best overall balance
                 
                 # Target directory for our local copy (same pattern as YOLO)
                 repo_root = Path(__file__).parent.parent.parent
@@ -180,10 +180,10 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
         try:
             self._load_model()
             
-            # SPEED OPTIMIZATION: Resize image to max 1024px for SAM processing
-            # SAM works well on smaller images and is MUCH faster
+            # SPEED OPTIMIZATION: Resize image to max 512px for SAM processing
+            # Much faster for real-time hover preview, still good accuracy
             original_height, original_width = image.shape[:2]
-            max_dimension = 1024
+            max_dimension = 512  # Aggressive downscale for speed
             
             scale_factor = 1.0
             if max(original_height, original_width) > max_dimension:
@@ -191,20 +191,13 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
                 new_width = int(original_width * scale_factor)
                 new_height = int(original_height * scale_factor)
                 resized_image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
-                print(f"⚡ Resized image from {original_width}x{original_height} to {new_width}x{new_height} for speed")
             else:
                 resized_image = image
-                print(f"✓ Image size OK: {original_width}x{original_height}")
             
             # Scale points to match resized image
             import numpy as np
             point_coords = np.array([[p.x * scale_factor, p.y * scale_factor] for p in points], dtype=np.float32)
             point_labels = np.array([p.label for p in points], dtype=np.int32)
-            
-            print(f"🎯 SAM Input: {len(points)} points")
-            print(f"   Original coords: {[[p.x, p.y] for p in points]}")
-            print(f"   Scaled coords: {point_coords.tolist()}")
-            print(f"   Labels: {point_labels.tolist()}")
             
             # Call SAM on resized image
             results = self.model(
@@ -214,25 +207,18 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
                 verbose=False
             )
             
-            print(f"📦 Results type: {type(results)}, length: {len(results) if results else 0}")
-            
             if not results or len(results) == 0:
-                print("❌ No results from SAM")
                 return [], 0.0
                 
             result = results[0]
-            print(f"📦 Result type: {type(result)}, has masks: {hasattr(result, 'masks')}")
             
             if not hasattr(result, 'masks') or result.masks is None:
-                print("❌ No masks in result")
                 return [], 0.0
                 
             # Get the mask data
             mask_tensor = result.masks.data[0]
             mask = mask_tensor.cpu().numpy()
             confidence = 0.8
-            
-            print(f"📊 Mask shape: {mask.shape}, confidence: {confidence:.3f}")
             
             # Convert mask to polygon using OpenCV
             # Mask is boolean/float, convert to uint8
@@ -241,16 +227,14 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
             # Find contours
             contours, _ = cv2.findContours(mask8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             if not contours:
-                print("❌ No contours found in mask")
                 return [], 0.0
                 
             # Take the largest contour
             largest_contour = max(contours, key=cv2.contourArea)
-            print(f"📐 Largest contour has {len(largest_contour)} points")
             
-            # Simplify contour
+            # Simplify contour - reduced factor for more detail
             base_epsilon = 0.01 
-            epsilon_factor = 0.5  # Fixed smoothing for now
+            epsilon_factor = 0.3  # Reduced from 0.5 to keep more detail
             epsilon = base_epsilon * epsilon_factor * cv2.arcLength(largest_contour, True)
             
             simplified = cv2.approxPolyDP(largest_contour, epsilon, True)
@@ -262,10 +246,8 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
                     "x": float(pt[0][0] / scale_factor), 
                     "y": float(pt[0][1] / scale_factor)
                 } for pt in simplified]
-                print(f"✅ Final polygon: {len(points_out)} points (scaled back to original size)")
             else:
                 points_out = [{"x": float(pt[0][0]), "y": float(pt[0][1])} for pt in simplified]
-                print(f"✅ Final polygon: {len(points_out)} points")
             
             return points_out, confidence
             

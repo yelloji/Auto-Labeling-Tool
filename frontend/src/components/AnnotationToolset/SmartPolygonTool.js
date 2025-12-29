@@ -280,6 +280,14 @@ const SmartPolygonTool = ({
       imageCoords.y < 0 ||
       imageCoords.y > imageSize.height;
 
+    if (isOutOfBounds) {
+      // Clear preview when mouse leaves the image
+      if (previewPolygon) {
+        setPreviewPolygon(null);
+      }
+      return;
+    }
+
     // Vertex Dragging Logic
     if (draggedPointIndex >= 0 && currentPolygon) {
       const newPoints = [...currentPolygon.points];
@@ -299,13 +307,13 @@ const SmartPolygonTool = ({
       refinementPoints.length === 0 &&
       !currentPolygon) {
       const now = Date.now();
-      if (now - lastHoverRequestRef.current > 250) { // 250ms throttle
+      if (now - lastHoverRequestRef.current > 150) { // Fast response for better UX
         lastHoverRequestRef.current = now;
         const pts = [{ ...imageCoords, label: 1 }];
         runSegmentation(pts, true);
       }
     }
-  }, [isActive, draggedPointIndex, currentPolygon, refinementPoints, screenToImageCoords, imageSize, runSegmentation]);
+  }, [isActive, draggedPointIndex, currentPolygon, refinementPoints, screenToImageCoords, imageSize, runSegmentation, previewPolygon]);
 
   const handleMouseUp = useCallback(() => {
     setDraggedPointIndex(-1);

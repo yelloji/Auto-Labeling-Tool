@@ -240,12 +240,12 @@ class ModelManager:
                 except Exception as e:
                     print(f"Failed to download {model_config['name']}: {e}")
 
-        # Download SAM model for Smart Polygon tool (same pattern as YOLO)
+        # Download SAM2 Base model for Smart Polygon tool (best overall)
         sam_config = {
-            "id": "sam_b",
-            "name": "Segment Anything Model (Base)",
+            "id": "sam2_b",
+            "name": "SAM2 Base",
             "type": ModelType.INSTANCE_SEGMENTATION,
-            "model_name": "sam_b.pt",  # Base model - good speed/accuracy balance
+            "model_name": "sam2_b.pt",  # Better accuracy, good speed
         }
         
         sam_dir = self.models_dir / "sam"

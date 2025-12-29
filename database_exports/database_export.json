@@ -1,5 +1,5 @@
 {
-  "export_timestamp": "2025-12-29T14:35:45.805452",
+  "export_timestamp": "2025-12-29T15:46:52.905678",
   "database_path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\database.db",
   "projects": [
     {
@@ -22,7 +22,7 @@
           "name": "animal",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-21 16:42:50",
-          "updated_at": "2025-12-29 13:23:32.043119",
+          "updated_at": "2025-12-29 14:07:39.290495",
           "statistics": {
             "total_images": 3,
             "labeled_images": 3,
@@ -46,7 +46,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-12-29 13:23:32.034677",
+              "updated_at": "2025-12-29 14:04:52.587335",
               "file_exists": false
             },
             {
@@ -65,7 +65,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-12-24 11:11:25.066062",
+              "updated_at": "2025-12-29 14:06:33.011939",
               "file_exists": false
             },
             {
@@ -84,7 +84,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-12-24 11:11:25.067067",
+              "updated_at": "2025-12-29 14:07:39.282438",
               "file_exists": false
             }
           ]
@@ -94,7 +94,7 @@
           "name": "Reject",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-22 07:07:14",
-          "updated_at": "2025-12-29 13:34:58.704508",
+          "updated_at": "2025-12-29 14:31:38.355374",
           "statistics": {
             "total_images": 1,
             "labeled_images": 1,
@@ -118,7 +118,7 @@
               "is_verified": false,
               "annotation_count": 9,
               "created_at": "2025-09-22 07:07:14",
-              "updated_at": "2025-12-29 13:34:58.695245",
+              "updated_at": "2025-12-29 14:31:38.335936",
               "file_exists": false
             }
           ]
@@ -632,7 +632,7 @@
         "total_images": 22,
         "labeled_images": 22,
         "unlabeled_images": 0,
-        "annotations": 97
+        "annotations": 98
       },
       "datasets": [
         {
@@ -640,12 +640,12 @@
           "name": "external_square",
           "description": "Images uploaded to Sensore di Forza external",
           "created_at": "2025-09-30 09:08:38",
-          "updated_at": "2025-11-10 10:22:21.127966",
+          "updated_at": "2025-12-29 14:46:20.065475",
           "statistics": {
             "total_images": 12,
             "labeled_images": 12,
             "unlabeled_images": 0,
-            "annotations": 87
+            "annotations": 88
           },
           "images": [
             {
@@ -664,7 +664,7 @@
               "is_verified": false,
               "annotation_count": 8,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:20.939652",
+              "updated_at": "2025-12-29 14:46:19.715137",
               "file_exists": false
             },
             {
@@ -683,7 +683,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:20.961496",
+              "updated_at": "2025-12-29 14:46:19.733909",
               "file_exists": false
             },
             {
@@ -702,7 +702,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:20.973353",
+              "updated_at": "2025-12-29 14:46:19.762052",
               "file_exists": false
             },
             {
@@ -721,7 +721,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:21.001903",
+              "updated_at": "2025-12-29 14:46:19.773273",
               "file_exists": false
             },
             {
@@ -740,7 +740,7 @@
               "is_verified": false,
               "annotation_count": 8,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:21.014477",
+              "updated_at": "2025-12-29 14:46:19.786437",
               "file_exists": false
             },
             {
@@ -759,7 +759,7 @@
               "is_verified": false,
               "annotation_count": 9,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:21.028622",
+              "updated_at": "2025-12-29 14:46:19.806117",
               "file_exists": false
             },
             {
@@ -778,7 +778,7 @@
               "is_verified": false,
               "annotation_count": 8,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:21.039860",
+              "updated_at": "2025-12-29 14:46:19.821607",
               "file_exists": false
             },
             {
@@ -795,9 +795,9 @@
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
-              "annotation_count": 9,
+              "annotation_count": 10,
               "created_at": "2025-09-30 09:08:39",
-              "updated_at": "2025-11-10 10:22:21.052690",
+              "updated_at": "2025-12-29 14:46:19.860379",
               "file_exists": false
             },
             {
@@ -816,7 +816,7 @@
               "is_verified": false,
               "annotation_count": 6,
               "created_at": "2025-09-30 09:08:39",
-              "updated_at": "2025-11-10 10:22:21.064599",
+              "updated_at": "2025-12-29 14:46:19.880979",
               "file_exists": false
             },
             {
@@ -835,7 +835,7 @@
               "is_verified": false,
               "annotation_count": 6,
               "created_at": "2025-09-30 09:08:39",
-              "updated_at": "2025-11-10 10:22:21.076147",
+              "updated_at": "2025-12-29 14:46:20.025966",
               "file_exists": false
             },
             {
@@ -854,7 +854,7 @@
               "is_verified": false,
               "annotation_count": 6,
               "created_at": "2025-09-30 09:08:39",
-              "updated_at": "2025-11-10 10:22:21.088017",
+              "updated_at": "2025-12-29 14:46:20.038659",
               "file_exists": false
             },
             {
@@ -873,7 +873,7 @@
               "is_verified": false,
               "annotation_count": 6,
               "created_at": "2025-09-30 09:08:39",
-              "updated_at": "2025-11-10 10:22:21.114226",
+              "updated_at": "2025-12-29 14:46:20.050693",
               "file_exists": false
             }
           ]
@@ -1105,7 +1105,7 @@
           "name": "internal_square",
           "description": "Images uploaded to Sensore di Forza internal",
           "created_at": "2025-09-29 13:27:16",
-          "updated_at": "2025-09-30 08:14:14.520208",
+          "updated_at": "2025-12-29 14:36:12.283644",
           "statistics": {
             "total_images": 4,
             "labeled_images": 4,
@@ -1129,7 +1129,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-29 13:27:16",
-              "updated_at": "2025-09-30 08:14:14.479211",
+              "updated_at": "2025-12-29 14:36:12.213034",
               "file_exists": false
             },
             {
@@ -1148,7 +1148,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-29 13:27:16",
-              "updated_at": "2025-09-30 08:14:14.490207",
+              "updated_at": "2025-12-29 14:36:12.227684",
               "file_exists": false
             },
             {
@@ -1167,7 +1167,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-29 13:27:16",
-              "updated_at": "2025-09-30 08:14:14.500208",
+              "updated_at": "2025-12-29 14:36:12.247254",
               "file_exists": false
             },
             {
@@ -1186,7 +1186,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-29 13:27:16",
-              "updated_at": "2025-09-30 08:14:14.510208",
+              "updated_at": "2025-12-29 14:36:12.264912",
               "file_exists": false
             }
           ]
@@ -1570,7 +1570,7 @@
     "total_projects": 6,
     "total_datasets": 10,
     "total_images": 69,
-    "total_annotations": 349,
+    "total_annotations": 350,
     "labeled_images": 69,
     "unlabeled_images": 0
   }
