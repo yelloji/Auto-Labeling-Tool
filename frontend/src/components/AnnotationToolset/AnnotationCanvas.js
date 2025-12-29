@@ -1221,61 +1221,84 @@ const AnnotationCanvas = ({
       <smartPolygonTool.ProcessingIndicator />
 
       {/* Smart Polygon Controls */}
-      {activeTool === 'smart_polygon' && smartPolygonTool.editingMode && (
-        <div style={{
-          position: 'absolute',
-          bottom: 20,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          gap: '8px',
-          background: 'rgba(0, 0, 0, 0.8)',
-          padding: '8px 16px',
-          borderRadius: '8px',
-          zIndex: 1000
-        }}>
-          <button
-            onClick={() => {
-              logUserClick('AnnotationCanvas', 'smart_polygon_complete_button', {
-                imageId,
-                activeTool
-              });
-              smartPolygonTool.completePolygon();
-            }}
-            style={{
-              background: '#52c41a',
-              color: 'white',
-              border: 'none',
-              padding: '6px 12px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            ✓ Complete
-          </button>
-          <button
-            onClick={() => {
-              logUserClick('AnnotationCanvas', 'smart_polygon_cancel_button', {
-                imageId,
-                activeTool
-              });
-              smartPolygonTool.cancelPolygon();
-            }}
-            style={{
-              background: '#ff4d4f',
-              color: 'white',
-              border: 'none',
-              padding: '6px 12px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            ✕ Cancel
-          </button>
-        </div>
-      )}
+      {activeTool === 'smart_polygon' && smartPolygonTool.editingMode && smartPolygonTool.currentPolygon && (() => {
+        const points = smartPolygonTool.currentPolygon.points;
+        if (!points || points.length === 0) return null;
+
+        // Calculate bounding box in image coordinates
+        const minX = Math.min(...points.map(p => p.x));
+        const maxX = Math.max(...points.map(p => p.x));
+        const maxY = Math.max(...points.map(p => p.y));
+
+        // Convert to screen coordinates
+        const scale = zoomLevel / 100;
+        const screenMinX = imagePosition.x + (minX * scale);
+        const screenMaxX = imagePosition.x + (maxX * scale);
+        const screenMaxY = imagePosition.y + (maxY * scale);
+
+        // Position the dialog below the polygon
+        const centerX = (screenMinX + screenMaxX) / 2;
+        const dialogTop = screenMaxY + 20;
+
+        return (
+          <div style={{
+            position: 'absolute',
+            top: Math.min(dialogTop, (canvasSize.height || 600) - 60), // Keep on screen
+            left: Math.max(100, Math.min(centerX, (canvasSize.width || 800) - 100)), // Keep on screen
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            gap: '8px',
+            background: 'rgba(0, 0, 0, 0.85)',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            zIndex: 1000,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+
+            <button
+              onClick={() => {
+                logUserClick('AnnotationCanvas', 'smart_polygon_complete_button', {
+                  imageId,
+                  activeTool
+                });
+                smartPolygonTool.completePolygon();
+              }}
+              style={{
+                background: '#52c41a',
+                color: 'white',
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              ✓ Complete
+            </button>
+            <button
+              onClick={() => {
+                logUserClick('AnnotationCanvas', 'smart_polygon_cancel_button', {
+                  imageId,
+                  activeTool
+                });
+                smartPolygonTool.cancelPolygon();
+              }}
+              style={{
+                background: '#ff4d4f',
+                color: 'white',
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              ✕ Cancel
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Polygon drawing instructions */}
       {activeTool === 'polygon' && polygonPoints.length > 0 && (() => {
