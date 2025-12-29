@@ -7,12 +7,13 @@ html {
 
 /* Ant Design Vector Overrides */
 .vector-select .ant-select-selector {
-  font-size: 0.875rem !important;
+  font-size: 0.8125rem !important;
 }
 
 .vector-select-dropdown .ant-select-item {
-  font-size: 0.875rem !important;
-  min-height: 2rem !important;
+  font-size: 0.8125rem !important;
+  min-height: 1.75rem !important;
+  padding: 0.25rem 0.5rem !important;
 }
 
 

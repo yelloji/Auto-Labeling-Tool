@@ -472,7 +472,7 @@ const ValidationView = ({ training }) => {
         if (loading && !activeExperiment) return <Skeleton active paragraph={{ rows: 8 }} />;
         if (!activeExperiment || !activeExperiment.confusion_matrix || activeExperiment.confusion_matrix.length === 0) {
             return (
-                <div className="v-heatmap-placeholder" style={{ padding: '40px 0', border: '1px dashed #d9d9d9', borderRadius: 8, textAlign: 'center' }}>
+                <div className="v-heatmap-placeholder" style={{ padding: '2.5rem 0', border: '0.0625rem dashed #d9d9d9', borderRadius: '0.5rem', textAlign: 'center' }}>
                     <Empty description="No confusion matrix data available for this experiment." />
                 </div>
             );
@@ -554,10 +554,10 @@ const ValidationView = ({ training }) => {
 
     return (
         <div className="validation-view-container">
-            <Row gutter={[12, 12]} style={{ height: '100%', margin: 0 }}>
+            <Row gutter={0} style={{ height: '100%', margin: 0 }}>
                 {/* Main Content Area (Config + Results) */}
                 <Col span={19}>
-                    <Row gutter={[12, 12]}>
+                    <Row gutter={0}>
                         {/* Left Sidebar - Configuration */}
                         <Col span={7}>
                             <Card
@@ -605,18 +605,18 @@ const ValidationView = ({ training }) => {
                                     </div>
                                 }
                             >
-                                <div style={{ marginBottom: 16 }}>
-                                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                                         Configure validation settings to fine-tune how the model evaluates on the dataset.
                                     </Text>
                                 </div>
-                                <div className="v-form-item" style={{ marginBottom: 16 }}>
+                                <div className="v-form-item" style={{ marginBottom: '1rem' }}>
                                     <Tooltip title="Unique name to identify this validation run. Helps in comparing results later.">
                                         <Text strong style={{ cursor: 'help' }}>Experiment Name</Text>
                                     </Tooltip>
                                     <Input
                                         value={params.name}
-                                        style={{ marginTop: 4 }}
+                                        style={{ marginTop: '0.25rem' }}
                                         onChange={e => updateParam('name', e.target.value)}
                                         placeholder="Enter experiment name..."
                                         autoComplete="off"
@@ -624,13 +624,13 @@ const ValidationView = ({ training }) => {
                                     />
                                 </div>
 
-                                <div className="v-form-item" style={{ marginBottom: 16 }}>
+                                <div className="v-form-item" style={{ marginBottom: '1rem' }}>
                                     <Tooltip title="Best: Uses the model state with highest metrics. Last: Uses the final state from training.">
                                         <Text strong style={{ cursor: 'help' }}>Select Validation Model</Text>
                                     </Tooltip>
                                     <Select
                                         value={params.weights_type}
-                                        style={{ width: '100%', marginTop: 4 }}
+                                        style={{ width: '100%', marginTop: '0.25rem' }}
                                         onChange={v => updateParam('weights_type', v)}
                                         disabled={running}
                                     >
@@ -640,13 +640,13 @@ const ValidationView = ({ training }) => {
                                 </div>
 
                                 {training?.taskType === 'segmentation' && (
-                                    <div className="v-form-item" style={{ marginBottom: 12 }}>
+                                    <div className="v-form-item" style={{ marginBottom: '0.75rem' }}>
                                         <Tooltip title="Detection: Validates bounding boxes. Segmentation: Validates pixel-level masks.">
                                             <Text strong style={{ cursor: 'help' }}>Validation Task</Text>
                                         </Tooltip>
                                         <Select
                                             value={params.task}
-                                            style={{ width: '100%', marginTop: 4 }}
+                                            style={{ width: '100%', marginTop: '0.25rem' }}
                                             onChange={v => updateParam('task', v)}
                                             disabled={running}
                                         >
@@ -662,7 +662,7 @@ const ValidationView = ({ training }) => {
                                     </Tooltip>
                                     <Select
                                         value={params.dataset_source}
-                                        style={{ width: '100%', marginTop: 4 }}
+                                        style={{ width: '100%', marginTop: '0.25rem' }}
                                         onChange={v => updateParam('dataset_source', v)}
                                         disabled={running}
                                     >
@@ -672,7 +672,7 @@ const ValidationView = ({ training }) => {
                                     </Select>
                                 </div>
 
-                                <div className="v-form-item" style={{ marginTop: 12 }}>
+                                <div className="v-form-item" style={{ marginTop: '0.75rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <Tooltip title="Minimum probability required for a detection. Lower values find more objects but may increase false positives (noise).">
                                             <Text strong style={{ cursor: 'help' }}>Confidence</Text>
@@ -688,13 +688,13 @@ const ValidationView = ({ training }) => {
                                     <Slider
                                         min={0.01} max={1.0} step={0.01}
                                         value={params.confidence}
-                                        style={{ margin: '8px 0' }}
+                                        style={{ margin: '0.5rem 0' }}
                                         onChange={v => updateParam('confidence', v)}
                                         disabled={running}
                                     />
                                 </div>
 
-                                <div className="v-form-item" style={{ marginTop: 12 }}>
+                                <div className="v-form-item" style={{ marginTop: '0.75rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <Tooltip title="NMS Overlap threshold. Lower values are stricter and reduce duplicate detections for the same object.">
                                             <Text strong style={{ cursor: 'help' }}>IoU Threshold</Text>
@@ -710,20 +710,20 @@ const ValidationView = ({ training }) => {
                                     <Slider
                                         min={0.01} max={1.0} step={0.01}
                                         value={params.iou_threshold}
-                                        style={{ margin: '8px 0' }}
+                                        style={{ margin: '0.5rem 0' }}
                                         onChange={v => updateParam('iou_threshold', v)}
                                         disabled={running}
                                     />
                                 </div>
 
-                                <div className="v-form-item" style={{ marginTop: 12 }}>
+                                <div className="v-form-item" style={{ marginTop: '0.75rem' }}>
                                     <Tooltip title="Pixel resolution for validation. Matches the model's training size for best results.">
                                         <Text strong style={{ cursor: 'help' }}>Image Size</Text>
                                     </Tooltip>
                                     <InputNumber
                                         min={32} step={32}
                                         value={params.imgsz}
-                                        style={{ width: '100%', marginTop: 4 }}
+                                        style={{ width: '100%', marginTop: '0.25rem' }}
                                         onChange={v => updateParam('imgsz', v)}
                                         placeholder={`Model default: ${training?.imgsz || 640}`}
                                         disabled={running}
@@ -738,7 +738,7 @@ const ValidationView = ({ training }) => {
                                     className="v-run-btn"
                                     onClick={handleRunValidation}
                                     loading={running}
-                                    style={{ marginTop: 24 }}
+                                    style={{ marginTop: '1.5rem' }}
                                 >
                                     {running ? 'Validating...' : 'Run Validation'}
                                 </Button>
@@ -748,15 +748,15 @@ const ValidationView = ({ training }) => {
                         {/* Middle Content - KPIs & Heatmap */}
                         <Col span={17}>
                             <div className="v-results-panel">
-                                <div style={{ marginBottom: 16, padding: '0 4px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div style={{ marginBottom: '1rem', padding: '0 0.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                     <div>
-                                        <Title level={5} style={{ marginBottom: 4 }}>
+                                        <Title level={5} style={{ marginBottom: '0.25rem' }}>
                                             {activeExperiment?.name ? `Experiment: ${activeExperiment.name}` : 'Validation Performance'}
-                                            {activeExperiment?.status === 'running' && <Badge status="processing" text="Running..." style={{ marginLeft: 12, fontSize: '12px' }} />}
-                                            {activeExperiment?.status === 'completed' && <Badge status="success" text="Completed" style={{ marginLeft: 12, fontSize: '12px' }} />}
-                                            {activeExperiment?.status === 'failed' && <Badge status="error" text="Failed" style={{ marginLeft: 12, fontSize: '12px' }} />}
+                                            {activeExperiment?.status === 'running' && <Badge status="processing" text="Running..." style={{ marginLeft: '0.75rem', fontSize: '0.75rem' }} />}
+                                            {activeExperiment?.status === 'completed' && <Badge status="success" text="Completed" style={{ marginLeft: '0.75rem', fontSize: '0.75rem' }} />}
+                                            {activeExperiment?.status === 'failed' && <Badge status="error" text="Failed" style={{ marginLeft: '0.75rem', fontSize: '0.75rem' }} />}
                                         </Title>
-                                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                                        <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                                             {activeExperiment?.name
                                                 ? `Viewing results for ${activeExperiment.name}. Run on ${new Date(activeExperiment.created_at).toLocaleString()}.`
                                                 : 'Performance scores showing how well your model detects objects. Higher values (closer to 100%) indicate better accuracy.'
@@ -798,8 +798,8 @@ const ValidationView = ({ training }) => {
                                     }
                                     extra={<Space><Button icon={<SwapOutlined />} disabled={experiments.length < 2}>Compare</Button></Space>}
                                 >
-                                    <div style={{ marginBottom: 12 }}>
-                                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                                    <div style={{ marginBottom: '0.75rem' }}>
+                                        <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                                             Visual heatmap showing prediction accuracy. Diagonal cells show correct predictions, off-diagonal shows confusion between classes.
                                         </Text>
                                     </div>
@@ -810,7 +810,7 @@ const ValidationView = ({ training }) => {
                     </Row>
 
                     {/* Wide Row - Per Class Performance */}
-                    <Row style={{ marginTop: 12 }}>
+                    <Row style={{ marginTop: '0.75rem' }}>
                         <Col span={24}>
                             <Card
                                 className="v-table-card"
@@ -820,8 +820,8 @@ const ValidationView = ({ training }) => {
                                     </Tooltip>
                                 }
                             >
-                                <div style={{ marginBottom: 12 }}>
-                                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                                <div style={{ marginBottom: '0.75rem' }}>
+                                    <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                                         Granular analysis of metrics filtered by individual object classes.
                                     </Text>
                                 </div>
@@ -849,8 +849,8 @@ const ValidationView = ({ training }) => {
                         }
                         bodyStyle={{ padding: 0 }}
                     >
-                        <div style={{ padding: '8px 16px', borderBottom: '1px solid #f0f0f0' }}>
-                            <Text type="secondary" style={{ fontSize: '11px' }}>
+                        <div style={{ padding: '0.5rem 1rem', borderBottom: '0.0625rem solid #f0f0f0' }}>
+                            <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
                                 Track and compare previous validation runs to find the best settings for your model.
                             </Text>
                         </div>
@@ -871,13 +871,13 @@ const ValidationView = ({ training }) => {
                                                     <CheckCircleOutlined style={{ color: '#52c41a' }} />}
                                         </div>
                                         {item.name && (
-                                            <div style={{ fontSize: 10, color: '#8c8c8c' }}>
+                                            <div style={{ fontSize: '0.625rem', color: '#8c8c8c' }}>
                                                 {new Date(item.created_at).toLocaleTimeString()}
                                             </div>
                                         )}
-                                        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                                            <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>mAP: {item.validation_metrics?.map50?.toFixed(2) || 'N/A'}</Tag>
-                                            <Tag color="cyan" style={{ fontSize: 10, margin: 0 }}>{item.dataset_source}</Tag>
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                            <Tag color="blue" style={{ fontSize: '0.625rem', margin: 0 }}>mAP: {item.validation_metrics?.map50?.toFixed(2) || 'N/A'}</Tag>
+                                            <Tag color="cyan" style={{ fontSize: '0.625rem', margin: 0 }}>{item.dataset_source}</Tag>
                                         </div>
                                     </div>
                                     <Space className="v-history-actions">

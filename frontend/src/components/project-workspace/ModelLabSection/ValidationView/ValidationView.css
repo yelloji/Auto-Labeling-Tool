@@ -1,8 +1,20 @@
 .validation-view-container {
     height: 100%;
-    padding: 0px 2px;
+    padding: 0 0.25rem;
     background: transparent !important;
     overflow-y: auto;
+}
+
+/* Global Fluid Gutter System */
+.validation-view-container .ant-row {
+    margin-left: -0.375rem !important;
+    margin-right: -0.375rem !important;
+    row-gap: 0.75rem !important;
+}
+
+.validation-view-container .ant-col {
+    padding-left: 0.375rem !important;
+    padding-right: 0.375rem !important;
 }
 
 /* Premium Gradients */
@@ -25,11 +37,11 @@
 .v-config-panel,
 .v-history-panel {
     height: 100%;
-    max-height: 850px;
-    /* Locked to 850px as requested */
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-    border: 1px solid #f0f0f0;
+    max-height: 53.125rem;
+    /* 850px converted to rem */
+    border-radius: 0.75rem;
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.04);
+    border: 0.0625rem solid #f0f0f0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -37,7 +49,7 @@
 
 .v-config-panel .ant-card-body,
 .v-history-panel .ant-card-body {
-    padding: 12px !important;
+    padding: 0.75rem !important;
     overflow-y: auto;
     /* Internal scroll */
     flex: 1;
@@ -45,23 +57,22 @@
 
 .v-config-panel .ant-card-head,
 .v-history-panel .ant-card-head {
-    min-height: 40px;
-    padding: 0 12px;
-    font-size: 14px;
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
 }
 
 .v-results-panel {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 0.75rem;
 }
 
 /* KPI Grid */
 .v-kpi-grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
-    margin-bottom: 4px;
+    gap: 0.25rem;
+    margin-bottom: 0.25rem;
 }
 
 .v-kpi-grid-10 {
@@ -71,8 +82,8 @@
 
 /* Stat Cards */
 .v-stat-card {
-    border-radius: 10px;
-    border: 1px solid #eef0f2;
+    border-radius: 0.625rem;
+    border: 0.0625rem solid #eef0f2;
     background: white;
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     position: relative;
@@ -81,28 +92,28 @@
 }
 
 .v-stat-card .ant-card-body {
-    padding: 10px 4px !important;
+    padding: 0.375rem 0.125rem !important;
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
 .v-stat-card:hover {
-    transform: translateY(-8px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+    transform: translateY(-0.5rem);
+    box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.1);
 }
 
 .v-stat-icon-circle {
-    width: 52px;
-    height: 52px;
+    width: 2.625rem;
+    height: 2.625rem;
     border-radius: 50%;
     background: linear-gradient(135deg, rgba(24, 144, 255, 0.1) 0%, rgba(114, 46, 209, 0.1) 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 12px;
+    margin-bottom: 0.5rem;
     position: relative;
-    border: 2px solid transparent;
+    border: 0.125rem solid transparent;
 }
 
 .v-stat-icon-circle::after {
@@ -124,37 +135,37 @@
 }
 
 .v-stat-icon {
-    font-size: 24px;
+    font-size: 1.5rem;
 }
 
 .v-stat-value {
-    font-size: 20px;
+    font-size: 1rem;
     font-weight: 700;
     color: #1f2937;
-    margin-bottom: 4px;
+    margin-bottom: 0.125rem;
 }
 
 .v-stat-label {
-    font-size: 10px;
+    font-size: 0.5625rem;
     color: #6b7280;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.0625rem;
     font-weight: 600;
 }
 
 /* Form Items */
 .v-form-item {
-    margin-bottom: 16px;
+    margin-bottom: 1rem;
 }
 
 /* Run Button */
 .v-run-btn {
-    height: 40px;
+    height: 2.5rem;
     font-weight: 600;
-    font-size: 15px;
+    font-size: 0.9375rem;
     border: none;
     background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%) !important;
-    box-shadow: 0 4px 10px rgba(24, 144, 255, 0.3);
+    box-shadow: 0 0.25rem 0.625rem rgba(24, 144, 255, 0.3);
 }
 
 .v-run-btn:hover {
@@ -165,18 +176,18 @@
 /* Heatmap & Table */
 .v-heatmap-card,
 .v-table-card {
-    margin-bottom: 16px;
-    border-radius: 12px;
+    margin-bottom: 1rem;
+    border-radius: 0.75rem;
 }
 
 .v-heatmap-placeholder {
-    height: 300px;
+    height: 18.75rem;
     display: flex;
     align-items: center;
     justify-content: center;
     background: #fafafa;
-    border: 1px dashed #d9d9d9;
-    border-radius: 8px;
+    border: 0.0625rem dashed #d9d9d9;
+    border-radius: 0.5rem;
 }
 
 /* Confusion Matrix Overhaul */
@@ -184,12 +195,12 @@
     display: flex;
     overflow: hidden;
     background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 12px;
-    padding: 16px;
-    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.07);
-    margin-top: 8px;
+    backdrop-filter: blur(0.625rem);
+    border: 0.0625rem solid rgba(255, 255, 255, 0.3);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    box-shadow: 0 0.5rem 2rem rgba(31, 38, 135, 0.07);
+    margin-top: 0.5rem;
     position: relative;
 }
 
@@ -197,19 +208,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
+    width: 2.5rem;
     background: #f8fafc;
-    border-radius: 8px 0 0 8px;
-    border-right: 2px solid #e2e8f0;
+    border-radius: 0.5rem 0 0 0.5rem;
+    border-right: 0.125rem solid #e2e8f0;
 }
 
 .v-axis-vertical-label {
     writing-mode: vertical-rl;
     transform: rotate(180deg);
     font-weight: 700;
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: #64748b;
-    letter-spacing: 2px;
+    letter-spacing: 0.125rem;
     text-transform: uppercase;
 }
 
@@ -223,24 +234,24 @@
 .v-axis-horizontal-label {
     text-align: center;
     font-weight: 700;
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: #64748b;
-    letter-spacing: 2px;
+    letter-spacing: 0.125rem;
     text-transform: uppercase;
-    padding-bottom: 12px;
+    padding-bottom: 0.75rem;
     background: #f8fafc;
-    border-bottom: 2px solid #e2e8f0;
-    margin-bottom: 4px;
+    border-bottom: 0.125rem solid #e2e8f0;
+    margin-bottom: 0.25rem;
 }
 
 .v-matrix-scroll {
     overflow: auto;
-    max-height: 500px;
+    max-height: 31.25rem;
 }
 
 .v-matrix {
     border-collapse: separate;
-    border-spacing: 2px;
+    border-spacing: 0.125rem;
     width: 100%;
 }
 
@@ -248,47 +259,45 @@
 .v-matrix td {
     border: none;
     padding: 0;
-    height: 48px;
-    width: 70px;
-    min-width: 70px;
+    height: 2.5rem;
+    width: 3.75rem;
     position: relative;
 }
 
 .v-matrix-header-cell {
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 600;
     color: #475569;
     background: #f1f5f9;
-    padding: 8px !important;
-    border-radius: 4px;
+    padding: 0.5rem !important;
+    border-radius: 0.25rem;
 }
 
 .v-class-label {
-    font-size: 11px;
+    font-size: 0.625rem;
     font-weight: 600;
     color: #475569;
     background: #f1f5f9 !important;
-    padding: 8px !important;
+    padding: 0.25rem !important;
     text-align: right !important;
-    width: 120px !important;
-    min-width: 120px !important;
-    border-radius: 4px;
+    width: 5.625rem !important;
+    border-radius: 0.25rem;
 }
 
 .v-matrix-cell {
     font-family: 'Inter', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 14px;
-    border-radius: 4px;
+    font-size: 0.875rem;
+    border-radius: 0.25rem;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .v-matrix-cell:hover {
     transform: scale(1.08);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 0.625rem 0.9375rem -0.1875rem rgba(0, 0, 0, 0.1), 0 0.25rem 0.375rem -0.125rem rgba(0, 0, 0, 0.05);
     z-index: 20;
-    outline: 2px solid #3b82f6;
-    border-radius: 6px;
+    outline: 0.125rem solid #3b82f6;
+    border-radius: 0.375rem;
 }
 
 .v-matrix-corner {
@@ -297,28 +306,27 @@
 
 /* Tooltip Enhancements */
 .v-matrix-tooltip {
-    padding: 8px;
-    min-width: 140px;
+    padding: 0.5rem;
 }
 
 .v-tooltip-row {
-    margin-bottom: 4px;
-    font-size: 12px;
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: 0.75rem;
 }
 
 .v-tooltip-divider {
-    height: 1px;
+    height: 0.0625rem;
     background: rgba(255, 255, 255, 0.2);
-    margin: 8px 0;
+    margin: 0.5rem 0;
 }
 
 /* History List Enhancements */
 .v-history-item.active {
     background: linear-gradient(to right, rgba(59, 130, 246, 0.1), transparent) !important;
-    border-left: 4px solid #3b82f6;
+    border-left: 0.25rem solid #3b82f6;
 }
 
 .v-history-actions {

@@ -4,8 +4,8 @@ import { logInfo, logError, logUserClick } from '../../utils/professional_logger
 
 const { Option } = Select;
 
-const AnnotationSplitControl = ({ 
-  currentSplit = 'train', 
+const AnnotationSplitControl = ({
+  currentSplit = 'train',
   onSplitChange,
   style = {}
 }) => {
@@ -59,14 +59,23 @@ const AnnotationSplitControl = ({
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', ...style }}>
-      <Tag color={getSplitColor(currentSplit)} style={{ margin: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, ...style }}>
+      <Tag color={getSplitColor(currentSplit)} style={{ margin: 0, padding: '0 0.5rem', fontSize: '0.8125rem', height: '1.625rem', lineHeight: '1.5rem' }}>
         {getSplitLabel(currentSplit).toUpperCase()}
       </Tag>
       <Select
         value={currentSplit}
         onChange={handleSplitChange}
-        style={{ width: 120 }}
+        style={{
+          minWidth: '6rem',
+          flexShrink: 0,
+          fontSize: '0.8125rem'
+        }}
+        dropdownStyle={{
+          zIndex: 3100
+        }}
+        className="vector-select"
+        popupClassName="vector-select-dropdown"
         size="small"
       >
         <Option value="train">Training</Option>

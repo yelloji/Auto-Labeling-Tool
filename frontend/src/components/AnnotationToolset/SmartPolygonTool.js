@@ -51,14 +51,14 @@ const SmartPolygonTool = ({
 
       // Convert screen coordinates to image coordinates for API
       const imageCoords = screenToImageCoords(clickX, clickY);
-      
+
       logInfo('app.frontend.interactions', 'smart_segmentation_started', 'Smart polygon segmentation started', {
         imageId,
         clickPoint: { x: clickX, y: clickY },
         imageCoords,
         imageSize
       });
-      
+
       console.log('🎯 Smart Polygon: Calling segmentation API', {
         imageId,
         clickPoint: { x: clickX, y: clickY },
@@ -86,10 +86,10 @@ const SmartPolygonTool = ({
       }
 
       const result = await response.json();
-      
+
       if (result.success && result.points && result.points.length > 0) {
         console.log('✅ Smart Polygon: Segmentation successful', result);
-        
+
         // Convert API points to our format
         const polygonPoints = result.points.map(point => ({
           x: point.x || point[0],
@@ -105,7 +105,7 @@ const SmartPolygonTool = ({
 
         setEditingMode(true);
         message.success(`Smart polygon generated with ${polygonPoints.length} points`);
-        
+
         logInfo('app.frontend.interactions', 'smart_segmentation_success', 'Smart polygon segmentation successful', {
           imageId,
           pointsCount: polygonPoints.length,
@@ -119,19 +119,19 @@ const SmartPolygonTool = ({
     } catch (error) {
       console.error('❌ Smart Polygon: Segmentation failed', error);
       message.error(`Smart segmentation failed: ${error.message}`);
-      
+
       logError('app.frontend.validation', 'smart_segmentation_failed', 'Smart polygon segmentation failed', {
         imageId,
         error: error.message,
         clickPoint: { x: clickX, y: clickY }
       });
-      
+
       // Fallback: Create a simple polygon around click point
       const fallbackPolygon = createFallbackPolygon(clickX, clickY);
       setCurrentPolygon(fallbackPolygon);
       setEditingMode(true);
       message.warning('Using fallback polygon - please adjust manually');
-      
+
       logInfo('app.frontend.ui', 'fallback_polygon_created', 'Fallback polygon created due to segmentation failure', {
         imageId,
         fallbackType: 'simple_square'
@@ -146,7 +146,7 @@ const SmartPolygonTool = ({
   const createFallbackPolygon = (centerX, centerY) => {
     const imageCoords = screenToImageCoords(centerX, centerY);
     const size = 50; // Default size in image coordinates
-    
+
     return {
       type: 'smart_polygon',
       points: [
@@ -163,7 +163,7 @@ const SmartPolygonTool = ({
   // Handle canvas click for smart segmentation
   const handleCanvasClick = useCallback(async (e) => {
     if (!isActive || processingRef.current) return;
-    
+
     // Log when tool becomes active (first click)
     if (!editingMode && !currentPolygon) {
       logInfo('app.frontend.interactions', 'smart_polygon_tool_activated', 'Smart polygon tool activated', {
@@ -180,8 +180,8 @@ const SmartPolygonTool = ({
 
     // Check if click is within image bounds
     const imageCoords = screenToImageCoords(clickX, clickY);
-    if (imageCoords.x < 0 || imageCoords.x > imageSize.width || 
-        imageCoords.y < 0 || imageCoords.y > imageSize.height) {
+    if (imageCoords.x < 0 || imageCoords.x > imageSize.width ||
+      imageCoords.y < 0 || imageCoords.y > imageSize.height) {
       message.warning('Please click within the image area');
       logInfo('app.frontend.validation', 'click_outside_image_bounds', 'User clicked outside image bounds', {
         imageId,
@@ -213,7 +213,7 @@ const SmartPolygonTool = ({
       const distance = Math.sqrt(
         Math.pow(clickX - screenPoint.x, 2) + Math.pow(clickY - screenPoint.y, 2)
       );
-      
+
       if (distance <= clickThreshold) {
         clickedPointIndex = i;
         break;
@@ -246,10 +246,10 @@ const SmartPolygonTool = ({
     for (let i = 0; i < points.length; i++) {
       const p1 = points[i];
       const p2 = points[(i + 1) % points.length];
-      
+
       // Calculate distance from click point to line segment
       const distance = distanceToLineSegment(clickImageCoords, p1, p2);
-      
+
       if (distance < minDistance && distance < 20) { // 20 pixel threshold in image coords
         minDistance = distance;
         insertIndex = i + 1;
@@ -259,14 +259,14 @@ const SmartPolygonTool = ({
     if (insertIndex >= 0) {
       const newPoints = [...points];
       newPoints.splice(insertIndex, 0, clickImageCoords);
-      
+
       setCurrentPolygon({
         ...currentPolygon,
         points: newPoints
       });
-      
+
       message.success('Point added to polygon');
-      
+
       logUserClick('polygon_point_added', 'User added point to polygon', {
         imageId,
         newPointCount: newPoints.length,
@@ -284,18 +284,18 @@ const SmartPolygonTool = ({
 
     const dot = A * C + B * D;
     const lenSq = C * C + D * D;
-    
+
     if (lenSq === 0) return Math.sqrt(A * A + B * B);
-    
+
     let param = dot / lenSq;
     param = Math.max(0, Math.min(1, param));
-    
+
     const xx = lineStart.x + param * C;
     const yy = lineStart.y + param * D;
-    
+
     const dx = point.x - xx;
     const dy = point.y - yy;
-    
+
     return Math.sqrt(dx * dx + dy * dy);
   };
 
@@ -307,12 +307,12 @@ const SmartPolygonTool = ({
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    
+
     const newImageCoords = screenToImageCoords(mouseX, mouseY);
-    
+
     const newPoints = [...currentPolygon.points];
     newPoints[draggedPointIndex] = newImageCoords;
-    
+
     setCurrentPolygon({
       ...currentPolygon,
       points: newPoints
@@ -333,7 +333,7 @@ const SmartPolygonTool = ({
   // Handle right-click to remove point
   const handleRightClick = useCallback((e) => {
     e.preventDefault();
-    
+
     if (!editingMode || !currentPolygon || currentPolygon.points.length <= 3) {
       message.warning('Polygon must have at least 3 points');
       return;
@@ -353,7 +353,7 @@ const SmartPolygonTool = ({
       const distance = Math.sqrt(
         Math.pow(clickX - screenPoint.x, 2) + Math.pow(clickY - screenPoint.y, 2)
       );
-      
+
       if (distance <= clickThreshold) {
         clickedPointIndex = i;
         break;
@@ -367,7 +367,7 @@ const SmartPolygonTool = ({
         points: newPoints
       });
       message.success('Point removed from polygon');
-      
+
       logUserClick('polygon_point_removed', 'User removed point from polygon', {
         imageId,
         remainingPoints: newPoints.length,
@@ -388,7 +388,7 @@ const SmartPolygonTool = ({
     }
 
     console.log('🎯 Smart Polygon: Completing polygon', currentPolygon);
-    
+
     const finalPolygon = {
       type: 'polygon',
       points: currentPolygon.points,
@@ -398,14 +398,14 @@ const SmartPolygonTool = ({
     };
 
     onPolygonComplete?.(finalPolygon);
-    
+
     // Reset state
     setCurrentPolygon(null);
     setEditingMode(false);
     setDraggedPointIndex(-1);
-    
+
     message.success('Smart polygon annotation completed!');
-    
+
     logInfo('app.frontend.interactions', 'smart_polygon_completed', 'Smart polygon annotation completed', {
       imageId,
       pointsCount: finalPolygon.points.length,
@@ -421,7 +421,7 @@ const SmartPolygonTool = ({
     setEditingMode(false);
     setDraggedPointIndex(-1);
     message.info('Polygon editing cancelled');
-    
+
     logInfo('app.frontend.interactions', 'polygon_editing_cancelled', 'Polygon editing cancelled by user', {
       imageId
     });
@@ -432,7 +432,7 @@ const SmartPolygonTool = ({
     if (!currentPolygon || !currentPolygon.points || currentPolygon.points.length === 0) return;
 
     const points = currentPolygon.points;
-    
+
     // Draw polygon fill and stroke
     ctx.beginPath();
     points.forEach((point, index) => {
@@ -444,23 +444,24 @@ const SmartPolygonTool = ({
       }
     });
     ctx.closePath();
-    
+
     // Style based on confidence
+    const baseRem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
     const alpha = Math.max(0.1, currentPolygon.confidence || 0.5);
     ctx.fillStyle = `rgba(82, 196, 26, ${alpha * 0.2})`;
     ctx.strokeStyle = `rgba(82, 196, 26, ${alpha})`;
-    ctx.lineWidth = 2;
-    
+    ctx.lineWidth = 0.125 * baseRem; // 0.125rem
+
     ctx.fill();
     ctx.stroke();
 
     // Draw control points
     points.forEach((point, index) => {
       const screenPoint = imageToScreenCoords(point.x, point.y);
-      
+
       ctx.beginPath();
-      ctx.arc(screenPoint.x, screenPoint.y, 6, 0, 2 * Math.PI);
-      
+      ctx.arc(screenPoint.x, screenPoint.y, 0.375 * baseRem, 0, 2 * Math.PI);
+
       if (index === draggedPointIndex) {
         ctx.fillStyle = '#ff4d4f';
         ctx.strokeStyle = '#fff';
@@ -468,8 +469,8 @@ const SmartPolygonTool = ({
         ctx.fillStyle = '#52c41a';
         ctx.strokeStyle = '#fff';
       }
-      
-      ctx.lineWidth = 2;
+
+      ctx.lineWidth = 0.125 * baseRem;
       ctx.fill();
       ctx.stroke();
     });
@@ -481,17 +482,17 @@ const SmartPolygonTool = ({
     handleMouseMove,
     handleMouseUp,
     handleRightClick,
-    
+
     // Rendering function
     renderPolygon,
-    
+
     // State and actions
     isProcessing,
     editingMode,
     currentPolygon,
     completePolygon,
     cancelPolygon,
-    
+
     // Processing indicator component
     ProcessingIndicator: () => isProcessing ? (
       <div style={{
@@ -501,11 +502,11 @@ const SmartPolygonTool = ({
         transform: 'translate(-50%, -50%)',
         background: 'rgba(0, 0, 0, 0.8)',
         color: 'white',
-        padding: '16px 24px',
-        borderRadius: '8px',
+        padding: '1rem 1.5rem',
+        borderRadius: '0.5rem',
         display: 'flex',
         alignItems: 'center',
-        gap: '12px',
+        gap: '0.75rem',
         zIndex: 1000
       }}>
         <Spin size="small" />

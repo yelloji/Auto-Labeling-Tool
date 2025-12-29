@@ -233,8 +233,8 @@ const AnnotationToolbox = ({
           toolLabel: tool.label,
           isActive: isActive,
           tooltip: tool.tooltip
-        }).catch(() => {});
-      } catch (_) {}
+        }).catch(() => { });
+      } catch (_) { }
       // reset guard shortly after to allow next activations
       setTimeout(() => { activatedRef.current = false; }, 200);
     };
@@ -253,7 +253,7 @@ const AnnotationToolbox = ({
         >
           <Button
             type={isActive ? 'primary' : 'default'}
-            icon={<tool.icon style={{ fontSize: '14px' }} />}
+            icon={<tool.icon style={{ fontSize: '1rem' }} />}
             data-tool-key={tool.key}
             onMouseDown={(e) => {
               console.log('🖱️ onMouseDown: ToolButton', tool.key, { button: e.button });
@@ -267,18 +267,19 @@ const AnnotationToolbox = ({
               activate();
             }}
             style={{
-              width: '40px',
-              height: '40px',
+              width: '3rem',
+              height: '3.25rem',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '1px',
+              gap: '0.125rem',
+              padding: '0.25rem 0',
               background: isActive ? '#3498db' : '#34495e',
               borderColor: isActive ? '#3498db' : '#001529',
               color: isActive ? '#fff' : '#bdc3c7',
-              borderRadius: '6px',
-              boxShadow: isActive ? '0 2px 6px rgba(52, 152, 219, 0.25)' : '0 1px 2px rgba(0,0,0,0.08)',
+              borderRadius: '0.375rem',
+              boxShadow: isActive ? '0 0.125rem 0.375rem rgba(52, 152, 219, 0.25)' : '0 0.0625rem 0.125rem rgba(0,0,0,0.08)',
               transition: 'all 0.2s ease',
               pointerEvents: 'auto',
               zIndex: 2100,
@@ -299,12 +300,14 @@ const AnnotationToolbox = ({
               }
             }}
           >
-            <Text 
-              style={{ 
-                fontSize: '8px', 
+            <Text
+              style={{
+                fontSize: '0.6875rem',
                 color: isActive ? '#fff' : '#bdc3c7',
                 fontWeight: '500',
-                lineHeight: 1
+                lineHeight: 1,
+                whiteSpace: 'nowrap',
+                marginTop: 'auto'
               }}
             >
               {tool.label}
@@ -332,7 +335,7 @@ const AnnotationToolbox = ({
           tooltip: tooltip,
           disabled: disabled,
           color: color
-        }).catch(() => {});
+        }).catch(() => { });
       } catch (e) {
         console.error('❌ ActionButton onClick error:', e);
       }
@@ -342,7 +345,7 @@ const AnnotationToolbox = ({
     return (
       <Tooltip title={tooltip} placement="left">
         <Button
-          icon={React.cloneElement(icon, { style: { fontSize: '12px' } })}
+          icon={React.cloneElement(icon, { style: { fontSize: '1rem' } })}
           onMouseDown={(e) => {
             console.log('🖱️ onMouseDown: ActionButton', tooltip, { button: e.button });
             e.preventDefault();
@@ -354,13 +357,13 @@ const AnnotationToolbox = ({
           }}
           disabled={disabled}
           style={{
-            width: '40px',
-            height: '32px',
+            width: '2.5rem',
+            height: '2rem',
             background: disabled ? '#2c3e50' : '#34495e',
             borderColor: '#001529',
             color: disabled ? '#7f8c8d' : '#bdc3c7',
-            borderRadius: '4px',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+            borderRadius: '0.25rem',
+            boxShadow: '0 0.0625rem 0.125rem rgba(0,0,0,0.08)',
             transition: 'all 0.2s ease',
             cursor: disabled ? 'not-allowed' : 'pointer'
           }}
@@ -392,33 +395,35 @@ const AnnotationToolbox = ({
         width: '100%',
         height: '100%',
         background: '#001529',
-        padding: '8px 6px',
+        padding: '0.375rem 0.25rem',
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px',
-        borderLeft: '1px solid #34495e'
+        gap: '0.25rem',
+        borderLeft: '0.0625rem solid #34495e'
       }}
       onClick={() => {
         // Container click to detect if pointer events are reaching the toolbox at all
         console.log('AnnotationToolbox container clicked');
       }}
-     >
-      {/* Section: Drawing Tools */}
-      <div>
-        <Text 
-          style={{ 
-            fontSize: '9px', 
-            color: '#95a5a6', 
-            fontWeight: '600',
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Text
+          style={{
+            fontSize: '0.75rem',
+            color: '#95a5a6',
+            fontWeight: '700',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '4px',
-            display: 'block'
+            letterSpacing: '0.03125rem',
+            marginBottom: '0.25rem',
+            display: 'block',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textAlign: 'center'
           }}
         >
           TOOLS
         </Text>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
           {tools.map(tool => (
             <ToolButton
               key={tool.key}
@@ -432,38 +437,40 @@ const AnnotationToolbox = ({
 
       <Divider style={{ margin: 0, borderColor: '#34495e' }} />
 
-      {/* Section: View Controls */}
-      <div>
-        <Text 
-          style={{ 
-            fontSize: '9px', 
-            color: '#95a5a6', 
-            fontWeight: '600',
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Text
+          style={{
+            fontSize: '0.75rem',
+            color: '#95a5a6',
+            fontWeight: '700',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '4px',
-            display: 'block'
+            letterSpacing: '0.03125rem',
+            marginBottom: '0.25rem',
+            display: 'block',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textAlign: 'center'
           }}
         >
           VIEW
         </Text>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
           <ActionButton
             icon={<ZoomInOutlined />}
             tooltip="Zoom In"
             onClick={handleZoomIn}
           />
-          
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
+
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             gap: '2px',
-            padding: '4px',
+            padding: '0.25rem 0.125rem',
             background: '#34495e',
-            borderRadius: '4px',
-            border: '1px solid #001529',
-            width: '40px'
+            borderRadius: '0.25rem',
+            border: '0.0625rem solid #001529',
+            width: '3rem'
           }}>
             <InputNumber
               value={zoomLevel}
@@ -472,16 +479,16 @@ const AnnotationToolbox = ({
               max={500}
               step={25}
               size="small"
-              style={{ 
-                width: '32px',
+              style={{
+                width: '2.75rem',
                 textAlign: 'center',
-                fontSize: '10px'
+                fontSize: '0.75rem'
               }}
               controls={false}
             />
-            <Text style={{ 
-              color: '#bdc3c7', 
-              fontSize: '8px',
+            <Text style={{
+              color: '#bdc3c7',
+              fontSize: '0.875rem',
               fontWeight: '500'
             }}>
               %
@@ -498,22 +505,24 @@ const AnnotationToolbox = ({
 
       <Divider style={{ margin: 0, borderColor: '#34495e' }} />
 
-      {/* Section: History */}
-      <div>
-        <Text 
-          style={{ 
-            fontSize: '9px', 
-            color: '#95a5a6', 
-            fontWeight: '600',
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Text
+          style={{
+            fontSize: '0.75rem',
+            color: '#95a5a6',
+            fontWeight: '700',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '4px',
-            display: 'block'
+            letterSpacing: '0.03125rem',
+            marginBottom: '0.25rem',
+            display: 'block',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textAlign: 'center'
           }}
         >
           HISTORY
         </Text>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
           <ActionButton
             icon={<UndoOutlined />}
             tooltip="Undo"
@@ -531,22 +540,24 @@ const AnnotationToolbox = ({
 
       <Divider style={{ margin: 0, borderColor: '#34495e' }} />
 
-      {/* Section: Actions */}
-      <div>
-        <Text 
-          style={{ 
-            fontSize: '9px', 
-            color: '#95a5a6', 
-            fontWeight: '600',
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Text
+          style={{
+            fontSize: '0.75rem',
+            color: '#95a5a6',
+            fontWeight: '700',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '4px',
-            display: 'block'
+            letterSpacing: '0.03125rem',
+            marginBottom: '0.25rem',
+            display: 'block',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textAlign: 'center'
           }}
         >
           ACTIONS
         </Text>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
           <ActionButton
             icon={<DeleteOutlined style={{ color: '#ff4d4f' }} />}
             tooltip="Delete Image"
