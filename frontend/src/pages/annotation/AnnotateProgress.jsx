@@ -556,17 +556,17 @@ const AnnotateProgress = () => {
   const tabItems = [
     {
       key: 'all',
-      label: <span style={{ fontSize: '0.875rem' }}>All Images ({totalImagesCount})</span>,
+      label: <span style={{ fontSize: '1.0625rem' }}>All Images ({totalImagesCount})</span>,
       children: null
     },
     {
       key: 'labeled',
-      label: <span style={{ fontSize: '0.875rem' }}>Annotated ({labeledImages})</span>,
+      label: <span style={{ fontSize: '1.0625rem' }}>Annotated ({labeledImages})</span>,
       children: null
     },
     {
       key: 'unlabeled',
-      label: <span style={{ fontSize: '0.875rem' }}>Unannotated ({totalImagesCount - labeledImages})</span>,
+      label: <span style={{ fontSize: '1.0625rem' }}>Unannotated ({totalImagesCount - labeledImages})</span>,
       children: null
     }
   ];
@@ -587,7 +587,7 @@ const AnnotateProgress = () => {
           <Button
             icon={<ArrowLeftOutlined />}
             onClick={handleGoBack}
-            style={{ marginBottom: '1.5rem' }}
+            style={{ marginBottom: '1.5rem', fontSize: '1.0625rem' }}
             type="text"
           >
             Back to Launcher
@@ -600,30 +600,30 @@ const AnnotateProgress = () => {
             title={
               <Space style={{ whiteSpace: 'nowrap' }}>
                 <FileImageOutlined style={{ color: '#1890ff' }} />
-                <Text strong style={{ whiteSpace: 'nowrap' }}>Dataset Info</Text>
+                <Text strong style={{ whiteSpace: 'nowrap', fontSize: '1.25rem' }}>Dataset Info</Text>
               </Space>
             }
           >
             <Space direction="vertical" size="small" style={{ width: '100%' }}>
               <div>
-                <Text type="secondary">Name:</Text>
+                <Text type="secondary" style={{ fontSize: '1.125rem' }}>Name:</Text>
                 <br />
-                <Text strong>{dataset?.name}</Text>
+                <Text strong style={{ whiteSpace: 'nowrap', fontSize: '1.25rem' }}>{dataset?.name}</Text>
               </div>
               <div>
-                <Text type="secondary">Created:</Text>
+                <Text type="secondary" style={{ fontSize: '1.125rem' }}>Created:</Text>
                 <br />
                 <Space style={{ whiteSpace: 'nowrap' }}>
                   <CalendarOutlined style={{ color: '#666' }} />
-                  <Text style={{ whiteSpace: 'nowrap' }}>{formatDate(dataset?.created_at)}</Text>
+                  <Text style={{ whiteSpace: 'nowrap', fontSize: '1.125rem' }}>{formatDate(dataset?.created_at)}</Text>
                 </Space>
               </div>
               <div>
-                <Text type="secondary">Assigned User:</Text>
+                <Text type="secondary" style={{ fontSize: '1.125rem' }}>Assigned User:</Text>
                 <br />
                 <Space style={{ whiteSpace: 'nowrap' }}>
                   <Avatar size="small" icon={<UserOutlined />} />
-                  <Text style={{ whiteSpace: 'nowrap' }}>Current User</Text>
+                  <Text style={{ whiteSpace: 'nowrap', fontSize: '1.125rem' }}>Current User</Text>
                 </Space>
               </div>
             </Space>
@@ -636,18 +636,18 @@ const AnnotateProgress = () => {
             title={
               <Space>
                 <TagOutlined style={{ color: '#52c41a' }} />
-                <Text strong>Progress Timeline</Text>
+                <Text strong style={{ fontSize: '1.25rem' }}>Progress Timeline</Text>
               </Space>
             }
           >
             <Space direction="vertical" size="small" style={{ width: '100%' }}>
               <div>
-                <Text type="secondary">Total Images:</Text>
+                <Text type="secondary" style={{ fontSize: '1.125rem' }}>Total Images:</Text>
                 <br />
-                <Text strong style={{ fontSize: '1.125rem' }}>{totalImagesCount}</Text>
+                <Text strong style={{ fontSize: '1.375rem' }}>{totalImagesCount}</Text>
               </div>
               <div>
-                <Text type="secondary">Completion:</Text>
+                <Text type="secondary" style={{ fontSize: '1.125rem' }}>Completion:</Text>
                 <br />
                 <Progress
                   percent={progressPercentage}
@@ -657,7 +657,7 @@ const AnnotateProgress = () => {
                     '100%': '#87d068',
                   }}
                 />
-                <Text style={{ fontSize: '0.75rem', color: '#666' }}>
+                <Text style={{ fontSize: '1.125rem', color: '#666' }}>
                   {labeledImages} of {totalImagesCount} images annotated
                 </Text>
               </div>
@@ -670,7 +670,7 @@ const AnnotateProgress = () => {
             title={
               <Space>
                 <EditOutlined style={{ color: '#722ed1' }} />
-                <Text strong>Annotation Instructions</Text>
+                <Text strong style={{ fontSize: '1.25rem' }}>Annotation Instructions</Text>
               </Space>
             }
             extra={
@@ -680,6 +680,7 @@ const AnnotateProgress = () => {
                   size="small"
                   icon={<EditOutlined />}
                   onClick={handleEditInstructions}
+                  style={{ fontSize: '1rem' }}
                 >
                   Edit
                 </Button>
@@ -690,6 +691,7 @@ const AnnotateProgress = () => {
                     size="small"
                     icon={<SaveOutlined />}
                     onClick={handleSaveInstructions}
+                    style={{ fontSize: '1rem' }}
                   >
                     Save
                   </Button>
@@ -698,6 +700,7 @@ const AnnotateProgress = () => {
                     size="small"
                     icon={<CloseOutlined />}
                     onClick={handleCancelEdit}
+                    style={{ fontSize: '0.8125rem' }}
                   >
                     Cancel
                   </Button>
@@ -718,7 +721,8 @@ const AnnotateProgress = () => {
                 style={{
                   margin: 0,
                   minHeight: '3.75rem',
-                  color: instructions.includes('Click edit') ? '#999' : '#333'
+                  color: instructions.includes('Click edit') ? '#999' : '#333',
+                  fontSize: '0.875rem'
                 }}
               >
                 {instructions}
@@ -746,11 +750,11 @@ const AnnotateProgress = () => {
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              fontSize: '1.25rem'
+              fontSize: '1.5rem'
             }}>
               🎯 Annotation Progress
             </Title>
-            <Text type="secondary" style={{ fontSize: '0.875rem', display: 'block' }}>
+            <Text type="secondary" style={{ fontSize: '1.125rem', display: 'block' }}>
               Track your annotation progress and manage image labeling
             </Text>
           </div>
@@ -795,7 +799,7 @@ const AnnotateProgress = () => {
           <Row gutter={[24, 16]} align="middle">
             <Col span={16}>
               <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                <Text strong style={{ fontSize: '0.875rem' }}>
+                <Text strong style={{ fontSize: '1.125rem' }}>
                   Overall Progress: {labeledImages} / {totalImagesCount} annotated
                 </Text>
                 <Progress
@@ -814,13 +818,13 @@ const AnnotateProgress = () => {
                   <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#52c41a' }}>
                     {labeledImages}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#666' }}>Labeled</div>
+                  <div style={{ fontSize: '1.125rem', color: '#666' }}>Labeled</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#faad14' }}>
                     {totalImagesCount - labeledImages}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#666' }}>Remaining</div>
+                  <div style={{ fontSize: '1.125rem', color: '#666' }}>Remaining</div>
                 </div>
               </Space>
             </Col>
@@ -856,7 +860,7 @@ const AnnotateProgress = () => {
           {imagesLoading ? (
             <div style={{ textAlign: 'center', padding: '2.5rem' }}>
               <Spin size="large" />
-              <div style={{ marginTop: '1rem' }}>Loading images...</div>
+              <div style={{ marginTop: '1rem', fontSize: '1.0625rem' }}>Loading images...</div>
             </div>
           ) : filteredImages.length === 0 ? (
             <Empty
@@ -952,7 +956,7 @@ const AnnotateProgress = () => {
                             <Text
                               strong
                               style={{
-                                fontSize: '0.875rem',
+                                fontSize: '1rem',
                                 display: 'block',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
@@ -965,7 +969,7 @@ const AnnotateProgress = () => {
                           </Tooltip>
                           <Text
                             type="secondary"
-                            style={{ fontSize: '0.75rem' }}
+                            style={{ fontSize: '1rem' }}
                           >
                             {image.width} × {image.height}
                           </Text>
@@ -1039,7 +1043,7 @@ const AnnotateProgress = () => {
                   </Space>
 
                   <div style={{ marginTop: '0.5rem' }}>
-                    <Text type="secondary">
+                    <Text type="secondary" style={{ fontSize: '1rem' }}>
                       Showing {((currentPage - 1) * imagesPerPage) + 1} - {Math.min(currentPage * imagesPerPage, totalFilteredImages)} of {totalFilteredImages} images
                     </Text>
                   </div>
@@ -1095,7 +1099,7 @@ const AnnotateProgress = () => {
         }
       >
         <div style={{ marginBottom: '1.5rem' }}>
-          <Title level={4}>Split Method</Title>
+          <Title level={4} style={{ fontSize: '1rem' }}>Split Method</Title>
           <Select
             value={splitMethod}
             onChange={handleSplitMethodChange}
@@ -1124,7 +1128,7 @@ const AnnotateProgress = () => {
               }
             ]}
           />
-          <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#666' }}>
+          <div style={{ marginTop: '0.5rem', fontSize: '1rem', color: '#666' }}>
             {splitMethod === 'use_existing' && 'Keep current split values in the database (for existing datasets)'}
             {splitMethod === 'assign_random' && 'Randomly assigns images to splits based on the percentages below'}
             {splitMethod === 'all_train' && 'Assigns all labeled images to the training set'}
@@ -1136,8 +1140,8 @@ const AnnotateProgress = () => {
         {/* Only show distribution controls for SPLIT IMAGES BETWEEN TRAIN/VALID/TEST option */}
         {splitMethod === 'assign_random' && (
           <div style={{ marginBottom: '1.5rem' }}>
-            <Title level={4}>Dataset Distribution</Title>
-            <Paragraph type="secondary">
+            <Title level={4} style={{ fontSize: '1rem' }}>Dataset Distribution</Title>
+            <Paragraph type="secondary" style={{ fontSize: '0.875rem' }}>
               Drag the sliders to adjust the dataset split:
               <ul style={{ marginTop: '0.5rem', marginBottom: 0 }}>
                 <li>First slider: End of training set</li>
@@ -1242,8 +1246,8 @@ const AnnotateProgress = () => {
         {/* Show appropriate message for other split methods */}
         {splitMethod === 'use_existing' && (
           <div style={{ marginBottom: '1.5rem' }}>
-            <Title level={4}>Using Existing Split</Title>
-            <Paragraph>
+            <Title level={4} style={{ fontSize: '1rem' }}>Using Existing Split</Title>
+            <Paragraph style={{ fontSize: '0.875rem' }}>
               This option will keep the current train/val/test assignments for all labeled images.
             </Paragraph>
           </div>
@@ -1251,8 +1255,8 @@ const AnnotateProgress = () => {
 
         {splitMethod === 'all_train' && (
           <div style={{ marginBottom: '1.5rem' }}>
-            <Title level={4}>All Images to Training Set</Title>
-            <Paragraph>
+            <Title level={4} style={{ fontSize: '1rem' }}>All Images to Training Set</Title>
+            <Paragraph style={{ fontSize: '0.875rem' }}>
               This option will assign all {totalLabeledImages} labeled images to the training set.
             </Paragraph>
           </div>
@@ -1260,8 +1264,8 @@ const AnnotateProgress = () => {
 
         {splitMethod === 'all_val' && (
           <div style={{ marginBottom: '1.5rem' }}>
-            <Title level={4}>All Images to Validation Set</Title>
-            <Paragraph>
+            <Title level={4} style={{ fontSize: '1rem' }}>All Images to Validation Set</Title>
+            <Paragraph style={{ fontSize: '0.875rem' }}>
               This option will assign all {totalLabeledImages} labeled images to the validation set.
             </Paragraph>
           </div>
@@ -1269,8 +1273,8 @@ const AnnotateProgress = () => {
 
         {splitMethod === 'all_test' && (
           <div style={{ marginBottom: '1.5rem' }}>
-            <Title level={4}>All Images to Test Set</Title>
-            <Paragraph>
+            <Title level={4} style={{ fontSize: '1rem' }}>All Images to Test Set</Title>
+            <Paragraph style={{ fontSize: '0.875rem' }}>
               This option will assign all {totalLabeledImages} labeled images to the test set.
             </Paragraph>
           </div>
@@ -1278,8 +1282,8 @@ const AnnotateProgress = () => {
 
         <Divider />
 
-        <Paragraph>
-          <Text strong>Note:</Text> {
+        <Paragraph style={{ fontSize: '0.875rem' }}>
+          <Text strong style={{ fontSize: '0.875rem' }}>Note:</Text> {
             splitMethod === 'assign_random'
               ? "This will assign all labeled images to the dataset splits according to the percentages you've set."
               : splitMethod === 'use_existing'
