@@ -14,6 +14,7 @@ const AnnotationCanvas = ({
   onAnnotationDelete,
   onImagePositionChange,
   onPolygonStateChange,
+  onToolChange, // New prop
   style = {}
 }) => {
   const canvasRef = useRef(null);
@@ -55,6 +56,7 @@ const AnnotationCanvas = ({
     imageUrl,
     imageId,
     onPolygonComplete: onShapeComplete,
+    onToolChange, // Pass to smart tool
     isActive: activeTool === 'smart_polygon',
     zoomLevel,
     imagePosition,
@@ -257,7 +259,7 @@ const AnnotationCanvas = ({
       polygonPointsCount: polygonPoints.length,
       activeTool
     });
-  }, [annotations, selectedAnnotation, currentShape, polygonPoints, activeTool, imagePosition, imageSize, zoomLevel, smartPolygonTool, imageId]);
+  }, [annotations, selectedAnnotation, currentShape, polygonPoints, activeTool, imagePosition, imageSize, zoomLevel, smartPolygonTool, smartPolygonTool.previewPolygon, smartPolygonTool.currentPolygon, imageId]);
 
   // Resize canvas to fit container
   const resizeCanvas = useCallback(() => {
@@ -952,6 +954,13 @@ const AnnotationCanvas = ({
         });
         onAnnotationSelect?.(null);
       }
+    } else if (activeTool === 'smart_polygon') {
+      logUserClick('AnnotationCanvas', 'smart_polygon_click', {
+        imageId,
+        zoomLevel,
+        isAltPressed: e.altKey
+      });
+      smartPolygonTool.handleCanvasClick(e);
     }
   }, [activeTool, annotations, onAnnotationSelect, zoomLevel, imagePosition, imageId, screenToImageCoords]);
 
@@ -1176,22 +1185,37 @@ const AnnotationCanvas = ({
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        cursor: activeTool === 'box' ? 'crosshair' :
-          activeTool === 'polygon' ? 'crosshair' :
-            activeTool === 'smart_polygon' ? 'crosshair' : 'default',
         ...style
       }}
     >
-      <canvas
-        ref={canvasRef}
+      <div
+        className="annotation-canvas-container"
         style={{
-          display: 'block',
-          width: canvasSize.width,
-          height: canvasSize.height,
-          backgroundColor: '#001529',
-          margin: '0 auto'
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          overflow: 'auto', // Changed from 'hidden' to allow scrolling for large images
+          cursor: activeTool === 'smart_polygon' ? 'pointer' : 'default'
         }}
-      />
+      >
+        <canvas
+          ref={canvasRef}
+          onMouseMove={(e) => {
+            if (activeTool === 'smart_polygon') smartPolygonTool.handleMouseMove(e);
+            else handleMouseMove(e);
+          }}
+          onMouseUp={(e) => {
+            if (activeTool === 'smart_polygon') smartPolygonTool.handleMouseUp(e);
+            else handleMouseUp(e);
+          }}
+          onClick={(e) => {
+            if (activeTool === 'smart_polygon') smartPolygonTool.handleCanvasClick(e);
+            // Standard tool clicks handled by mouseUp or specific canvas hooks
+          }}
+          onContextMenu={activeTool === 'smart_polygon' ? smartPolygonTool.handleRightClick : undefined}
+          style={{ display: 'block' }}
+        />
+      </div>
 
       {/* Smart Polygon Processing Indicator */}
       <smartPolygonTool.ProcessingIndicator />
@@ -1297,6 +1321,27 @@ const AnnotationCanvas = ({
         Tool: {activeTool} | Zoom: {zoomLevel}% | Annotations: {annotations.length}
         {activeTool === 'polygon' && polygonPoints.length > 0 && ` | Points: ${polygonPoints.length}`}
       </div>
+
+      {/* Smart Polygon Tool processing indicator */}
+      {smartPolygonTool.ProcessingIndicator && smartPolygonTool.ProcessingIndicator()}
+
+      {activeTool === 'smart_polygon' && !smartPolygonTool.isProcessing && (
+        <div style={{
+          position: 'absolute',
+          top: 70,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0, 0, 0, 0.65)',
+          color: 'white',
+          padding: '6px 12px',
+          borderRadius: '20px',
+          fontSize: '11px',
+          zIndex: 1000,
+          pointerEvents: 'none'
+        }}>
+          💡 Click to add positive • Alt+Click for negative • Full vertex control enabled
+        </div>
+      )}
     </div>
   );
 };

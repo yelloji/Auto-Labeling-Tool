@@ -1968,6 +1968,7 @@ const ManualLabeling = () => {
                 onAnnotationDelete={handleAnnotationDelete}
                 onImagePositionChange={setImagePosition}
                 onPolygonStateChange={handlePolygonStateChange}
+                onToolChange={setActiveTool}
                 style={{
                   maxWidth: '100%',
                   maxHeight: '100%',

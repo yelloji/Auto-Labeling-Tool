@@ -520,5 +520,51 @@
     "source_type": "training",
     "training_session_id": 18,
     "is_best": true
+  },
+  "sam_b": {
+    "id": "sam_b",
+    "name": "Segment Anything Model (Base)",
+    "type": "instance_segmentation",
+    "format": "pytorch",
+    "path": "models/sam/sam_b.pt",
+    "classes": [],
+    "input_size": [
+      1024,
+      1024
+    ],
+    "confidence_threshold": 0.5,
+    "iou_threshold": 0.45,
+    "description": "Segment Anything Model for Smart Polygon annotation",
+    "created_at": "2025-12-29T12:43:01.334577",
+    "is_custom": false,
+    "file_size": 375042383,
+    "is_ready": true,
+    "is_training": false,
+    "source_type": "custom",
+    "training_session_id": null,
+    "is_best": false
+  },
+  "sam_l": {
+    "id": "sam_l",
+    "name": "Segment Anything Model (Large)",
+    "type": "instance_segmentation",
+    "format": "pytorch",
+    "path": "models/sam/sam_l.pt",
+    "classes": [],
+    "input_size": [
+      1024,
+      1024
+    ],
+    "confidence_threshold": 0.5,
+    "iou_threshold": 0.45,
+    "description": "Segment Anything Model for Smart Polygon annotation",
+    "created_at": "2025-12-29T14:03:16.151258",
+    "is_custom": false,
+    "file_size": 1249524607,
+    "is_ready": true,
+    "is_training": false,
+    "source_type": "custom",
+    "training_session_id": null,
+    "is_best": false
   }
 }

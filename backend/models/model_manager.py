@@ -240,6 +240,53 @@ class ModelManager:
                 except Exception as e:
                     print(f"Failed to download {model_config['name']}: {e}")
 
+        # Download SAM model for Smart Polygon tool (same pattern as YOLO)
+        sam_config = {
+            "id": "sam_b",
+            "name": "Segment Anything Model (Base)",
+            "type": ModelType.INSTANCE_SEGMENTATION,
+            "model_name": "sam_b.pt",  # Base model - good speed/accuracy balance
+        }
+        
+        sam_dir = self.models_dir / "sam"
+        sam_dir.mkdir(parents=True, exist_ok=True)
+        
+        if sam_config["id"] not in self.models_info:
+            try:
+                print(f"Downloading {sam_config['name']}...")
+                from ultralytics import SAM
+                
+                # Trigger auto-download
+                model = SAM(sam_config["model_name"])
+                
+                # Copy to our local storage
+                model_path = sam_dir / sam_config["model_name"]
+                ckpt_path = getattr(model, 'ckpt_path', None)
+                if ckpt_path and os.path.exists(ckpt_path):
+                    shutil.copy2(ckpt_path, model_path)
+                    print(f"SAM model saved to {model_path}")
+                elif os.path.exists(sam_config["model_name"]):
+                    shutil.copy2(sam_config["model_name"], model_path)
+                
+                # Register SAM in model info
+                model_info = ModelInfo(
+                    id=sam_config["id"],
+                    name=sam_config["name"],
+                    type=sam_config["type"],
+                    format=ModelFormat.PYTORCH,
+                    path=str(model_path),
+                    classes=[],
+                    input_size=(1024, 1024),
+                    description="Segment Anything Model for Smart Polygon annotation",
+                    is_custom=False,
+                    created_at=datetime.now().isoformat(),
+                )
+                self._refresh_model_metadata(model_info)
+                self.models_info[sam_config["id"]] = model_info
+                print(f"✅ {sam_config['name']} ready!")
+            except Exception as e:
+                print(f"Failed to download {sam_config['name']}: {e}")
+
         self._save_models_config()
     
     def import_custom_model(

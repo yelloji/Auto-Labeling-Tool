@@ -1,14 +1,9 @@
 /**
  * SmartPolygonTool.js
- * Smart Polygon Tool with automatic segmentation and manual editing capabilities
- * 
- * Features:
- * - Click to auto-generate polygon around objects
- * - Manual polygon point editing (drag, add, remove)
- * - Integration with existing annotation system
+ * Smart Polygon Tool with automatic segmentation, refinement, and manual editing.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { message, Spin } from 'antd';
 import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
@@ -16,501 +11,415 @@ const SmartPolygonTool = ({
   imageUrl,
   imageId,
   onPolygonComplete,
+  onToolChange, // New prop
   isActive = false,
   zoomLevel = 100,
   imagePosition = { x: 0, y: 0 },
   imageSize = { width: 0, height: 0 }
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentPolygon, setCurrentPolygon] = useState(null);
+  const [currentPolygon, setCurrentPolygon] = useState(null); // High-res generated polygon
+  const [previewPolygon, setPreviewPolygon] = useState(null); // Blue hover preview
+  const [refinementPoints, setRefinementPoints] = useState([]); // [{x, y, label}]
   const [editingMode, setEditingMode] = useState(false);
   const [draggedPointIndex, setDraggedPointIndex] = useState(-1);
+  const [complexity, setComplexity] = useState(0.4); // For polygon smoothing
   const processingRef = useRef(false);
+  const lastHoverRequestRef = useRef(0);
 
-  // Convert screen coordinates to image coordinates
+  // --- Coordinate Conversions ---
   const screenToImageCoords = useCallback((screenX, screenY) => {
     const scale = zoomLevel / 100;
-    const imageX = (screenX - imagePosition.x) / scale;
-    const imageY = (screenY - imagePosition.y) / scale;
-    return { x: imageX, y: imageY };
+    return {
+      x: (screenX - imagePosition.x) / scale,
+      y: (screenY - imagePosition.y) / scale
+    };
   }, [zoomLevel, imagePosition]);
 
-  // Convert image coordinates to screen coordinates
   const imageToScreenCoords = useCallback((imageX, imageY) => {
     const scale = zoomLevel / 100;
-    const screenX = imagePosition.x + (imageX * scale);
-    const screenY = imagePosition.y + (imageY * scale);
-    return { x: screenX, y: screenY };
+    return {
+      x: imagePosition.x + (imageX * scale),
+      y: imagePosition.y + (imageY * scale)
+    };
   }, [zoomLevel, imagePosition]);
 
-  // Call backend segmentation API
-  const performSmartSegmentation = async (clickX, clickY) => {
+  // --- Core Segmentation Logic ---
+  const runSegmentation = async (points, isHover = false) => {
+    if (!imageId || points.length === 0) return;
+
     try {
-      setIsProcessing(true);
-      processingRef.current = true;
+      if (!isHover) {
+        setIsProcessing(true);
+        processingRef.current = true;
+      }
 
-      // Convert screen coordinates to image coordinates for API
-      const imageCoords = screenToImageCoords(clickX, clickY);
-
-      logInfo('app.frontend.interactions', 'smart_segmentation_started', 'Smart polygon segmentation started', {
-        imageId,
-        clickPoint: { x: clickX, y: clickY },
-        imageCoords,
-        imageSize
-      });
-
-      console.log('🎯 Smart Polygon: Calling segmentation API', {
-        imageId,
-        clickPoint: { x: clickX, y: clickY },
-        imageCoords,
-        imageSize
-      });
-
-      // Call backend segmentation endpoint
-      const response = await fetch('/api/segment-polygon', {
+      const response = await fetch(isHover ? '/api/segment-preview' : '/api/segment-polygon', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           image_id: imageId,
-          x: Math.round(imageCoords.x),
-          y: Math.round(imageCoords.y),
+          points: points,
+          complexity: complexity, // Pass smoothing detail
           image_width: imageSize.width,
           image_height: imageSize.height
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`Segmentation failed: ${response.status} ${response.statusText}`);
-      }
-
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
       const result = await response.json();
 
+      console.log('🔍 Smart Polygon API Response:', {
+        isHover,
+        success: result.success,
+        pointCount: result.points?.length || 0,
+        points: result.points,
+        confidence: result.confidence
+      });
+
       if (result.success && result.points && result.points.length > 0) {
-        console.log('✅ Smart Polygon: Segmentation successful', result);
+        const polyPoints = result.points.map(p => ({ x: p.x, y: p.y }));
 
-        // Convert API points to our format
-        const polygonPoints = result.points.map(point => ({
-          x: point.x || point[0],
-          y: point.y || point[1]
-        }));
+        console.log('🎨 Setting polygon:', { isHover, pointCount: polyPoints.length });
 
-        setCurrentPolygon({
-          type: 'smart_polygon',
-          points: polygonPoints,
-          confidence: result.confidence || 0.8,
-          algorithm: result.algorithm || 'auto'
-        });
-
-        setEditingMode(true);
-        message.success(`Smart polygon generated with ${polygonPoints.length} points`);
-
-        logInfo('app.frontend.interactions', 'smart_segmentation_success', 'Smart polygon segmentation successful', {
-          imageId,
-          pointsCount: polygonPoints.length,
-          confidence: result.confidence || 0.8,
-          algorithm: result.algorithm || 'auto'
-        });
-      } else {
-        throw new Error(result.error || 'No polygon points returned');
+        if (isHover) {
+          setPreviewPolygon({ points: polyPoints, confidence: result.confidence });
+        } else {
+          setCurrentPolygon({
+            type: 'smart_polygon',
+            points: polyPoints,
+            confidence: result.confidence || 0.8,
+            algorithm: result.algorithm || 'sam'
+          });
+          setEditingMode(true);
+        }
       }
-
     } catch (error) {
-      console.error('❌ Smart Polygon: Segmentation failed', error);
-      message.error(`Smart segmentation failed: ${error.message}`);
-
-      logError('app.frontend.validation', 'smart_segmentation_failed', 'Smart polygon segmentation failed', {
-        imageId,
-        error: error.message,
-        clickPoint: { x: clickX, y: clickY }
-      });
-
-      // Fallback: Create a simple polygon around click point
-      const fallbackPolygon = createFallbackPolygon(clickX, clickY);
-      setCurrentPolygon(fallbackPolygon);
-      setEditingMode(true);
-      message.warning('Using fallback polygon - please adjust manually');
-
-      logInfo('app.frontend.ui', 'fallback_polygon_created', 'Fallback polygon created due to segmentation failure', {
-        imageId,
-        fallbackType: 'simple_square'
-      });
+      if (!isHover) {
+        console.error('Segmentation failed', error);
+        message.error(`Smart segmentation failed: ${error.message}`);
+      }
     } finally {
-      setIsProcessing(false);
-      processingRef.current = false;
-    }
-  };
-
-  // Create a simple fallback polygon when segmentation fails
-  const createFallbackPolygon = (centerX, centerY) => {
-    const imageCoords = screenToImageCoords(centerX, centerY);
-    const size = 50; // Default size in image coordinates
-
-    return {
-      type: 'smart_polygon',
-      points: [
-        { x: imageCoords.x - size, y: imageCoords.y - size },
-        { x: imageCoords.x + size, y: imageCoords.y - size },
-        { x: imageCoords.x + size, y: imageCoords.y + size },
-        { x: imageCoords.x - size, y: imageCoords.y + size }
-      ],
-      confidence: 0.1,
-      algorithm: 'fallback'
-    };
-  };
-
-  // Handle canvas click for smart segmentation
-  const handleCanvasClick = useCallback(async (e) => {
-    if (!isActive || processingRef.current) return;
-
-    // Log when tool becomes active (first click)
-    if (!editingMode && !currentPolygon) {
-      logInfo('app.frontend.interactions', 'smart_polygon_tool_activated', 'Smart polygon tool activated', {
-        imageId,
-        zoomLevel,
-        imageSize
-      });
-    }
-
-    const canvas = e.target;
-    const rect = canvas.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
-
-    // Check if click is within image bounds
-    const imageCoords = screenToImageCoords(clickX, clickY);
-    if (imageCoords.x < 0 || imageCoords.x > imageSize.width ||
-      imageCoords.y < 0 || imageCoords.y > imageSize.height) {
-      message.warning('Please click within the image area');
-      logInfo('app.frontend.validation', 'click_outside_image_bounds', 'User clicked outside image bounds', {
-        imageId,
-        clickPoint: { x: clickX, y: clickY },
-        imageBounds: { width: imageSize.width, height: imageSize.height }
-      });
-      return;
-    }
-
-    if (editingMode && currentPolygon) {
-      // Handle polygon editing
-      handlePolygonEdit(clickX, clickY, e);
-    } else {
-      // Start smart segmentation
-      await performSmartSegmentation(clickX, clickY);
-    }
-  }, [isActive, editingMode, currentPolygon, imageSize, screenToImageCoords]);
-
-  // Handle polygon point editing
-  const handlePolygonEdit = (clickX, clickY, e) => {
-    if (!currentPolygon || !currentPolygon.points) return;
-
-    const clickThreshold = 10; // Pixels
-    let clickedPointIndex = -1;
-
-    // Check if clicked on existing point
-    for (let i = 0; i < currentPolygon.points.length; i++) {
-      const screenPoint = imageToScreenCoords(currentPolygon.points[i].x, currentPolygon.points[i].y);
-      const distance = Math.sqrt(
-        Math.pow(clickX - screenPoint.x, 2) + Math.pow(clickY - screenPoint.y, 2)
-      );
-
-      if (distance <= clickThreshold) {
-        clickedPointIndex = i;
-        break;
+      if (!isHover) {
+        setIsProcessing(false);
+        processingRef.current = false;
       }
     }
-
-    if (clickedPointIndex >= 0) {
-      // Start dragging existing point
-      setDraggedPointIndex(clickedPointIndex);
-      logUserClick('polygon_point_drag_started', 'User started dragging polygon point', {
-        imageId,
-        pointIndex: clickedPointIndex
-      });
-    } else {
-      // Add new point on edge
-      addPointOnEdge(clickX, clickY);
-    }
   };
 
-  // Add point on polygon edge
-  const addPointOnEdge = (clickX, clickY) => {
-    if (!currentPolygon || !currentPolygon.points) return;
+  // --- Manual Edit Helpers ---
+  const distanceToLineSegment = (point, lineStart, lineEnd) => {
+    const A = point.x - lineStart.x;
+    const B = point.y - lineStart.y;
+    const C = lineEnd.x - lineStart.x;
+    const D = lineEnd.y - lineStart.y;
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    if (lenSq === 0) return Math.sqrt(A * A + B * B);
+    let param = dot / lenSq;
+    param = Math.max(0, Math.min(1, param));
+    const xx = lineStart.x + param * C;
+    const yy = lineStart.y + param * D;
+    const dx = point.x - xx;
+    const dy = point.y - yy;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
 
-    const points = currentPolygon.points;
+  const addPointOnEdge = useCallback((clickX, clickY) => {
+    if (!currentPolygon || !currentPolygon.points) return;
     const clickImageCoords = screenToImageCoords(clickX, clickY);
     let insertIndex = -1;
     let minDistance = Infinity;
 
-    // Find closest edge
-    for (let i = 0; i < points.length; i++) {
-      const p1 = points[i];
-      const p2 = points[(i + 1) % points.length];
-
-      // Calculate distance from click point to line segment
+    for (let i = 0; i < currentPolygon.points.length; i++) {
+      const p1 = currentPolygon.points[i];
+      const p2 = currentPolygon.points[(i + 1) % currentPolygon.points.length];
       const distance = distanceToLineSegment(clickImageCoords, p1, p2);
-
-      if (distance < minDistance && distance < 20) { // 20 pixel threshold in image coords
+      if (distance < minDistance && distance < 20) {
         minDistance = distance;
         insertIndex = i + 1;
       }
     }
 
     if (insertIndex >= 0) {
-      const newPoints = [...points];
+      const newPoints = [...currentPolygon.points];
       newPoints.splice(insertIndex, 0, clickImageCoords);
-
-      setCurrentPolygon({
-        ...currentPolygon,
-        points: newPoints
-      });
-
-      message.success('Point added to polygon');
-
-      logUserClick('polygon_point_added', 'User added point to polygon', {
-        imageId,
-        newPointCount: newPoints.length,
-        insertIndex
-      });
+      setCurrentPolygon({ ...currentPolygon, points: newPoints });
+      message.success('Point added to polygon edge');
     }
-  };
+  }, [currentPolygon, screenToImageCoords]);
 
-  // Calculate distance from point to line segment
-  const distanceToLineSegment = (point, lineStart, lineEnd) => {
-    const A = point.x - lineStart.x;
-    const B = point.y - lineStart.y;
-    const C = lineEnd.x - lineStart.x;
-    const D = lineEnd.y - lineStart.y;
-
-    const dot = A * C + B * D;
-    const lenSq = C * C + D * D;
-
-    if (lenSq === 0) return Math.sqrt(A * A + B * B);
-
-    let param = dot / lenSq;
-    param = Math.max(0, Math.min(1, param));
-
-    const xx = lineStart.x + param * C;
-    const yy = lineStart.y + param * D;
-
-    const dx = point.x - xx;
-    const dy = point.y - yy;
-
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
-  // Handle mouse move for dragging points
-  const handleMouseMove = useCallback((e) => {
-    if (draggedPointIndex < 0 || !currentPolygon) return;
-
-    const canvas = e.target;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const newImageCoords = screenToImageCoords(mouseX, mouseY);
-
-    const newPoints = [...currentPolygon.points];
-    newPoints[draggedPointIndex] = newImageCoords;
-
-    setCurrentPolygon({
-      ...currentPolygon,
-      points: newPoints
+  // --- State Actions ---
+  const completePolygon = useCallback(() => {
+    if (!currentPolygon || currentPolygon.points.length < 3) return;
+    onPolygonComplete?.({
+      type: 'polygon',
+      points: currentPolygon.points,
+      confidence: currentPolygon.confidence,
+      isSmartGenerated: true
     });
-  }, [draggedPointIndex, currentPolygon, screenToImageCoords]);
+    setCurrentPolygon(null);
+    setPreviewPolygon(null);
+    setRefinementPoints([]);
+    setEditingMode(false);
+  }, [currentPolygon, onPolygonComplete]);
 
-  // Handle mouse up to stop dragging
-  const handleMouseUp = useCallback(() => {
-    if (draggedPointIndex >= 0) {
-      logUserClick('polygon_point_drag_ended', 'User finished dragging polygon point', {
-        imageId,
-        pointIndex: draggedPointIndex
-      });
+  const cancelPolygon = useCallback(() => {
+    setCurrentPolygon(null);
+    setPreviewPolygon(null);
+    setRefinementPoints([]);
+    setEditingMode(false);
+  }, []);
+
+  // --- Keyboard Shortcuts ---
+  useEffect(() => {
+    if (!isActive) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        completePolygon();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelPolygon();
+      } else if (e.key.toLowerCase() === 's') {
+        // Roboflow spec: 'S' activates smart tool
+        if (typeof onToolChange === 'function') onToolChange('smart_polygon');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isActive, completePolygon, cancelPolygon]);
+
+  // --- Canvas Interaction Handlers ---
+  // Ray-casting for inside/outside detection
+  const isPointInPolygon = useCallback((point, vs) => {
+    var x = point.x, y = point.y;
+    var inside = false;
+    for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+      var xi = vs[i].x, yi = vs[i].y;
+      var xj = vs[j].x, yj = vs[j].y;
+      var intersect = ((yi > y) != (yj > y))
+        && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
     }
-    setDraggedPointIndex(-1);
-  }, [draggedPointIndex]);
+    return inside;
+  }, []);
 
-  // Handle right-click to remove point
-  const handleRightClick = useCallback((e) => {
-    e.preventDefault();
-
-    if (!editingMode || !currentPolygon || currentPolygon.points.length <= 3) {
-      message.warning('Polygon must have at least 3 points');
-      return;
-    }
+  const handleCanvasClick = useCallback(async (e) => {
+    if (!isActive || processingRef.current) return;
 
     const canvas = e.target;
     const rect = canvas.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
+    const imageCoords = screenToImageCoords(clickX, clickY);
 
-    const clickThreshold = 10;
-    let clickedPointIndex = -1;
-
-    // Find clicked point
-    for (let i = 0; i < currentPolygon.points.length; i++) {
-      const screenPoint = imageToScreenCoords(currentPolygon.points[i].x, currentPolygon.points[i].y);
-      const distance = Math.sqrt(
-        Math.pow(clickX - screenPoint.x, 2) + Math.pow(clickY - screenPoint.y, 2)
-      );
-
-      if (distance <= clickThreshold) {
-        clickedPointIndex = i;
-        break;
-      }
-    }
-
-    if (clickedPointIndex >= 0) {
-      const newPoints = currentPolygon.points.filter((_, index) => index !== clickedPointIndex);
-      setCurrentPolygon({
-        ...currentPolygon,
-        points: newPoints
-      });
-      message.success('Point removed from polygon');
-
-      logUserClick('polygon_point_removed', 'User removed point from polygon', {
-        imageId,
-        remainingPoints: newPoints.length,
-        removedIndex: clickedPointIndex
-      });
-    }
-  }, [editingMode, currentPolygon, imageToScreenCoords]);
-
-  // Complete polygon and save
-  const completePolygon = useCallback(() => {
-    if (!currentPolygon || !currentPolygon.points || currentPolygon.points.length < 3) {
-      message.error('Polygon must have at least 3 points');
-      logError('app.frontend.validation', 'polygon_insufficient_points', 'Polygon completion failed - insufficient points', {
-        imageId,
-        pointsCount: currentPolygon?.points?.length || 0
-      });
+    if (imageCoords.x < 0 || imageCoords.x > imageSize.width ||
+      imageCoords.y < 0 || imageCoords.y > imageSize.height) {
       return;
     }
 
-    console.log('🎯 Smart Polygon: Completing polygon', currentPolygon);
+    // 1. If in Edit Mode, check if we're clicking a vertex OR near an edge
+    if (editingMode && currentPolygon) {
+      const threshold = 10;
+      let clickedPIndex = -1;
+      for (let i = 0; i < currentPolygon.points.length; i++) {
+        const sPt = imageToScreenCoords(currentPolygon.points[i].x, currentPolygon.points[i].y);
+        const dist = Math.sqrt((clickX - sPt.x) ** 2 + (clickY - sPt.y) ** 2);
+        if (dist <= threshold) {
+          clickedPIndex = i;
+          break;
+        }
+      }
 
-    const finalPolygon = {
-      type: 'polygon',
-      points: currentPolygon.points,
-      confidence: currentPolygon.confidence,
-      algorithm: currentPolygon.algorithm,
-      isSmartGenerated: true
-    };
+      if (clickedPIndex >= 0) {
+        setDraggedPointIndex(clickedPIndex);
+        return;
+      }
 
-    onPolygonComplete?.(finalPolygon);
+      // If not clicking a vertex, maybe add one to an edge
+      if (!e.altKey && !e.ctrlKey) {
+        addPointOnEdge(clickX, clickY);
+        return;
+      }
+    }
 
-    // Reset state
-    setCurrentPolygon(null);
-    setEditingMode(false);
+    // 2. Otherwise, handle as a Refinement Point
+    // ROBFLOW SPEC: Automatic Inside/Outside detection
+    const isInside = currentPolygon && isPointInPolygon(imageCoords, currentPolygon.points);
+    const label = isInside ? 0 : 1; // Inside means "remove", Outside means "add"
+
+    // Fallback to manual Alt key if specifically used
+    const finalLabel = e.altKey ? 0 : label;
+
+    const newPoints = [...refinementPoints, { ...imageCoords, label: finalLabel }];
+    setRefinementPoints(newPoints);
+    setPreviewPolygon(null);
+    await runSegmentation(newPoints, false);
+  }, [isActive, refinementPoints, currentPolygon, editingMode, imageSize, screenToImageCoords, imageToScreenCoords, addPointOnEdge, isPointInPolygon]);
+
+  const handleMouseMove = useCallback((e) => {
+    const canvas = e.target;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // FIRST: Check if mouse is physically outside the canvas element
+    if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
+      return; // Stop immediately if outside canvas
+    }
+
+    const imageCoords = screenToImageCoords(x, y);
+
+    // SECOND: Check if mouse is within image bounds
+    const isOutOfBounds =
+      imageCoords.x < 0 ||
+      imageCoords.x > imageSize.width ||
+      imageCoords.y < 0 ||
+      imageCoords.y > imageSize.height;
+
+    // Vertex Dragging Logic
+    if (draggedPointIndex >= 0 && currentPolygon) {
+      const newPoints = [...currentPolygon.points];
+      newPoints[draggedPointIndex] = imageCoords;
+      setCurrentPolygon({ ...currentPolygon, points: newPoints });
+      return;
+    }
+
+    // Hover Preview Logic - STRICT CONDITIONS:
+    // 1. Only BEFORE first click (refinementPoints.length === 0)
+    // 2. Only when mouse is INSIDE image bounds
+    // 3. Not while processing
+    // 4. With throttling to prevent lag
+    if (isActive &&
+      !processingRef.current &&
+      !isOutOfBounds &&
+      refinementPoints.length === 0 &&
+      !currentPolygon) {
+      const now = Date.now();
+      if (now - lastHoverRequestRef.current > 250) { // 250ms throttle
+        lastHoverRequestRef.current = now;
+        const pts = [{ ...imageCoords, label: 1 }];
+        runSegmentation(pts, true);
+      }
+    }
+  }, [isActive, draggedPointIndex, currentPolygon, refinementPoints, screenToImageCoords, imageSize, runSegmentation]);
+
+  const handleMouseUp = useCallback(() => {
     setDraggedPointIndex(-1);
-
-    message.success('Smart polygon annotation completed!');
-
-    logInfo('app.frontend.interactions', 'smart_polygon_completed', 'Smart polygon annotation completed', {
-      imageId,
-      pointsCount: finalPolygon.points.length,
-      confidence: finalPolygon.confidence,
-      algorithm: finalPolygon.algorithm,
-      isSmartGenerated: true
-    });
-  }, [currentPolygon, onPolygonComplete]);
-
-  // Cancel polygon editing
-  const cancelPolygon = useCallback(() => {
-    setCurrentPolygon(null);
-    setEditingMode(false);
-    setDraggedPointIndex(-1);
-    message.info('Polygon editing cancelled');
-
-    logInfo('app.frontend.interactions', 'polygon_editing_cancelled', 'Polygon editing cancelled by user', {
-      imageId
-    });
   }, []);
 
-  // Render polygon on canvas
+  const handleRightClick = useCallback((e) => {
+    e.preventDefault();
+    if (refinementPoints.length > 0) {
+      const nextPoints = refinementPoints.slice(0, -1);
+      setRefinementPoints(nextPoints);
+      if (nextPoints.length > 0) runSegmentation(nextPoints, false);
+      else {
+        setCurrentPolygon(null);
+        setPreviewPolygon(null);
+        setEditingMode(false);
+      }
+    } else if (editingMode && currentPolygon) {
+      cancelPolygon();
+    }
+  }, [refinementPoints, editingMode, currentPolygon, cancelPolygon]);
+
+  // --- Rendering ---
   const renderPolygon = (ctx) => {
-    if (!currentPolygon || !currentPolygon.points || currentPolygon.points.length === 0) return;
-
-    const points = currentPolygon.points;
-
-    // Draw polygon fill and stroke
-    ctx.beginPath();
-    points.forEach((point, index) => {
-      const screenPoint = imageToScreenCoords(point.x, point.y);
-      if (index === 0) {
-        ctx.moveTo(screenPoint.x, screenPoint.y);
-      } else {
-        ctx.lineTo(screenPoint.x, screenPoint.y);
-      }
-    });
-    ctx.closePath();
-
-    // Style based on confidence
     const baseRem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    const alpha = Math.max(0.1, currentPolygon.confidence || 0.5);
-    ctx.fillStyle = `rgba(82, 196, 26, ${alpha * 0.2})`;
-    ctx.strokeStyle = `rgba(82, 196, 26, ${alpha})`;
-    ctx.lineWidth = 0.125 * baseRem; // 0.125rem
 
-    ctx.fill();
-    ctx.stroke();
+    console.log('🖌️ renderPolygon called:', {
+      hasPreview: !!previewPolygon,
+      previewPoints: previewPolygon?.points?.length || 0,
+      hasCurrent: !!currentPolygon,
+      currentPoints: currentPolygon?.points?.length || 0
+    });
 
-    // Draw control points
-    points.forEach((point, index) => {
-      const screenPoint = imageToScreenCoords(point.x, point.y);
-
+    // Draw Blue "Ghost" Preview
+    if (previewPolygon && previewPolygon.points) {
       ctx.beginPath();
-      ctx.arc(screenPoint.x, screenPoint.y, 0.375 * baseRem, 0, 2 * Math.PI);
-
-      if (index === draggedPointIndex) {
-        ctx.fillStyle = '#ff4d4f';
-        ctx.strokeStyle = '#fff';
-      } else {
-        ctx.fillStyle = '#52c41a';
-        ctx.strokeStyle = '#fff';
-      }
-
-      ctx.lineWidth = 0.125 * baseRem;
+      previewPolygon.points.forEach((p, i) => {
+        const s = imageToScreenCoords(p.x, p.y);
+        if (i === 0) ctx.moveTo(s.x, s.y);
+        else ctx.lineTo(s.x, s.y);
+      });
+      ctx.closePath();
+      ctx.setLineDash([5, 5]); // Dashed line for ghost look
+      ctx.fillStyle = 'rgba(24, 144, 255, 0.1)';
+      ctx.strokeStyle = 'rgba(24, 144, 255, 0.4)';
+      ctx.lineWidth = 1;
       ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset dash
+    }
+
+    // Draw Main Generated Polygon
+    if (currentPolygon && currentPolygon.points) {
+      ctx.beginPath();
+      currentPolygon.points.forEach((p, i) => {
+        const s = imageToScreenCoords(p.x, p.y);
+        if (i === 0) ctx.moveTo(s.x, s.y);
+        else ctx.lineTo(s.x, s.y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(82, 196, 26, 0.25)';
+      ctx.strokeStyle = '#52c41a';
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw vertices if editing
+      if (editingMode) {
+        currentPolygon.points.forEach((p, i) => {
+          const s = imageToScreenCoords(p.x, p.y);
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 4, 0, 2 * Math.PI);
+          ctx.fillStyle = i === draggedPointIndex ? '#ff4d4f' : '#52c41a';
+          ctx.fill();
+          ctx.strokeStyle = '#fff';
+          ctx.stroke();
+        });
+      }
+    }
+
+    // Draw Refinement Clicks
+    refinementPoints.forEach(p => {
+      const s = imageToScreenCoords(p.x, p.y);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 5, 0, 2 * Math.PI);
+      ctx.fillStyle = p.label === 1 ? '#52c41a' : '#ff4d4f';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
       ctx.stroke();
     });
   };
 
   return {
-    // Event handlers to be attached to canvas
     handleCanvasClick,
     handleMouseMove,
     handleMouseUp,
     handleRightClick,
-
-    // Rendering function
     renderPolygon,
-
-    // State and actions
     isProcessing,
     editingMode,
     currentPolygon,
+    previewPolygon, // Expose for canvas redraw triggering
     completePolygon,
     cancelPolygon,
-
-    // Processing indicator component
+    complexity,
+    setComplexity,
     ProcessingIndicator: () => isProcessing ? (
       <div style={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        background: 'rgba(0, 0, 0, 0.8)',
-        color: 'white',
-        padding: '1rem 1.5rem',
-        borderRadius: '0.5rem',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.75rem',
-        zIndex: 1000
+        position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+        background: 'rgba(0,0,0,0.85)', color: 'white', padding: '1rem 1.5rem', borderRadius: '0.75rem',
+        display: 'flex', alignItems: 'center', gap: '0.75rem', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
       }}>
         <Spin size="small" />
-        <span>Generating smart polygon...</span>
+        <span style={{ fontWeight: 500 }}>Smart Segmenting...</span>
       </div>
     ) : null
   };
