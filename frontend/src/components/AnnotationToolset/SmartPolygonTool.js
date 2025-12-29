@@ -356,9 +356,9 @@ const SmartPolygonTool = ({
       });
       ctx.closePath();
       ctx.setLineDash([5, 5]); // Dashed line for ghost look
-      ctx.fillStyle = 'rgba(24, 144, 255, 0.1)';
-      ctx.strokeStyle = 'rgba(24, 144, 255, 0.4)';
-      ctx.lineWidth = 1;
+      ctx.fillStyle = 'rgba(255, 165, 0, 0.2)'; // Bright orange - visible on all backgrounds
+      ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)'; // Strong orange border
+      ctx.lineWidth = 2; // Slightly thicker for visibility
       ctx.fill();
       ctx.stroke();
       ctx.setLineDash([]); // Reset dash
