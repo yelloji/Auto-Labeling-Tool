@@ -118,7 +118,26 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
         self.model = None
         self.last_image_id = None
         self.predictor = None # For caching embeddings
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = self._get_optimal_device()
+        self.cached_resized_image = None
+        self.cached_scale = 1.0
+
+    def _get_optimal_device(self):
+        """Pick the safest device (prefers CUDA if >2GB free)"""
+        if not torch.cuda.is_available():
+            return "cpu"
+        try:
+            # Check free memory (Total - Allocated)
+            total_mem = torch.cuda.get_device_properties(0).total_memory
+            allocated_mem = torch.cuda.memory_allocated(0)
+            free_mem = total_mem - allocated_mem
+            
+            # 2GB safety margin (2 * 1024^3 bytes)
+            if free_mem < 2 * 1024 * 1024 * 1024:
+                return "cpu"
+            return "cuda"
+        except:
+            return "cpu"
 
     def _load_model(self):
         if self.model is None:
@@ -167,13 +186,31 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
                 logger.warning("operations.annotations", "Using MockSegmentor as fallback", "sam_fallback_mock")
 
     def set_image(self, image: np.ndarray, image_id: str):
-        """Prepare the image for segmentation"""
+        """Prepare the image for segmentation (compute embeddings)"""
         self._load_model()
-        # Only reset if it's a new image
         if self.last_image_id != image_id:
             self.last_image_id = image_id
-            # In a more advanced version, we would pre-compute embeddings here
-            # for the predictor, but for now we just track the ID.
+            # Pre-calculate a 512px downscale to use as a persistent cache
+            # This makes both CPU and GPU hover previews near-instant
+            h, w = image.shape[:2]
+            max_dim = 512
+            scale = min(1.0, max_dim / max(h, w))
+            if scale < 1.0:
+                self.cached_resized_image = cv2.resize(image, (int(w*scale), int(h*scale)))
+                self.cached_scale = scale
+            else:
+                self.cached_resized_image = image
+                self.cached_scale = 1.0
+
+            # Dynamic health check on device before we start a new image
+            self.device = self._get_optimal_device()
+            
+            # EXPLICITLY move model to device now
+            if self.model and hasattr(self.model, 'to'):
+                try:
+                    self.model.to(self.device)
+                except Exception as e:
+                    logger.warning("operations.annotations", f"Failed to move model to {self.device}: {e}", "sam_device_move_fail")
         
     def segment(self, image: np.ndarray, points: List[SmartPoint]) -> Tuple[List[Dict[str, float]], float]:
         if not points:
@@ -182,32 +219,58 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
         try:
             self._load_model()
             
-            # SPEED OPTIMIZATION: Resize image to max 512px for SAM processing
-            # Much faster for real-time hover preview, still good accuracy
-            original_height, original_width = image.shape[:2]
-            max_dimension = 512  # Aggressive downscale for speed
-            
-            scale_factor = 1.0
-            if max(original_height, original_width) > max_dimension:
-                scale_factor = max_dimension / max(original_height, original_width)
-                new_width = int(original_width * scale_factor)
-                new_height = int(original_height * scale_factor)
-                resized_image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+            # Use cached resized image if available
+            if hasattr(self, 'last_image_id') and self.last_image_id is not None:
+                resized_image = self.cached_resized_image
+                scale_factor = self.cached_scale
             else:
-                resized_image = image
-            
-            # Scale points to match resized image
-            import numpy as np
+                # Fallback to ad-hoc scaling
+                h, w = image.shape[:2]
+                scale_factor = min(1.0, 512 / max(h, w))
+                resized_image = cv2.resize(image, (int(w*scale_factor), int(h*scale_factor))) if scale_factor < 1.0 else image
+
             point_coords = np.array([[p.x * scale_factor, p.y * scale_factor] for p in points], dtype=np.float32)
             point_labels = np.array([p.label for p in points], dtype=np.int32)
             
-            # Call SAM on resized image
-            results = self.model(
-                source=resized_image,
-                points=[point_coords.tolist()],
-                labels=[point_labels.tolist()],
-                verbose=False
-            )
+            # Use the model with cached image check
+            # Wrap in try-except for OOM fallback (training protection)
+            t_start = time.time()
+            try:
+                # DEBUG PRINT for user verification
+                if self.device == "cuda":
+                    free_mem = (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)) / (1024**2)
+                    print(f"🚀 [SMART POLYGON] Device: RTX 3060 (Free VRAM: {free_mem:.0f}MB)")
+                else:
+                    print(f"💻 [SMART POLYGON] Device: CPU (Safe Mode)")
+
+                # Use the predict method with the resized image
+                # This is the most reliable way and with 512px it should be fast
+                results = self.model.predict(
+                    source=resized_image, 
+                    points=[point_coords.tolist()],
+                    labels=[point_labels.tolist()],
+                    verbose=False,
+                    device=self.device
+                )
+                t_predict = (time.time() - t_start) * 1000
+                print(f"⏱️ [SMART POLYGON] Prediction Time: {t_predict:.1f}ms")
+            except Exception as e:
+                t_err = (time.time() - t_start) * 1000
+                print(f"⚠️ [SMART POLYGON] Prediction Error after {t_err:.1f}ms: {e}")
+                # If GPU fails (OOM or otherwise), fallback to CPU to avoid crash
+                if "out of memory" in str(e).lower() and self.device == "cuda":
+                    self.device = "cpu"
+                    print(f"🔄 [SMART POLYGON] Fallback to CPU due to OOM")
+                    # Re-run with full image on CPU
+                    results = self.model.predict(
+                        source=resized_image,
+                        points=[point_coords.tolist()],
+                        labels=[point_labels.tolist()],
+                        verbose=False,
+                        device="cpu"
+                    )
+                else:
+                    raise e
             
             if not results or len(results) == 0:
                 return [], 0.0

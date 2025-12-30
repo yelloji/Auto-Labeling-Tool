@@ -27,6 +27,7 @@ const SmartPolygonTool = ({
   const processingRef = useRef(false);
   const lastHoverRequestRef = useRef(0);
   const hoverRequestIdRef = useRef(0); // Tracks current hover request to avoid race conditions
+  const abortControllerRef = useRef(null);
 
   // --- Coordinate Conversions ---
   const screenToImageCoords = useCallback((screenX, screenY) => {
@@ -55,9 +56,16 @@ const SmartPolygonTool = ({
         processingRef.current = true;
       }
 
+      if (isHover && abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      if (isHover) abortControllerRef.current = controller;
+
       const response = await fetch(isHover ? '/api/segment-preview' : '/api/segment-polygon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: isHover ? controller.signal : null,
         body: JSON.stringify({
           image_id: imageId,
           points: points,
@@ -90,6 +98,7 @@ const SmartPolygonTool = ({
         }
       }
     } catch (error) {
+      if (error.name === 'AbortError') return; // Silent for canceled requests
       if (!isHover) {
         console.error('Segmentation failed', error);
         message.error(`Smart segmentation failed: ${error.message}`);
@@ -295,7 +304,10 @@ const SmartPolygonTool = ({
       imageCoords.y > imageSize.height;
 
     if (isOutOfBounds) {
-      // Clear preview when mouse leaves the image
+      // Clear preview and invalidate pending requests when mouse leaves the image
+      hoverRequestIdRef.current += 1;
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+
       if (previewPolygon) {
         setPreviewPolygon(null);
       }
@@ -337,6 +349,7 @@ const SmartPolygonTool = ({
 
   const handleMouseLeave = useCallback(() => {
     hoverRequestIdRef.current += 1; // Invalidate any pending requests
+    if (abortControllerRef.current) abortControllerRef.current.abort();
     setPreviewPolygon(null);
   }, []);
 
