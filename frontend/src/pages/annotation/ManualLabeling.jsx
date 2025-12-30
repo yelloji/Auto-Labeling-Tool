@@ -650,6 +650,17 @@ const ManualLabeling = () => {
       const projectId = response.data.project_id;
 
       console.log(`🔍 DATASET ${datasetId} belongs to PROJECT ${projectId}`);
+
+      // CRITICAL: Prevent 422 errors by checking for NaN project ID
+      if (!projectId || isNaN(projectId)) {
+        logError('app.frontend.validation', 'invalid_project_id', 'Cannot load labels for invalid project ID', {
+          datasetId,
+          projectId
+        });
+        console.error(`❌ INVALID PROJECT ID: ${projectId} for dataset ${datasetId}. Skipping labels fetch.`);
+        return;
+      }
+
       console.log('🔍 CURRENT PROJECT LABELS STATE:', projectLabels.length, 'labels');
 
       // Now get the labels for this project
@@ -1447,15 +1458,19 @@ const ManualLabeling = () => {
       try {
         console.log('UPDATING PROJECT LABELS with label:', labelName);
 
-        // CRITICAL: Get the project ID from the dataset ID
-        // In this application, datasetId is actually the project ID
-        const projectId = parseInt(datasetId);
+        // CRITICAL: Use the project ID resolved by the API service
+        const projectId = savedLabel?.project_id;
+
+        if (!projectId || isNaN(projectId)) {
+          console.warn('Skipping redundant label save: No valid project ID available');
+          return;
+        }
 
         // Force save the label to the database again to ensure it's there
         const projectLabel = {
           name: labelName,
           color: labelColor, // Use the labelColor we defined earlier
-          project_id: parseInt(projectId)
+          project_id: projectId
         };
 
         // Save to database with direct API call
