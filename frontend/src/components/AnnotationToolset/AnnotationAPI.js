@@ -604,6 +604,7 @@ class AnnotationAPI {
    * @returns {Promise<Object>} Created or updated label
    */
   static async saveProjectLabel(datasetId, label) {
+    let projectId = null;
     try {
       logInfo('app.frontend.interactions', 'save_project_label_started', 'Saving project label started', {
         datasetId,
@@ -630,9 +631,19 @@ class AnnotationAPI {
       }
 
       // First, get the project ID for this dataset
-      const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
-      const projectId = response.data.project_id;
-      console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
+      try { // New try block for projectId retrieval
+        const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
+        projectId = response.data.project_id;
+        console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
+      } catch (e) {
+        logError('app.frontend.validation', 'save_project_label_project_id_unresolved', 'Could not resolve Project ID from Dataset ID for saving label', {
+          datasetId,
+          error: e.message
+        });
+        console.error(`Could not resolve Project ID for dataset ${datasetId}. Aborting label save.`, e);
+        throw new Error(`Could not resolve Project ID for dataset ${datasetId}`);
+      }
+
 
       // Prepare the label data
       const labelData = {
