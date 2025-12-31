@@ -1195,7 +1195,7 @@ const AnnotationCanvas = ({
           width: '100%',
           height: '100%',
           overflow: 'auto', // Changed from 'hidden' to allow scrolling for large images
-          cursor: activeTool === 'smart_polygon' ? 'pointer' : 'default'
+          cursor: activeTool === 'smart_polygon' ? 'crosshair' : 'default'
         }}
       >
         <canvas

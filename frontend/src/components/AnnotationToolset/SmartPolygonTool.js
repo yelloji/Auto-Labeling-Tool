@@ -384,9 +384,10 @@ const SmartPolygonTool = ({
       });
       ctx.closePath();
       ctx.setLineDash([5, 5]); // Dashed line for ghost look
-      ctx.fillStyle = 'rgba(255, 165, 0, 0.2)'; // Bright orange - visible on all backgrounds
-      ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)'; // Strong orange border
-      ctx.lineWidth = 2; // Slightly thicker for visibility
+      // Use dark red for better visibility on complex backgrounds
+      ctx.fillStyle = 'rgba(139, 0, 0, 0.4)'; // Dark red - more opaque for final
+      ctx.strokeStyle = 'rgba(139, 0, 0, 0.9)'; // Strong dark red border
+      ctx.lineWidth = 2 / zoomLevel; // Slightly thicker for visibility
       ctx.fill();
       ctx.stroke();
       ctx.setLineDash([]); // Reset dash
@@ -401,9 +402,9 @@ const SmartPolygonTool = ({
         else ctx.lineTo(s.x, s.y);
       });
       ctx.closePath();
-      ctx.fillStyle = 'rgba(82, 196, 26, 0.25)';
-      ctx.strokeStyle = '#52c41a';
-      ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(139, 0, 0, 0.25)';
+      ctx.strokeStyle = '#8b0000';
+      ctx.lineWidth = 2 / zoomLevel;
       ctx.fill();
       ctx.stroke();
 
