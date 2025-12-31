@@ -1,5 +1,5 @@
 html {
-  /* GLOBAL SCALING ENGINE: Absolute Vector Mode */
+  /* GLOBAL SCALING ENGINE: Stable Vector Base */
   /* 0.8333vw = 16px at 1920px width. */
   /* clamp(12px, ...) adds a "Readability Floor" so it doesn't get too small on laptops. */
   font-size: clamp(10px, 0.8333vw, 16px);
