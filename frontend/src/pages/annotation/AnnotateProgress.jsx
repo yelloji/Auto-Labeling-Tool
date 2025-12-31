@@ -503,6 +503,17 @@ const AnnotateProgress = () => {
     navigate(`/annotate-launcher/${datasetId}`);
   };
 
+  // Professional Responsive Engine
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isMobile = windowWidth < 576; // Standard phone breakpoint
+  const isTablet = windowWidth >= 576 && windowWidth < 1024;
+
 
 
   // Format date
@@ -1056,9 +1067,15 @@ const AnnotateProgress = () => {
 
       {/* Dataset Split Drawer */}
       <Drawer
-        title="Add Images to Dataset Splits"
-        width="32.5rem"
+        title={<span style={{ fontWeight: 700, fontSize: '1.5rem', color: '#111' }}>Add Images to Dataset Splits</span>}
+        width={isMobile ? '100%' : '32rem'} // Senior Context Logic: Sidebar stays sidebar on tablets
         open={splitDrawerVisible}
+        placement={isMobile ? 'bottom' : 'right'}
+        height={isMobile ? '90%' : '100%'}
+        bodyStyle={{
+          padding: isMobile ? '1.5rem' : '2rem',
+          background: '#fff'
+        }}
         onClose={() => {
           logUserClick('AnnotateProgress', 'close_split_drawer', {
             datasetId,
@@ -1071,7 +1088,14 @@ const AnnotateProgress = () => {
           setSplitDrawerVisible(false);
         }}
         footer={
-          <div style={{ textAlign: 'right' }}>
+          <div style={{
+            display: 'flex',
+            flexFlow: isMobile ? 'column' : 'row wrap', // Natural wrap for senior flexibility
+            gap: '1rem',
+            justifyContent: 'flex-end',
+            padding: '1.25rem 0',
+            borderTop: '1px solid #f0f0f0'
+          }}>
             <Button
               onClick={() => {
                 logUserClick('AnnotateProgress', 'close_split_drawer', {
@@ -1084,7 +1108,14 @@ const AnnotateProgress = () => {
                 });
                 setSplitDrawerVisible(false);
               }}
-              style={{ marginRight: '0.5rem' }}
+              style={{
+                height: '3.25rem',
+                fontSize: '1rem',
+                minWidth: isMobile ? '100%' : '8rem',
+                borderRadius: '0.625rem',
+                fontWeight: 500,
+                order: isMobile ? 2 : 1
+              }}
             >
               Cancel
             </Button>
@@ -1092,43 +1123,57 @@ const AnnotateProgress = () => {
               type="primary"
               onClick={handleAssignImages}
               loading={assignLoading}
+              style={{
+                height: '3.25rem',
+                fontSize: '1rem',
+                padding: '0 2rem',
+                minWidth: isMobile ? '100%' : '12rem',
+                borderRadius: '0.625rem',
+                order: isMobile ? 1 : 2,
+                background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)',
+                border: 'none',
+                fontWeight: '600',
+                boxShadow: '0 4px 12px rgba(24, 144, 255, 0.2)'
+              }}
             >
               Update & Go to Workspace
             </Button>
           </div>
         }
       >
-        <div style={{ marginBottom: '1.5rem' }}>
-          <Title level={4} style={{ fontSize: '1rem' }}>Split Method</Title>
+        <div style={{ marginBottom: '2.5rem' }}>
+          <Title level={4} style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Split Method</Title>
           <Select
             value={splitMethod}
             onChange={handleSplitMethodChange}
-            style={{ width: '100%', marginTop: '0.5rem' }}
+            style={{ width: '100%', fontSize: '1.125rem' }}
             size="large"
+            className="vector-select"
+            dropdownClassName="vector-select-dropdown"
             options={[
               {
                 value: 'use_existing',
-                label: 'USE EXISTING SPLIT',
+                label: <span style={{ fontSize: '1.0625rem' }}>USE EXISTING SPLIT</span>,
               },
               {
                 value: 'assign_random',
-                label: 'SPLIT IMAGES BETWEEN TRAIN/VALID/TEST',
+                label: <span style={{ fontSize: '1.0625rem' }}>SPLIT IMAGES BETWEEN TRAIN/VALID/TEST</span>,
               },
               {
                 value: 'all_train',
-                label: 'ADD ALL IMAGES TO TRAIN SET',
+                label: <span style={{ fontSize: '1.0625rem' }}>ADD ALL IMAGES TO TRAIN SET</span>,
               },
               {
                 value: 'all_val',
-                label: 'ADD ALL IMAGES TO VALID SET',
+                label: <span style={{ fontSize: '1.0625rem' }}>ADD ALL IMAGES TO VALID SET</span>,
               },
               {
                 value: 'all_test',
-                label: 'ADD ALL IMAGES TO TEST SET',
+                label: <span style={{ fontSize: '1.0625rem' }}>ADD ALL IMAGES TO TEST SET</span>,
               }
             ]}
           />
-          <div style={{ marginTop: '0.5rem', fontSize: '1rem', color: '#666' }}>
+          <div style={{ marginTop: '1rem', fontSize: '1.125rem', color: '#555', lineHeight: 1.6 }}>
             {splitMethod === 'use_existing' && 'Keep current split values in the database (for existing datasets)'}
             {splitMethod === 'assign_random' && 'Randomly assigns images to splits based on the percentages below'}
             {splitMethod === 'all_train' && 'Assigns all labeled images to the training set'}
@@ -1137,75 +1182,81 @@ const AnnotateProgress = () => {
           </div>
         </div>
 
-        {/* Only show distribution controls for SPLIT IMAGES BETWEEN TRAIN/VALID/TEST option */}
         {splitMethod === 'assign_random' && (
-          <div style={{ marginBottom: '1.5rem' }}>
-            <Title level={4} style={{ fontSize: '1rem' }}>Dataset Distribution</Title>
-            <Paragraph type="secondary" style={{ fontSize: '0.875rem' }}>
-              Drag the sliders to adjust the dataset split:
-              <ul style={{ marginTop: '0.5rem', marginBottom: 0 }}>
-                <li>First slider: End of training set</li>
-                <li>Second slider: End of validation set</li>
-                <li>Remaining percentage goes to test set</li>
-              </ul>
+          <div style={{ marginBottom: '3rem' }}>
+            <Title level={4} style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Dataset Distribution</Title>
+            <Paragraph type="secondary" style={{ fontSize: '1.125rem', lineHeight: 1.6, marginBottom: '2.5rem', color: '#555' }}>
+              Adjust the sliders to define split boundaries:
             </Paragraph>
 
-            <div style={{ marginTop: '1.5rem', marginBottom: '3rem' }}>
+            <div style={{ padding: '0 0.5rem', marginBottom: '3.5rem' }}>
               <Slider
                 range
                 min={0}
                 max={100}
-                value={[trainEndPoint, valEndPoint]}
+                value={splitPercentages}
                 onChange={handleSliderChange}
-                marks={{
-                  0: '0%',
-                  25: '25%',
-                  50: '50%',
-                  75: '75%',
-                  100: '100%'
-                }}
                 tooltip={{
-                  formatter: (value, index) => {
-                    if (index === 0) {
-                      return `Train: ${splitPercentages[0]}%`;
-                    } else {
-                      return `Val: ${splitPercentages[1]}%`;
-                    }
-                  }
+                  formatter: value => `${value}%`,
+                  open: true
                 }}
+                trackStyle={[{ background: '#1890ff' }, { background: '#722ed1' }]}
+                handleStyle={[{ borderColor: '#1890ff' }, { borderColor: '#722ed1' }]}
               />
+            </div>
 
-              {/* Distribution Markers */}
+            {/* Senior Distribution Display: Grid on mobile/tablet, Bar on desktop */}
+            {(isMobile || isTablet) ? (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '0.5rem',
+                marginBottom: '2rem'
+              }}>
+                <div style={{ background: 'rgba(24, 144, 255, 0.05)', padding: '1rem', borderRadius: '0.625rem', textAlign: 'center', border: '1px solid rgba(24, 144, 255, 0.1)' }}>
+                  <div style={{ color: '#1890ff', fontWeight: 700, fontSize: '1.25rem' }}>{splitPercentages[0]}%</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', color: '#1890ff', marginTop: '0.25rem' }}>Train</div>
+                </div>
+                <div style={{ background: 'rgba(114, 46, 209, 0.05)', padding: '1rem', borderRadius: '0.625rem', textAlign: 'center', border: '1px solid rgba(114, 46, 209, 0.1)' }}>
+                  <div style={{ color: '#722ed1', fontWeight: 700, fontSize: '1.25rem' }}>{splitPercentages[1] - splitPercentages[0]}%</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', color: '#722ed1', marginTop: '0.25rem' }}>Val</div>
+                </div>
+                <div style={{ background: 'rgba(82, 196, 26, 0.05)', padding: '1rem', borderRadius: '0.625rem', textAlign: 'center', border: '1px solid rgba(82, 196, 26, 0.1)' }}>
+                  <div style={{ color: '#52c41a', fontWeight: 700, fontSize: '1.25rem' }}>{100 - splitPercentages[1]}%</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', color: '#52c41a', marginTop: '0.25rem' }}>Test</div>
+                </div>
+              </div>
+            ) : (
               <div style={{
                 display: 'flex',
-                marginTop: '-2.25rem',
-                marginBottom: '1.5rem'
+                marginTop: '-2.5rem',
+                marginBottom: '2.5rem'
               }}>
                 <div style={{
                   width: `${splitPercentages[0]}%`,
                   textAlign: 'center',
                   paddingRight: '0.25rem',
-                  minWidth: '3.75rem'
+                  minWidth: '4.5rem'
                 }}>
-                  <Tag color="blue" style={{ marginRight: 0 }}>Train</Tag>
+                  <Tag color="blue" style={{ marginRight: 0, fontSize: '0.9375rem', padding: '0.25rem 0.75rem' }}>Train: {splitPercentages[0]}%</Tag>
                 </div>
                 <div style={{
-                  width: `${splitPercentages[1]}%`,
+                  width: `${splitPercentages[1] - splitPercentages[0]}%`,
                   textAlign: 'center',
-                  minWidth: '5rem'
+                  minWidth: '6rem'
                 }}>
-                  <Tag color="orange" style={{ marginRight: 0 }}>Val</Tag>
+                  <Tag color="orange" style={{ marginRight: 0, fontSize: '0.9375rem', padding: '0.25rem 0.75rem' }}>Val: {splitPercentages[1] - splitPercentages[0]}%</Tag>
                 </div>
                 <div style={{
-                  width: `${testPercentage}%`,
+                  width: `${100 - splitPercentages[1]}%`,
                   textAlign: 'center',
                   paddingLeft: '0.25rem',
-                  minWidth: '3.75rem'
+                  minWidth: '4.5rem'
                 }}>
-                  <Tag color="green" style={{ marginRight: 0 }}>Test</Tag>
+                  <Tag color="green" style={{ marginRight: 0, fontSize: '0.9375rem', padding: '0.25rem 0.75rem' }}>Test: {100 - splitPercentages[1]}%</Tag>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Distribution Statistics */}
             <Row gutter={16}>
@@ -1222,9 +1273,9 @@ const AnnotateProgress = () => {
               <Col span={8}>
                 <Statistic
                   title="Validation"
-                  value={splitPercentages[1]}
+                  value={splitPercentages[1] - splitPercentages[0]}
                   suffix="%"
-                  valueStyle={{ color: '#fa8c16' }}
+                  valueStyle={{ color: '#722ed1' }}
                   precision={0}
                 />
                 <Text type="secondary">{valCount} images</Text>
@@ -1232,7 +1283,7 @@ const AnnotateProgress = () => {
               <Col span={8}>
                 <Statistic
                   title="Test"
-                  value={testPercentage}
+                  value={100 - splitPercentages[1]}
                   suffix="%"
                   valueStyle={{ color: '#52c41a' }}
                   precision={0}
@@ -1245,36 +1296,36 @@ const AnnotateProgress = () => {
 
         {/* Show appropriate message for other split methods */}
         {splitMethod === 'use_existing' && (
-          <div style={{ marginBottom: '1.5rem' }}>
-            <Title level={4} style={{ fontSize: '1rem' }}>Using Existing Split</Title>
-            <Paragraph style={{ fontSize: '0.875rem' }}>
+          <div style={{ marginBottom: '2rem' }}>
+            <Title level={4} style={{ fontSize: '1.125rem' }}>Using Existing Split</Title>
+            <Paragraph style={{ fontSize: '1.0625rem', lineHeight: 1.6 }}>
               This option will keep the current train/val/test assignments for all labeled images.
             </Paragraph>
           </div>
         )}
 
         {splitMethod === 'all_train' && (
-          <div style={{ marginBottom: '1.5rem' }}>
-            <Title level={4} style={{ fontSize: '1rem' }}>All Images to Training Set</Title>
-            <Paragraph style={{ fontSize: '0.875rem' }}>
+          <div style={{ marginBottom: '2rem' }}>
+            <Title level={4} style={{ fontSize: '1.125rem' }}>All Images to Training Set</Title>
+            <Paragraph style={{ fontSize: '1.0625rem', lineHeight: 1.6 }}>
               This option will assign all {totalLabeledImages} labeled images to the training set.
             </Paragraph>
           </div>
         )}
 
         {splitMethod === 'all_val' && (
-          <div style={{ marginBottom: '1.5rem' }}>
-            <Title level={4} style={{ fontSize: '1rem' }}>All Images to Validation Set</Title>
-            <Paragraph style={{ fontSize: '0.875rem' }}>
+          <div style={{ marginBottom: '2rem' }}>
+            <Title level={4} style={{ fontSize: '1.125rem' }}>All Images to Validation Set</Title>
+            <Paragraph style={{ fontSize: '1.0625rem', lineHeight: 1.6 }}>
               This option will assign all {totalLabeledImages} labeled images to the validation set.
             </Paragraph>
           </div>
         )}
 
         {splitMethod === 'all_test' && (
-          <div style={{ marginBottom: '1.5rem' }}>
-            <Title level={4} style={{ fontSize: '1rem' }}>All Images to Test Set</Title>
-            <Paragraph style={{ fontSize: '0.875rem' }}>
+          <div style={{ marginBottom: '2rem' }}>
+            <Title level={4} style={{ fontSize: '1.125rem' }}>All Images to Test Set</Title>
+            <Paragraph style={{ fontSize: '1.0625rem', lineHeight: 1.6 }}>
               This option will assign all {totalLabeledImages} labeled images to the test set.
             </Paragraph>
           </div>
@@ -1282,8 +1333,8 @@ const AnnotateProgress = () => {
 
         <Divider />
 
-        <Paragraph style={{ fontSize: '0.875rem' }}>
-          <Text strong style={{ fontSize: '0.875rem' }}>Note:</Text> {
+        <Paragraph style={{ fontSize: '1.125rem', lineHeight: 1.7, paddingBottom: isMobile ? '3rem' : '2rem' }}>
+          <Text strong style={{ fontSize: '1.125rem' }}>Note:</Text> {
             splitMethod === 'assign_random'
               ? "This will assign all labeled images to the dataset splits according to the percentages you've set."
               : splitMethod === 'use_existing'
