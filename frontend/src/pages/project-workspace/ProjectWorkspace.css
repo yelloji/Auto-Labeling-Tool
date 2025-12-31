@@ -30,18 +30,25 @@
 
 .workspace-sider .ant-menu-item-group-title {
   color: var(--silver-dim) !important;
-  font-size: 0.75rem !important;
-  /* Force group titles to 12px/rem */
+  font-size: 0.9375rem !important;
+  /* Force group titles to 15px/rem */
   height: auto !important;
-  line-height: 1.5rem !important;
+  line-height: 2rem !important;
+  letter-spacing: 0.05rem;
+  margin-top: 1rem !important;
+  margin-bottom: 0.5rem !important;
 }
 
 .workspace-sider .ant-menu-item,
 .workspace-sider .ant-menu-submenu-title {
   height: auto !important;
-  line-height: 1.5rem !important;
-  padding-top: 0.5rem !important;
-  padding-bottom: 0.5rem !important;
+  line-height: 1.6rem !important;
+  padding-top: 0.75rem !important;
+  padding-bottom: 0.75rem !important;
+  font-size: 1rem !important;
+  border-radius: 0.5rem !important;
+  width: calc(100% - 1rem) !important;
+  margin-left: 0.5rem !important;
 }
 
 /* Selected and hover states for readability on navy */

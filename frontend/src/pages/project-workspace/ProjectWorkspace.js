@@ -416,18 +416,19 @@ const ProjectWorkspace = () => {
         <div style={{ padding: '1rem', borderBottom: '0.0625rem solid rgba(255,255,255,0.08)' }}>
           <Button
             type="text"
-            icon={<ArrowLeftOutlined style={{ fontSize: '0.875rem' }} />}
+            icon={<ArrowLeftOutlined style={{ fontSize: '1rem' }} />}
             onClick={() => {
               logUserClick('ProjectWorkspace', 'back_to_projects_button', { projectId, projectName: project.name });
               navigate('/projects');
             }}
             style={{
               marginBottom: '1rem',
-              fontSize: '0.875rem',
+              fontSize: '1rem',
               height: 'auto',
               padding: '0.25rem 0',
               display: 'flex',
-              alignItems: 'center'
+              alignItems: 'center',
+              fontWeight: 500
             }}
           >
             Back to Projects
@@ -456,17 +457,18 @@ const ProjectWorkspace = () => {
                     typeInfo.color === 'purple' ? '✂️' : '📁'}
               </div>
               <div>
-                <Title level={4} style={{ margin: 0, fontSize: '1rem', lineHeight: '1.25rem', color: '#ffffff' }}>
+                <Title level={4} style={{ margin: 0, fontSize: '1.25rem', lineHeight: '1.6rem', color: '#ffffff', fontWeight: 600 }}>
                   {project.name}
                 </Title>
                 <Tag
                   color={typeInfo.color}
                   style={{
-                    fontSize: '0.625rem',
-                    lineHeight: '0.875rem',
+                    fontSize: '0.75rem',
+                    lineHeight: '1rem',
                     height: 'auto',
-                    padding: '0.125rem 0.5rem',
-                    marginTop: '0.25rem'
+                    padding: '0.25rem 0.625rem',
+                    marginTop: '0.375rem',
+                    fontWeight: 500
                   }}
                 >
                   {typeInfo.label}
@@ -479,24 +481,24 @@ const ProjectWorkspace = () => {
           <Row gutter={['0.5rem', '0.5rem']}>
             <Col span={12}>
               <Statistic
-                title={<span style={{ fontSize: '0.625rem' }}>Images</span>}
+                title={<span style={{ fontSize: '0.75rem', fontWeight: 500 }}>Images</span>}
                 value={project.total_images}
-                prefix={<PictureOutlined style={{ fontSize: '0.75rem' }} />}
-                valueStyle={{ fontSize: '0.875rem', color: '#E6E6E6' }}
+                prefix={<PictureOutlined style={{ fontSize: '0.875rem' }} />}
+                valueStyle={{ fontSize: '1rem', color: '#E6E6E6', fontWeight: 600 }}
               />
             </Col>
             <Col span={12}>
               <Statistic
-                title={<span style={{ fontSize: '0.625rem' }}>Datasets</span>}
+                title={<span style={{ fontSize: '0.75rem', fontWeight: 500 }}>Datasets</span>}
                 value={project.total_datasets}
-                prefix={<DatabaseOutlined style={{ fontSize: '0.75rem' }} />}
-                valueStyle={{ fontSize: '0.875rem', color: '#E6E6E6' }}
+                prefix={<DatabaseOutlined style={{ fontSize: '0.875rem' }} />}
+                valueStyle={{ fontSize: '1rem', color: '#E6E6E6', fontWeight: 600 }}
               />
             </Col>
           </Row>
 
           <div style={{ marginTop: '0.75rem' }}>
-            <Text type="secondary" style={{ fontSize: '0.75rem', color: '#A3A7AD' }}>
+            <Text type="secondary" style={{ fontSize: '0.875rem', color: '#A3A7AD', fontWeight: 500 }}>
               Progress: {project.total_images > 0
                 ? Math.round((project.labeled_images / project.total_images) * 100)
                 : 0}% annotated
