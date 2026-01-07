@@ -69,6 +69,7 @@ class UltralyticsPredictor(BasePredictor):
                 imgsz=params.get('imgsz', 640),
                 conf=params.get('confidence', 0.25),
                 iou=params.get('iou_threshold', 0.45),
+                max_det=params.get('max_det', 300),
                 device=params.get('device', '0'),  # '0' for GPU, 'cpu' for CPU
                 project=output_folder,
                 name='',  # Save directly in output_folder

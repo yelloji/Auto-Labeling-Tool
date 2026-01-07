@@ -561,6 +561,60 @@ export const projectsAPI = {
     const response = await api.delete(`/api/v1/experiments/${experimentId}`);
     return response.data;
   },
+
+  // --- Prediction API ---
+
+  // Get active queued prediction draft for a model
+  getQueuedPrediction: async (trainingId) => {
+    try {
+      const response = await api.get(`/api/v1/training/${trainingId}/prediction/queued`);
+      return response.data;
+    } catch (error) {
+      if (error.response && error.response.status === 404) return null;
+      throw error;
+    }
+  },
+
+  // Initialize a prediction draft
+  initPrediction: async (trainingId, payload) => {
+    const response = await api.post(`/api/v1/training/${trainingId}/prediction/init`, payload);
+    return response.data;
+  },
+
+  // Sync prediction draft settings to DB
+  updatePredictionDraft: async (experimentId, payload) => {
+    const response = await api.patch(`/api/v1/experiments/${experimentId}/prediction`, payload);
+    return response.data;
+  },
+
+  // Start prediction subprocess
+  triggerPrediction: async (trainingId, payload) => {
+    const response = await api.post(`/api/v1/training/${trainingId}/predict`, payload);
+    return response.data;
+  },
+
+  // List images in an experiment output folder
+  getExperimentImages: async (experimentId) => {
+    const response = await api.get(`/api/v1/experiments/${experimentId}/images`);
+    return response.data;
+  },
+
+  // Download experiment results as ZIP
+  downloadExperimentResults: async (experimentId) => {
+    const response = await api.get(`/api/v1/experiments/${experimentId}/download`, {
+      responseType: 'blob'
+    });
+    // Try to extract filename from Content-Disposition
+    const contentDisposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+    let filename = `prediction_${experimentId}.zip`;
+    if (contentDisposition) {
+      const match = /filename="?([^";]+)"?/i.exec(contentDisposition);
+      if (match && match[1]) {
+        filename = match[1];
+      }
+    }
+    return { blob: response.data, filename };
+  },
 };
 
 // ==================== IMAGE TRANSFORMATIONS API ====================

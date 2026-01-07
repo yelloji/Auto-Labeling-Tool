@@ -6,6 +6,7 @@ import ViewConfig from '../ConfigurationView/ViewConfig';
 import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
 import ModelManagerView from '../ModelManagerView/ModelManagerView';
 import ValidationView from '../ValidationView/ValidationView';
+import PredictionView from '../PredictionView/PredictionView';
 import './OverviewView.css';
 
 const { Title, Text } = Typography;
@@ -483,6 +484,11 @@ const OverviewView = ({ training }) => {
                     key: 'validation',
                     label: 'Validation',
                     children: <ValidationView training={training} />
+                },
+                {
+                    key: 'prediction',
+                    label: 'Prediction',
+                    children: <PredictionView training={training} />
                 }
             ]} />
         </div>

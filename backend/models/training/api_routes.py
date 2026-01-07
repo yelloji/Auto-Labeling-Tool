@@ -1,5 +1,7 @@
 from typing import Optional, List, Any, Dict
 from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -1260,7 +1262,8 @@ async def get_queued_validation(training_id: int, db: Session = Depends(get_db))
         db.query(ModelExperiment)
         .filter(
             ModelExperiment.training_id == training_id,
-            ModelExperiment.status == "queued"
+            ModelExperiment.status == "queued",
+            ModelExperiment.experiment_type == "validation"  # Only return validation experiments
         )
         .first()
     )
@@ -1525,6 +1528,43 @@ async def list_training_experiments(training_id: int, db: Session = Depends(get_
     return exps
 
 
+@router.get("/experiments/{experiment_id}/images")
+async def list_experiment_images(experiment_id: str, db: Session = Depends(get_db)):
+    """List result images (filenames) in an experiment output folder."""
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    if not exp.output_folder:
+        return []
+    
+    # Resolve project root
+    current_file = Path(__file__).resolve()
+    backend_dir = next(p for p in current_file.parents if p.name == "backend")
+    project_root = backend_dir.parent
+    
+    full_path = (project_root / exp.output_folder).resolve()
+    if not full_path.exists() or not full_path.is_dir():
+        logger.warning("errors.system", f"Experiment folder not found on disk: {full_path}", "list_experiment_images_not_found")
+        return []
+    
+    # Collect all image files
+    image_files = []
+    # Supported formats from settings (hardcoded here to avoid import cycle if any)
+    valid_exts = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+    
+    for f in full_path.iterdir():
+        if f.is_file() and f.suffix.lower() in valid_exts:
+            # Check if this is an annotated image (ends with _pred or similar)
+            # Actually, we'll just return all images in that folder
+            image_files.append(f.name)
+            
+    # Sort alphabetically
+    image_files.sort()
+    
+    return image_files
+
+
 @router.delete("/experiments/{experiment_id}")
 async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
     """Delete an experiment record (DB only for now, filesystem cleanup TODO)."""
@@ -1591,6 +1631,52 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
     return {"success": True, "message": "Experiment deleted successfully"}
 
 
+@router.get("/experiments/{experiment_id}/download")
+async def download_experiment_results(experiment_id: str, db: Session = Depends(get_db)):
+    """Zip and download the annotated images and predictions.json."""
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    if not exp.output_folder:
+        raise HTTPException(status_code=400, detail="Experiment has no output files")
+
+    # Resolve project root
+    current_file = Path(__file__).resolve()
+    backend_dir = next(p for p in current_file.parents if p.name == "backend")
+    project_root = backend_dir.parent
+    
+    abs_output_dir = (project_root / exp.output_folder).resolve()
+    if not abs_output_dir.exists():
+        raise HTTPException(status_code=404, detail="Result folder not found on disk")
+
+    # Create a temporary ZIP file path
+    zip_filename = f"prediction_{exp.name or exp.id}.zip"
+    temp_zip_path = Path(abs_output_dir).parent / f"{exp.id}_download.zip"
+    
+    # Use shutil to create the archive
+    # base_name is the archive name without .zip
+    try:
+        shutil.make_archive(str(temp_zip_path.with_suffix('')), 'zip', abs_output_dir)
+    except Exception as e:
+        logger.error("errors.system", f"Failed to create ZIP archive: {e}", "zip_creation_failed")
+        raise HTTPException(status_code=500, detail="Failed to create result archive")
+
+    def cleanup_temp_file():
+        if temp_zip_path.exists():
+            try:
+                os.remove(temp_zip_path)
+            except Exception:
+                pass
+
+    return FileResponse(
+        path=str(temp_zip_path), 
+        filename=zip_filename, 
+        media_type="application/zip",
+        background=BackgroundTask(cleanup_temp_file)
+    )
+
+
 # =============================================================================
 # PREDICTION API ENDPOINTS
 # =============================================================================
@@ -1604,6 +1690,8 @@ class PredictionRequest(BaseModel):
     imgsz: int = 640
     weights_type: str = "best"  # 'best' or 'last'
     task: str = "detect"  # 'detect' or 'segment'
+    max_det: int = 300
+    device: str = "0"
     custom_params: Optional[Dict[str, Any]] = None
     # For upload source
     uploaded_images: Optional[List[str]] = None  # List of image paths for upload source
@@ -1618,6 +1706,8 @@ class PredictionUpdate(BaseModel):
     imgsz: Optional[int] = None
     weights_type: Optional[str] = None
     task: Optional[str] = None
+    max_det: Optional[int] = None
+    device: Optional[str] = None
     custom_params: Optional[Dict[str, Any]] = None
     uploaded_images: Optional[List[str]] = None
 
@@ -1768,6 +1858,8 @@ async def trigger_prediction(
         experiment.imgsz = payload.imgsz
         experiment.weights_type = payload.weights_type
         experiment.task = payload.task
+        experiment.max_detections = payload.max_det
+        experiment.device = payload.device
         experiment.custom_params = payload.custom_params
         experiment.input_images = payload.uploaded_images
     else:
@@ -1804,6 +1896,8 @@ async def trigger_prediction(
             iou_threshold=payload.iou_threshold,
             imgsz=payload.imgsz,
             weights_type=payload.weights_type,
+            max_detections=payload.max_det,
+            device=payload.device,
             input_images=payload.uploaded_images,
             status="queued"
         )

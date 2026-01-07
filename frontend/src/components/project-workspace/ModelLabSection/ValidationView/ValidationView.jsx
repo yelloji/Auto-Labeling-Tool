@@ -201,12 +201,14 @@ const ValidationView = ({ training }) => {
         if (!quiet) setLoading(true);
         try {
             const data = await projectsAPI.getTrainingExperiments(training.id);
-            setExperiments(data || []);
+            // Filter to only show validation experiments (not prediction experiments)
+            const validations = (data || []).filter(e => e.experiment_type === 'validation');
+            setExperiments(validations);
 
             // AUTO-DETECT BACKGROUND RUNS: 
             // If any experiment is actually 'running', lock the UI.
             // Note: 'queued' is treated as a draft for this UI, so we don't lock for it.
-            const isAnyRunning = (data || []).some(e => e.status === 'running');
+            const isAnyRunning = validations.some(e => e.status === 'running');
             setRunning(isAnyRunning);
 
             if (isAnyRunning) {
@@ -228,15 +230,15 @@ const ValidationView = ({ training }) => {
             // SELECTIVE AUTO-SELECTION:
             // Ensure we don't leak the selection from a previous training session
             setActiveExperiment(prev => {
-                if (!prev) return (data && data.length > 0) ? data[0] : null;
+                if (!prev) return (validations && validations.length > 0) ? validations[0] : null;
 
                 // Try to find the exact same experiment (for status updates)
-                const updated = (data || []).find(e => e.id === prev.id);
+                const updated = validations.find(e => e.id === prev.id);
                 if (updated) return updated;
 
                 // ID not found? It probably belongs to a different training session.
                 // Reset to the first item of THIS session, or null if empty.
-                return (data && data.length > 0) ? data[0] : null;
+                return (validations && validations.length > 0) ? validations[0] : null;
             });
         } catch (error) {
             if (!quiet) handleAPIError(error, "Failed to load validation history");

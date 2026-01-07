@@ -189,7 +189,8 @@ async def init_db():
                         "process_pid": "ALTER TABLE model_experiments ADD COLUMN process_pid INTEGER",
                         "task": "ALTER TABLE model_experiments ADD COLUMN task VARCHAR",
                         "completed_at": "ALTER TABLE model_experiments ADD COLUMN completed_at DATETIME",
-                        "duration_sec": "ALTER TABLE model_experiments ADD COLUMN duration_sec FLOAT"
+                        "duration_sec": "ALTER TABLE model_experiments ADD COLUMN duration_sec FLOAT",
+                        "device": "ALTER TABLE model_experiments ADD COLUMN device VARCHAR DEFAULT '0'"
                     }
                     
                     for col, sql_stmt in add_map.items():

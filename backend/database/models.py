@@ -635,6 +635,7 @@ class ModelExperiment(Base):
     confidence = Column(Float, default=0.25)
     iou_threshold = Column(Float, default=0.45)
     imgsz = Column(Integer, default=640)
+    device = Column(String, default="0")
     custom_params = Column(JSON, nullable=True)
     
     # Validation Results
