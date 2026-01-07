@@ -138,6 +138,12 @@
     gap: 1.5rem;
 }
 
+.config-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
 .config-item {
     display: flex;
     flex-direction: column;

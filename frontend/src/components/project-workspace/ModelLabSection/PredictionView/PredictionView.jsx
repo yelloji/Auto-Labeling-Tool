@@ -395,138 +395,130 @@ const PredictionView = ({ training }) => {
                             </Text>
                         </div>
                         <div className="config-grid">
-                            {/* Column 1: Basic Info */}
-                            <div className="config-item">
-                                <Tooltip title="Unique name to identify this prediction run. Helps organize and compare results later.">
-                                    <Text strong style={{ cursor: 'help' }}>Experiment Name</Text>
-                                </Tooltip>
-                                <Input
-                                    placeholder="Timestamp name if empty"
-                                    value={config.name}
-                                    onChange={e => updateParam('name', e.target.value)}
-                                    disabled={selectedExp && selectedExp.status !== 'queued'}
-                                />
-                            </div>
-
-                            {/* Column 2: Confidence Slider */}
-                            <div className="config-item">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                    <Tooltip title="Minimum confidence score (0-1) for object detections. Lower values detect more objects but may include false positives.">
-                                        <Text strong style={{ cursor: 'help' }}>Confidence</Text>
+                            {/* Column 1: Basic & Source Info */}
+                            <div className="config-column">
+                                <div className="config-item">
+                                    <Tooltip title="Unique name to identify this prediction run. Helps organize and compare results later.">
+                                        <Text strong style={{ cursor: 'help' }}>Experiment Name</Text>
                                     </Tooltip>
-                                    <InputNumber
-                                        min={0.01} max={1.0} step={0.01}
-                                        value={config.confidence}
-                                        size="small"
-                                        onChange={val => updateParam('confidence', val)}
+                                    <Input
+                                        placeholder="Timestamp name if empty"
+                                        value={config.name}
+                                        onChange={e => updateParam('name', e.target.value)}
                                         disabled={selectedExp && selectedExp.status !== 'queued'}
-                                        style={{ width: '80px' }}
                                     />
                                 </div>
-                                <Slider
-                                    min={0.01} max={1.00} step={0.01}
-                                    value={config.confidence}
-                                    onChange={val => updateParam('confidence', val)}
-                                    disabled={selectedExp && selectedExp.status !== 'queued'}
-                                />
-                            </div>
-
-                            {/* Column 3: Prediction Task (Only for segmentation models) */}
-                            {training?.taskType === 'segmentation' && (
                                 <div className="config-item">
-                                    <Tooltip title="Type of prediction to perform: Object Detection (bounding boxes) or Segmentation (pixel-level masks).">
-                                        <Text strong style={{ cursor: 'help' }}>Prediction Task</Text>
+                                    <Tooltip title="Choose which dataset to run predictions on: Test/Val/Train sets, or upload custom images.">
+                                        <Text strong style={{ cursor: 'help' }}>Select Prediction Data</Text>
                                     </Tooltip>
                                     <Select
-                                        value={config.task}
-                                        onChange={val => updateParam('task', val)}
+                                        value={config.dataset_source}
+                                        onChange={val => updateParam('dataset_source', val)}
                                         disabled={selectedExp && selectedExp.status !== 'queued'}
                                         style={{ width: '100%' }}
                                     >
-                                        <Option value="segmentation">Instance Segmentation (Recommended)</Option>
-                                        <Option value="detection">Object Detection</Option>
+                                        <Option value="test">Test Set</Option>
+                                        <Option value="val">Validation Set</Option>
+                                        <Option value="train">Training Set</Option>
+                                        <Option value="upload">Upload Files</Option>
                                     </Select>
                                 </div>
-                            )}
-
-                            {/* Column 1: Dataset Split */}
-                            <div className="config-item">
-                                <Tooltip title="Choose which dataset to run predictions on: Test/Val/Train sets, or upload custom images.">
-                                    <Text strong style={{ cursor: 'help' }}>Select Prediction Data</Text>
-                                </Tooltip>
-                                <Select
-                                    value={config.dataset_source}
-                                    onChange={val => updateParam('dataset_source', val)}
-                                    disabled={selectedExp && selectedExp.status !== 'queued'}
-                                    style={{ width: '100%' }}
-                                >
-                                    <Option value="test">Test Set</Option>
-                                    <Option value="val">Validation Set</Option>
-                                    <Option value="train">Training Set</Option>
-                                    <Option value="upload">Upload Files</Option>
-                                </Select>
                             </div>
 
-                            {/* Column 2: IoU Threshold Slider */}
-                            <div className="config-item">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                    <Tooltip title="Intersection over Union threshold for Non-Maximum Suppression. Higher values remove more overlapping boxes.">
-                                        <Text strong style={{ cursor: 'help' }}>IoU Threshold</Text>
-                                    </Tooltip>
-                                    <InputNumber
-                                        min={0.01} max={1.0} step={0.01}
-                                        value={config.iou_threshold}
-                                        size="small"
-                                        onChange={val => updateParam('iou_threshold', val)}
+                            {/* Column 2: Thresholds & Sliders */}
+                            <div className="config-column">
+                                <div className="config-item">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                        <Tooltip title="Minimum confidence score (0-1) for object detections. Lower values detect more objects but may include false positives.">
+                                            <Text strong style={{ cursor: 'help' }}>Confidence</Text>
+                                        </Tooltip>
+                                        <InputNumber
+                                            min={0.01} max={1.0} step={0.01}
+                                            value={config.confidence}
+                                            size="small"
+                                            onChange={val => updateParam('confidence', val)}
+                                            disabled={selectedExp && selectedExp.status !== 'queued'}
+                                            style={{ width: '80px' }}
+                                        />
+                                    </div>
+                                    <Slider
+                                        min={0.01} max={1.00} step={0.01}
+                                        value={config.confidence}
+                                        onChange={val => updateParam('confidence', val)}
                                         disabled={selectedExp && selectedExp.status !== 'queued'}
-                                        style={{ width: '80px' }}
                                     />
                                 </div>
-                                <Slider
-                                    min={0.01} max={1.00} step={0.01}
-                                    value={config.iou_threshold}
-                                    onChange={val => updateParam('iou_threshold', val)}
-                                    disabled={selectedExp && selectedExp.status !== 'queued'}
-                                />
+                                <div className="config-item">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                        <Tooltip title="Intersection over Union threshold for Non-Maximum Suppression. Higher values remove more overlapping boxes.">
+                                            <Text strong style={{ cursor: 'help' }}>IoU Threshold</Text>
+                                        </Tooltip>
+                                        <InputNumber
+                                            min={0.01} max={1.0} step={0.01}
+                                            value={config.iou_threshold}
+                                            size="small"
+                                            onChange={val => updateParam('iou_threshold', val)}
+                                            disabled={selectedExp && selectedExp.status !== 'queued'}
+                                            style={{ width: '80px' }}
+                                        />
+                                    </div>
+                                    <Slider
+                                        min={0.01} max={1.00} step={0.01}
+                                        value={config.iou_threshold}
+                                        onChange={val => updateParam('iou_threshold', val)}
+                                        disabled={selectedExp && selectedExp.status !== 'queued'}
+                                    />
+                                </div>
                             </div>
 
-                            {/* Column 3: Image Size */}
-                            <div className="config-item">
-                                <Tooltip title="Input image resolution for predictions. Higher values (1280px) are more accurate but slower, lower (320px) are faster.">
-                                    <Text strong style={{ cursor: 'help' }}>Image Size</Text>
-                                </Tooltip>
-                                <Select
-                                    value={config.imgsz}
-                                    onChange={val => updateParam('imgsz', val)}
-                                    disabled={selectedExp && selectedExp.status !== 'queued'}
-                                    style={{ width: '100%' }}
-                                >
-                                    <Option value={320}>320px (Fast)</Option>
-                                    <Option value={640}>640px (Default)</Option>
-                                    <Option value={1280}>1280px (Accurate)</Option>
-                                </Select>
-                            </div>
-
-                            {/* Empty cell to maintain grid alignment */}
-                            <div className="config-item" style={{ visibility: 'hidden' }}></div>
-
-                            {/* Empty cell to maintain grid alignment */}
-                            <div className="config-item" style={{ visibility: 'hidden' }}></div>
-
-                            {/* Column 3: Model Weights */}
-                            <div className="config-item">
-                                <Tooltip title="Best: Uses model checkpoint with highest validation metrics. Last: Uses final checkpoint from training.">
-                                    <Text strong style={{ cursor: 'help' }}>Model Weights</Text>
-                                </Tooltip>
-                                <Select
-                                    value={config.weights_type}
-                                    onChange={val => updateParam('weights_type', val)}
-                                    disabled={selectedExp && selectedExp.status !== 'queued'}
-                                    style={{ width: '100%' }}
-                                >
-                                    <Option value="best">Best Weights</Option>
-                                    <Option value="last">Last Weights</Option>
-                                </Select>
+                            {/* Column 3: Task & Model Settings */}
+                            <div className="config-column">
+                                {training?.taskType === 'segmentation' && (
+                                    <div className="config-item">
+                                        <Tooltip title="Type of prediction to perform: Object Detection (bounding boxes) or Segmentation (pixel-level masks).">
+                                            <Text strong style={{ cursor: 'help' }}>Prediction Task</Text>
+                                        </Tooltip>
+                                        <Select
+                                            value={config.task}
+                                            onChange={val => updateParam('task', val)}
+                                            disabled={selectedExp && selectedExp.status !== 'queued'}
+                                            style={{ width: '100%' }}
+                                        >
+                                            <Option value="segmentation">Instance Segmentation (Recommended)</Option>
+                                            <Option value="detection">Object Detection</Option>
+                                        </Select>
+                                    </div>
+                                )}
+                                <div className="config-item">
+                                    <Tooltip title="Input image resolution for predictions. Higher values (1280px) are more accurate but slower, lower (320px) are faster.">
+                                        <Text strong style={{ cursor: 'help' }}>Image Size</Text>
+                                    </Tooltip>
+                                    <Select
+                                        value={config.imgsz}
+                                        onChange={val => updateParam('imgsz', val)}
+                                        disabled={selectedExp && selectedExp.status !== 'queued'}
+                                        style={{ width: '100%' }}
+                                    >
+                                        <Option value={320}>320px (Fast)</Option>
+                                        <Option value={640}>640px (Default)</Option>
+                                        <Option value={1280}>1280px (Accurate)</Option>
+                                    </Select>
+                                </div>
+                                <div className="config-item">
+                                    <Tooltip title="Best: Uses model checkpoint with highest validation metrics. Last: Uses final checkpoint from training.">
+                                        <Text strong style={{ cursor: 'help' }}>Model Weights</Text>
+                                    </Tooltip>
+                                    <Select
+                                        value={config.weights_type}
+                                        onChange={val => updateParam('weights_type', val)}
+                                        disabled={selectedExp && selectedExp.status !== 'queued'}
+                                        style={{ width: '100%' }}
+                                    >
+                                        <Option value="best">Best Weights</Option>
+                                        <Option value="last">Last Weights</Option>
+                                    </Select>
+                                </div>
                             </div>
                         </div>
 
