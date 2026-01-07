@@ -83,6 +83,7 @@ const PredictionView = ({ training }) => {
     const [config, setConfig] = useState({
         name: '',
         dataset_source: 'test',
+        task: training?.taskType || 'detection',  // Default to training's task type
         confidence: 0.25,
         iou_threshold: 0.45,
         imgsz: 640,
@@ -134,6 +135,7 @@ const PredictionView = ({ training }) => {
                     setConfig({
                         name: latest.name || '',
                         dataset_source: latest.dataset_source || 'test',
+                        task: latest.task || training?.taskType || 'detection',
                         confidence: latest.confidence || 0.25,
                         iou_threshold: latest.iou_threshold || 0.45,
                         imgsz: latest.imgsz || 640,
@@ -329,7 +331,11 @@ const PredictionView = ({ training }) => {
                 {/* --- Left Sidebar: History --- */}
                 <div className="prediction-left-col">
                     <Card
-                        title={<Space><HistoryOutlined /> 📜 History</Space>}
+                        title={
+                            <Tooltip title="View all your prediction experiments. Click an experiment to see its results and configurations.">
+                                <Space style={{ cursor: 'help' }}><HistoryOutlined /> History</Space>
+                            </Tooltip>
+                        }
                         className="history-card"
                         size="small"
                         extra={<Button type="text" icon={<SyncOutlined />} onClick={() => fetchExperiments()} />}
@@ -383,10 +389,17 @@ const PredictionView = ({ training }) => {
                     {/* 1. Configuration Section */}
                     <div className="config-section-container">
                         <div className="section-header"><SettingOutlined /> Configuration</div>
+                        <div style={{ marginBottom: '1rem', marginTop: '0.5rem' }}>
+                            <Text type="secondary" style={{ fontSize: '0.75rem' }}>
+                                Configure these settings to run a new prediction experiment and detect objects in your images.
+                            </Text>
+                        </div>
                         <div className="config-grid">
                             {/* Column 1: Basic Info */}
                             <div className="config-item">
-                                <Text strong>Experiment Name</Text>
+                                <Tooltip title="Unique name to identify this prediction run. Helps organize and compare results later.">
+                                    <Text strong style={{ cursor: 'help' }}>Experiment Name</Text>
+                                </Tooltip>
                                 <Input
                                     placeholder="Timestamp name if empty"
                                     value={config.name}
@@ -398,7 +411,9 @@ const PredictionView = ({ training }) => {
                             {/* Column 2: Confidence Slider */}
                             <div className="config-item">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                    <Text strong>Confidence</Text>
+                                    <Tooltip title="Minimum confidence score (0-1) for object detections. Lower values detect more objects but may include false positives.">
+                                        <Text strong style={{ cursor: 'help' }}>Confidence</Text>
+                                    </Tooltip>
                                     <InputNumber
                                         min={0.01} max={1.0} step={0.01}
                                         value={config.confidence}
@@ -416,23 +431,29 @@ const PredictionView = ({ training }) => {
                                 />
                             </div>
 
-                            {/* Column 3: Prediction Task */}
-                            <div className="config-item">
-                                <Text strong>Prediction Task</Text>
-                                <Select
-                                    value={config.task}
-                                    onChange={val => updateParam('task', val)}
-                                    disabled={selectedExp && selectedExp.status !== 'queued'}
-                                    style={{ width: '100%' }}
-                                >
-                                    <Option value="detect">Object Detection</Option>
-                                    <Option value="segment">Segmentation</Option>
-                                </Select>
-                            </div>
+                            {/* Column 3: Prediction Task (Only for segmentation models) */}
+                            {training?.taskType === 'segmentation' && (
+                                <div className="config-item">
+                                    <Tooltip title="Type of prediction to perform: Object Detection (bounding boxes) or Segmentation (pixel-level masks).">
+                                        <Text strong style={{ cursor: 'help' }}>Prediction Task</Text>
+                                    </Tooltip>
+                                    <Select
+                                        value={config.task}
+                                        onChange={val => updateParam('task', val)}
+                                        disabled={selectedExp && selectedExp.status !== 'queued'}
+                                        style={{ width: '100%' }}
+                                    >
+                                        <Option value="segmentation">Instance Segmentation (Recommended)</Option>
+                                        <Option value="detection">Object Detection</Option>
+                                    </Select>
+                                </div>
+                            )}
 
                             {/* Column 1: Dataset Split */}
                             <div className="config-item">
-                                <Text strong>Dataset Split</Text>
+                                <Tooltip title="Choose which dataset to run predictions on: Test/Val/Train sets, or upload custom images.">
+                                    <Text strong style={{ cursor: 'help' }}>Select Prediction Data</Text>
+                                </Tooltip>
                                 <Select
                                     value={config.dataset_source}
                                     onChange={val => updateParam('dataset_source', val)}
@@ -449,7 +470,9 @@ const PredictionView = ({ training }) => {
                             {/* Column 2: IoU Threshold Slider */}
                             <div className="config-item">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                    <Text strong>IoU Threshold</Text>
+                                    <Tooltip title="Intersection over Union threshold for Non-Maximum Suppression. Higher values remove more overlapping boxes.">
+                                        <Text strong style={{ cursor: 'help' }}>IoU Threshold</Text>
+                                    </Tooltip>
                                     <InputNumber
                                         min={0.01} max={1.0} step={0.01}
                                         value={config.iou_threshold}
@@ -469,7 +492,9 @@ const PredictionView = ({ training }) => {
 
                             {/* Column 3: Image Size */}
                             <div className="config-item">
-                                <Text strong>Image Size</Text>
+                                <Tooltip title="Input image resolution for predictions. Higher values (1280px) are more accurate but slower, lower (320px) are faster.">
+                                    <Text strong style={{ cursor: 'help' }}>Image Size</Text>
+                                </Tooltip>
                                 <Select
                                     value={config.imgsz}
                                     onChange={val => updateParam('imgsz', val)}
@@ -490,7 +515,9 @@ const PredictionView = ({ training }) => {
 
                             {/* Column 3: Model Weights */}
                             <div className="config-item">
-                                <Text strong>Model Weights</Text>
+                                <Tooltip title="Best: Uses model checkpoint with highest validation metrics. Last: Uses final checkpoint from training.">
+                                    <Text strong style={{ cursor: 'help' }}>Model Weights</Text>
+                                </Tooltip>
                                 <Select
                                     value={config.weights_type}
                                     onChange={val => updateParam('weights_type', val)}
@@ -580,7 +607,9 @@ const PredictionView = ({ training }) => {
                     {/* 3. Gallery Section */}
                     <div className="gallery-section-container">
                         <div className="gallery-header">
-                            <span><EyeOutlined /> Image Gallery</span>
+                            <Tooltip title="Browse prediction results. Click any image to view detailed detection boxes and confidence scores.">
+                                <span style={{ cursor: 'help' }}><EyeOutlined /> Image Gallery</span>
+                            </Tooltip>
                             <Button
                                 icon={<DownloadOutlined />}
                                 size="small"

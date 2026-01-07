@@ -62,10 +62,17 @@ class UltralyticsPredictor(BasePredictor):
             model = YOLO(model_path)
             
             # 4. Run prediction
+            # Map frontend task names to YOLO task names
+            task_name = params.get('task', 'detect')
+            if task_name == 'detection':
+                task_name = 'detect'
+            elif task_name == 'segmentation':
+                task_name = 'segment'
+            
             # Note: name='' ensures results are saved DIRECTLY in output_folder, no /predict/ subfolder
             results = model.predict(
                 source=images,  # Can be list of paths, folder path, or single image
-                task=params.get('task', 'detect'),  # 'detect' or 'segment'
+                task=task_name,  # 'detect' or 'segment' (YOLO format)
                 imgsz=params.get('imgsz', 640),
                 conf=params.get('confidence', 0.25),
                 iou=params.get('iou_threshold', 0.45),
