@@ -30,6 +30,7 @@ import sys
 from core.config import settings
 from database.models import ModelExperiment
 from models.training.validator import ValidatorRegistry
+from models.training.predictor import PredictorRegistry
 import re
 import psutil
 import signal
@@ -1226,7 +1227,7 @@ async def acknowledge_training_completion(
     
     return {"success": True, "session_id": session_id}
 
-# --- Validation and Prediction API ---
+# --- Validation  API ---
 
 class ValidationRequest(BaseModel):
     name: Optional[str] = None
@@ -1523,6 +1524,7 @@ async def list_training_experiments(training_id: int, db: Session = Depends(get_
     exps = db.query(ModelExperiment).filter(ModelExperiment.training_id == training_id).order_by(ModelExperiment.created_at.desc()).all()
     return exps
 
+
 @router.delete("/experiments/{experiment_id}")
 async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
     """Delete an experiment record (DB only for now, filesystem cleanup TODO)."""
@@ -1587,3 +1589,361 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
     })
     
     return {"success": True, "message": "Experiment deleted successfully"}
+
+
+# =============================================================================
+# PREDICTION API ENDPOINTS
+# =============================================================================
+
+class PredictionRequest(BaseModel):
+    """Request model for prediction experiments"""
+    name: str
+    dataset_source: str = "test"  # 'test', 'val', 'train', 'upload'
+    confidence: float = 0.25
+    iou_threshold: float = 0.45
+    imgsz: int = 640
+    weights_type: str = "best"  # 'best' or 'last'
+    task: str = "detect"  # 'detect' or 'segment'
+    custom_params: Optional[Dict[str, Any]] = None
+    # For upload source
+    uploaded_images: Optional[List[str]] = None  # List of image paths for upload source
+
+
+class PredictionUpdate(BaseModel):
+    """Update model for prediction experiments"""
+    name: Optional[str] = None
+    dataset_source: Optional[str] = None
+    confidence: Optional[float] = None
+    iou_threshold: Optional[float] = None
+    imgsz: Optional[int] = None
+    weights_type: Optional[str] = None
+    task: Optional[str] = None
+    custom_params: Optional[Dict[str, Any]] = None
+    uploaded_images: Optional[List[str]] = None
+
+
+@router.get("/training/{training_id}/prediction/queued")
+async def get_queued_prediction(training_id: int, db: Session = Depends(get_db)):
+    """Find existing queued prediction experiment for a model."""
+    exp = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.experiment_type == "prediction",
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+    return exp
+
+
+@router.post("/training/{training_id}/prediction/init")
+async def init_prediction(training_id: int, payload: PredictionRequest, db: Session = Depends(get_db)):
+    """Initialize a new prediction record or return existing queued one."""
+    # Check for existing queued prediction
+    existing = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.experiment_type == "prediction",
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+    if existing:
+        return existing
+        
+    # Get training session
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+    
+    # Get project for denormalized name
+    project = db.query(Project).filter(Project.id == ts.project_id).first()
+    
+    # Calculate image_count from dataset_summary_json for dataset sources
+    image_count = None
+    if payload.dataset_source in ['test', 'val', 'train']:
+        if ts.dataset_summary_json:
+            try:
+                summary = json.loads(ts.dataset_summary_json) if isinstance(ts.dataset_summary_json, str) else ts.dataset_summary_json
+                splits = summary.get('splits', {})
+                image_count = splits.get(payload.dataset_source, None)
+            except Exception as e:
+                logger.warning("errors.system", f"Failed to parse dataset_summary_json: {e}", "init_prediction_summary_parse_failed")
+    elif payload.dataset_source == 'upload' and payload.uploaded_images:
+        image_count = len(payload.uploaded_images)
+        
+    # Create prediction experiment
+    exp = ModelExperiment(
+        id=str(uuid.uuid4()),
+        training_id=ts.id,
+        project_id=ts.project_id,
+        project_name=project.name if project else None,
+        training_name=ts.name,
+        name=payload.name or "",
+        experiment_type="prediction",
+        framework=ts.framework or "ultralytics",
+        task=payload.task or ts.task,
+        dataset_source=payload.dataset_source,
+        dataset_path=ts.dataset_release_dir if payload.dataset_source in ['test', 'val', 'train'] else None,
+        image_count=image_count,
+        confidence=payload.confidence,
+        iou_threshold=payload.iou_threshold,
+        imgsz=payload.imgsz,
+        weights_type=payload.weights_type,
+        input_images=payload.uploaded_images,  # Store uploaded image paths
+        status="queued"
+    )
+    
+    db.add(exp)
+    db.commit()
+    db.refresh(exp)
+    return exp
+
+
+@router.patch("/experiments/{experiment_id}/prediction")
+async def update_prediction(experiment_id: str, payload: PredictionUpdate, db: Session = Depends(get_db)):
+    """Update specific fields of a prediction experiment (real-time sync)."""
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    update_data = payload.dict(exclude_unset=True)
+    
+    # If dataset_source changed, recalculate image_count
+    if 'dataset_source' in update_data:
+        new_source = update_data['dataset_source']
+        if new_source in ['test', 'val', 'train']:
+            ts = db.query(TrainingSession).filter(TrainingSession.id == exp.training_id).first()
+            if ts and ts.dataset_summary_json:
+                try:
+                    summary = json.loads(ts.dataset_summary_json) if isinstance(ts.dataset_summary_json, str) else ts.dataset_summary_json
+                    splits = summary.get('splits', {})
+                    new_count = splits.get(new_source, None)
+                    if new_count is not None:
+                        exp.image_count = new_count
+                except Exception as e:
+                    logger.warning("errors.system", f"Failed to recalculate image_count: {e}", "update_prediction_image_count_failed")
+        elif new_source == 'upload' and 'uploaded_images' in update_data:
+            exp.image_count = len(update_data['uploaded_images']) if update_data['uploaded_images'] else None
+    
+    for key, value in update_data.items():
+        setattr(exp, key, value)
+        
+    db.commit()
+    db.refresh(exp)
+    return exp
+
+
+@router.post("/training/{training_id}/predict")
+async def trigger_prediction(
+    training_id: int, 
+    payload: PredictionRequest, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Start a prediction experiment in a subprocess."""
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    # Resume existing draft if available
+    experiment = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.experiment_type == "prediction",
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+    
+    if experiment:
+        # Finalize settings from UI
+        experiment.name = payload.name
+        experiment.dataset_source = payload.dataset_source
+        experiment.confidence = payload.confidence
+        experiment.iou_threshold = payload.iou_threshold
+        experiment.imgsz = payload.imgsz
+        experiment.weights_type = payload.weights_type
+        experiment.task = payload.task
+        experiment.custom_params = payload.custom_params
+        experiment.input_images = payload.uploaded_images
+    else:
+        # Fallback if UI somehow triggered without init
+        project = db.query(Project).filter(Project.id == ts.project_id).first()
+        
+        # Calculate image_count
+        image_count = None
+        if payload.dataset_source in ['test', 'val', 'train']:
+            if ts.dataset_summary_json:
+                try:
+                    summary = json.loads(ts.dataset_summary_json) if isinstance(ts.dataset_summary_json, str) else ts.dataset_summary_json
+                    splits = summary.get('splits', {})
+                    image_count = splits.get(payload.dataset_source, None)
+                except Exception:
+                    pass
+        elif payload.dataset_source == 'upload' and payload.uploaded_images:
+            image_count = len(payload.uploaded_images)
+        
+        experiment = ModelExperiment(
+            id=str(uuid.uuid4()),
+            training_id=ts.id,
+            project_id=ts.project_id,
+            project_name=project.name if project else None,
+            training_name=ts.name,
+            name=payload.name,
+            experiment_type="prediction",
+            framework=ts.framework or "ultralytics",
+            task=payload.task or ts.task,
+            dataset_source=payload.dataset_source,
+            dataset_path=ts.dataset_release_dir if payload.dataset_source in ['test', 'val', 'train'] else None,
+            image_count=image_count,
+            confidence=payload.confidence,
+            iou_threshold=payload.iou_threshold,
+            imgsz=payload.imgsz,
+            weights_type=payload.weights_type,
+            input_images=payload.uploaded_images,
+            status="queued"
+        )
+        db.add(experiment)
+    
+    db.commit()
+    db.refresh(experiment)
+
+    # --- Start Prediction Subprocess ---
+    try:
+        # Resolve paths
+        current_file = Path(__file__).resolve()
+        backend_dir = next(p for p in current_file.parents if p.name == "backend")
+        project_root = backend_dir.parent
+        
+        # 1. Weights Path
+        weights_filename = "best.pt" if payload.weights_type == 'best' else "last.pt"
+
+        weights_path = None
+        candidates = []
+        if ts.weights_dir:
+            candidates.append(project_root / ts.weights_dir / weights_filename)
+        if ts.run_dir:
+            candidates.append(project_root / ts.run_dir / "weights" / weights_filename)
+            
+        for c in candidates:
+            if c.exists():
+                weights_path = c.as_posix()
+                break
+        
+        if not weights_path:
+            raise FileNotFoundError(f"Weights {weights_filename} not found in {candidates}")
+
+        # 2. Resolve image sources
+        images_list = []
+        if payload.dataset_source in ['test', 'val', 'train']:
+            # Use dataset images
+            if not ts.dataset_release_dir:
+                raise ValueError(f"No dataset found for training {ts.name}")
+            
+            images_dir = project_root / ts.dataset_release_dir / "images" / payload.dataset_source
+            if not images_dir.exists():
+                raise FileNotFoundError(f"Images folder not found: {images_dir}")
+            
+            # Collect all image files
+            for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif']:
+                images_list.extend([str(p) for p in images_dir.glob(f'*{ext}')])
+                images_list.extend([str(p) for p in images_dir.glob(f'*{ext.upper()}')])
+            
+            if not images_list:
+                raise FileNotFoundError(f"No images found in {images_dir}")
+                
+        elif payload.dataset_source == 'upload':
+            # Use uploaded images
+            if not payload.uploaded_images:
+                raise ValueError("No uploaded images provided")
+            images_list = payload.uploaded_images
+        
+            # Verify all uploaded images exist
+            for img_path in images_list:
+                full_path = project_root / img_path if not Path(img_path).is_absolute() else Path(img_path)
+                if not full_path.exists():
+                    raise FileNotFoundError(f"Uploaded image not found: {img_path}")
+        
+        # Update experiment with actual image count
+        experiment.image_count = len(images_list)
+
+        # 3. Output Folder Path
+        safe_name = re.sub(r'[^\w\-_]', '_', experiment.name or 'unnamed')
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        folder_name = f"{safe_name}_{timestamp}"
+        
+        rel_output_dir = Path(ts.run_dir) / "experiments" / "prediction" / folder_name
+        abs_output_dir = project_root / rel_output_dir
+        
+        # Ensure directory exists
+        os.makedirs(abs_output_dir, exist_ok=True)
+
+        # 4. Launch Subprocess
+        executor_path = (backend_dir / "models" / "training" / "prediction_executor.py").as_posix()
+        
+        # Build params dict
+        params = {
+            'confidence': payload.confidence,
+            'iou_threshold': payload.iou_threshold,
+            'imgsz': payload.imgsz,
+            'task': payload.task or ts.task or 'detect',
+            'device': '0'  # GPU by default
+        }
+        if payload.custom_params:
+            params.update(payload.custom_params)
+        
+        params_json = json.dumps(params)
+        images_json = json.dumps(images_list)
+        
+        log_file_path = abs_output_dir / "prediction.log"
+        log_file = open(log_file_path, "w", encoding="utf-8")
+        
+        # Set environment for unbuffered logging and UTF-8 encoding
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        
+        command = [
+            sys.executable,
+            executor_path,
+            "--experiment_id", str(experiment.id),
+            "--weights_path", weights_path,
+            "--images_json", images_json,
+            "--output_folder", abs_output_dir.as_posix(),
+            "--params_json", params_json
+        ]
+
+        # Use CREATE_NEW_PROCESS_GROUP on Windows to avoid orphan processes
+        creation_flags = 0
+        if os.name == 'nt':
+            creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
+
+        process = subprocess.Popen(
+            command,
+            cwd=project_root.as_posix(),
+            creationflags=creation_flags,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            env=env
+        )
+        
+        # Record the PID immediately
+        experiment.process_pid = process.pid
+        experiment.status = "running"
+        db.commit()
+        
+        logger.info("operations.training", f"Started prediction subprocess PID {process.pid}", "prediction_subprocess_started")
+
+    except Exception as e:
+        logger.error("errors.system", f"Failed to launch prediction subprocess: {str(e)}", "prediction_launch_failure")
+        experiment.status = "failed"
+        experiment.error_message = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to start prediction: {str(e)}")
+
+    return {"experiment_id": experiment.id, "status": "running"}
+

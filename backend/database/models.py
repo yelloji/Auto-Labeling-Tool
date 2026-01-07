@@ -647,6 +647,7 @@ class ModelExperiment(Base):
     input_images = Column(JSON, nullable=True)
     output_folder = Column(String, nullable=True)
     predictions = Column(JSON, nullable=True)
+    analytics_summary = Column(JSON, nullable=True)  # Pre-computed prediction statistics
     
     # Execution Metadata
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -655,7 +656,7 @@ class ModelExperiment(Base):
     duration_sec = Column(Float, nullable=True)
     
     # Status
-    status = Column(String, default='pending')        # 'pending', 'running', 'completed', 'failed'
+    status = Column(String, default='pending')        # 'pending'/'queued', 'running', 'completed', 'failed'
     process_pid = Column(Integer, nullable=True)     # Added for subprocess tracking
     error_message = Column(Text, nullable=True)
     
