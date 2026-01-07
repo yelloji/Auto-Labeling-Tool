@@ -128,19 +128,37 @@ const PredictionView = ({ training }) => {
                 }
             }
 
-            if (!isPolling && !selectedExp && preds.length > 0) {
+            if (preds.length === 0) {
+                setSelectedExp(null);
+                setExperimentImages([]);
+                // Reset form to defaults for this training
+                setConfig({
+                    name: '',
+                    dataset_source: 'test',
+                    task: training?.taskType || 'detection',
+                    confidence: 0.25,
+                    iou_threshold: 0.45,
+                    imgsz: 640,
+                    weights_type: 'best'
+                });
+            } else if (!isPolling && preds.length > 0) {
+                // If switching training OR no selection yet, load latest
                 const latest = preds[0];
-                setSelectedExp(latest);
-                if (latest.status === 'queued') {
-                    setConfig({
-                        name: latest.name || '',
-                        dataset_source: latest.dataset_source || 'test',
-                        task: latest.task || training?.taskType || 'detection',
-                        confidence: latest.confidence || 0.25,
-                        iou_threshold: latest.iou_threshold || 0.45,
-                        imgsz: latest.imgsz || 640,
-                        weights_type: latest.weights_type || 'best'
-                    });
+                // Check if the current selectedExp belongs to this training (optional but safer)
+                // If not, or if nothing selected, force load latest
+                if (!selectedExp || !preds.find(e => e.id === selectedExp.id)) {
+                    setSelectedExp(latest);
+                    if (latest.status === 'queued') {
+                        setConfig({
+                            name: latest.name || '',
+                            dataset_source: latest.dataset_source || 'test',
+                            task: latest.task || training?.taskType || 'detection',
+                            confidence: latest.confidence || 0.25,
+                            iou_threshold: latest.iou_threshold || 0.45,
+                            imgsz: latest.imgsz || 640,
+                            weights_type: latest.weights_type || 'best'
+                        });
+                    }
                 }
             }
         } catch (error) {
@@ -148,7 +166,7 @@ const PredictionView = ({ training }) => {
         } finally {
             if (!isPolling) setLoading(false);
         }
-    }, [training?.id, selectedExp]);
+    }, [training?.id, selectedExp, training?.taskType]);
 
     useEffect(() => {
         if (pollingActive) {
@@ -159,8 +177,14 @@ const PredictionView = ({ training }) => {
         return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current); };
     }, [pollingActive, fetchExperiments]);
 
+    // This effect handles the initial load and training switches
     useEffect(() => {
-        fetchExperiments();
+        if (training?.id) {
+            // Background load - no setLoading(true) here to prevent flicker
+            setSelectedExp(null); // Force clear old training's experiment
+            setExperimentImages([]);
+            fetchExperiments();
+        }
     }, [training?.id]);
 
     // --- Filtering Logic ---
@@ -320,8 +344,6 @@ const PredictionView = ({ training }) => {
         };
         loadResults();
     }, [selectedExp?.id, selectedExp?.status]);
-
-    if (loading) return <div className="prediction-view-container"><Spin size="large" /></div>;
 
     const availableClasses = selectedExp?.analytics_summary?.classes_detected ? Object.keys(selectedExp.analytics_summary.classes_detected) : [];
 
