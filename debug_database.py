@@ -302,9 +302,30 @@ class DatabaseDebugger:
                 if row['predictions']:
                     try:
                         preds = json.loads(row['predictions']) if isinstance(row['predictions'], str) else row['predictions']
-                        print(f"      │ Predictions: {len(preds)} total entries")
-                    except Exception:
-                        print(f"      │ Predictions: Available")
+                        
+                        # Handle both dict and list structures
+                        if isinstance(preds, dict):
+                            print(f"      │ Predictions: {len(preds)} images")
+                            print(f"      │ Sample (first 2 images):")
+                            for i, (img_name, dets) in enumerate(list(preds.items())[:2]):
+                                print(f"      │   ├─ {img_name}: {len(dets)} detection(s)")
+                                for det in dets[:3]:
+                                    cls = det.get('class', '?')
+                                    conf = det.get('confidence', 0)
+                                    print(f"      │   │  └─ {cls} ({conf:.2f})")
+                        elif isinstance(preds, list):
+                            print(f"      │ Predictions: {len(preds)} total entries")
+                            print(f"      │ Sample (first 2 images):")
+                            for pred in preds[:2]:
+                                img_name = pred.get('image', 'unknown')
+                                dets = pred.get('detections', [])
+                                print(f"      │   ├─ {img_name}: {len(dets)} detection(s)")
+                                for det in dets[:3]:
+                                    cls = det.get('class', '?')
+                                    conf = det.get('confidence', 0)
+                                    print(f"      │   │  └─ {cls} ({conf:.2f})")
+                    except Exception as e:
+                        print(f"      │ Predictions: Available (Parse Error: {e})")
                 else:
                     print(f"      │ Predictions: N/A")
 
