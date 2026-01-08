@@ -1308,6 +1308,7 @@ async def init_validation(training_id: int, payload: ValidationRequest, db: Sess
         db.query(ModelExperiment)
         .filter(
             ModelExperiment.training_id == training_id,
+            ModelExperiment.experiment_type == "validation",  # Only check for validation experiments
             ModelExperiment.status == "queued"
         )
         .first()
