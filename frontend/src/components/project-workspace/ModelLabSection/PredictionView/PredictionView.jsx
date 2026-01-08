@@ -83,7 +83,7 @@ const PredictionView = ({ training }) => {
     // Form inputs (Draft state for 'queued' experiment)
     const [config, setConfig] = useState({
         name: '',
-        dataset_source: 'test',
+        dataset_source: 'upload',
         task: training?.taskType || 'detection',  // Default to training's task type
         confidence: 0.25,
         iou_threshold: 0.45,
@@ -96,6 +96,45 @@ const PredictionView = ({ training }) => {
     // --- References ---
     const pollTimerRef = useRef(null);
     const syncTimeoutRef = useRef(null);
+
+    // Compute available dataset splits from training session
+    const availableSplits = React.useMemo(() => {
+        if (!training?.dataset_summary_json) {
+            return ['train', 'val', 'test'];
+        }
+
+        try {
+            const summary = typeof training.dataset_summary_json === 'string'
+                ? JSON.parse(training.dataset_summary_json)
+                : training.dataset_summary_json;
+
+            const splits = summary?.splits || {};
+
+            const available = [];
+
+            // Only include splits with images (count > 0)
+            if (splits.train > 0) available.push('train');
+            if (splits.val > 0) available.push('val');
+            if (splits.test > 0) available.push('test');
+
+            // Fallback: if no splits found, show all
+            return available.length > 0 ? available : ['train', 'val', 'test'];
+        } catch (e) {
+            console.error('❌ Failed to parse dataset_summary_json:', e);
+            return ['train', 'val', 'test'];
+        }
+    }, [training?.dataset_summary_json]);
+
+    // Helper: Determine best default dataset split
+    const getDefaultSplit = useCallback(() => {
+        // Prefer test, then val, then train, then upload as fallback
+        if (availableSplits.includes('test')) return 'test';
+        if (availableSplits.includes('val')) return 'val';
+        if (availableSplits.includes('train')) return 'train';
+        return 'upload'; // Fallback to upload if no splits available
+    }, [availableSplits]);
+
+
 
     // --- Helpers ---
     const getStatusTag = (status) => {
@@ -136,7 +175,7 @@ const PredictionView = ({ training }) => {
                 // Reset form to defaults for this training
                 setConfig({
                     name: '',
-                    dataset_source: 'test',
+                    dataset_source: getDefaultSplit(),
                     task: training?.taskType || 'detection',
                     confidence: 0.25,
                     iou_threshold: 0.45,
@@ -153,7 +192,7 @@ const PredictionView = ({ training }) => {
                     if (latest.status === 'queued') {
                         setConfig({
                             name: latest.name || '',
-                            dataset_source: latest.dataset_source || 'test',
+                            dataset_source: latest.dataset_source || getDefaultSplit(),
                             task: latest.task || training?.taskType || 'detection',
                             confidence: latest.confidence || 0.25,
                             iou_threshold: latest.iou_threshold || 0.45,
@@ -452,7 +491,7 @@ const PredictionView = ({ training }) => {
                                         setSelectedExp(queuedExp);
                                         setConfig({
                                             name: queuedExp.name || '',
-                                            dataset_source: queuedExp.dataset_source || 'test',
+                                            dataset_source: queuedExp.dataset_source || getDefaultSplit(),
                                             confidence: queuedExp.confidence || 0.25,
                                             iou_threshold: queuedExp.iou_threshold || 0.45,
                                             imgsz: queuedExp.imgsz || 640,
@@ -466,7 +505,7 @@ const PredictionView = ({ training }) => {
                                         setSelectedExp(null);
                                         setConfig({
                                             name: '',
-                                            dataset_source: 'test',
+                                            dataset_source: getDefaultSplit(),
                                             confidence: 0.25,
                                             iou_threshold: 0.45,
                                             imgsz: 640,
@@ -520,10 +559,10 @@ const PredictionView = ({ training }) => {
                                         disabled={selectedExp && selectedExp.status !== 'queued'}
                                         style={{ width: '100%' }}
                                     >
-                                        <Option value="test">Test Set</Option>
-                                        <Option value="val">Validation Set</Option>
-                                        <Option value="train">Training Set</Option>
-                                        <Option value="upload">Upload Files</Option>
+                                        {availableSplits.includes('train') && <Option value="train">Training Set</Option>}
+                                        {availableSplits.includes('val') && <Option value="val">Validation Set</Option>}
+                                        {availableSplits.includes('test') && <Option value="test">Test Set</Option>}
+                                        <Option value="upload">📁 Upload Images</Option>
                                     </Select>
                                 </div>
                             </div>
