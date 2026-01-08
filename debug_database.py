@@ -172,41 +172,72 @@ class DatabaseDebugger:
         print(f"\n📊 Total rows: {count}")
         
         if count:
-            print("\n🧪 Recent Experiments:")
+            print(f"\n🧪 GROUPED EXPERIMENTS (Project > Training > Type):")
             cursor.execute("PRAGMA table_info('model_experiments')")
             _cols_info = cursor.fetchall()
             _col_names = [c[1] for c in _cols_info]
             
+            # Order: Type (Validation first) -> Project Name -> Training ID -> Newest First
             cursor.execute("""
                 SELECT * FROM model_experiments 
-                ORDER BY created_at DESC 
-                LIMIT 15
+                ORDER BY experiment_type DESC, project_name ASC, training_id ASC, created_at DESC 
+                LIMIT 40
             """)
+            
+            last_type = None
+            last_project = None
+            last_training = None
+            
             for row in cursor.fetchall():
-                print(f"\n   🔬 EXPERIMENT: {row['id']} [{row['experiment_type']}]")
+                # Print Major Type Header (VALIDATION vs PREDICTION)
+                curr_type = row['experiment_type']
+                if curr_type != last_type:
+                    print(f"\n\n{'█' * 60}")
+                    print(f" 🔥 {curr_type.upper()} RECORDS")
+                    print(f"{'█' * 60}")
+                    last_type = curr_type
+                    last_project = None
+                    last_training = None
+
+                # Print Project Header
+                project_display = row['project_name'] or 'Unknown Project'
+                if project_display != last_project:
+                    print(f"\n{'#' * 40}")
+                    print(f"🏗️  PROJECT: {project_display.upper()}")
+                    print(f"{'#' * 40}")
+                    last_project = project_display
+                    last_training = None # Reset training for new project
                 
-                print(f"\n      ├─ Identification")
+                # Print Training Model Header
+                training_display = f"{row['training_name']} (ID: {row['training_id']})" if row['training_id'] else "No Training ID"
+                if training_display != last_training:
+                    print(f"\n   ⚙️  TRAINING MODEL: {training_display}")
+                    print(f"   {'=' * 30}")
+                    last_training = training_display
+                
+                print(f"\n      🔍 [{row['experiment_type'].upper()}] - {row['name'] or row['id'][:8]} (ID: {row['id']})")
+                print(f"      📁 Project: {row['project_name'] or 'N/A'} | 🔧 Training: {row['training_name'] or 'N/A'}")
+                
+                print(f"      ├─ Identification")
                 print(f"      │ Status: {row['status']}")
                 print(f"      │ PID: {row['process_pid'] or 'N/A'}")
-                print(f"      │ Name: {row['name'] or 'N/A'}")
-                print(f"      │ Project: {row['project_name'] or 'N/A'} (ID: {row['project_id']})")
-                print(f"      │ Training: {row['training_name'] or 'N/A'} (ID: {row['training_id']})")
                 print(f"      │ Created: {row['created_at']}")
                 
                 print(f"\n      ├─ Configuration")
                 print(f"      │ Dataset Split: {row['dataset_source']}")
                 print(f"      │ Image Count: {row['image_count'] if row['image_count'] is not None else 'N/A'}")
                 print(f"      │ Confidence: {row['confidence']}")
-                print(f"      │ IoU Threshold: {row['iou_threshold']}")
-                print(f"      │ Image Size: {row['imgsz']}")
-                print(f"      │ Weights Type: {row['weights_type']}")
+                if row['experiment_type'] == 'validation':
+                    print(f"      │ IoU Threshold: {row['iou_threshold']}")
+                    print(f"      │ Image Size: {row['imgsz']}")
+                print(f"      │ Weights Type: {row['weights_type'] or 'N/A'}")
                 print(f"      │ Task: {row['task'] or 'N/A'}")
                 print(f"      │ Framework: {row['framework'] or 'N/A'}")
+                print(f"      │ Device: {row['device'] or 'N/A'}")
                 print(f"      │ Max Detections: {row['max_detections'] if row['max_detections'] is not None else 'N/A'}")
-                print(f"      │ Custom Params: {row['custom_params'] or 'N/A'}")
                 print(f"      │ Is Default: {bool(row['is_default'])}")
                 
-                print(f"\n      ├─ Results")
+                print(f"\n      ├─ Results - Validation")
                 if row['validation_metrics']:
                     try:
                         m = json.loads(row['validation_metrics']) if isinstance(row['validation_metrics'], str) else row['validation_metrics']
@@ -268,14 +299,33 @@ class DatabaseDebugger:
                 else:
                     print(f"      │ Confusion Matrix: N/A")
 
-                # Predictions & Images counts
+                print(f"\n      ├─ Results - Prediction")
                 if row['predictions']:
                     try:
                         preds = json.loads(row['predictions']) if isinstance(row['predictions'], str) else row['predictions']
-                        print(f"      │ Predictions: {len(preds)} total")
-                    except: print(f"      │ Predictions: Available")
+                        print(f"      │ Predictions: {len(preds)} total entries")
+                    except Exception:
+                        print(f"      │ Predictions: Available")
                 else:
                     print(f"      │ Predictions: N/A")
+
+                # Analytics Summary (Pre-computed stats)
+                if row['analytics_summary']:
+                    try:
+                        a = json.loads(row['analytics_summary']) if isinstance(row['analytics_summary'], str) else row['analytics_summary']
+                        print(f"      │ Analytics Summary:")
+                        print(f"      │   ├─ Total Objects: {a.get('total_detections', 0)}")
+                        print(f"      │   ├─ Images w/ Hits: {a.get('images_with_detections', 0)}")
+                        print(f"      │   ├─ Avg Confidence: {a.get('avg_confidence', 0):.4f}")
+                        if 'classes_detected' in a:
+                            classes = a['classes_detected']
+                            top_classes = sorted(classes.items(), key=lambda x: x[1], reverse=True)[:5]
+                            class_str = ", ".join([f"{k} ({v})" for k, v in top_classes])
+                            print(f"      │   └─ Top Classes: {class_str}{'...' if len(classes) > 5 else ''}")
+                    except Exception:
+                        print(f"      │ Analytics Summary: Available (Parse Error)")
+                else:
+                    print(f"      │ Analytics Summary: N/A")
 
                 if row['input_images']:
                     try:
@@ -285,18 +335,18 @@ class DatabaseDebugger:
                 else:
                     print(f"      │ Input Images: N/A")
                 
-                print(f"\n      ├─ Timing")
+                print(f"\n      ├─ Timing & Paths")
                 print(f"      │ Started: {row['started_at'] or 'N/A'}")
                 print(f"      │ Completed: {row['completed_at'] or 'N/A'}")
                 print(f"      │ Duration: {row['duration_sec'] if row['duration_sec'] is not None else 'N/A'} sec")
-                
-                print(f"\n      └─ Paths & Notes")
-                print(f"         Dataset Path: {row['dataset_path'] or 'N/A'}")
-                print(f"         Output Folder: {row['output_folder'] or 'N/A'}")
-                print(f"         User Notes: {row['user_notes'] or 'N/A'}")
+                print(f"      │ Dataset Path: {row['dataset_path'] or 'N/A'}")
+                print(f"      │ Output Folder: {row['output_folder'] or 'N/A'}")
+                print(f"      │ User Notes: {row['user_notes'] or 'N/A'}")
                 
                 if row['error_message']:
-                    print(f"\n      ❌ Error: {row['error_message']}")
+                    print(f"      ❌ Error: {row['error_message']}")
+                
+                print(f"      {'─' * 70}")
 
     
     def get_projects_overview(self):
