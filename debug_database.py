@@ -227,9 +227,8 @@ class DatabaseDebugger:
                 print(f"      │ Dataset Split: {row['dataset_source']}")
                 print(f"      │ Image Count: {row['image_count'] if row['image_count'] is not None else 'N/A'}")
                 print(f"      │ Confidence: {row['confidence']}")
-                if row['experiment_type'] == 'validation':
-                    print(f"      │ IoU Threshold: {row['iou_threshold']}")
-                    print(f"      │ Image Size: {row['imgsz']}")
+                print(f"      │ IoU Threshold: {row['iou_threshold']}")
+                print(f"      │ Image Size: {row['imgsz']}")
                 print(f"      │ Weights Type: {row['weights_type'] or 'N/A'}")
                 print(f"      │ Task: {row['task'] or 'N/A'}")
                 print(f"      │ Framework: {row['framework'] or 'N/A'}")
@@ -283,14 +282,14 @@ class DatabaseDebugger:
                             
                             # Simple Grid Rendering
                             if len(unique_names) <= 10: # Only grid for small matrices
-                                header = "      │    " + "".join([f"{n[:8]:>10}" for n in unique_names])
+                                header = "      │ " + " " * 10 + "   " + "   ".join([f"{n[:10]:>10}" for n in unique_names])
                                 print(header)
                                 for actual in unique_names:
-                                    row_str = f"      │ {actual[:8]:>8} "
+                                    row_str = f"      │ {actual[:10]:>10}   "
                                     for predicted in unique_names:
                                         cell_data = next((c for c in cm if c['actual'] == actual and c['predicted'] == predicted), None)
                                         val = cell_data['count'] if cell_data else 0
-                                        row_str += f"{val:10d}"
+                                        row_str += f"{val:>10}   "
                                     print(row_str)
                             else:
                                 print(f"      │ Matrix too large for terminal grid ({len(unique_names)} classes)")
