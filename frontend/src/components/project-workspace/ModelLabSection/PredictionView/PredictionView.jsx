@@ -134,6 +134,22 @@ const PredictionView = ({ training }) => {
         return 'upload'; // Fallback to upload if no splits available
     }, [availableSplits]);
 
+    // Helper: Detect training resolution
+    const getDetectedImgsz = useCallback(() => {
+        if (training?.resolved_config_json) {
+            try {
+                const cfg = typeof training.resolved_config_json === 'string'
+                    ? JSON.parse(training.resolved_config_json)
+                    : training.resolved_config_json;
+                return cfg.train?.imgsz || cfg.imgsz || 640;
+            } catch (e) {
+                console.error("Failed to parse config for imgsz", e);
+            }
+        }
+        return 640;
+    }, [training?.resolved_config_json]);
+
+
 
 
     // --- Helpers ---
@@ -179,7 +195,7 @@ const PredictionView = ({ training }) => {
                     task: training?.taskType || 'detection',
                     confidence: 0.25,
                     iou_threshold: 0.45,
-                    imgsz: 640,
+                    imgsz: getDetectedImgsz(),
                     weights_type: 'best'
                 });
             } else if (!isPolling && preds.length > 0) {
@@ -196,7 +212,7 @@ const PredictionView = ({ training }) => {
                             task: latest.task || training?.taskType || 'detection',
                             confidence: latest.confidence || 0.25,
                             iou_threshold: latest.iou_threshold || 0.45,
-                            imgsz: latest.imgsz || 640,
+                            imgsz: latest.imgsz || getDetectedImgsz(),
                             weights_type: latest.weights_type || 'best'
                         });
                     }
@@ -494,7 +510,7 @@ const PredictionView = ({ training }) => {
                                             dataset_source: queuedExp.dataset_source || getDefaultSplit(),
                                             confidence: queuedExp.confidence || 0.25,
                                             iou_threshold: queuedExp.iou_threshold || 0.45,
-                                            imgsz: queuedExp.imgsz || 640,
+                                            imgsz: queuedExp.imgsz || getDetectedImgsz(),
                                             weights_type: queuedExp.weights_type || 'best',
                                             max_det: queuedExp.max_det || 300,
                                             task: queuedExp.task || training?.taskType || 'detection'
@@ -508,7 +524,7 @@ const PredictionView = ({ training }) => {
                                             dataset_source: getDefaultSplit(),
                                             confidence: 0.25,
                                             iou_threshold: 0.45,
-                                            imgsz: 640,
+                                            imgsz: getDetectedImgsz(),
                                             weights_type: 'best',
                                             max_det: 300,
                                             task: training?.taskType || 'detection'
@@ -632,19 +648,17 @@ const PredictionView = ({ training }) => {
                                     </div>
                                 )}
                                 <div className="config-item">
-                                    <Tooltip title="Input image resolution for predictions. Higher values (1280px) are more accurate but slower, lower (320px) are faster.">
+                                    <Tooltip title="Input image resolution for predictions. Higher values are more accurate but slower, lower values are faster. Best results are usually achieved at the model's training resolution.">
                                         <Text strong style={{ cursor: 'help' }}>Image Size</Text>
                                     </Tooltip>
-                                    <Select
+                                    <InputNumber
+                                        min={32} step={32}
                                         value={config.imgsz}
+                                        style={{ width: '100%', marginTop: '0.25rem' }}
                                         onChange={val => updateParam('imgsz', val)}
+                                        placeholder={`Model default: ${training?.imgsz || 640}`}
                                         disabled={selectedExp && selectedExp.status !== 'queued'}
-                                        style={{ width: '100%' }}
-                                    >
-                                        <Option value={320}>320px (Fast)</Option>
-                                        <Option value={640}>640px (Default)</Option>
-                                        <Option value={1280}>1280px (Accurate)</Option>
-                                    </Select>
+                                    />
                                 </div>
                                 <div className="config-item">
                                     <Tooltip title="Best: Uses model checkpoint with highest validation metrics. Last: Uses final checkpoint from training.">
