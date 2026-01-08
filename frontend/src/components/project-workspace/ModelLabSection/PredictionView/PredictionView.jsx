@@ -85,7 +85,9 @@ const PredictionView = ({ training }) => {
     const [filters, setFilters] = useState({
         detectionCount: 'any',
         className: 'all',
-        confidence: 0.25
+        confidence: 0.1, // Default lower for viewing
+        imageSearch: '',
+        riskLevel: 'any'
     });
 
     // Pagination State
@@ -108,6 +110,44 @@ const PredictionView = ({ training }) => {
     // --- References ---
     const pollTimerRef = useRef(null);
     const syncTimeoutRef = useRef(null);
+    const galleryRef = useRef(null);
+    const layoutRef = useRef(null);
+
+    // Dynamic Alignment Logic
+    const [historyHeight, setHistoryHeight] = useState('100%');
+
+    const updateAlignment = useCallback(() => {
+        if (galleryRef.current && layoutRef.current) {
+            const galleryRect = galleryRef.current.getBoundingClientRect();
+            const layoutRect = layoutRef.current.getBoundingClientRect();
+            // Calculate height of history section (distance from layout top to gallery top)
+            const topOffset = galleryRect.top - layoutRect.top;
+
+            // Only split if filters are actually going to be shown
+            if (selectedExp && selectedExp.status === 'completed' && topOffset > 100) {
+                setHistoryHeight(`${topOffset}px`);
+            } else {
+                setHistoryHeight('100%');
+            }
+        }
+    }, [selectedExp]);
+
+    useEffect(() => {
+        // Initial measurement
+        updateAlignment();
+
+        // Update on resize or content changes
+        window.addEventListener('resize', updateAlignment);
+
+        // Intersection observer to track when things might shift
+        const observer = new ResizeObserver(updateAlignment);
+        if (layoutRef.current) observer.observe(layoutRef.current);
+
+        return () => {
+            window.removeEventListener('resize', updateAlignment);
+            observer.disconnect();
+        };
+    }, [updateAlignment, experiments, selectedExp]); // Re-run when content changes
 
     // Compute available dataset splits from training session
     const availableSplits = React.useMemo(() => {
@@ -261,48 +301,59 @@ const PredictionView = ({ training }) => {
 
     // --- Filtering Logic ---
     useEffect(() => {
+        // Reset to page 1 whenever filters change
+        setCurrentPage(1);
+
         if (!selectedExp || !selectedExp.predictions || experimentImages.length === 0) {
             setFilteredImages(experimentImages);
             return;
         }
 
-        const { detectionCount, className, confidence } = filters;
+        const { detectionCount, className, confidence, imageSearch, riskLevel } = filters;
         const preds = selectedExp.predictions;
 
         const filtered = experimentImages.filter(imgName => {
-            // Helper to get detections (handles both full path and filename only)
+            // Helper to get detections
             const getDetections = (name) => {
                 if (preds[name]) return preds[name];
                 const fileName = name.split('/').pop();
                 return preds[fileName] || [];
             };
 
-            const detections = getDetections(imgName);
+            const allDets = getDetections(imgName);
+            // Filter detections by current confidence threshold
+            const detections = allDets.filter(d => d.confidence >= confidence);
 
-            // 1. Detection Count Filter
+            // 1. Image Search Filter
+            if (imageSearch && !imgName.toLowerCase().includes(imageSearch.toLowerCase())) {
+                return false;
+            }
+
+            // 2. Detection Count Filter
             let countMatch = true;
             if (detectionCount === '0') countMatch = detections.length === 0;
             else if (detectionCount === '1-5') countMatch = detections.length >= 1 && detections.length <= 5;
             else if (detectionCount === '6-10') countMatch = detections.length >= 6 && detections.length <= 10;
             else if (detectionCount === '10+') countMatch = detections.length > 10;
+            if (!countMatch) return false;
 
-            // 2. Class Filter
-            let classMatch = true;
-            if (className !== 'all') {
-                classMatch = detections.some(d => d.class === className);
+            // 3. Class Filter
+            if (className !== 'all' && !detections.some(d => d.class === className)) {
+                return false;
             }
 
-            // 3. Confidence Filter (applied to any detection in image)
-            let confMatch = true;
-            if (detections.length > 0) {
-                confMatch = detections.some(d => d.confidence >= confidence);
-            } else if (confidence > 0 && detectionCount !== 'any') {
-                // Only hide if we are searching for specific count ranges and fail confidence
-                confMatch = false;
+            // 4. Risk Level Filter (based on max confidence in image)
+            // High Risk: Max confidence < 0.4
+            // Medium Risk: Max confidence 0.4 - 0.7
+            // Low Risk: Max confidence > 0.7
+            if (riskLevel !== 'any') {
+                const maxConf = detections.length > 0 ? Math.max(...detections.map(d => d.confidence)) : 0;
+                if (riskLevel === 'high' && maxConf >= 0.4) return false;
+                if (riskLevel === 'medium' && (maxConf < 0.4 || maxConf > 0.7)) return false;
+                if (riskLevel === 'low' && maxConf <= 0.7) return false;
             }
-            // If detectionCount is 'any', always show images even if conf is 0 or no hits
 
-            return countMatch && classMatch && confMatch;
+            return true;
         });
 
         setFilteredImages(filtered);
@@ -487,7 +538,7 @@ const PredictionView = ({ training }) => {
     const availableClasses = selectedExp?.analytics_summary?.classes_detected ? Object.keys(selectedExp.analytics_summary.classes_detected) : [];
 
     return (
-        <div className="prediction-view-container">
+        <div className="prediction-view-container" ref={layoutRef}>
             <div className="prediction-layout">
                 {/* --- Left Sidebar: History --- */}
                 <div className="prediction-left-col">
@@ -499,6 +550,7 @@ const PredictionView = ({ training }) => {
                         }
                         className="history-card"
                         size="small"
+                        style={{ height: historyHeight }}
                         extra={<Button type="text" icon={<SyncOutlined />} onClick={() => fetchExperiments()} />}
                     >
                         <List
@@ -546,6 +598,83 @@ const PredictionView = ({ training }) => {
                             locale={{ emptyText: <Empty description="No experiments" /> }}
                         />
                     </Card>
+
+                    {/* --- Filters Card (New!) --- */}
+                    {selectedExp && selectedExp.status === 'completed' && (
+                        <Card
+                            title={
+                                <Space style={{ cursor: 'default' }}><SearchOutlined /> Filter Results</Space>
+                            }
+                            className="filters-card"
+                            size="small"
+                            style={{ marginTop: '1rem' }}
+                        >
+                            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                                {/* Search Filter */}
+                                <div>
+                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Search Image</Text>
+                                    <Input
+                                        placeholder="Search by name..."
+                                        size="small"
+                                        allowClear
+                                        value={filters.imageSearch}
+                                        onChange={e => setFilters(f => ({ ...f, imageSearch: e.target.value }))}
+                                        prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                                    />
+                                </div>
+                                {/* Detection Count Filter */}
+                                <div>
+                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Detection Count</Text>
+                                    <Select
+                                        value={filters.detectionCount}
+                                        onChange={val => setFilters(f => ({ ...f, detectionCount: val }))}
+                                        style={{ width: '100%' }}
+                                        size="small"
+                                    >
+                                        <Option value="any">Any</Option>
+                                        <Option value="0">None (0)</Option>
+                                        <Option value="1-5">1-5</Option>
+                                        <Option value="6-10">6-10</Option>
+                                        <Option value="10+">10+</Option>
+                                    </Select>
+                                </div>
+
+                                {/* Class Filter */}
+                                <div>
+                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Class</Text>
+                                    <Select
+                                        value={filters.className}
+                                        onChange={val => setFilters(f => ({ ...f, className: val }))}
+                                        style={{ width: '100%' }}
+                                        size="small"
+                                    >
+                                        <Option value="all">All Classes</Option>
+                                        {availableClasses.map(c => <Option key={c} value={c}>{c}</Option>)}
+                                    </Select>
+                                </div>
+
+                                {/* Results Counter & Clear */}
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    paddingTop: '0.5rem',
+                                    borderTop: '1px dashed #f0f0f0'
+                                }}>
+                                    <Text type="secondary" style={{ fontSize: '0.75rem' }}>
+                                        {filteredImages.length} of {experimentImages.length}
+                                    </Text>
+                                    <Button
+                                        type="link"
+                                        size="small"
+                                        onClick={() => setFilters({ detectionCount: 'any', className: 'all', confidence: 0.25 })}
+                                    >
+                                        Clear
+                                    </Button>
+                                </div>
+                            </Space>
+                        </Card>
+                    )}
                 </div>
 
                 {/* --- Right Content Column --- */}
@@ -853,50 +982,52 @@ const PredictionView = ({ training }) => {
                         )
                     }
 
-                    {/* 2. Filter Bar Section */}
-                    {
-                        selectedExp && selectedExp.status === 'completed' && (
-                            <div className="filter-section-container">
-                                <div className="section-title" style={{ marginBottom: 0 }}><SearchOutlined /> 🔍 Filter Results</div>
-                                <Space size="large">
-                                    <div>
-                                        <Text type="secondary" style={{ marginRight: 8 }}>Detection:</Text>
-                                        <Select
-                                            value={filters.detectionCount}
-                                            onChange={val => setFilters(f => ({ ...f, detectionCount: val }))}
-                                            style={{ width: 100 }}
-                                            size="small"
-                                        >
-                                            <Option value="any">Any</Option>
-                                            <Option value="0">None (0)</Option>
-                                            <Option value="1-5">1-5</Option>
-                                            <Option value="6-10">6-10</Option>
-                                            <Option value="10+">10+</Option>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <Text type="secondary" style={{ marginRight: 8 }}>Class:</Text>
-                                        <Select
-                                            value={filters.className}
-                                            onChange={val => setFilters(f => ({ ...f, className: val }))}
-                                            style={{ width: 120 }}
-                                            size="small"
-                                        >
-                                            <Option value="all">All Classes</Option>
-                                            {availableClasses.map(c => <Option key={c} value={c}>{c}</Option>)}
-                                        </Select>
-                                    </div>
-                                    <Button type="link" size="small" onClick={() => setFilters({ detectionCount: 'any', className: 'all', confidence: 0.25 })}>Clear Filters</Button>
-                                    <Text type="secondary" style={{ marginLeft: 'auto' }}>
-                                        Showing {filteredImages.length} of {experimentImages.length}
-                                    </Text>
-                                </Space>
-                            </div>
-                        )
-                    }
+                    {/* 2. Filter Bar Section - MOVED TO SIDEBAR (hidden for safety, will delete after testing) */}
+                    <div style={{ display: 'none' }}>
+                        {
+                            selectedExp && selectedExp.status === 'completed' && (
+                                <div className="filter-section-container">
+                                    <div className="section-title" style={{ marginBottom: 0 }}><SearchOutlined /> 🔍 Filter Results</div>
+                                    <Space size="large">
+                                        <div>
+                                            <Text type="secondary" style={{ marginRight: 8 }}>Detection:</Text>
+                                            <Select
+                                                value={filters.detectionCount}
+                                                onChange={val => setFilters(f => ({ ...f, detectionCount: val }))}
+                                                style={{ width: 100 }}
+                                                size="small"
+                                            >
+                                                <Option value="any">Any</Option>
+                                                <Option value="0">None (0)</Option>
+                                                <Option value="1-5">1-5</Option>
+                                                <Option value="6-10">6-10</Option>
+                                                <Option value="10+">10+</Option>
+                                            </Select>
+                                        </div>
+                                        <div>
+                                            <Text type="secondary" style={{ marginRight: 8 }}>Class:</Text>
+                                            <Select
+                                                value={filters.className}
+                                                onChange={val => setFilters(f => ({ ...f, className: val }))}
+                                                style={{ width: 120 }}
+                                                size="small"
+                                            >
+                                                <Option value="all">All Classes</Option>
+                                                {availableClasses.map(c => <Option key={c} value={c}>{c}</Option>)}
+                                            </Select>
+                                        </div>
+                                        <Button type="link" size="small" onClick={() => setFilters({ detectionCount: 'any', className: 'all', confidence: 0.25 })}>Clear Filters</Button>
+                                        <Text type="secondary" style={{ marginLeft: 'auto' }}>
+                                            Showing {filteredImages.length} of {experimentImages.length}
+                                        </Text>
+                                    </Space>
+                                </div>
+                            )
+                        }
+                    </div>
 
                     {/* 3. Gallery Section */}
-                    <div className="gallery-section-container">
+                    <div className="gallery-section-container" ref={galleryRef}>
                         <div className="gallery-header">
                             <Tooltip title="Browse prediction results. Click any image to view detailed detection boxes and confidence scores.">
                                 <span style={{ cursor: 'help' }}><EyeOutlined /> Image Gallery</span>
