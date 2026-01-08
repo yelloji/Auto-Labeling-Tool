@@ -21,7 +21,8 @@ import {
     Col,
     Radio,
     Upload,
-    Segmented
+    Segmented,
+    Pagination
 } from 'antd';
 import {
     ExperimentOutlined,
@@ -86,6 +87,10 @@ const PredictionView = ({ training }) => {
         className: 'all',
         confidence: 0.25
     });
+
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 30;
 
     // Form inputs (Draft state for 'queued' experiment)
     const [config, setConfig] = useState({
@@ -913,33 +918,71 @@ const PredictionView = ({ training }) => {
                         ) : fetchingResults ? (
                             <div style={{ padding: '4rem' }}><Skeleton active /></div>
                         ) : filteredImages.length > 0 ? (
-                            <div className="prediction-gallery-grid">
-                                {filteredImages.map(imgName => {
-                                    const getDetections = (name) => {
-                                        if (selectedExp?.predictions?.[name]) return selectedExp.predictions[name];
-                                        const fileName = name.split('/').pop();
-                                        return selectedExp?.predictions?.[fileName] || [];
-                                    };
-                                    const detections = getDetections(imgName);
-                                    const imageUrl = selectedExp?.output_folder
-                                        ? `${window.location.protocol}//${window.location.hostname}:12000/${selectedExp.output_folder}/${imgName}`
-                                        : '';
-                                    // Clean filename: remove "predict/" and any path components
-                                    const displayName = imgName.split('/').pop();
+                            <>
+                                {/* Calculate pagination */}
+                                {(() => {
+                                    const totalPages = Math.ceil(filteredImages.length / itemsPerPage);
+                                    const startIndex = (currentPage - 1) * itemsPerPage;
+                                    const endIndex = startIndex + itemsPerPage;
+                                    const currentPageImages = filteredImages.slice(startIndex, endIndex);
+
                                     return (
-                                        <div key={imgName} className="prediction-gallery-item-wrapper">
-                                            <div className="prediction-gallery-item" onClick={() => { setPreviewImage(imgName); setPreviewVisible(true); }}>
-                                                <Badge count={detections.length} className="detection-badge" color="#1890ff" />
-                                                <img src={imageUrl} alt={imgName} loading="lazy" />
-                                                <div className="image-overlay"><EyeOutlined style={{ color: '#fff', fontSize: 24 }} /></div>
+                                        <>
+                                            <div className="prediction-gallery-grid">
+                                                {currentPageImages.map(imgName => {
+                                                    const getDetections = (name) => {
+                                                        if (selectedExp?.predictions?.[name]) return selectedExp.predictions[name];
+                                                        const fileName = name.split('/').pop();
+                                                        return selectedExp?.predictions?.[fileName] || [];
+                                                    };
+                                                    const detections = getDetections(imgName);
+                                                    const imageUrl = selectedExp?.output_folder
+                                                        ? `${window.location.protocol}//${window.location.hostname}:12000/${selectedExp.output_folder}/${imgName}`
+                                                        : '';
+                                                    // Clean filename: remove "predict/" and any path components
+                                                    const displayName = imgName.split('/').pop();
+                                                    return (
+                                                        <div key={imgName} className="prediction-gallery-item-wrapper">
+                                                            <div className="prediction-gallery-item" onClick={() => { setPreviewImage(imgName); setPreviewVisible(true); }}>
+                                                                <Badge count={detections.length} className="detection-badge" color="#1890ff" />
+                                                                <img src={imageUrl} alt={imgName} loading="lazy" />
+                                                                <div className="image-overlay"><EyeOutlined style={{ color: '#fff', fontSize: 24 }} /></div>
+                                                            </div>
+                                                            <div className="image-name-label" title={imgName}>
+                                                                {displayName.length > 25 ? displayName.slice(0, 22) + '...' : displayName}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
-                                            <div className="image-name-label" title={imgName}>
-                                                {displayName.length > 25 ? displayName.slice(0, 22) + '...' : displayName}
-                                            </div>
-                                        </div>
+                                            {/* Pagination Controls */}
+                                            {totalPages > 1 && (
+                                                <div style={{
+                                                    padding: '1rem',
+                                                    borderTop: '1px solid #f0f0f0',
+                                                    display: 'flex',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                    gap: '1rem',
+                                                    background: '#fafafa'
+                                                }}>
+                                                    <Text type="secondary" style={{ fontSize: '0.875rem' }}>
+                                                        Showing {startIndex + 1}-{Math.min(endIndex, filteredImages.length)} of {filteredImages.length}
+                                                    </Text>
+                                                    <Pagination
+                                                        current={currentPage}
+                                                        total={filteredImages.length}
+                                                        pageSize={itemsPerPage}
+                                                        onChange={(page) => setCurrentPage(page)}
+                                                        showSizeChanger={false}
+                                                        size="small"
+                                                    />
+                                                </div>
+                                            )}
+                                        </>
                                     );
-                                })}
-                            </div>
+                                })()}
+                            </>
                         ) : (
                             <div style={{ padding: '4rem' }}>
                                 <Empty description={selectedExp?.status === 'completed' ? "No images match your filters" : "Run a prediction to see results"} />
