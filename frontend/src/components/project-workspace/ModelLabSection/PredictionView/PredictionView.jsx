@@ -662,7 +662,7 @@ const PredictionView = ({ training }) => {
                                 </div>
                                 <div className="config-item">
                                     <Tooltip title="Best: Uses model checkpoint with highest validation metrics. Last: Uses final checkpoint from training.">
-                                        <Text strong style={{ cursor: 'help' }}>Model Weights</Text>
+                                        <Text strong style={{ cursor: 'help' }}>Select Prediction Model</Text>
                                     </Tooltip>
                                     <Select
                                         value={config.weights_type}
@@ -670,8 +670,8 @@ const PredictionView = ({ training }) => {
                                         disabled={selectedExp && selectedExp.status !== 'queued'}
                                         style={{ width: '100%' }}
                                     >
-                                        <Option value="best">Best Weights</Option>
-                                        <Option value="last">Last Weights</Option>
+                                        <Option value="best">Best Weights (Recommended)</Option>
+                                        <Option value="last">Last Weights (Most Recent)</Option>
                                     </Select>
                                 </div>
                             </div>
