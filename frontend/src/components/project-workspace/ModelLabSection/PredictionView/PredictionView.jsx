@@ -265,7 +265,14 @@ const PredictionView = ({ training }) => {
         const preds = selectedExp.predictions;
 
         const filtered = experimentImages.filter(imgName => {
-            const detections = preds[imgName] || [];
+            // Helper to get detections (handles both full path and filename only)
+            const getDetections = (name) => {
+                if (preds[name]) return preds[name];
+                const fileName = name.split('/').pop();
+                return preds[fileName] || [];
+            };
+
+            const detections = getDetections(imgName);
 
             // 1. Detection Count Filter
             let countMatch = true;
@@ -284,10 +291,11 @@ const PredictionView = ({ training }) => {
             let confMatch = true;
             if (detections.length > 0) {
                 confMatch = detections.some(d => d.confidence >= confidence);
-            } else if (confidence > 0 && detectionCount === 'any') {
-                // If filtering by confidence but no detections, don't show unless 'any' count
+            } else if (confidence > 0 && detectionCount !== 'any') {
+                // Only hide if we are searching for specific count ranges and fail confidence
                 confMatch = false;
             }
+            // If detectionCount is 'any', always show images even if conf is 0 or no hits
 
             return countMatch && classMatch && confMatch;
         });
@@ -832,7 +840,7 @@ const PredictionView = ({ training }) => {
                     {
                         selectedExp && selectedExp.status === 'completed' && (
                             <div className="p-kpi-grid">
-                                {renderKPICard("Total Objects", stats.total_objects || 0, <CheckCircleOutlined />, "#1890ff", "Total number of items detected across all images")}
+                                {renderKPICard("Total Objects", stats.total_detections || 0, <CheckCircleOutlined />, "#1890ff", "Total number of items detected across all images")}
                                 {renderKPICard("Images w/ Det", stats.images_with_detections || 0, <EyeOutlined />, "#52c41a", "Number of images where at least one object was found")}
                                 {renderKPICard("Avg Confidence", ((stats.avg_confidence || 0) * 100).toFixed(1) + "%", <SyncOutlined />, "#722ed1", "Mean confidence score of all predictions")}
                                 {renderKPICard("Process Time", (selectedExp.duration_sec || 0).toFixed(1) + "s", <ClockCircleOutlined />, "#fa8c16", "Total duration of the prediction run")}
@@ -907,8 +915,15 @@ const PredictionView = ({ training }) => {
                         ) : filteredImages.length > 0 ? (
                             <div className="prediction-gallery-grid">
                                 {filteredImages.map(imgName => {
-                                    const detections = selectedExp?.predictions?.[imgName] || [];
-                                    const imageUrl = `${window.location.protocol}//${window.location.hostname}:12000/${selectedExp.output_folder}/${imgName}`;
+                                    const getDetections = (name) => {
+                                        if (selectedExp?.predictions?.[name]) return selectedExp.predictions[name];
+                                        const fileName = name.split('/').pop();
+                                        return selectedExp?.predictions?.[fileName] || [];
+                                    };
+                                    const detections = getDetections(imgName);
+                                    const imageUrl = selectedExp?.output_folder
+                                        ? `${window.location.protocol}//${window.location.hostname}:12000/${selectedExp.output_folder}/${imgName}`
+                                        : '';
                                     return (
                                         <div key={imgName} className="prediction-gallery-item" onClick={() => { setPreviewImage(imgName); setPreviewVisible(true); }}>
                                             <Badge count={detections.length} className="detection-badge" color="#1890ff" />

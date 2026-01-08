@@ -22,10 +22,17 @@ const { Text } = Typography;
  * - Download option
  */
 const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment, onNavigate }) => {
-    if (!visible || !currentImage) return null;
+    if (!visible || !currentImage || !experiment) return null;
 
     const currentIndex = images.indexOf(currentImage);
-    const detections = experiment?.predictions?.[currentImage] || [];
+
+    // Helper to get detections (handles both full path and filename only)
+    const getDetectionsForImage = (name) => {
+        if (experiment?.predictions?.[name]) return experiment.predictions[name];
+        const fileName = name.split('/').pop();
+        return experiment?.predictions?.[fileName] || [];
+    };
+    const detections = getDetectionsForImage(currentImage);
 
     const imageUrl = `${window.location.protocol}//${window.location.hostname}:12000/${experiment.output_folder}/${currentImage}`;
 

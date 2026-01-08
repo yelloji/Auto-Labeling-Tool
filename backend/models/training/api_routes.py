@@ -1544,20 +1544,25 @@ async def list_experiment_images(experiment_id: str, db: Session = Depends(get_d
     project_root = backend_dir.parent
     
     full_path = (project_root / exp.output_folder).resolve()
+    
     if not full_path.exists() or not full_path.is_dir():
         logger.warning("errors.system", f"Experiment folder not found on disk: {full_path}", "list_experiment_images_not_found")
         return []
     
-    # Collect all image files
+    # Collect all image files recursively
     image_files = []
     # Supported formats from settings (hardcoded here to avoid import cycle if any)
     valid_exts = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
     
-    for f in full_path.iterdir():
+    # Use rglob for recursive discovery to handle subfolders like YOLO's /predict/
+    for f in full_path.rglob('*'):
         if f.is_file() and f.suffix.lower() in valid_exts:
-            # Check if this is an annotated image (ends with _pred or similar)
-            # Actually, we'll just return all images in that folder
-            image_files.append(f.name)
+            # We want the relative path from the output folder for the UI to handle it correctly
+            # But the UI currently expects just the filename if it assumes flat structure
+            # Let's keep it simple: return the filename if it's unique, or full relative if needed
+            # For now, most UIs expect filename. We'll return the relative path as posix
+            rel_path = f.relative_to(full_path)
+            image_files.append(rel_path.as_posix())
             
     # Sort alphabetically
     image_files.sort()
@@ -1853,7 +1858,7 @@ async def upload_prediction_images(
         try:
             with target_path.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
-            saved_files.append(str(rel_temp_dir / safe_filename))
+            saved_files.append((rel_temp_dir / safe_filename).as_posix())
         except Exception as e:
             logger.error("errors.system", f"Failed to save uploaded file {safe_filename}: {e}", "upload_prediction_save_failed")
             
@@ -1861,7 +1866,7 @@ async def upload_prediction_images(
     exp.input_images = saved_files
     exp.image_count = len(saved_files)
     # Point dataset_path to the folder so prediction_executor knows where to look
-    exp.dataset_path = str(rel_temp_dir) 
+    exp.dataset_path = rel_temp_dir.as_posix()
     
     db.commit()
     db.refresh(exp)
@@ -1870,7 +1875,7 @@ async def upload_prediction_images(
         "ok": True, 
         "experiment_id": experiment_id, 
         "count": len(saved_files), 
-        "path": str(rel_temp_dir)
+        "path": rel_temp_dir.as_posix()
     }
 
 
