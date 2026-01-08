@@ -587,6 +587,21 @@ export const projectsAPI = {
     return response.data;
   },
 
+  // Upload images for a specific prediction experiment
+  uploadPredictionImages: async (trainingId, experimentId, formData) => {
+    const response = await api.post(
+      `/api/v1/training/${trainingId}/prediction/upload-images?experiment_id=${experimentId}`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 120000, // 2 minutes for bulk uploads
+      }
+    );
+    return response.data;
+  },
+
   // Start prediction subprocess
   triggerPrediction: async (trainingId, payload) => {
     const response = await api.post(`/api/v1/training/${trainingId}/predict`, payload);

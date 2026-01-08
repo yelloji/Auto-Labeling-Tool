@@ -1,5 +1,5 @@
 from typing import Optional, List, Any, Dict
-from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks, File, UploadFile
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from fastapi import WebSocket, WebSocketDisconnect
@@ -1618,6 +1618,19 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
             else:
                 logger.warning("errors.validation", f"Blocked unsafe/non-existent path deletion: {full_path}", "unsafe_deletion_blocked")
 
+    # 4. NEW: Cleanup Temporary Dataset Path (if it's an upload)
+    if exp.dataset_path and "prediction_temp" in str(exp.dataset_path):
+        temp_rel_path = Path(exp.dataset_path)
+        if not temp_rel_path.is_absolute():
+            full_temp_path = (project_root / temp_rel_path).resolve()
+            # Safety check: must be inside prediction_temp
+            if "prediction_temp" in str(full_temp_path.as_posix()) and full_temp_path.exists() and full_temp_path.is_dir():
+                try:
+                    logger.info("operations.validation", f"Deleting temporary source folder: {full_temp_path}", "temp_source_deleted")
+                    shutil.rmtree(full_temp_path)
+                except Exception as e:
+                    logger.error("errors.system", f"Failed to delete temp source: {str(e)}", "temp_source_delete_failure")
+
     # 4. Delete the database record
     db.delete(exp)
     db.commit()
@@ -1792,6 +1805,77 @@ async def init_prediction(training_id: int, payload: PredictionRequest, db: Sess
     return exp
 
 
+@router.post("/training/{training_id}/prediction/upload-images")
+async def upload_prediction_images(
+    training_id: int,
+    experiment_id: str = Query(...),
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload multiple images for a specific prediction experiment.
+    Images are saved to a temporary 'prediction_temp' folder in the project.
+    """
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+        
+    exp = db.query(ModelExperiment).filter(
+        ModelExperiment.id == experiment_id,
+        ModelExperiment.training_id == training_id
+    ).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+
+    project = db.query(Project).filter(Project.id == ts.project_id).first()
+    project_name = project.name if project else "unknown"
+    
+    # Resolve Project Root (portable logic)
+    current_file = Path(__file__).resolve()
+    backend_dir = current_file.parent
+    while backend_dir.name != "backend" and backend_dir.parent != backend_dir:
+        backend_dir = backend_dir.parent
+    project_root = backend_dir.parent
+
+    # Define and create temp storage directory
+    # Standard: projects/{project_name}/model/prediction_temp/{experiment_id}/
+    rel_temp_dir = Path("projects") / project_name / "model" / "prediction_temp" / experiment_id
+    abs_temp_dir = project_root / rel_temp_dir
+    abs_temp_dir.mkdir(parents=True, exist_ok=True)
+    
+    saved_files = []
+    
+    for file in files:
+        # Avoid directory traversal by using only the filename
+        safe_filename = Path(file.filename).name
+        target_path = abs_temp_dir / safe_filename
+        
+        try:
+            with target_path.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            saved_files.append(str(rel_temp_dir / safe_filename))
+        except Exception as e:
+            logger.error("errors.system", f"Failed to save uploaded file {safe_filename}: {e}", "upload_prediction_save_failed")
+            
+    # Update Experiment Record
+    exp.input_images = saved_files
+    exp.image_count = len(saved_files)
+    # Point dataset_path to the folder so prediction_executor knows where to look
+    exp.dataset_path = str(rel_temp_dir) 
+    
+    db.commit()
+    db.refresh(exp)
+    
+    return {
+        "ok": True, 
+        "experiment_id": experiment_id, 
+        "count": len(saved_files), 
+        "path": str(rel_temp_dir)
+    }
+
+
+
+
 @router.patch("/experiments/{experiment_id}/prediction")
 async def update_prediction(experiment_id: str, payload: PredictionUpdate, db: Session = Depends(get_db)):
     """Update specific fields of a prediction experiment (real-time sync)."""
@@ -1861,7 +1945,14 @@ async def trigger_prediction(
         experiment.max_detections = payload.max_det
         experiment.device = payload.device
         experiment.custom_params = payload.custom_params
-        experiment.input_images = payload.uploaded_images
+        
+        # SAFE MERGE: Only overwrite if payload explicitly provides images
+        if payload.uploaded_images:
+            experiment.input_images = payload.uploaded_images
+            experiment.image_count = len(payload.uploaded_images)
+        elif experiment.input_images:
+            # If no new images in payload, but we have staged ones, ensure count is correct
+            experiment.image_count = len(experiment.input_images)
     else:
         # Fallback if UI somehow triggered without init
         project = db.query(Project).filter(Project.id == ts.project_id).first()
@@ -1951,10 +2042,11 @@ async def trigger_prediction(
                 raise FileNotFoundError(f"No images found in {images_dir}")
                 
         elif payload.dataset_source == 'upload':
-            # Use uploaded images
-            if not payload.uploaded_images:
-                raise ValueError("No uploaded images provided")
-            images_list = payload.uploaded_images
+            # Use uploaded images: Priority given to experiment.input_images (the staged files)
+            images_list = payload.uploaded_images or experiment.input_images
+            
+            if not images_list:
+                raise ValueError("No uploaded images staged for this experiment. Please upload images first.")
         
             # Verify all uploaded images exist
             for img_path in images_list:

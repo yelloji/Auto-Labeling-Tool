@@ -11,6 +11,7 @@ import json
 import argparse
 from pathlib import Path
 from datetime import datetime
+import shutil
 
 # Add parent directory to path so we can import from backend
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -77,6 +78,17 @@ def run_executor():
         
         db.commit()
         logger.info("operations.training", f"Prediction subprocess completed for {args.experiment_id}", "prediction_subprocess_success")
+
+        # 5. Cleanup temporary source if this was an upload-based prediction
+        if experiment.dataset_source == 'upload' and experiment.dataset_path:
+            # dataset_path is relative like "projects/gevis/model/prediction_temp/UUID"
+            abs_source_dir = Path(os.getcwd()) / experiment.dataset_path
+            if abs_source_dir.exists() and "prediction_temp" in str(abs_source_dir):
+                try:
+                    shutil.rmtree(abs_source_dir)
+                    logger.info("operations.cleanup", f"Cleaned up temporary source directory: {experiment.dataset_path}", "prediction_cleanup_success")
+                except Exception as cleanup_err:
+                    logger.warning("errors.system", f"Failed to cleanup temp source {abs_source_dir}: {cleanup_err}", "prediction_cleanup_failed")
 
     except Exception as e:
         logger.error("errors.prediction", f"Prediction subprocess failed: {str(e)}", "prediction_subprocess_error", {

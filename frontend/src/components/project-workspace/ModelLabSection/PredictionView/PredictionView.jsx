@@ -66,6 +66,8 @@ const PredictionView = ({ training }) => {
     const [loading, setLoading] = useState(true);
     const [running, setRunning] = useState(false);
     const [pollingActive, setPollingActive] = useState(false);
+    const [pendingFiles, setPendingFiles] = useState([]);
+    const [uploading, setUploading] = useState(false);
 
     // Results state
     const [experimentImages, setExperimentImages] = useState([]); // All image names
@@ -247,6 +249,7 @@ const PredictionView = ({ training }) => {
             // Background load - no setLoading(true) here to prevent flicker
             setSelectedExp(null); // Force clear old training's experiment
             setExperimentImages([]);
+            setPendingFiles([]); // Fix: Clear staged images from previous training
             fetchExperiments();
         }
     }, [training?.id]);
@@ -392,13 +395,49 @@ const PredictionView = ({ training }) => {
 
     const handleRun = async () => {
         if (!config.name) { message.warning("Please enter an experiment name"); return; }
+
         try {
             setRunning(true);
+
+            let currentExp = selectedExp;
+
+            // 1. If 'upload' source, we MUST have a draft experiment initialized first to have a target folder
+            if (config.dataset_source === 'upload' && (!currentExp || currentExp.status !== 'queued')) {
+                const initPayload = { ...config, training_id: training.id };
+                currentExp = await projectsAPI.initPrediction(training.id, initPayload);
+                setSelectedExp(currentExp);
+                setExperiments(prev => [currentExp, ...prev.filter(e => e.id !== currentExp.id)]);
+            }
+
+            // 2. If 'upload' source and we have pending files, upload them now
+            if (config.dataset_source === 'upload' && pendingFiles.length > 0) {
+                const formData = new FormData();
+                pendingFiles.forEach(file => formData.append('files', file));
+
+                const hideMsg = message.loading(`Uploading ${pendingFiles.length} images...`, 0);
+                try {
+                    setUploading(true);
+                    await projectsAPI.uploadPredictionImages(training.id, currentExp.id, formData);
+                    hideMsg();
+                    message.success("Images uploaded successfully");
+                    setPendingFiles([]); // Clear pending files
+                } finally {
+                    setUploading(false);
+                    hideMsg();
+                }
+            }
+
+            // 3. Trigger the prediction
             await projectsAPI.triggerPrediction(training.id, config);
-            message.loading(`Starting prediction: ${config.name}...`, 2);
+            message.success(`Prediction "${config.name}" started`);
+
             await fetchExperiments();
             setPollingActive(true);
-        } catch (error) { handleAPIError(error, 'Failed to start prediction'); }
+        } catch (error) {
+            handleAPIError(error, 'Failed to start prediction');
+            // Refresh to show 'FAILED' status if backend updated it
+            fetchExperiments();
+        }
         finally { setRunning(false); }
     };
 
@@ -637,7 +676,15 @@ const PredictionView = ({ training }) => {
                                                 directory={false}
                                                 showUploadList={false}
                                                 beforeUpload={(file, fileList) => {
-                                                    message.success(`${fileList.length} images ready`);
+                                                    // Ensure we capture all files in the selection
+                                                    setPendingFiles(prev => {
+                                                        const combined = [...prev, file];
+                                                        // Only show message once for the batch
+                                                        if (combined.length === prev.length + fileList.length) {
+                                                            message.success(`${fileList.length} images staged`);
+                                                        }
+                                                        return combined;
+                                                    });
                                                     return false;
                                                 }}
                                             >
@@ -645,10 +692,24 @@ const PredictionView = ({ training }) => {
                                                     size="small"
                                                     icon={<CloudUploadOutlined />}
                                                     className="compact-upload-btn"
+                                                    loading={uploading}
                                                 >
-                                                    Select Images or Folders
+                                                    {pendingFiles.length > 0
+                                                        ? `${pendingFiles.length} Images Selected`
+                                                        : "Select Images or Folders"}
                                                 </Button>
                                             </Upload>
+                                            {pendingFiles.length > 0 && (
+                                                <Button
+                                                    type="text"
+                                                    size="small"
+                                                    danger
+                                                    onClick={() => setPendingFiles([])}
+                                                    style={{ fontSize: '10px', marginLeft: '4px' }}
+                                                >
+                                                    Clear
+                                                </Button>
+                                            )}
                                         </div>
                                     )}
                                 </div>
