@@ -924,11 +924,18 @@ const PredictionView = ({ training }) => {
                                     const imageUrl = selectedExp?.output_folder
                                         ? `${window.location.protocol}//${window.location.hostname}:12000/${selectedExp.output_folder}/${imgName}`
                                         : '';
+                                    // Clean filename: remove "predict/" and any path components
+                                    const displayName = imgName.split('/').pop();
                                     return (
-                                        <div key={imgName} className="prediction-gallery-item" onClick={() => { setPreviewImage(imgName); setPreviewVisible(true); }}>
-                                            <Badge count={detections.length} className="detection-badge" color="#1890ff" />
-                                            <img src={imageUrl} alt={imgName} loading="lazy" />
-                                            <div className="image-overlay"><EyeOutlined style={{ color: '#fff', fontSize: 24 }} /></div>
+                                        <div key={imgName} className="prediction-gallery-item-wrapper">
+                                            <div className="prediction-gallery-item" onClick={() => { setPreviewImage(imgName); setPreviewVisible(true); }}>
+                                                <Badge count={detections.length} className="detection-badge" color="#1890ff" />
+                                                <img src={imageUrl} alt={imgName} loading="lazy" />
+                                                <div className="image-overlay"><EyeOutlined style={{ color: '#fff', fontSize: 24 }} /></div>
+                                            </div>
+                                            <div className="image-name-label" title={imgName}>
+                                                {displayName.length > 25 ? displayName.slice(0, 22) + '...' : displayName}
+                                            </div>
                                         </div>
                                     );
                                 })}

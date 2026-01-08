@@ -398,20 +398,28 @@
     flex: 1;
 }
 
-.prediction-gallery-item {
-    position: relative;
-    aspect-ratio: 1;
+.prediction-gallery-item-wrapper {
+    display: flex;
+    flex-direction: column;
     border-radius: 0.5rem;
     overflow: hidden;
-    cursor: pointer;
     border: 1px solid #f0f0f0;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.prediction-gallery-item:hover {
+.prediction-gallery-item-wrapper:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
+
+.prediction-gallery-item {
+    position: relative;
+    aspect-ratio: 1;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+
 
 .prediction-gallery-item img {
     width: 100%;
@@ -444,6 +452,25 @@
     right: 0.5rem;
     z-index: 5;
 }
+
+.image-name-label {
+    padding: 0.5rem 0.75rem;
+    background: #fafafa;
+    border-top: 1px solid #f0f0f0;
+    font-size: 0.75rem;
+    color: #595959;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.prediction-gallery-item-wrapper:hover .image-name-label {
+    background: #e6f7ff;
+    color: #1890ff;
+}
+
 
 /* History Sidebar List */
 .exp-list-item {
