@@ -150,6 +150,156 @@
     gap: 0.25rem;
 }
 
+/* Senior UX: Ultra-Compact Card UI */
+.source-selection-list {
+    margin: 0.25rem 0;
+}
+
+.source-card-radio {
+    display: flex !important;
+    align-items: center;
+    width: 100%;
+    margin: 0 !important;
+    padding: 4px 8px !important;
+    border-radius: 4px;
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    transition: all 0.1s ease;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.source-card-radio:hover {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+}
+
+.source-card-radio.ant-radio-wrapper-checked {
+    background: #eff6ff;
+    border-color: #dbeafe;
+}
+
+/* Fix Ant Design Radio circle and label span */
+.source-card-radio .ant-radio {
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.source-card-radio>span:last-child {
+    flex: 1;
+    display: flex !important;
+    align-items: center;
+    padding-inline-start: 8px !important;
+    width: 100%;
+    overflow: hidden;
+}
+
+.source-card-radio .radio-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.source-label {
+    font-size: 0.725rem;
+    font-weight: 500;
+    color: #475569;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.source-card-radio.ant-radio-wrapper-checked .source-label {
+    color: #1d4ed8;
+}
+
+.source-badge .ant-scroll-number {
+    font-size: 8px !important;
+    height: 14px !important;
+    line-height: 14px !important;
+    min-width: 14px !important;
+    padding: 0 4px !important;
+    background: #e2e8f0 !important;
+    color: #64748b !important;
+    box-shadow: none !important;
+}
+
+/* Professional Inline Uploader */
+.inline-uploader-row {
+    margin-top: 10px;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: center;
+    /* PERFECT CENTERING */
+    width: 100%;
+    animation: fadeInCompact 0.2s ease-out;
+}
+
+.compact-upload-btn {
+    font-size: 0.75rem !important;
+    height: 30px !important;
+    padding: 0 18px !important;
+    border-radius: 15px !important;
+    background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.25) !important;
+    transition: all 0.3s ease !important;
+}
+
+.compact-upload-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(114, 46, 209, 0.35) !important;
+    opacity: 0.95;
+    color: #ffffff !important;
+}
+
+
+
+@keyframes fadeInCompact {
+    from {
+        opacity: 0;
+        transform: translateY(-2px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+@keyframes slideInDownTiny {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+
+@keyframes slideInDownTiny {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+
+
 .config-actions {
     margin-top: 1rem;
     display: flex;

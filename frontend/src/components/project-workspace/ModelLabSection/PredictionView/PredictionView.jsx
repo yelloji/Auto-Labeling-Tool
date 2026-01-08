@@ -18,7 +18,10 @@ import {
     Modal,
     Tooltip,
     Row,
-    Col
+    Col,
+    Radio,
+    Upload,
+    Segmented
 } from 'antd';
 import {
     ExperimentOutlined,
@@ -35,7 +38,9 @@ import {
     CloseCircleOutlined,
     LoadingOutlined,
     SyncOutlined,
-    PlusOutlined
+    PlusOutlined,
+    CloudUploadOutlined,
+    InboxOutlined
 } from '@ant-design/icons';
 
 // Modular Components
@@ -99,31 +104,33 @@ const PredictionView = ({ training }) => {
 
     // Compute available dataset splits from training session
     const availableSplits = React.useMemo(() => {
-        if (!training?.dataset_summary_json) {
-            return ['train', 'val', 'test'];
-        }
-
+        if (!training?.dataset_summary_json) return ['val', 'train', 'test'];
         try {
             const summary = typeof training.dataset_summary_json === 'string'
                 ? JSON.parse(training.dataset_summary_json)
                 : training.dataset_summary_json;
-
             const splits = summary?.splits || {};
-
-            const available = [];
-
-            // Only include splits with images (count > 0)
-            if (splits.train > 0) available.push('train');
-            if (splits.val > 0) available.push('val');
-            if (splits.test > 0) available.push('test');
-
-            // Fallback: if no splits found, show all
-            return available.length > 0 ? available : ['train', 'val', 'test'];
+            const found = [];
+            if (splits.test > 0) found.push('test');
+            if (splits.val > 0) found.push('val');
+            if (splits.train > 0) found.push('train');
+            return found.length > 0 ? found : ['val', 'train', 'test'];
         } catch (e) {
-            console.error('❌ Failed to parse dataset_summary_json:', e);
-            return ['train', 'val', 'test'];
+            return ['val', 'train', 'test'];
         }
-    }, [training?.dataset_summary_json]);
+    }, [training]);
+
+    const datasetSplitCounts = React.useMemo(() => {
+        if (!training?.dataset_summary_json) return {};
+        try {
+            const summary = typeof training.dataset_summary_json === 'string'
+                ? JSON.parse(training.dataset_summary_json)
+                : training.dataset_summary_json;
+            return summary?.splits || {};
+        } catch (e) {
+            return {};
+        }
+    }, [training]);
 
     // Helper: Determine best default dataset split
     const getDefaultSplit = useCallback(() => {
@@ -569,17 +576,81 @@ const PredictionView = ({ training }) => {
                                     <Tooltip title="Choose which dataset to run predictions on: Test/Val/Train sets, or upload custom images.">
                                         <Text strong style={{ cursor: 'help' }}>Select Prediction Data</Text>
                                     </Tooltip>
-                                    <Select
-                                        value={config.dataset_source}
-                                        onChange={val => updateParam('dataset_source', val)}
-                                        disabled={selectedExp && selectedExp.status !== 'queued'}
-                                        style={{ width: '100%' }}
-                                    >
-                                        {availableSplits.includes('train') && <Option value="train">Training Set</Option>}
-                                        {availableSplits.includes('val') && <Option value="val">Validation Set</Option>}
-                                        {availableSplits.includes('test') && <Option value="test">Test Set</Option>}
-                                        <Option value="upload">📁 Upload Images</Option>
-                                    </Select>
+
+                                    <div className="source-selection-list">
+                                        <Radio.Group
+                                            value={config.dataset_source}
+                                            onChange={e => updateParam('dataset_source', e.target.value)}
+                                            disabled={selectedExp && selectedExp.status !== 'queued'}
+                                            style={{ width: '100%' }}
+                                        >
+                                            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                                {availableSplits.includes('test') && (
+                                                    <Radio value="test" className="source-card-radio">
+                                                        <div className="radio-content">
+                                                            <span className="source-label">Test Set</span>
+                                                            <Badge
+                                                                count={datasetSplitCounts.test || 0}
+                                                                overflowCount={99999}
+                                                                style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
+                                                            />
+                                                        </div>
+                                                    </Radio>
+                                                )}
+                                                {availableSplits.includes('val') && (
+                                                    <Radio value="val" className="source-card-radio">
+                                                        <div className="radio-content">
+                                                            <span className="source-label">Validation Set</span>
+                                                            <Badge
+                                                                count={datasetSplitCounts.val || 0}
+                                                                overflowCount={99999}
+                                                                style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
+                                                            />
+                                                        </div>
+                                                    </Radio>
+                                                )}
+                                                {availableSplits.includes('train') && (
+                                                    <Radio value="train" className="source-card-radio">
+                                                        <div className="radio-content">
+                                                            <span className="source-label">Training Set</span>
+                                                            <Badge
+                                                                count={datasetSplitCounts.train || 0}
+                                                                overflowCount={99999}
+                                                                style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
+                                                            />
+                                                        </div>
+                                                    </Radio>
+                                                )}
+                                                <Radio value="upload" className="source-card-radio">
+                                                    <div className="radio-content">
+                                                        <span className="source-label">📁 Custom Upload</span>
+                                                    </div>
+                                                </Radio>
+                                            </Space>
+                                        </Radio.Group>
+                                    </div>
+
+                                    {config.dataset_source === 'upload' && (
+                                        <div className="inline-uploader-row">
+                                            <Upload
+                                                multiple
+                                                directory={false}
+                                                showUploadList={false}
+                                                beforeUpload={(file, fileList) => {
+                                                    message.success(`${fileList.length} images ready`);
+                                                    return false;
+                                                }}
+                                            >
+                                                <Button
+                                                    size="small"
+                                                    icon={<CloudUploadOutlined />}
+                                                    className="compact-upload-btn"
+                                                >
+                                                    Select Images or Folders
+                                                </Button>
+                                            </Upload>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
