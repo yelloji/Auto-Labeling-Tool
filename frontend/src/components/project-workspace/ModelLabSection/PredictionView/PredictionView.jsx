@@ -34,7 +34,8 @@ import {
     ClockCircleOutlined,
     CloseCircleOutlined,
     LoadingOutlined,
-    SyncOutlined
+    SyncOutlined,
+    PlusOutlined
 } from '@ant-design/icons';
 
 // Modular Components
@@ -94,6 +95,7 @@ const PredictionView = ({ training }) => {
 
     // --- References ---
     const pollTimerRef = useRef(null);
+    const syncTimeoutRef = useRef(null);
 
     // --- Helpers ---
     const getStatusTag = (status) => {
@@ -230,22 +232,45 @@ const PredictionView = ({ training }) => {
 
     // --- Actions ---
     const updateParam = async (key, value) => {
+        // 1. Update local UI state immediately for responsiveness
         const newConfig = { ...config, [key]: value };
         setConfig(newConfig);
 
-        if (selectedExp && selectedExp.status === 'queued') {
-            try {
-                await projectsAPI.updatePredictionDraft(selectedExp.id, { [key]: value });
-                setExperiments(prev => prev.map(e => e.id === selectedExp.id ? { ...e, [key]: value } : e));
-            } catch (error) { console.error("Failed to sync param:", error); }
-        } else if (!selectedExp || selectedExp.status !== 'queued') {
+        // 2. INITIALIZATION: Only create a record in DB if NO experiment is selected 
+        // (or if we are moving away from a completed run to start something new)
+        if (!selectedExp && key === 'name' && value.trim().length >= 3) {
             try {
                 const initPayload = { ...newConfig, training_id: training.id };
                 const draft = await projectsAPI.initPrediction(training.id, initPayload);
                 setSelectedExp(draft);
-                setExperiments(prev => [draft, ...prev.filter(e => e.status !== 'queued')]);
-            } catch (error) { console.error("Failed to init draft:", error); }
+                // Add new draft to history, removing any old instance with same ID
+                setExperiments(prev => {
+                    const filtered = prev.filter(e => e.id !== draft.id);
+                    return [draft, ...filtered];
+                });
+            } catch (error) {
+                console.error("Failed to initialize prediction draft:", error);
+            }
         }
+        // 3. AUTOSAVE: Only sync to DB if we are editing an active DRAFT ('queued')
+        else if (selectedExp && selectedExp.status === 'queued') {
+            if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+            syncTimeoutRef.current = setTimeout(async () => {
+                // STICKY IDENTITY: Guard against syncing invalid short names
+                if (key === 'name' && value.trim().length < 3) return;
+
+                try {
+                    await projectsAPI.updatePredictionDraft(selectedExp.id, { [key]: value });
+                    // Sync local state for real-time sidebar/header update
+                    setExperiments(prev => (prev || []).map(e => e.id === selectedExp.id ? { ...e, [key]: value } : e));
+                    setSelectedExp(prev => (prev?.id === selectedExp.id ? { ...prev, [key]: value } : prev));
+                } catch (error) {
+                    console.error("Failed to autosave prediction parameter:", error);
+                }
+            }, 800);
+        }
+        // 4. VOLATILE MODE: If no name is given and no draft exists, we do nothing here.
+        // The UI is already updated via setConfig above, but nothing is saved to DB.
     };
 
     // --- UI Helpers ---
@@ -369,6 +394,7 @@ const PredictionView = ({ training }) => {
                                     className={`exp-list-item ${selectedExp?.id === item.id ? 'active' : ''}`}
                                     onClick={() => {
                                         setSelectedExp(item);
+                                        // "Dont change that": Only overwrite form if we click an unrun DRAFT
                                         if (item.status === 'queued') {
                                             setConfig({
                                                 name: item.name || '',
@@ -376,7 +402,9 @@ const PredictionView = ({ training }) => {
                                                 confidence: item.confidence || 0.25,
                                                 iou_threshold: item.iou_threshold || 0.45,
                                                 imgsz: item.imgsz || 640,
-                                                weights_type: item.weights_type || 'best'
+                                                weights_type: item.weights_type || 'best',
+                                                max_det: item.max_det || 300,
+                                                task: item.task || training?.taskType || 'detection'
                                             });
                                         }
                                     }}
@@ -384,7 +412,7 @@ const PredictionView = ({ training }) => {
                                     <div className="history-item-meta">
                                         <div className="history-item-title">
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                <Text strong>{item.name || 'Unnamed'}</Text>
+                                                <Text strong>{item.name || 'Untitled Experiment'}</Text>
                                                 {getStatusTag(item.status)}
                                             </div>
                                             <Button
@@ -410,7 +438,50 @@ const PredictionView = ({ training }) => {
                 <div className="prediction-right-col">
                     {/* 1. Configuration Section */}
                     <div className="config-section-container">
-                        <div className="section-header"><SettingOutlined /> Configuration</div>
+                        <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div><SettingOutlined /> Configuration</div>
+                            <Button
+                                size="small"
+                                icon={<PlusOutlined />}
+                                onClick={() => {
+                                    // Check if a queued experiment already exists for this training
+                                    const queuedExp = experiments.find(e => e.status === 'queued');
+
+                                    if (queuedExp) {
+                                        // Load the existing queued experiment instead of creating new
+                                        setSelectedExp(queuedExp);
+                                        setConfig({
+                                            name: queuedExp.name || '',
+                                            dataset_source: queuedExp.dataset_source || 'test',
+                                            confidence: queuedExp.confidence || 0.25,
+                                            iou_threshold: queuedExp.iou_threshold || 0.45,
+                                            imgsz: queuedExp.imgsz || 640,
+                                            weights_type: queuedExp.weights_type || 'best',
+                                            max_det: queuedExp.max_det || 300,
+                                            task: queuedExp.task || training?.taskType || 'detection'
+                                        });
+                                        message.info("Loaded existing draft. Rename or delete it to start fresh.");
+                                    } else {
+                                        // No queued experiment, clear for fresh start
+                                        setSelectedExp(null);
+                                        setConfig({
+                                            name: '',
+                                            dataset_source: 'test',
+                                            confidence: 0.25,
+                                            iou_threshold: 0.45,
+                                            imgsz: 640,
+                                            weights_type: 'best',
+                                            max_det: 300,
+                                            task: training?.taskType || 'detection'
+                                        });
+                                        message.info("Form reset for new experiment");
+                                    }
+                                }}
+                                disabled={running}
+                            >
+                                New
+                            </Button>
+                        </div>
                         <div style={{ marginBottom: '1rem', marginTop: '0.5rem' }}>
                             <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                                 Configure these settings to run a new prediction experiment and detect objects in your images.
@@ -424,10 +495,19 @@ const PredictionView = ({ training }) => {
                                         <Text strong style={{ cursor: 'help' }}>Experiment Name</Text>
                                     </Tooltip>
                                     <Input
-                                        placeholder="Timestamp name if empty"
+                                        placeholder="Enter experiment name..."
                                         value={config.name}
                                         onChange={e => updateParam('name', e.target.value)}
-                                        disabled={selectedExp && selectedExp.status !== 'queued'}
+                                        onBlur={(e) => {
+                                            // SNAP-BACK: If user leaves field with invalid name, restore from DB state
+                                            const val = e.target.value.trim();
+                                            if (selectedExp && val.length < 3) {
+                                                const restoredName = selectedExp.name || 'Untitled Experiment';
+                                                setConfig(prev => ({ ...prev, name: restoredName }));
+                                            }
+                                        }}
+                                        autoComplete="off"
+                                        disabled={running || (selectedExp && selectedExp.status !== 'queued')}
                                     />
                                 </div>
                                 <div className="config-item">
@@ -549,18 +629,17 @@ const PredictionView = ({ training }) => {
                                 <Button icon={<LineChartOutlined />} onClick={() => setAnalyticsVisible(true)} disabled={!selectedExp || selectedExp.status !== 'completed'}>📈 Analytics</Button>
                                 <Button icon={<ExperimentOutlined />} onClick={() => setCompareVisible(true)} disabled={experiments.length < 2}>📊 Compare</Button>
                             </Space>
-                            <Space>
-                                <Button onClick={handleReset}>Reset Defaults</Button>
+                            <Tooltip title={!config.name?.trim() || config.name.trim().length < 3 ? "Name must be at least 3 characters" : ""}>
                                 <Button
                                     type="primary"
                                     icon={<PlayCircleOutlined />}
                                     onClick={handleRun}
                                     loading={running}
-                                    disabled={selectedExp && selectedExp.status !== 'queued'}
+                                    disabled={(selectedExp && selectedExp.status !== 'queued') || !config.name?.trim() || config.name.trim().length < 3}
                                 >
                                     Run Prediction
                                 </Button>
-                            </Space>
+                            </Tooltip>
                         </div>
                     </div>
 

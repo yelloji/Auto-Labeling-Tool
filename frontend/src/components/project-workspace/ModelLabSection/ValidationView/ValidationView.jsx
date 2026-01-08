@@ -52,15 +52,23 @@ const ValidationView = ({ training }) => {
 
     // Sync any parameter change with the database
     const updateParam = async (key, value) => {
+        // 1. Update local UI state immediately for responsiveness
         const newParams = { ...params, [key]: value };
         setParams(newParams);
 
-        // If we don't have an active experiment ID yet, we need to INIT first
-        if (!activeExperimentId && !isInitializing.current) {
+        // 2. INITIALIZATION: Only create a record in DB if NO experiment is currently active
+        // (Minimum 3 characters required)
+        if (!activeExperimentId && !isInitializing.current && key === 'name' && value.trim().length >= 3) {
             isInitializing.current = true;
             try {
                 const response = await projectsAPI.initValidation(training.id, newParams);
                 setActiveExperimentId(response.id);
+                setActiveExperiment(response);
+                // Update history sidebar with the new draft, removing any old instance with same ID
+                setExperiments(prev => {
+                    const filtered = (prev || []).filter(e => e.id !== response.id);
+                    return [response, ...filtered];
+                });
                 logInfo('app.frontend.validation', 'draft_initialized', `Draft created for training ${training.id}`, { experiment_id: response.id });
             } catch (error) {
                 console.error("Failed to initialize validation draft:", error);
@@ -68,18 +76,30 @@ const ValidationView = ({ training }) => {
             } finally {
                 isInitializing.current = false;
             }
-        } else if (activeExperimentId) {
-            // We have an ID, so update/PATCH it (Debounced)
+        }
+        // 3. AUTOSAVE: Only sync to DB if the experiment is in DRAFT status ('queued')
+        else if (activeExperimentId && activeExperiment?.status === 'queued') {
+
+            // STICKY IDENTITY: If user is renaming, only sync if it meets the 3-character minimum.
             if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
             syncTimeoutRef.current = setTimeout(async () => {
+                if (key === 'name' && value.trim().length < 3) return; // Guard against small names in DB
+
                 try {
                     await projectsAPI.updateValidationDraft(activeExperimentId, { [key]: value });
+                    // UPDATE LOCAL LIST: Ensure the sidebar and header reflect the new name immediately
+                    setExperiments(prev => (prev || []).map(e => e.id === activeExperimentId ? { ...e, [key]: value } : e));
+                    if (activeExperiment?.id === activeExperimentId) {
+                        setActiveExperiment(prev => ({ ...prev, [key]: value }));
+                    }
                     logInfo('app.frontend.validation', 'draft_synced', `Draft ${activeExperimentId} updated: ${key}=${value}`);
                 } catch (error) {
                     console.error("Failed to sync validation parameter:", error);
                 }
             }, 800); // 800ms debounce for senior-level feel
         }
+        // 4. VOLATILE MODE: If no name is given and no ID exists, we do nothing.
+        // The UI is already updated via setParams above.
     };
 
     // Load existing draft or model defaults on model switch
@@ -574,31 +594,53 @@ const ValidationView = ({ training }) => {
                                             icon={<PlusOutlined />}
                                             onClick={() => {
                                                 logUserClick('ValidationView', 'new_experiment');
-                                                setActiveExperimentId(null);
-                                                setActiveExperiment(null);
 
-                                                // Reset to defaults
-                                                let detectedImgsz = 640;
-                                                if (training?.resolved_config_json) {
-                                                    try {
-                                                        const config = typeof training.resolved_config_json === 'string'
-                                                            ? JSON.parse(training.resolved_config_json)
-                                                            : training.resolved_config_json;
-                                                        detectedImgsz = config.train?.imgsz || config.imgsz || 640;
-                                                    } catch (e) { }
+                                                // Check if a queued experiment already exists for this training
+                                                const queuedExp = experiments.find(e => e.status === 'queued');
+
+                                                if (queuedExp) {
+                                                    // Load the existing queued experiment instead of creating new
+                                                    setActiveExperimentId(queuedExp.id);
+                                                    setActiveExperiment(queuedExp);
+                                                    setParams({
+                                                        name: queuedExp.name || '',
+                                                        dataset_source: queuedExp.dataset_source || 'val',
+                                                        confidence: queuedExp.confidence || 0.25,
+                                                        iou_threshold: queuedExp.iou_threshold || 0.45,
+                                                        imgsz: queuedExp.imgsz || 640,
+                                                        max_detections: queuedExp.max_detections || 300,
+                                                        task: queuedExp.task || training?.taskType || 'detection',
+                                                        weights_type: queuedExp.weights_type || 'best'
+                                                    });
+                                                    message.info("Loaded existing draft. Rename or delete it to start fresh.");
+                                                } else {
+                                                    // No queued experiment, clear for fresh start
+                                                    setActiveExperimentId(null);
+                                                    setActiveExperiment(null);
+
+                                                    // Reset to defaults
+                                                    let detectedImgsz = 640;
+                                                    if (training?.resolved_config_json) {
+                                                        try {
+                                                            const config = typeof training.resolved_config_json === 'string'
+                                                                ? JSON.parse(training.resolved_config_json)
+                                                                : training.resolved_config_json;
+                                                            detectedImgsz = config.train?.imgsz || config.imgsz || 640;
+                                                        } catch (e) { }
+                                                    }
+
+                                                    setParams({
+                                                        name: '',
+                                                        dataset_source: 'val',
+                                                        task: training?.taskType || 'detection',
+                                                        imgsz: detectedImgsz,
+                                                        confidence: 0.25,
+                                                        iou_threshold: 0.45,
+                                                        max_detections: 300,
+                                                        weights_type: 'best'
+                                                    });
+                                                    message.info("Form reset for new experiment");
                                                 }
-
-                                                setParams({
-                                                    name: '',
-                                                    dataset_source: 'val',
-                                                    task: training?.taskType || 'detection',
-                                                    imgsz: detectedImgsz,
-                                                    confidence: 0.25,
-                                                    iou_threshold: 0.45,
-                                                    max_detections: 300,
-                                                    weights_type: 'best'
-                                                });
-                                                message.info("Form reset for new experiment");
                                             }}
                                             disabled={running}
                                         >
@@ -620,9 +662,17 @@ const ValidationView = ({ training }) => {
                                         value={params.name}
                                         style={{ marginTop: '0.25rem' }}
                                         onChange={e => updateParam('name', e.target.value)}
+                                        onBlur={(e) => {
+                                            // SNAP-BACK: If user leaves field with invalid name, restore from DB state
+                                            const val = e.target.value.trim();
+                                            if (activeExperiment && val.length < 3) {
+                                                const restoredName = activeExperiment.name || 'Untitled Experiment';
+                                                setParams(prev => ({ ...prev, name: restoredName }));
+                                            }
+                                        }}
                                         placeholder="Enter experiment name..."
                                         autoComplete="off"
-                                        disabled={running}
+                                        disabled={running || (activeExperiment && activeExperiment.status !== 'queued')}
                                     />
                                 </div>
 
@@ -732,18 +782,21 @@ const ValidationView = ({ training }) => {
                                     />
                                 </div>
 
-                                <Button
-                                    type="primary"
-                                    icon={<PlayCircleOutlined />}
-                                    block
-                                    size="large"
-                                    className="v-run-btn"
-                                    onClick={handleRunValidation}
-                                    loading={running}
-                                    style={{ marginTop: '1.5rem' }}
-                                >
-                                    {running ? 'Validating...' : 'Run Validation'}
-                                </Button>
+                                <Tooltip title={!params.name?.trim() || params.name.trim().length < 3 ? "Name must be at least 3 characters" : ""}>
+                                    <Button
+                                        type="primary"
+                                        icon={<PlayCircleOutlined />}
+                                        block
+                                        size="large"
+                                        className="v-run-btn"
+                                        onClick={handleRunValidation}
+                                        loading={running}
+                                        disabled={running || !params.name?.trim() || params.name.trim().length < 3}
+                                        style={{ marginTop: '1.5rem' }}
+                                    >
+                                        Run Validation
+                                    </Button>
+                                </Tooltip>
                             </Card>
                         </Col>
 
@@ -862,21 +915,38 @@ const ValidationView = ({ training }) => {
                             renderItem={item => (
                                 <List.Item
                                     className={`v-history-item ${activeExperiment?.id === item.id ? 'active' : ''}`}
-                                    onClick={() => setActiveExperiment(item)}
+                                    onClick={() => {
+                                        setActiveExperiment(item);
+                                        // "Dont change that": Only overwrite form if we click an unrun DRAFT
+                                        if (item.status === 'queued') {
+                                            setActiveExperimentId(item.id);
+                                            setParams({
+                                                name: item.name || '',
+                                                dataset_source: item.dataset_source || 'val',
+                                                confidence: item.confidence || 0.25,
+                                                iou_threshold: item.iou_threshold || 0.45,
+                                                imgsz: item.imgsz || 640,
+                                                max_detections: item.max_detections || 300,
+                                                task: item.task || training?.taskType || 'detection',
+                                                weights_type: item.weights_type || 'best'
+                                            });
+                                        } else {
+                                            // Reset active ID so we don't accidentally update a completed run
+                                            setActiveExperimentId(null);
+                                        }
+                                    }}
                                 >
                                     <div className="v-history-content">
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text strong>{item.name || new Date(item.created_at).toLocaleTimeString()}</Text>
+                                            <Text strong>{item.name || 'Untitled Experiment'}</Text>
                                             {(item.status === 'queued' || item.status === 'running' || item.status === 'pending') ?
                                                 <SyncOutlined spin style={{ color: '#1890ff' }} /> :
                                                 item.status === 'failed' ? <CloseCircleOutlined style={{ color: '#ff4d4f' }} /> :
                                                     <CheckCircleOutlined style={{ color: '#52c41a' }} />}
                                         </div>
-                                        {item.name && (
-                                            <div style={{ fontSize: '0.625rem', color: '#8c8c8c' }}>
-                                                {new Date(item.created_at).toLocaleTimeString()}
-                                            </div>
-                                        )}
+                                        <div style={{ fontSize: '0.625rem', color: '#8c8c8c' }}>
+                                            {new Date(item.created_at).toLocaleTimeString()}
+                                        </div>
                                         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
                                             <Tag color="blue" style={{ fontSize: '0.625rem', margin: 0 }}>mAP: {item.validation_metrics?.map50?.toFixed(2) || 'N/A'}</Tag>
                                             <Tag color="cyan" style={{ fontSize: '0.625rem', margin: 0 }}>{item.dataset_source}</Tag>
