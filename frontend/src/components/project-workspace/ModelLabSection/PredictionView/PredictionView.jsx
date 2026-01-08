@@ -125,7 +125,8 @@ const PredictionView = ({ training }) => {
 
             // Only split if filters are actually going to be shown
             if (selectedExp && selectedExp.status === 'completed' && topOffset > 100) {
-                setHistoryHeight(`${topOffset}px`);
+                // Subtract margins (48px) to make the headers level across the screen
+                setHistoryHeight(`${topOffset - 48}px`);
             } else {
                 setHistoryHeight('100%');
             }

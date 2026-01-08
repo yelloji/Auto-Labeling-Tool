@@ -19,8 +19,8 @@
 .prediction-left-col {
     width: 20rem;
     /* Fixed width sidebar */
-    background: #fdfdfd;
-    /* Very subtle off-white for contrast */
+    background: #ffffff;
+    /* Pure white sidebar */
     border-right: 1px solid #d9d9d9;
     display: flex;
     flex-direction: column;
