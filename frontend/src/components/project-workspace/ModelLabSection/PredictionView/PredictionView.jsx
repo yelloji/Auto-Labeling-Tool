@@ -1125,11 +1125,64 @@ const PredictionView = ({ training }) => {
                                                         : '';
                                                     // Clean filename: remove "predict/" and any path components
                                                     const displayName = imgName.split('/').pop();
+                                                    // Render detection overlay for filtered detections
+                                                    const DetectionOverlay = ({ dets, imgKey }) => {
+                                                        const [dimensions, setDimensions] = useState({ width: 640, height: 640 });
+
+                                                        // This effect handles getting the image's natural dimensions once loaded
+                                                        // to ensure the SVG coordinates scale perfectly.
+                                                        const handleImgLoad = (e) => {
+                                                            setDimensions({
+                                                                width: e.target.naturalWidth || 640,
+                                                                height: e.target.naturalHeight || 640
+                                                            });
+                                                        };
+
+                                                        return (
+                                                            <div className="prediction-image-container">
+                                                                <img
+                                                                    src={imageUrl}
+                                                                    alt={imgName}
+                                                                    loading="lazy"
+                                                                    onLoad={handleImgLoad}
+                                                                />
+                                                                {dets.length > 0 && dimensions.width > 0 && (
+                                                                    <svg
+                                                                        className="detection-overlay-svg"
+                                                                        viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
+                                                                        preserveAspectRatio="none"
+                                                                    >
+                                                                        {dets.map((d, i) => {
+                                                                            if (!d.bbox) return null;
+                                                                            const [x1, y1, x2, y2] = d.bbox;
+                                                                            // Determine risk class for coloring
+                                                                            let riskClass = '';
+                                                                            if (d.confidence < 0.4) riskClass = 'high-risk';
+                                                                            else if (d.confidence < 0.7) riskClass = 'medium-risk';
+                                                                            else riskClass = 'low-risk';
+
+                                                                            return (
+                                                                                <rect
+                                                                                    key={i}
+                                                                                    x={x1}
+                                                                                    y={y1}
+                                                                                    width={x2 - x1}
+                                                                                    height={y2 - y1}
+                                                                                    className={`detection-highlight-rect ${riskClass}`}
+                                                                                />
+                                                                            );
+                                                                        })}
+                                                                    </svg>
+                                                                )}
+                                                                <div className="image-overlay"><EyeOutlined style={{ color: '#fff', fontSize: 24 }} /></div>
+                                                            </div>
+                                                        );
+                                                    };
+
                                                     return (
                                                         <div key={imgName} className="prediction-gallery-item-wrapper">
                                                             <div className="prediction-gallery-item" onClick={() => { setPreviewImage(imgName); setPreviewVisible(true); }}>
-                                                                <img src={imageUrl} alt={imgName} loading="lazy" />
-                                                                <div className="image-overlay"><EyeOutlined style={{ color: '#fff', fontSize: 24 }} /></div>
+                                                                <DetectionOverlay dets={detections} imgKey={imgName} />
                                                             </div>
                                                             <div className="image-name-label" title={imgName}>
                                                                 {displayName.length > 25 ? displayName.slice(0, 22) + '...' : displayName}
@@ -1186,6 +1239,7 @@ const PredictionView = ({ training }) => {
                 images={filteredImages}
                 experiment={selectedExp}
                 onNavigate={(newImg) => setPreviewImage(newImg)}
+                filters={filters}
             />
 
             < AnalyticsModal

@@ -156,6 +156,48 @@
     /* Match filter header size */
 }
 
+/* Dynamic Detection Overlays */
+.prediction-image-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.detection-overlay-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    /* Let clicks pass through to the image */
+    z-index: 5;
+}
+
+.detection-highlight-rect {
+    fill: rgba(255, 77, 79, 0.15);
+    /* Very light red fill */
+    stroke: #ff4d4f;
+    /* Bright Red */
+    stroke-width: 2.5;
+    vector-effect: non-scaling-stroke;
+    /* Keep stroke thin regardless of zoom */
+    paint-order: stroke;
+}
+
+.detection-highlight-rect.medium-risk {
+    stroke: #faad14;
+    /* Orange/Yellow */
+    fill: rgba(250, 173, 20, 0.1);
+}
+
+.detection-highlight-rect.low-risk {
+    stroke: #52c41a;
+    /* Green */
+    fill: rgba(82, 196, 26, 0.05);
+}
+
 /* Download button - always visible */
 .gallery-header .ant-btn {
     background: white;
