@@ -125,8 +125,11 @@ const PredictionView = ({ training }) => {
 
             // Only split if filters are actually going to be shown
             if (selectedExp && selectedExp.status === 'completed' && topOffset > 100) {
-                // Subtract margins (48px) to make the headers level across the screen
-                setHistoryHeight(`${topOffset - 48}px`);
+                // Subtract exact padding to align headers:
+                // - Right column has 1rem (16px) top padding
+                // - Filter card has 0.5rem (8px) top margin
+                // Total to subtract: 24px
+                setHistoryHeight(`${topOffset - 24}px`);
             } else {
                 setHistoryHeight('100%');
             }
@@ -608,7 +611,6 @@ const PredictionView = ({ training }) => {
                             }
                             className="filters-card"
                             size="small"
-                            style={{ marginTop: '1rem' }}
                         >
                             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                                 {/* Search Filter */}
