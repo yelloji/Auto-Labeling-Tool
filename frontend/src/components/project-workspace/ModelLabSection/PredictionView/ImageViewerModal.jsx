@@ -37,14 +37,6 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
 
     const currentIndex = images.indexOf(currentImage);
 
-    // Reset zoom and selection when image changes
-    React.useEffect(() => {
-        setScale(1);
-        setOffset({ x: 0, y: 0 });
-        setSelectedIndices([]);
-        hasInitSelection.current = false; // Allow re-init for the next image
-    }, [currentImage]);
-
     // Helper to get detections (handles both full path and filename only)
     const getDetectionsForImage = (name) => {
         if (!name || !experiment?.predictions) return [];
@@ -63,13 +55,23 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
         return confMatch && classMatch;
     });
 
-    // Auto-select all filtered detections ONLY ONCE per image load
+    // Unified Image Change Logic
+    // This ensures that whenever you move to a new image, all its specific detections 
+    // are selected by default, while your GLOBAL toggles (Top Buttons) stay exactly as you set them.
     React.useEffect(() => {
-        if (filteredDets.length > 0 && !hasInitSelection.current) {
+        // Reset Zoom/Pan
+        setScale(1);
+        setOffset({ x: 0, y: 0 });
+
+        // Auto-select all new objects for the fresh image
+        if (filteredDets.length > 0) {
             setSelectedIndices(filteredDets.map((_, i) => i));
-            hasInitSelection.current = true;
+        } else {
+            setSelectedIndices([]);
         }
-    }, [filteredDets.length]);
+    }, [currentImage, filteredDets.length]); // Re-run if image changes OR if new detections load
+
+    // (Logic moved to unified handler above for perfect synchronization)
 
     if (!visible || !currentImage || !experiment) return null;
 
@@ -197,36 +199,63 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                         alignItems: 'center'
                     }}>
                         {/* 1. Precision Overlay Filters */}
-                        <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', padding: '2px' }}>
+                        <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', padding: '2px', gap: '2px' }}>
                             <Tooltip title="Show/Hide Bounding Boxes">
                                 <Button
                                     type="text"
                                     size="small"
-                                    style={{ color: showBoxes ? '#1890ff' : '#666', width: 32 }}
-                                    icon={<div style={{ border: '2px solid currentColor', width: 14, height: 14, margin: 'auto' }} />}
+                                    style={{
+                                        color: showBoxes ? '#1890ff' : '#666',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '0 8px',
+                                        height: '24px'
+                                    }}
                                     onClick={() => setShowBoxes(!showBoxes)}
-                                />
+                                >
+                                    <div style={{ border: '2px solid currentColor', width: 12, height: 12 }} />
+                                    <span style={{ fontSize: '11px', fontWeight: 600 }}>Boxes</span>
+                                </Button>
                             </Tooltip>
                             <Tooltip title="Show/Hide Contours">
                                 <Button
                                     type="text"
                                     size="small"
-                                    style={{ color: showContours ? '#faad14' : '#666', width: 32 }}
-                                    icon={<div style={{
-                                        width: 14, height: 14, margin: 'auto', borderRadius: '50%',
-                                        border: '2px solid currentColor', borderStyle: 'dashed'
-                                    }} />}
+                                    style={{
+                                        color: showContours ? '#faad14' : '#666',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '0 8px',
+                                        height: '24px'
+                                    }}
                                     onClick={() => setShowContours(!showContours)}
-                                />
+                                >
+                                    <div style={{
+                                        width: 12, height: 12, borderRadius: '50%',
+                                        border: '2px solid currentColor', borderStyle: 'dashed'
+                                    }} />
+                                    <span style={{ fontSize: '11px', fontWeight: 600 }}>Contours</span>
+                                </Button>
                             </Tooltip>
                             <Tooltip title="Show/Hide Labels">
                                 <Button
                                     type="text"
                                     size="small"
-                                    style={{ color: showLabels ? '#52c41a' : '#666', width: 32 }}
-                                    icon={<span style={{ fontWeight: 800, fontSize: '12px' }}>Aa</span>}
+                                    style={{
+                                        color: showLabels ? '#52c41a' : '#666',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '0 8px',
+                                        height: '24px'
+                                    }}
                                     onClick={() => setShowLabels(!showLabels)}
-                                />
+                                >
+                                    <span style={{ fontWeight: 800, fontSize: '11px' }}>Aa</span>
+                                    <span style={{ fontSize: '11px', fontWeight: 600 }}>Labels</span>
+                                </Button>
                             </Tooltip>
                         </div>
 
