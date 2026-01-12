@@ -686,7 +686,20 @@ const PredictionView = ({ training }) => {
 
                                 {/* Risk Level Filter */}
                                 <div>
-                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Risk Level</Text>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                        <Text type="secondary" style={{ fontSize: '0.75rem' }}>Risk Level</Text>
+                                        <Space size={8}>
+                                            <Tooltip title="High Risk: < 40% Confidence">
+                                                <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ff4d4f', boxShadow: '0 0 8px rgba(255, 77, 79, 0.6)' }} />
+                                            </Tooltip>
+                                            <Tooltip title="Medium Risk: 40-70% Confidence">
+                                                <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#faad14', boxShadow: '0 0 8px rgba(250, 173, 20, 0.6)' }} />
+                                            </Tooltip>
+                                            <Tooltip title="Low Risk: > 70% Confidence">
+                                                <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#52c41a', boxShadow: '0 0 8px rgba(82, 196, 26, 0.6)' }} />
+                                            </Tooltip>
+                                        </Space>
+                                    </div>
                                     <Select
                                         value={filters.riskLevel}
                                         onChange={val => setFilters(f => ({ ...f, riskLevel: val }))}
@@ -694,9 +707,24 @@ const PredictionView = ({ training }) => {
                                         size="small"
                                     >
                                         <Option value="any">Any Risk</Option>
-                                        <Option value="high">High Risk (Needs Review)</Option>
-                                        <Option value="medium">Medium Risk</Option>
-                                        <Option value="low">Low Risk (Validated)</Option>
+                                        <Option value="high">
+                                            <Space size={10}>
+                                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ff4d4f', boxShadow: '0 0 4px rgba(255, 77, 79, 0.4)' }} />
+                                                <span>High Risk (Needs Review)</span>
+                                            </Space>
+                                        </Option>
+                                        <Option value="medium">
+                                            <Space size={10}>
+                                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#faad14', boxShadow: '0 0 4px rgba(250, 173, 20, 0.4)' }} />
+                                                <span>Medium Risk</span>
+                                            </Space>
+                                        </Option>
+                                        <Option value="low">
+                                            <Space size={10}>
+                                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#52c41a', boxShadow: '0 0 4px rgba(82, 196, 26, 0.4)' }} />
+                                                <span>Low Risk (Validated)</span>
+                                            </Space>
+                                        </Option>
                                     </Select>
                                 </div>
 

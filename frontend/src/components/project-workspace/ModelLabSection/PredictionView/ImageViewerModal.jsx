@@ -91,7 +91,20 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                 alignItems: 'center'
             }}>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <Text style={{ color: '#fff', fontWeight: 600 }}>{currentImage}</Text>
+                    <Space align="center">
+                        <Text style={{ color: '#fff', fontWeight: 600 }}>{currentImage}</Text>
+                        <Space size={10} style={{ marginLeft: '16px', background: 'rgba(255,255,255,0.08)', padding: '4px 12px', borderRadius: '14px' }}>
+                            <Tooltip title="High Risk: < 40% Confidence - Needs Review">
+                                <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#ff4d4f', boxShadow: '0 0 12px #ff4d4f' }} />
+                            </Tooltip>
+                            <Tooltip title="Medium Risk: 40-70% Confidence - Verify">
+                                <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#faad14', boxShadow: '0 0 12px #faad14' }} />
+                            </Tooltip>
+                            <Tooltip title="Low Risk: > 70% Confidence - Validated">
+                                <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#52c41a', boxShadow: '0 0 12px #52c41a' }} />
+                            </Tooltip>
+                        </Space>
+                    </Space>
                     <Space>
                         <Tag color="blue">{filteredDets.length} Matching Detections</Tag>
                         <Text style={{ color: '#aaa', fontSize: '0.75rem' }}>{currentIndex + 1} of {images.length}</Text>
@@ -232,18 +245,34 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                     </Text>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    {filteredDets.length > 0 ? filteredDets.map((d, i) => (
-                        <div key={i} style={{
-                            background: d.confidence < 0.4 ? 'rgba(255, 77, 79, 0.15)' : 'rgba(24, 144, 255, 0.15)',
-                            border: `1px solid ${d.confidence < 0.4 ? '#ff4d4f' : '#1890ff'}`,
-                            padding: '2px 8px',
-                            borderRadius: '4px'
-                        }}>
-                            <Text style={{ color: d.confidence < 0.4 ? '#ff4d4f' : '#1890ff', fontSize: '0.8125rem' }}>
-                                <strong>{d.class}</strong>: {(d.confidence * 100).toFixed(1)}%
-                            </Text>
-                        </div>
-                    )) : (
+                    {filteredDets.length > 0 ? filteredDets.map((d, i) => {
+                        let color = '#1890ff'; // Default Blue
+                        let bg = 'rgba(24, 144, 255, 0.15)';
+
+                        if (d.confidence < 0.4) {
+                            color = '#ff4d4f'; // High Risk
+                            bg = 'rgba(255, 77, 79, 0.15)';
+                        } else if (d.confidence < 0.7) {
+                            color = '#faad14'; // Medium Risk
+                            bg = 'rgba(250, 173, 20, 0.15)';
+                        } else {
+                            color = '#52c41a'; // Low Risk
+                            bg = 'rgba(82, 196, 26, 0.15)';
+                        }
+
+                        return (
+                            <div key={i} style={{
+                                background: bg,
+                                border: `1px solid ${color}`,
+                                padding: '2px 8px',
+                                borderRadius: '4px'
+                            }}>
+                                <Text style={{ color, fontSize: '0.8125rem' }}>
+                                    <strong>{d.class}</strong>: {(d.confidence * 100).toFixed(1)}%
+                                </Text>
+                            </div>
+                        );
+                    }) : (
                         <Text type="secondary" style={{ color: '#666' }}>No matching objects with current filters.</Text>
                     )}
                 </div>
