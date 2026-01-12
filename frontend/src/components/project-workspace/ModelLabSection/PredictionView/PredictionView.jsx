@@ -85,7 +85,7 @@ const PredictionView = ({ training }) => {
     const [filters, setFilters] = useState({
         detectionCount: 'any',
         className: 'all',
-        confidence: 0.1, // Default lower for viewing
+        confidenceRange: [10, 100], // Default range 10% to 100%
         imageSearch: '',
         riskLevel: 'any'
     });
@@ -313,8 +313,9 @@ const PredictionView = ({ training }) => {
             return;
         }
 
-        const { detectionCount, className, confidence, imageSearch, riskLevel } = filters;
+        const { detectionCount, className, confidenceRange, imageSearch, riskLevel } = filters;
         const preds = selectedExp.predictions;
+        const [minConf, maxConf] = [confidenceRange[0] / 100, confidenceRange[1] / 100];
 
 
 
@@ -327,8 +328,12 @@ const PredictionView = ({ training }) => {
             };
 
             const allDets = getDetections(imgName);
-            // Filter detections by current confidence threshold
-            const detections = allDets.filter(d => d.confidence >= confidence);
+            // Filter detections by current filters (Range + Class)
+            const detections = allDets.filter(d => {
+                const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
+                const classMatch = className === 'all' || d.class === className;
+                return confMatch && classMatch;
+            });
 
             // 1. Image Search Filter
             if (imageSearch && !imgName.toLowerCase().includes(imageSearch.toLowerCase())) {
@@ -339,10 +344,10 @@ const PredictionView = ({ training }) => {
 
             let countMatch = true;
             if (detectionCount === 'no') countMatch = allDets.length === 0;
-            else if (detectionCount === 'yes') countMatch = allDets.length > 0;
-            else if (detectionCount === '1-5') countMatch = allDets.length >= 1 && allDets.length <= 5;
-            else if (detectionCount === '6-10') countMatch = allDets.length >= 6 && allDets.length <= 10;
-            else if (detectionCount === '10+') countMatch = allDets.length > 10;
+            else if (detectionCount === 'yes') countMatch = detections.length > 0;
+            else if (detectionCount === '1-5') countMatch = detections.length >= 1 && detections.length <= 5;
+            else if (detectionCount === '6-10') countMatch = detections.length >= 6 && detections.length <= 10;
+            else if (detectionCount === '10+') countMatch = detections.length > 10;
 
             if (!countMatch) return false;
 
@@ -660,6 +665,22 @@ const PredictionView = ({ training }) => {
                                         <Option value="all">All Classes</Option>
                                         {availableClasses.map(c => <Option key={c} value={c}>{c}</Option>)}
                                     </Select>
+                                </div>
+
+                                {/* Confidence Range Filter */}
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                        <Text type="secondary" style={{ fontSize: '0.75rem' }}>Confidence Range</Text>
+                                        <Text type="secondary" style={{ fontSize: '0.75rem' }}>{filters.confidenceRange[0]}% - {filters.confidenceRange[1]}%</Text>
+                                    </div>
+                                    <Slider
+                                        range
+                                        min={0}
+                                        max={100}
+                                        step={1}
+                                        value={filters.confidenceRange}
+                                        onChange={val => setFilters(f => ({ ...f, confidenceRange: val }))}
+                                    />
                                 </div>
 
                                 {/* Results Counter & Clear */}
@@ -1025,7 +1046,7 @@ const PredictionView = ({ training }) => {
                                                 {availableClasses.map(c => <Option key={c} value={c}>{c}</Option>)}
                                             </Select>
                                         </div>
-                                        <Button type="link" size="small" onClick={() => setFilters({ detectionCount: 'any', className: 'all', confidence: 0.25 })}>Clear Filters</Button>
+                                        <Button type="link" size="small" onClick={() => setFilters({ detectionCount: 'any', className: 'all', confidenceRange: [10, 100], imageSearch: '', riskLevel: 'any' })}>Clear Filters</Button>
                                         <Text type="secondary" style={{ marginLeft: 'auto' }}>
                                             Showing {filteredImages.length} of {experimentImages.length}
                                         </Text>
@@ -1075,7 +1096,13 @@ const PredictionView = ({ training }) => {
                                                         const fileName = name.split('/').pop();
                                                         return selectedExp?.predictions?.[fileName] || [];
                                                     };
-                                                    const detections = getDetections(imgName);
+                                                    const allDets = getDetections(imgName);
+                                                    const [minConf, maxConf] = [filters.confidenceRange[0] / 100, filters.confidenceRange[1] / 100];
+                                                    const detections = allDets.filter(d => {
+                                                        const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
+                                                        const classMatch = filters.className === 'all' || d.class === filters.className;
+                                                        return confMatch && classMatch;
+                                                    });
                                                     const imageUrl = selectedExp?.output_folder
                                                         ? `${window.location.protocol}//${window.location.hostname}:12000/${selectedExp.output_folder}/${imgName}`
                                                         : '';
