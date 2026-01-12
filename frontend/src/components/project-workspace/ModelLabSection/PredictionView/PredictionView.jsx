@@ -338,7 +338,8 @@ const PredictionView = ({ training }) => {
             // 2. Detection Count Filter
 
             let countMatch = true;
-            if (detectionCount === '0') countMatch = allDets.length === 0;
+            if (detectionCount === 'no') countMatch = allDets.length === 0;
+            else if (detectionCount === 'yes') countMatch = allDets.length > 0;
             else if (detectionCount === '1-5') countMatch = allDets.length >= 1 && allDets.length <= 5;
             else if (detectionCount === '6-10') countMatch = allDets.length >= 6 && allDets.length <= 10;
             else if (detectionCount === '10+') countMatch = allDets.length > 10;
@@ -639,10 +640,11 @@ const PredictionView = ({ training }) => {
                                         size="small"
                                     >
                                         <Option value="any">Any</Option>
-                                        <Option value="0">None (0)</Option>
-                                        <Option value="1-5">1-5</Option>
-                                        <Option value="6-10">6-10</Option>
-                                        <Option value="10+">10+</Option>
+                                        <Option value="yes">With Detections</Option>
+                                        <Option value="no">No Detections</Option>
+                                        <Option value="1-5">1-5 Detections</Option>
+                                        <Option value="6-10">6-10 Detections</Option>
+                                        <Option value="10+">10+ Detections</Option>
                                     </Select>
                                 </div>
 
