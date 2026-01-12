@@ -1531,11 +1531,26 @@ async def list_training_experiments(training_id: int, db: Session = Depends(get_
 
 @router.get("/experiments/{experiment_id}/images")
 async def list_experiment_images(experiment_id: str, db: Session = Depends(get_db)):
-    """List result images (filenames) in an experiment output folder."""
+    """List result images (filenames) in an experiment."""
     exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
     if not exp:
         raise HTTPException(status_code=404, detail="Experiment not found")
     
+    # NEW ELITE STRATEGY: Use the Database as the source of truth
+    # This restores images in the UI even if the output_folder is empty (zero-copy mode)
+    image_files = []
+    if exp.predictions:
+        try:
+            # predictions is stored as a JSON dict {filename: detections}
+            preds = json.loads(exp.predictions) if isinstance(exp.predictions, str) else exp.predictions
+            if preds and isinstance(preds, dict):
+                image_files = sorted(list(preds.keys()))
+                if image_files:
+                    return image_files
+        except Exception as e:
+            logger.warning("errors.system", f"Failed to parse predictions for {experiment_id}: {e}", "list_experiment_images_db_failed")
+    
+    # FALLBACK: Traditional folder scan (for legacy experiments or local uploads)
     if not exp.output_folder:
         return []
     
@@ -1545,29 +1560,16 @@ async def list_experiment_images(experiment_id: str, db: Session = Depends(get_d
     project_root = backend_dir.parent
     
     full_path = (project_root / exp.output_folder).resolve()
-    
     if not full_path.exists() or not full_path.is_dir():
-        logger.warning("errors.system", f"Experiment folder not found on disk: {full_path}", "list_experiment_images_not_found")
         return []
     
-    # Collect all image files recursively
-    image_files = []
-    # Supported formats from settings (hardcoded here to avoid import cycle if any)
     valid_exts = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
-    
-    # Use rglob for recursive discovery to handle subfolders like YOLO's /predict/
     for f in full_path.rglob('*'):
         if f.is_file() and f.suffix.lower() in valid_exts:
-            # We want the relative path from the output folder for the UI to handle it correctly
-            # But the UI currently expects just the filename if it assumes flat structure
-            # Let's keep it simple: return the filename if it's unique, or full relative if needed
-            # For now, most UIs expect filename. We'll return the relative path as posix
             rel_path = f.relative_to(full_path)
             image_files.append(rel_path.as_posix())
             
-    # Sort alphabetically
     image_files.sort()
-    
     return image_files
 
 
@@ -1598,15 +1600,24 @@ async def get_experiment_original_image(
         if not exp.dataset_path:
             raise HTTPException(status_code=400, detail="Experiment has no dataset path")
             
-        # Standard YOLO structure: dataset_path/images/[train|val|test]/filename
-        potential_path = project_root / exp.dataset_path / "images" / exp.dataset_source / filename
+        # SMART PATH RESOLUTION:
+        # Check if dataset_path already includes the split (Phase 2.3 granularity)
+        base_path = project_root / exp.dataset_path
+        if f"images/{exp.dataset_source}" in exp.dataset_path.replace('\\', '/'):
+            # Already granular!
+            potential_path = base_path / filename
+        else:
+            # Standard root path logic
+            potential_path = base_path / "images" / exp.dataset_source / filename
+            
         if potential_path.exists():
             original_path = potential_path
         else:
-            # Fallback: Search for the stem with any supported extension in that folder
+            # Fallback search
             stem = Path(filename).stem
+            search_dir = potential_path.parent
             for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff']:
-                p = project_root / exp.dataset_path / "images" / exp.dataset_source / f"{stem}{ext}"
+                p = search_dir / f"{stem}{ext}"
                 if p.exists():
                     original_path = p
                     break
@@ -2024,6 +2035,12 @@ async def trigger_prediction(
         experiment.device = payload.device
         experiment.custom_params = payload.custom_params
         
+        # Ensure path is granular even if resumed from draft
+        if payload.dataset_source in ['test', 'val', 'train']:
+            experiment.dataset_path = (Path(ts.dataset_release_dir) / "images" / payload.dataset_source).as_posix()
+        else:
+            experiment.dataset_path = None
+        
         # SAFE MERGE: Only overwrite if payload explicitly provides images
         if payload.uploaded_images:
             experiment.input_images = payload.uploaded_images
@@ -2059,7 +2076,7 @@ async def trigger_prediction(
             framework=ts.framework or "ultralytics",
             task=payload.task or ts.task,
             dataset_source=payload.dataset_source,
-            dataset_path=ts.dataset_release_dir if payload.dataset_source in ['test', 'val', 'train'] else None,
+            dataset_path=(Path(ts.dataset_release_dir) / "images" / payload.dataset_source).as_posix() if payload.dataset_source in ['test', 'val', 'train'] else None,
             image_count=image_count,
             confidence=payload.confidence,
             iou_threshold=payload.iou_threshold,
@@ -2111,10 +2128,14 @@ async def trigger_prediction(
             if not images_dir.exists():
                 raise FileNotFoundError(f"Images folder not found: {images_dir}")
             
-            # Collect all image files
+            # Collect unique image files (deduplicate for Windows case-insensitivity)
+            images_set = set()
             for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif']:
-                images_list.extend([str(p) for p in images_dir.glob(f'*{ext}')])
-                images_list.extend([str(p) for p in images_dir.glob(f'*{ext.upper()}')])
+                # On Windows, glob is case-insensitive, so we deduplicate using a set
+                images_set.update([str(p).replace('\\', '/') for p in images_dir.glob(f'*{ext}')])
+                images_set.update([str(p).replace('\\', '/') for p in images_dir.glob(f'*{ext.upper()}')])
+            
+            images_list = sorted(list(images_set))
             
             if not images_list:
                 raise FileNotFoundError(f"No images found in {images_dir}")
