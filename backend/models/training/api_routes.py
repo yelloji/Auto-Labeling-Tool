@@ -1571,6 +1571,78 @@ async def list_experiment_images(experiment_id: str, db: Session = Depends(get_d
     return image_files
 
 
+@router.get("/experiments/{experiment_id}/original-image/{filename:path}")
+async def get_experiment_original_image(
+    experiment_id: str, 
+    filename: str, 
+    download: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Serve the clean, un-annotated original image for a prediction result.
+    If download=True, force a 'Save As' dialog.
+    """
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    # Resolve project root
+    current_file = Path(__file__).resolve()
+    backend_dir = next(p for p in current_file.parents if p.name == "backend")
+    project_root = backend_dir.parent
+    
+    original_path = None
+    
+    # 1. Handle dataset sources (train/val/test)
+    if exp.dataset_source in ['train', 'val', 'test']:
+        if not exp.dataset_path:
+            raise HTTPException(status_code=400, detail="Experiment has no dataset path")
+            
+        # Standard YOLO structure: dataset_path/images/[train|val|test]/filename
+        potential_path = project_root / exp.dataset_path / "images" / exp.dataset_source / filename
+        if potential_path.exists():
+            original_path = potential_path
+        else:
+            # Fallback: Search for the stem with any supported extension in that folder
+            stem = Path(filename).stem
+            for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff']:
+                p = project_root / exp.dataset_path / "images" / exp.dataset_source / f"{stem}{ext}"
+                if p.exists():
+                    original_path = p
+                    break
+                    
+    # 2. Handle uploaded source
+    elif exp.dataset_source == 'upload':
+        if not exp.dataset_path:
+            raise HTTPException(status_code=400, detail="Experiment has no upload path")
+            
+        potential_path = project_root / exp.dataset_path / filename
+        if potential_path.exists():
+            original_path = potential_path
+        else:
+            # Fallback search
+            stem = Path(filename).stem
+            for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff']:
+                p = project_root / exp.dataset_path / f"{stem}{ext}"
+                if p.exists():
+                    original_path = p
+                    break
+    
+    if not original_path or not original_path.exists():
+        logger.warning("errors.system", f"Original source image not found for {filename} in {exp.dataset_source}", "original_image_not_found")
+        raise HTTPException(status_code=404, detail="Original image not found on disk")
+        
+    if download:
+        return FileResponse(
+            str(original_path), 
+            media_type='application/octet-stream',
+            filename=filename,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    return FileResponse(str(original_path))
+
+
 @router.delete("/experiments/{experiment_id}")
 async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
     """Delete an experiment record (DB only for now, filesystem cleanup TODO)."""

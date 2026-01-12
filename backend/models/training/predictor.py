@@ -80,11 +80,11 @@ class UltralyticsPredictor(BasePredictor):
                 device=params.get('device', '0'),  # '0' for GPU, 'cpu' for CPU
                 project=output_folder,
                 name='',  # Save directly in output_folder
-                save=True,  # Save annotated images
-                save_txt=True,  # Save labels as .txt files
-                save_conf=True,  # Save confidence in labels
-                show_labels=True,  # Show labels on images
-                show_conf=True  # Show confidence on images
+                save=False,  # DO NOT Save annotated images (Memory Optimization Phase 2)
+                save_txt=True,  # Keep labels for debugging/backup
+                save_conf=True, 
+                show_labels=False, 
+                show_conf=False
             )
             
             # 5. Extract predictions per image
@@ -103,31 +103,11 @@ class UltralyticsPredictor(BasePredictor):
             }
             
             for result in results:
-                # IMPORTANT: Use the SAVED OUTPUT filename, not the input filename
-                # YOLO may convert formats (e.g., .png input → .jpg output)
-                # result.path = input image path
-                # result.save_dir = output folder where YOLO saved the annotated image
-                
-                # Get input filename for reference
-                input_name = Path(result.path).name
-                
-                # Find the actual saved output file
-                # YOLO saves to: output_folder/predict/{image_name}.jpg (in a subfolder!)
-                # Use recursive glob to search in main folder and subfolders
-                saved_files = list(Path(output_folder).glob(f"**/{Path(input_name).stem}.*"))
-                
-                # Use the saved filename if found, otherwise fall back to input name
-                if saved_files:
-                    # Filter out .txt files (labels), only get image files
-                    image_files = [f for f in saved_files if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']]
-                    if image_files:
-                        image_name = image_files[0].name
-                    else:
-                        image_name = input_name
-                else:
-                    image_name = input_name
+                # Use the original filename as the key
+                image_name = Path(result.path).name
                 
                 boxes = result.boxes
+                masks = result.masks # Get segmentation masks if the model is a -seg model
                 
                 image_predictions = []
                 for i in range(len(boxes)):
@@ -136,10 +116,16 @@ class UltralyticsPredictor(BasePredictor):
                     confidence = float(boxes.conf[i])
                     bbox = boxes.xyxy[i].tolist()  # [x1, y1, x2, y2]
                     
+                    # Extract segmentation polygon if available
+                    segmentation = None
+                    if masks is not None and len(masks.xy) > i:
+                        segmentation = masks.xy[i].tolist() # List of [x, y] coordinates
+                    
                     image_predictions.append({
                         'class': class_name,
                         'confidence': confidence,
-                        'bbox': bbox
+                        'bbox': bbox,
+                        'segmentation': segmentation
                     })
                     
                     # Update analytics

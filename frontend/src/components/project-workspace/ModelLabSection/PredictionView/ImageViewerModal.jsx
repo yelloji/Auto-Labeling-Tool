@@ -25,6 +25,11 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
     const [isDragging, setIsDragging] = useState(false);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
 
+    // Layer Visibility State
+    const [showBoxes, setShowBoxes] = useState(true);
+    const [showContours, setShowContours] = useState(true);
+    const [showLabels, setShowLabels] = useState(true);
+
     const currentIndex = images.indexOf(currentImage);
 
     // Reset zoom when image changes
@@ -52,7 +57,7 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
         return confMatch && classMatch;
     });
 
-    const imageUrl = `${window.location.protocol}//${window.location.hostname}:12000/${experiment.output_folder}/${currentImage}`;
+    const imageUrl = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experiment.id}/original-image/${currentImage}`;
 
     const handleImgLoad = (e) => {
         setDimensions({
@@ -67,8 +72,7 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
      * This bypasses CORS fetch issues and "new tab" frustrations.
      */
     const handleDownload = () => {
-        const relativePath = `${experiment.output_folder}/${currentImage}`;
-        const downloadUrl = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/download-file?path=${encodeURIComponent(relativePath)}`;
+        const downloadUrl = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experiment.id}/original-image/${currentImage}?download=true`;
 
         // This will trigger the browser's save dialog without navigating away
         // because the backend sends 'Content-Disposition: attachment'
@@ -161,6 +165,36 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                     <Text style={{ color: '#aaa', fontSize: '0.75rem', marginRight: '8px' }}>
                         {Math.round(scale * 100)}%
                     </Text>
+
+                    <Space.Compact style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '6px', padding: '2px' }}>
+                        <Tooltip title="Show/Hide Bounding Boxes">
+                            <Button
+                                type="text"
+                                style={{ color: showBoxes ? '#1890ff' : '#666' }}
+                                icon={<div style={{ border: '2px solid currentColor', width: 14, height: 14, margin: 'auto' }} />}
+                                onClick={() => setShowBoxes(!showBoxes)}
+                            />
+                        </Tooltip>
+                        <Tooltip title="Show/Hide Contours">
+                            <Button
+                                type="text"
+                                style={{ color: showContours ? '#faad14' : '#666' }}
+                                icon={<div style={{
+                                    width: 14, height: 14, margin: 'auto', borderRadius: '50%',
+                                    border: '2px solid currentColor', borderStyle: 'dashed'
+                                }} />}
+                                onClick={() => setShowContours(!showContours)}
+                            />
+                        </Tooltip>
+                        <Tooltip title="Show/Hide Labels">
+                            <Button
+                                type="text"
+                                style={{ color: showLabels ? '#52c41a' : '#666' }}
+                                icon={<span style={{ fontWeight: 800, fontSize: '10px' }}>Aa</span>}
+                                onClick={() => setShowLabels(!showLabels)}
+                            />
+                        </Tooltip>
+                    </Space.Compact>
 
                     <Space.Compact style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '6px', padding: '2px' }}>
                         <Tooltip title="Zoom Out">
@@ -282,23 +316,77 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                                 }}
                             >
                                 {filteredDets.map((d, i) => {
-                                    if (!d.bbox) return null;
-                                    const [x1, y1, x2, y2] = d.bbox;
-                                    // Risk coloring
-                                    let riskClass = '';
-                                    if (d.confidence < 0.4) riskClass = 'high-risk';
-                                    else if (d.confidence < 0.7) riskClass = 'medium-risk';
-                                    else riskClass = 'low-risk';
+                                    // Risk coloring logic
+                                    let riskColor = '#52c41a';
+                                    let riskClass = 'low-risk';
+                                    if (d.confidence < 0.4) {
+                                        riskColor = '#ff4d4f';
+                                        riskClass = 'high-risk';
+                                    } else if (d.confidence < 0.7) {
+                                        riskColor = '#faad14';
+                                        riskClass = 'medium-risk';
+                                    }
 
                                     return (
-                                        <rect
-                                            key={i}
-                                            x={x1}
-                                            y={y1}
-                                            width={x2 - x1}
-                                            height={y2 - y1}
-                                            className={`detection-highlight-rect ${riskClass}`}
-                                        />
+                                        <g key={i}>
+                                            {/* 1. RENDER CONTOURS (Polygons) */}
+                                            {showContours && d.segmentation && (
+                                                <polygon
+                                                    points={d.segmentation.map(p => `${p[0]},${p[1]}`).join(' ')}
+                                                    fill={`${riskColor}33`} // 20% opacity fill
+                                                    stroke={riskColor}
+                                                    strokeWidth={1.5}
+                                                    strokeDasharray="4,2"
+                                                    style={{ transition: 'all 0.3s ease' }}
+                                                />
+                                            )}
+
+                                            {/* 2. RENDER BOUNDING BOXES */}
+                                            {showBoxes && d.bbox && (
+                                                <rect
+                                                    x={d.bbox[0]}
+                                                    y={d.bbox[1]}
+                                                    width={d.bbox[2] - d.bbox[0]}
+                                                    height={d.bbox[3] - d.bbox[1]}
+                                                    className={`detection-highlight-rect ${riskClass}`}
+                                                    style={{
+                                                        strokeWidth: 2,
+                                                        fill: 'transparent',
+                                                        transition: 'all 0.3s ease'
+                                                    }}
+                                                />
+                                            )}
+
+                                            {/* 3. RENDER SMART LABELS (Text) */}
+                                            {showLabels && d.bbox && (
+                                                <g transform={`translate(${d.bbox[0]}, ${d.bbox[1] < 20 ? d.bbox[1] + 20 : d.bbox[1] - 4})`}>
+                                                    {/* Label Background */}
+                                                    <rect
+                                                        x={0}
+                                                        y={-18}
+                                                        width={Math.max(d.class.length * 8 + 45, 80)}
+                                                        height={18}
+                                                        fill={riskColor}
+                                                        opacity={0.85}
+                                                        rx={2}
+                                                    />
+                                                    {/* Label Text */}
+                                                    <text
+                                                        x={4}
+                                                        y={-5}
+                                                        fill="#fff"
+                                                        style={{
+                                                            fontSize: '14px',
+                                                            fontWeight: '600',
+                                                            fontFamily: 'monospace',
+                                                            textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+                                                        }}
+                                                    >
+                                                        {d.class} {(d.confidence * 100).toFixed(0)}%
+                                                    </text>
+                                                </g>
+                                            )}
+                                        </g>
                                     );
                                 })}
                             </svg>

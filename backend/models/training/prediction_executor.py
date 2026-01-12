@@ -79,16 +79,34 @@ def run_executor():
         db.commit()
         logger.info("operations.training", f"Prediction subprocess completed for {args.experiment_id}", "prediction_subprocess_success")
 
-        # 5. Cleanup temporary source if this was an upload-based prediction
+        # 5. Handle source image persistence (Phase 2.1)
         if experiment.dataset_source == 'upload' and experiment.dataset_path:
             # dataset_path is relative like "projects/gevis/model/prediction_temp/UUID"
             abs_source_dir = Path(os.getcwd()) / experiment.dataset_path
+            
+            # Destination: experiment_folder/input_images
+            perm_input_dir = Path(args.output_folder) / "input_images"
+            
             if abs_source_dir.exists() and "prediction_temp" in str(abs_source_dir):
                 try:
+                    # Create permanent folder and MOVE images there
+                    perm_input_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Move individual files to handle potential cross-device issues or directory locks
+                    for item in abs_source_dir.iterdir():
+                        if item.is_file():
+                            shutil.move(str(item), str(perm_input_dir / item.name))
+                    
+                    # Update database to point to the new permanent location
+                    rel_perm_path = perm_input_dir.relative_to(Path(os.getcwd()))
+                    experiment.dataset_path = rel_perm_path.as_posix()
+                    db.commit()
+                    
+                    # Now safe to remove the empty temp folder
                     shutil.rmtree(abs_source_dir)
-                    logger.info("operations.cleanup", f"Cleaned up temporary source directory: {experiment.dataset_path}", "prediction_cleanup_success")
-                except Exception as cleanup_err:
-                    logger.warning("errors.system", f"Failed to cleanup temp source {abs_source_dir}: {cleanup_err}", "prediction_cleanup_failed")
+                    logger.info("operations.cleanup", f"Moved uploads to permanent folder: {experiment.dataset_path}", "prediction_persistence_success")
+                except Exception as persist_err:
+                    logger.warning("errors.system", f"Failed to persist uploaded images {abs_source_dir}: {persist_err}", "prediction_persistence_failed")
 
     except Exception as e:
         logger.error("errors.prediction", f"Prediction subprocess failed: {str(e)}", "prediction_subprocess_error", {

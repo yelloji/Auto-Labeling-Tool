@@ -1148,8 +1148,8 @@ const PredictionView = ({ training }) => {
                                                         const classMatch = filters.className === 'all' || d.class === filters.className;
                                                         return confMatch && classMatch;
                                                     });
-                                                    const imageUrl = selectedExp?.output_folder
-                                                        ? `${window.location.protocol}//${window.location.hostname}:12000/${selectedExp.output_folder}/${imgName}`
+                                                    const imageUrl = selectedExp?.id
+                                                        ? `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${selectedExp.id}/original-image/${imgName}`
                                                         : '';
                                                     // Clean filename: remove "predict/" and any path components
                                                     const displayName = imgName.split('/').pop();
@@ -1190,14 +1190,27 @@ const PredictionView = ({ training }) => {
                                                                             else riskClass = 'low-risk';
 
                                                                             return (
-                                                                                <rect
-                                                                                    key={i}
-                                                                                    x={x1}
-                                                                                    y={y1}
-                                                                                    width={x2 - x1}
-                                                                                    height={y2 - y1}
-                                                                                    className={`detection-highlight-rect ${riskClass}`}
-                                                                                />
+                                                                                <g key={i}>
+                                                                                    {/* 1. RENDER CONTOUR (Polygon) */}
+                                                                                    {d.segmentation && (
+                                                                                        <polygon
+                                                                                            points={d.segmentation.map(p => `${p[0]},${p[1]}`).join(' ')}
+                                                                                            fill={`${riskClass === 'high-risk' ? '#ff4d4f' : riskClass === 'medium-risk' ? '#faad14' : '#52c41a'}22`}
+                                                                                            stroke={riskClass === 'high-risk' ? '#ff4d4f' : riskClass === 'medium-risk' ? '#faad14' : '#52c41a'}
+                                                                                            strokeWidth={1}
+                                                                                            strokeDasharray="2,1"
+                                                                                        />
+                                                                                    )}
+
+                                                                                    {/* 2. RENDER BBOX */}
+                                                                                    <rect
+                                                                                        x={x1}
+                                                                                        y={y1}
+                                                                                        width={x2 - x1}
+                                                                                        height={y2 - y1}
+                                                                                        className={`detection-highlight-rect ${riskClass}`}
+                                                                                    />
+                                                                                </g>
                                                                             );
                                                                         })}
                                                                     </svg>
