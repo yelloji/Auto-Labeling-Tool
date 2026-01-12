@@ -55,7 +55,15 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
         const [minConf, maxConf] = [filters.confidenceRange[0] / 100, filters.confidenceRange[1] / 100];
         const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
         const classMatch = filters.className === 'all' || d.class === filters.className;
-        return confMatch && classMatch;
+
+        // Apply Strict Risk Level Filter
+        const riskLevel = filters.riskLevel;
+        let riskMatch = true;
+        if (riskLevel === 'high') riskMatch = d.confidence < 0.4;
+        else if (riskLevel === 'medium') riskMatch = d.confidence >= 0.4 && d.confidence < 0.7;
+        else if (riskLevel === 'low') riskMatch = d.confidence >= 0.7;
+
+        return confMatch && classMatch && riskMatch;
     });
 
     // 1. IMAGE NAVIGATION TRIGGER

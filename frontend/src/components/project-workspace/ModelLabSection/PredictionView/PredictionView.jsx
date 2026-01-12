@@ -356,16 +356,18 @@ const PredictionView = ({ training }) => {
                 return false;
             }
 
-            // 4. Risk Level Filter (based on max confidence in image)
-            // High Risk: Max confidence < 0.4
-            // Medium Risk: Max confidence 0.4 - 0.7
-            // Low Risk: Max confidence > 0.7
-            if (riskLevel !== 'any') {
-                if (detections.length === 0) return false;
-                const maxConf = Math.max(...detections.map(d => d.confidence));
-                if (riskLevel === 'high' && maxConf >= 0.4) return false;
-                if (riskLevel === 'medium' && (maxConf < 0.4 || maxConf > 0.7)) return false;
-                if (riskLevel === 'low' && maxConf <= 0.7) return false;
+            // 4. Strict Risk Level Filter
+            // Only show detections that match the selected risk category
+            const matchingDets = detections.filter(d => {
+                if (riskLevel === 'any') return true;
+                if (riskLevel === 'high') return d.confidence < 0.4;
+                if (riskLevel === 'medium') return d.confidence >= 0.4 && d.confidence < 0.7;
+                if (riskLevel === 'low') return d.confidence >= 0.7;
+                return true;
+            });
+
+            if (riskLevel !== 'any' && matchingDets.length === 0) {
+                return false;
             }
 
             return true;
@@ -1146,7 +1148,15 @@ const PredictionView = ({ training }) => {
                                                     const detections = allDets.filter(d => {
                                                         const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
                                                         const classMatch = filters.className === 'all' || d.class === filters.className;
-                                                        return confMatch && classMatch;
+
+                                                        // Apply Strict Risk Level Filter in Gallery Thumbnails
+                                                        const riskLevel = filters.riskLevel;
+                                                        let riskMatch = true;
+                                                        if (riskLevel === 'high') riskMatch = d.confidence < 0.4;
+                                                        else if (riskLevel === 'medium') riskMatch = d.confidence >= 0.4 && d.confidence < 0.7;
+                                                        else if (riskLevel === 'low') riskMatch = d.confidence >= 0.7;
+
+                                                        return confMatch && classMatch && riskMatch;
                                                     });
                                                     const imageUrl = selectedExp?.id
                                                         ? `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${selectedExp.id}/original-image/${imgName}`
