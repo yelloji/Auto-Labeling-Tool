@@ -103,8 +103,30 @@ class UltralyticsPredictor(BasePredictor):
             }
             
             for result in results:
-                # Get image name from path
-                image_name = Path(result.path).name
+                # IMPORTANT: Use the SAVED OUTPUT filename, not the input filename
+                # YOLO may convert formats (e.g., .png input → .jpg output)
+                # result.path = input image path
+                # result.save_dir = output folder where YOLO saved the annotated image
+                
+                # Get input filename for reference
+                input_name = Path(result.path).name
+                
+                # Find the actual saved output file
+                # YOLO saves to: output_folder/predict/{image_name}.jpg (in a subfolder!)
+                # Use recursive glob to search in main folder and subfolders
+                saved_files = list(Path(output_folder).glob(f"**/{Path(input_name).stem}.*"))
+                
+                # Use the saved filename if found, otherwise fall back to input name
+                if saved_files:
+                    # Filter out .txt files (labels), only get image files
+                    image_files = [f for f in saved_files if f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']]
+                    if image_files:
+                        image_name = image_files[0].name
+                    else:
+                        image_name = input_name
+                else:
+                    image_name = input_name
+                
                 boxes = result.boxes
                 
                 image_predictions = []

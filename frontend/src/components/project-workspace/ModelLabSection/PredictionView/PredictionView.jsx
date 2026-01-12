@@ -316,6 +316,8 @@ const PredictionView = ({ training }) => {
         const { detectionCount, className, confidence, imageSearch, riskLevel } = filters;
         const preds = selectedExp.predictions;
 
+
+
         const filtered = experimentImages.filter(imgName => {
             // Helper to get detections
             const getDetections = (name) => {
@@ -334,11 +336,13 @@ const PredictionView = ({ training }) => {
             }
 
             // 2. Detection Count Filter
+
             let countMatch = true;
-            if (detectionCount === '0') countMatch = detections.length === 0;
-            else if (detectionCount === '1-5') countMatch = detections.length >= 1 && detections.length <= 5;
-            else if (detectionCount === '6-10') countMatch = detections.length >= 6 && detections.length <= 10;
-            else if (detectionCount === '10+') countMatch = detections.length > 10;
+            if (detectionCount === '0') countMatch = allDets.length === 0;
+            else if (detectionCount === '1-5') countMatch = allDets.length >= 1 && allDets.length <= 5;
+            else if (detectionCount === '6-10') countMatch = allDets.length >= 6 && allDets.length <= 10;
+            else if (detectionCount === '10+') countMatch = allDets.length > 10;
+
             if (!countMatch) return false;
 
             // 3. Class Filter
@@ -1078,12 +1082,14 @@ const PredictionView = ({ training }) => {
                                                     return (
                                                         <div key={imgName} className="prediction-gallery-item-wrapper">
                                                             <div className="prediction-gallery-item" onClick={() => { setPreviewImage(imgName); setPreviewVisible(true); }}>
-                                                                <Badge count={detections.length} className="detection-badge" color="#1890ff" />
                                                                 <img src={imageUrl} alt={imgName} loading="lazy" />
                                                                 <div className="image-overlay"><EyeOutlined style={{ color: '#fff', fontSize: 24 }} /></div>
                                                             </div>
                                                             <div className="image-name-label" title={imgName}>
                                                                 {displayName.length > 25 ? displayName.slice(0, 22) + '...' : displayName}
+                                                                <Tooltip title={`This image has ${detections.length} detection${detections.length !== 1 ? 's' : ''} found by our model`}>
+                                                                    <Badge count={detections.length} style={{ marginLeft: '0.5rem' }} showZero />
+                                                                </Tooltip>
                                                             </div>
                                                         </div>
                                                     );
