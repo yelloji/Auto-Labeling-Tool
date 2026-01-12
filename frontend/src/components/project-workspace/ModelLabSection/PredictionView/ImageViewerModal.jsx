@@ -24,6 +24,9 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+    const [isImgLoading, setIsImgLoading] = useState(true); // New: Guard for sync
+    const [lastLoadTime, setLastLoadTime] = useState(0);
+    const loadStartTime = React.useRef(performance.now());
     const hasInitSelection = React.useRef(false);
 
     // Layer Visibility State
@@ -55,21 +58,24 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
         return confMatch && classMatch;
     });
 
-    // Unified Image Change Logic
-    // This ensures that whenever you move to a new image, all its specific detections 
-    // are selected by default, while your GLOBAL toggles (Top Buttons) stay exactly as you set them.
+    // 1. IMAGE NAVIGATION TRIGGER
+    // Only resets zoom and turns on the "Sync Guard" when the actual image changes.
     React.useEffect(() => {
-        // Reset Zoom/Pan
         setScale(1);
         setOffset({ x: 0, y: 0 });
+        setIsImgLoading(true); // Guard ON - only when changing images
+        loadStartTime.current = performance.now();
+    }, [currentImage]);
 
-        // Auto-select all new objects for the fresh image
+    // 2. DETECTION AUTO-SELECT TRIGGER
+    // Refreshes selection whenever data OR filters change, without hiding the image.
+    React.useEffect(() => {
         if (filteredDets.length > 0) {
             setSelectedIndices(filteredDets.map((_, i) => i));
         } else {
             setSelectedIndices([]);
         }
-    }, [currentImage, filteredDets.length]); // Re-run if image changes OR if new detections load
+    }, [currentImage, filteredDets.length]);
 
     // (Logic moved to unified handler above for perfect synchronization)
 
@@ -89,6 +95,10 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
     const imageUrl = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experiment.id}/original-image/${currentImage}`;
 
     const handleImgLoad = (e) => {
+        const duration = performance.now() - loadStartTime.current;
+        setLastLoadTime(duration);
+        setIsImgLoading(false); // Guard OFF - Image is ready
+
         setDimensions({
             width: e.target.naturalWidth,
             height: e.target.naturalHeight
@@ -186,6 +196,11 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                             {filteredDets.length} Matching Detections
                         </Tag>
                         <Text style={{ color: '#888', fontSize: '0.75rem' }}>{currentIndex + 1} of {images.length}</Text>
+                        {lastLoadTime > 0 && (
+                            <Tag color="cyan" style={{ borderRadius: '4px', border: 'none', background: 'rgba(0, 255, 255, 0.1)', color: '#00ffff', fontSize: '10px' }}>
+                                Load: {lastLoadTime.toFixed(0)}ms
+                            </Tag>
+                        )}
                     </Space>
                 </div>
 
@@ -389,7 +404,7 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                         />
 
                         {/* SVG Dynamic Overlay - NATURALLY PERFECT ALIGNMENT */}
-                        {dimensions.width > 0 && filteredDets.length > 0 && (
+                        {dimensions.width > 0 && filteredDets.length > 0 && !isImgLoading && (
                             <svg
                                 className="detection-overlay-svg"
                                 viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
@@ -425,7 +440,7 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                                                     stroke={riskColor}
                                                     strokeWidth={1.5}
                                                     strokeDasharray="4,2"
-                                                    style={{ transition: 'all 0.3s ease' }}
+                                                    style={{ transition: 'none' }}
                                                 />
                                             )}
 
@@ -440,7 +455,7 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                                                     style={{
                                                         strokeWidth: 2,
                                                         fill: 'transparent',
-                                                        transition: 'all 0.3s ease'
+                                                        transition: 'none'
                                                     }}
                                                 />
                                             )}
