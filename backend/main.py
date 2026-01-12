@@ -365,6 +365,53 @@ async def serve_image(image_id: str):
 
     return FileResponse(str(absolute_path))
 
+@app.get("/api/v1/download-file")
+async def download_file_proxy(path: str):
+    """
+    RATIONALE:
+    This proxy endpoint was created to solve two critical frontend issues:
+    1. CORS Blocks: Browsers strictly block cross-origin 'fetch()' calls for images, making it 
+       difficult to convert an image URL into a 'Blob' for downloading.
+    2. Forced Downloads: Standard <a> tags often fail to trigger a download, instead opening 
+       the image in a new tab.
+
+    PURPOSE:
+    This endpoint takes a project-relative path, verifies it for safety, and serves the file 
+    with 'Content-Disposition: attachment'. This forces the user's browser to open a native 
+    "Save As" dialog regardless of browser settings or origin differences.
+    """
+    from fastapi.responses import FileResponse
+    from core.config import settings
+    from pathlib import Path
+    
+    projects_base = Path(settings.PROJECTS_DIR).resolve()
+    # Remove leading slash if present to prevent absolute path escapes
+    safe_path = path.lstrip("/").lstrip("\\")
+    
+    # If the path starts with 'projects/', strip it because projects_base already points there
+    if safe_path.startswith("projects/"):
+        safe_path = safe_path.replace("projects/", "", 1)
+    elif safe_path.startswith("projects\\"):
+        safe_path = safe_path.replace("projects\\", "", 1)
+
+    target_path = (projects_base / safe_path).resolve()
+    
+    # Security: Ensure the resolved path is still inside the projects base
+    if not str(target_path).startswith(str(projects_base)):
+        logger.error("security.access", f"Blocked attempted path traversal: {path}", "download_traversal_blocked")
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    if not target_path.exists() or not target_path.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {safe_path}")
+        
+    logger.info("operations.files", f"Serving file for download: {safe_path}", "file_download_proxy")
+    
+    return FileResponse(
+        path=str(target_path),
+        filename=target_path.name,
+        media_type='application/octet-stream'
+    )
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
