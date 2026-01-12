@@ -188,52 +188,84 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                 </div>
 
                 <Space size={16}>
-                    {/* Zoom Level Indicator */}
-                    <Text style={{ color: '#aaa', fontSize: '0.75rem', marginRight: '8px' }}>
-                        {Math.round(scale * 100)}%
-                    </Text>
+                    <div style={{
+                        background: 'rgba(255,255,255,0.08)',
+                        borderRadius: '8px',
+                        padding: '3px',
+                        display: 'flex',
+                        gap: '6px',
+                        alignItems: 'center'
+                    }}>
+                        {/* 1. Precision Overlay Filters */}
+                        <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', padding: '2px' }}>
+                            <Tooltip title="Show/Hide Bounding Boxes">
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    style={{ color: showBoxes ? '#1890ff' : '#666', width: 32 }}
+                                    icon={<div style={{ border: '2px solid currentColor', width: 14, height: 14, margin: 'auto' }} />}
+                                    onClick={() => setShowBoxes(!showBoxes)}
+                                />
+                            </Tooltip>
+                            <Tooltip title="Show/Hide Contours">
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    style={{ color: showContours ? '#faad14' : '#666', width: 32 }}
+                                    icon={<div style={{
+                                        width: 14, height: 14, margin: 'auto', borderRadius: '50%',
+                                        border: '2px solid currentColor', borderStyle: 'dashed'
+                                    }} />}
+                                    onClick={() => setShowContours(!showContours)}
+                                />
+                            </Tooltip>
+                            <Tooltip title="Show/Hide Labels">
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    style={{ color: showLabels ? '#52c41a' : '#666', width: 32 }}
+                                    icon={<span style={{ fontWeight: 800, fontSize: '12px' }}>Aa</span>}
+                                    onClick={() => setShowLabels(!showLabels)}
+                                />
+                            </Tooltip>
+                        </div>
 
-                    <Space.Compact style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '6px', padding: '2px' }}>
-                        <Tooltip title="Show/Hide Bounding Boxes">
-                            <Button
-                                type="text"
-                                style={{ color: showBoxes ? '#1890ff' : '#666' }}
-                                icon={<div style={{ border: '2px solid currentColor', width: 14, height: 14, margin: 'auto' }} />}
-                                onClick={() => setShowBoxes(!showBoxes)}
-                            />
-                        </Tooltip>
-                        <Tooltip title="Show/Hide Contours">
-                            <Button
-                                type="text"
-                                style={{ color: showContours ? '#faad14' : '#666' }}
-                                icon={<div style={{
-                                    width: 14, height: 14, margin: 'auto', borderRadius: '50%',
-                                    border: '2px solid currentColor', borderStyle: 'dashed'
-                                }} />}
-                                onClick={() => setShowContours(!showContours)}
-                            />
-                        </Tooltip>
-                        <Tooltip title="Show/Hide Labels">
-                            <Button
-                                type="text"
-                                style={{ color: showLabels ? '#52c41a' : '#666' }}
-                                icon={<span style={{ fontWeight: 800, fontSize: '10px' }}>Aa</span>}
-                                onClick={() => setShowLabels(!showLabels)}
-                            />
-                        </Tooltip>
-                    </Space.Compact>
+                        {/* Divider Line */}
+                        <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)' }} />
 
-                    <Space.Compact style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '6px', padding: '2px' }}>
-                        <Tooltip title="Zoom Out">
-                            <Button type="text" style={{ color: '#fff' }} icon={<ZoomOutOutlined />} onClick={handleZoomOut} />
-                        </Tooltip>
-                        <Tooltip title="Reset View">
-                            <Button type="text" style={{ color: '#fff' }} icon={<ReloadOutlined />} onClick={handleResetZoom} />
-                        </Tooltip>
-                        <Tooltip title="Zoom In">
-                            <Button type="text" style={{ color: '#fff' }} icon={<ZoomInOutlined />} onClick={handleZoomIn} />
-                        </Tooltip>
-                    </Space.Compact>
+                        {/* 2. Advanced Zoom Controls */}
+                        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', padding: '2px' }}>
+                            <Tooltip title="Zoom Out">
+                                <Button type="text" size="small" style={{ color: '#fff', width: 32 }} icon={<ZoomOutOutlined />} onClick={handleZoomOut} />
+                            </Tooltip>
+
+                            <Tooltip title="Reset Zoom">
+                                <div
+                                    onClick={handleResetZoom}
+                                    style={{
+                                        color: '#aaa',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 600,
+                                        padding: '0 8px',
+                                        cursor: 'pointer',
+                                        minWidth: '45px',
+                                        textAlign: 'center',
+                                        userSelect: 'none'
+                                    }}
+                                >
+                                    {Math.round(scale * 100)}%
+                                </div>
+                            </Tooltip>
+
+                            <Tooltip title="Zoom In">
+                                <Button type="text" size="small" style={{ color: '#fff', width: 32 }} icon={<ZoomInOutlined />} onClick={handleZoomIn} />
+                            </Tooltip>
+
+                            <Tooltip title="Center View">
+                                <Button type="text" size="small" style={{ color: '#fff', width: 32, marginLeft: '2px' }} icon={<ReloadOutlined />} onClick={handleResetZoom} />
+                            </Tooltip>
+                        </div>
+                    </div>
 
                     <Tooltip title="Download Image">
                         <Button
