@@ -24,27 +24,33 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+    const hasInitSelection = React.useRef(false);
 
     // Layer Visibility State
     const [showBoxes, setShowBoxes] = useState(true);
     const [showContours, setShowContours] = useState(true);
     const [showLabels, setShowLabels] = useState(true);
 
+    // Individual Detection Selection State (Phase 2.4)
+    // We store the INDICES of the detections that are checked.
+    const [selectedIndices, setSelectedIndices] = useState([]);
+
     const currentIndex = images.indexOf(currentImage);
 
-    // Reset zoom when image changes
+    // Reset zoom and selection when image changes
     React.useEffect(() => {
         setScale(1);
         setOffset({ x: 0, y: 0 });
+        setSelectedIndices([]);
+        hasInitSelection.current = false; // Allow re-init for the next image
     }, [currentImage]);
-
-    if (!visible || !currentImage || !experiment) return null;
 
     // Helper to get detections (handles both full path and filename only)
     const getDetectionsForImage = (name) => {
-        if (experiment?.predictions?.[name]) return experiment.predictions[name];
+        if (!name || !experiment?.predictions) return [];
+        if (experiment.predictions[name]) return experiment.predictions[name];
         const fileName = name.split('/').pop();
-        return experiment?.predictions?.[fileName] || [];
+        return experiment.predictions[fileName] || [];
     };
     const allDets = getDetectionsForImage(currentImage);
 
@@ -56,6 +62,27 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
         const classMatch = filters.className === 'all' || d.class === filters.className;
         return confMatch && classMatch;
     });
+
+    // Auto-select all filtered detections ONLY ONCE per image load
+    React.useEffect(() => {
+        if (filteredDets.length > 0 && !hasInitSelection.current) {
+            setSelectedIndices(filteredDets.map((_, i) => i));
+            hasInitSelection.current = true;
+        }
+    }, [filteredDets.length]);
+
+    if (!visible || !currentImage || !experiment) return null;
+
+    const toggleDetection = (index) => {
+        if (selectedIndices.includes(index)) {
+            setSelectedIndices(selectedIndices.filter(i => i !== index));
+        } else {
+            setSelectedIndices([...selectedIndices, index]);
+        }
+    };
+
+    const selectAll = () => setSelectedIndices(filteredDets.map((_, i) => i));
+    const selectNone = () => setSelectedIndices([]);
 
     const imageUrl = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experiment.id}/original-image/${currentImage}`;
 
@@ -330,7 +357,7 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                                     return (
                                         <g key={i}>
                                             {/* 1. RENDER CONTOURS (Polygons) */}
-                                            {showContours && d.segmentation && (
+                                            {showContours && d.segmentation && selectedIndices.includes(i) && (
                                                 <polygon
                                                     points={d.segmentation.map(p => `${p[0]},${p[1]}`).join(' ')}
                                                     fill={`${riskColor}33`} // 20% opacity fill
@@ -342,7 +369,7 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                                             )}
 
                                             {/* 2. RENDER BOUNDING BOXES */}
-                                            {showBoxes && d.bbox && (
+                                            {showBoxes && d.bbox && selectedIndices.includes(i) && (
                                                 <rect
                                                     x={d.bbox[0]}
                                                     y={d.bbox[1]}
@@ -358,7 +385,7 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                                             )}
 
                                             {/* 3. RENDER SMART LABELS (Text) */}
-                                            {showLabels && d.bbox && (
+                                            {showLabels && d.bbox && selectedIndices.includes(i) && (
                                                 <g transform={`translate(${d.bbox[0]}, ${d.bbox[1] < 20 ? d.bbox[1] + 20 : d.bbox[1] - 4})`}>
                                                     {/* Label Background */}
                                                     <rect
@@ -424,14 +451,33 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                 overflowY: 'auto',
                 zIndex: 100
             }}>
-                <div style={{ marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                     <Text type="secondary" style={{ color: '#888', fontSize: '0.75rem', fontWeight: 600 }}>
                         <InfoCircleOutlined /> MATCHING FILTERS ({filteredDets.length})
                     </Text>
-                    {scale > 1 && (
-                        <Text style={{ color: '#555', fontSize: '0.7rem' }}>Click and Drag to Pan Image</Text>
-                    )}
+                    <Space size={8}>
+                        <Button
+                            size="small"
+                            type="text"
+                            style={{ color: '#1890ff', fontSize: '0.7rem', padding: '0 4px' }}
+                            onClick={selectAll}
+                        >
+                            Select All
+                        </Button>
+                        <span style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
+                        <Button
+                            size="small"
+                            type="text"
+                            style={{ color: '#ff4d4f', fontSize: '0.7rem', padding: '0 4px' }}
+                            onClick={selectNone}
+                        >
+                            Unselect All
+                        </Button>
+                    </Space>
                 </div>
+                {scale > 1 && (
+                    <Text style={{ color: '#444', fontSize: '0.7rem' }}>Click and Drag to Pan Image</Text>
+                )}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                     {filteredDets.length > 0 ? filteredDets.map((d, i) => {
                         let color = '#1890ff'; // Default Blue
@@ -448,14 +494,39 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                             bg = 'rgba(82, 196, 26, 0.15)';
                         }
 
+                        const isSelected = selectedIndices.includes(i);
+
                         return (
-                            <div key={i} style={{
-                                background: bg,
-                                border: `1px solid ${color}`,
-                                padding: '2px 8px',
-                                borderRadius: '4px'
-                            }}>
-                                <Text style={{ color, fontSize: '0.8125rem', fontWeight: 500 }}>
+                            <div
+                                key={i}
+                                onClick={() => toggleDetection(i)}
+                                style={{
+                                    background: isSelected ? bg : 'rgba(255,255,255,0.02)',
+                                    border: `1px solid ${isSelected ? color : 'rgba(255,255,255,0.1)'}`,
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    transition: 'all 0.2s ease',
+                                    opacity: isSelected ? 1 : 0.5
+                                }}
+                            >
+                                <div style={{
+                                    width: 12,
+                                    height: 12,
+                                    borderRadius: '2px',
+                                    border: `1.5px solid ${isSelected ? color : '#555'}`,
+                                    background: isSelected ? color : 'transparent',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'all 0.2s ease'
+                                }}>
+                                    {isSelected && <div style={{ width: 6, height: 6, background: '#fff', borderRadius: '1px' }} />}
+                                </div>
+                                <Text style={{ color: isSelected ? color : '#888', fontSize: '0.8125rem', fontWeight: 500 }}>
                                     <strong>{d.class}</strong>: {(d.confidence * 100).toFixed(1)}%
                                 </Text>
                             </div>
