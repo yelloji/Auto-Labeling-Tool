@@ -361,7 +361,8 @@ const PredictionView = ({ training }) => {
             // Medium Risk: Max confidence 0.4 - 0.7
             // Low Risk: Max confidence > 0.7
             if (riskLevel !== 'any') {
-                const maxConf = detections.length > 0 ? Math.max(...detections.map(d => d.confidence)) : 0;
+                if (detections.length === 0) return false;
+                const maxConf = Math.max(...detections.map(d => d.confidence));
                 if (riskLevel === 'high' && maxConf >= 0.4) return false;
                 if (riskLevel === 'medium' && (maxConf < 0.4 || maxConf > 0.7)) return false;
                 if (riskLevel === 'low' && maxConf <= 0.7) return false;
@@ -683,6 +684,22 @@ const PredictionView = ({ training }) => {
                                     />
                                 </div>
 
+                                {/* Risk Level Filter */}
+                                <div>
+                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Risk Level</Text>
+                                    <Select
+                                        value={filters.riskLevel}
+                                        onChange={val => setFilters(f => ({ ...f, riskLevel: val }))}
+                                        style={{ width: '100%' }}
+                                        size="small"
+                                    >
+                                        <Option value="any">Any Risk</Option>
+                                        <Option value="high">High Risk (Needs Review)</Option>
+                                        <Option value="medium">Medium Risk</Option>
+                                        <Option value="low">Low Risk (Validated)</Option>
+                                    </Select>
+                                </div>
+
                                 {/* Results Counter & Clear */}
                                 <div style={{
                                     display: 'flex',
@@ -697,7 +714,7 @@ const PredictionView = ({ training }) => {
                                     <Button
                                         type="link"
                                         size="small"
-                                        onClick={() => setFilters({ detectionCount: 'any', className: 'all', confidence: 0.25 })}
+                                        onClick={() => setFilters({ detectionCount: 'any', className: 'all', confidenceRange: [10, 100], imageSearch: '', riskLevel: 'any' })}
                                     >
                                         Clear
                                     </Button>
