@@ -101,6 +101,37 @@ const ImageViewerModal = ({
 
     // (Logic moved to unified handler above for perfect synchronization)
 
+    // Dynamic Story Engine for Historical Hints
+    const generateVerificationStory = (hints) => {
+        if (!hints || hints.length === 0) return null;
+
+        const latest = hints[0];
+        const count = hints.length;
+        const allPass = hints.every(h => h.status === 'pass');
+        const allFail = hints.every(h => h.status === 'fail');
+
+        const latestName = `${latest.training_name || 'Legacy'} (${latest.experiment_name || 'N/A'})`;
+
+        if (count === 1) {
+            return `You reviewed this detection once in "${latestName}". At that time, you marked it as a ${latest.status.toUpperCase()}.`;
+        }
+
+        if (allPass || allFail) {
+            const status = allPass ? 'PASS' : 'FAIL';
+            return `You have been perfectly consistent across ${count} experiments, most recently in "${latestName}". You have always marked it as a ${status}.`;
+        }
+
+        // If behaviors have changed (Evolution)
+        const first = hints[hints.length - 1];
+        const firstName = `${first.training_name || 'Legacy'} (${first.experiment_name || 'N/A'})`;
+
+        if (latest.status !== first.status) {
+            return `Your standards have evolved. You originally marked it as ${first.status.toUpperCase()} in "${firstName}", but your most recent decision in "${latestName}" was to switch it to ${latest.status.toUpperCase()}.`;
+        }
+
+        return `This detection has a history of ${count} reviews. Your latest decision was ${latest.status.toUpperCase()} during the "${latestName}" session.`;
+    };
+
     if (!visible || !currentImage || !experiment) return null;
 
     const toggleDetection = (index) => {
@@ -677,13 +708,15 @@ const ImageViewerModal = ({
 
                         const currentImgHash = imgMetadata && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
 
-                        let matchMethod = null;
-                        const verification = verifications.find(v => {
+                        let activeVerification = null;
+                        let hintVerifications = []; // Store all historical hints
+                        let currentMatchMethod = null;
+
+                        verifications.forEach(v => {
                             const vHash = v.image_hash_md5 || v.imageHashMd5;
                             const hashMatch = currentImgHash && vHash === currentImgHash;
                             const nameMatch = v.image_name === fileName;
 
-                            // Match by Hash (Preferred) or Fallback to Filename
                             const isIdentityMatch = hashMatch || nameMatch;
 
                             const isMatch = isIdentityMatch &&
@@ -694,12 +727,17 @@ const ImageViewerModal = ({
                                 Math.abs(v.bbox[3] - d.bbox[3]) < 1.0;
 
                             if (isMatch) {
-                                matchMethod = hashMatch ? 'HASH' : 'NAME';
-                                return true;
+                                if (v.experiment_id === experiment.id) {
+                                    activeVerification = v;
+                                    currentMatchMethod = hashMatch ? 'HASH' : 'NAME';
+                                } else {
+                                    hintVerifications.push(v);
+                                }
                             }
-                            return false;
                         });
-                        const vStatus = verification?.status || 'unverified';
+
+                        const vStatus = activeVerification?.status || 'unverified';
+                        const primaryHint = hintVerifications.length > 0 ? hintVerifications[0] : null;
 
                         const isHovered = hoveredIndex === i;
 
@@ -743,13 +781,17 @@ const ImageViewerModal = ({
                                     {isSelected && <div style={{ width: 8, height: 2, background: '#fff', borderRadius: '1px' }} />}
                                 </div>
                                 <Text
-                                    onClick={() => toggleDetection(i)}
                                     style={{ color: isSelected ? color : '#888', fontSize: '0.8125rem', fontWeight: 500 }}
                                 >
                                     <strong>{d.class}</strong>: {(d.confidence * 100).toFixed(1)}%
-                                    {matchMethod && (
-                                        <span title={`Matched by ${matchMethod}`} style={{ fontSize: '0.7rem', marginLeft: '6px' }}>
-                                            {matchMethod === 'HASH' ? '🔑' : '📄'}
+                                    {activeVerification && (
+                                        <span title={`Verified in Current Experiment (via ${currentMatchMethod})`} style={{ fontSize: '0.7rem', marginLeft: '6px' }}>
+                                            {currentMatchMethod === 'HASH' ? '🔑' : '📄'}
+                                        </span>
+                                    )}
+                                    {!activeVerification && primaryHint && (
+                                        <span title="Historical Hint available" style={{ fontSize: '0.7rem', marginLeft: '6px', filter: 'grayscale(1)', opacity: 0.4 }}>
+                                            🔑
                                         </span>
                                     )}
                                 </Text>
@@ -757,17 +799,28 @@ const ImageViewerModal = ({
                                 {/* 3-Button Verification Status Selector */}
                                 <Space size={6} style={{ marginLeft: '8px' }}>
                                     {/* UNVERIFIED Button */}
-                                    <div style={{
-                                        padding: '2px 8px',
-                                        borderRadius: '4px',
-                                        fontSize: '0.65rem',
-                                        fontWeight: 'bold',
-                                        background: vStatus === 'unverified' ? 'rgba(128, 128, 128, 0.2)' : 'transparent',
-                                        border: `1px solid ${vStatus === 'unverified' ? '#888' : 'rgba(255,255,255,0.1)'}`,
-                                        color: vStatus === 'unverified' ? '#888' : 'rgba(255,255,255,0.3)',
-                                        cursor: 'default',
-                                        transition: 'all 0.2s ease'
-                                    }}>
+                                    <div
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onVerify({
+                                                image_name: fileName,
+                                                class_name: d.class,
+                                                bbox: d.bbox,
+                                                status: 'unverified',
+                                                experiment_id: experiment.id
+                                            });
+                                        }}
+                                        style={{
+                                            padding: '2px 8px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.65rem',
+                                            fontWeight: 'bold',
+                                            background: vStatus === 'unverified' ? 'rgba(128, 128, 128, 0.2)' : 'transparent',
+                                            border: `1px solid ${vStatus === 'unverified' ? '#888' : 'rgba(255,255,255,0.1)'}`,
+                                            color: vStatus === 'unverified' ? '#fff' : 'rgba(255,255,255,0.3)',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease'
+                                        }}>
                                         UNVERIFIED
                                     </div>
 
@@ -823,6 +876,55 @@ const ImageViewerModal = ({
                                         ❌ FAIL
                                     </div>
                                 </Space>
+
+                                {/* Historical Hint Badge */}
+                                {!activeVerification && hintVerifications.length > 0 && primaryHint && (
+                                    <Tooltip
+                                        title={
+                                            <div style={{ fontSize: '0.78rem', lineHeight: '1.4' }}>
+                                                <div style={{ fontWeight: 'bold', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '4px', marginBottom: '8px', color: '#1890ff' }}>
+                                                    VERIFICATION STORY
+                                                </div>
+                                                <div style={{ marginBottom: '12px', borderBottom: '1px dashed rgba(255,255,255,0.1)', pb: '8px' }}>
+                                                    {generateVerificationStory(hintVerifications)}
+                                                </div>
+                                                <div style={{ maxHeight: '150px', overflowY: 'auto', pr: '4px' }}>
+                                                    <div style={{ fontSize: '0.65rem', fontWeight: 'bold', mb: '4px', opacity: 0.5 }}>NAME LOG:</div>
+                                                    {hintVerifications.map((hv, idx) => (
+                                                        <div key={idx} style={{ fontSize: '0.65rem', marginBottom: '4px', background: 'rgba(255,255,255,0.03)', padding: '2px 6px', borderRadius: '3px' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span style={{ color: '#fff' }}>{hv.training_name || 'Legacy'}</span>
+                                                                <span style={{ color: hv.status === 'pass' ? '#52c41a' : '#ff4d4f', fontWeight: 'bold' }}>{hv.status.toUpperCase()}</span>
+                                                            </div>
+                                                            <div style={{ opacity: 0.5 }}>Expt: {hv.experiment_name || hv.experiment_id?.slice(0, 8)}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        }
+                                        overlayStyle={{ maxWidth: '320px' }}
+                                    >
+                                        <div style={{
+                                            marginLeft: 'auto',
+                                            padding: '2px 6px',
+                                            background: 'rgba(255,255,255,0.03)',
+                                            borderRadius: '4px',
+                                            border: '1px dashed rgba(255,255,255,0.15)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            height: '24px'
+                                        }}>
+                                            <span style={{ fontSize: '0.6rem', color: '#666', fontWeight: 600 }}>HINT:</span>
+                                            <Tag
+                                                color={primaryHint.status === 'pass' ? 'success' : 'error'}
+                                                style={{ fontSize: '0.6rem', padding: '0 4px', height: '16px', lineHeight: '14.5px', margin: 0, border: 'none', borderRadius: '2px' }}
+                                            >
+                                                {primaryHint.status.toUpperCase()}
+                                            </Tag>
+                                        </div>
+                                    </Tooltip>
+                                )}
                             </div>
                         );
                     }) : (

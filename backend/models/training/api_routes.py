@@ -250,10 +250,11 @@ async def verify_detection(payload: VerificationRequest, db: Session = Depends(g
                             if matches:
                                 image_md5 = get_image_md5(matches[0])
 
-        # 2. Try to find existing verification
+        # 2. Try to find existing verification in the CURRENT experiment only
         eps = 0.0001
         query = db.query(HumanVerification).filter(
             HumanVerification.project_id == payload.project_id,
+            HumanVerification.experiment_id == payload.experiment_id, # Strict Isolation
             HumanVerification.class_name == payload.class_name,
             HumanVerification.x_min >= x_min - eps,
             HumanVerification.x_min <= x_min + eps,
@@ -265,18 +266,21 @@ async def verify_detection(payload: VerificationRequest, db: Session = Depends(g
             HumanVerification.y_max <= y_max + eps
         )
         
-        # Identity match logic: 
-        # 1. Prefer Hash match (Perfect identity)
-        # 2. Fallback to Name match (Legacy records without hash)
+        # Identity match logic within that experiment
         existing = None
         if image_md5:
             existing = query.filter(HumanVerification.image_hash_md5 == image_md5).first()
         
         if not existing:
-            # Fallback for legacy or records missing the hash
             existing = query.filter(HumanVerification.image_name == payload.image_name).first()
         
-        # 3. Upsert
+        # 3. Upsert or Delete
+        if payload.status == 'unverified':
+            if existing:
+                db.delete(existing)
+                db.commit()
+            return {"status": "unverified", "action": "deleted", "image_hash": image_md5}
+
         if existing:
             existing.status = payload.status
             existing.notes = payload.notes
@@ -310,22 +314,38 @@ async def verify_detection(payload: VerificationRequest, db: Session = Depends(g
 @router.get("/projects/{project_id}/verifications")
 async def get_project_verifications(project_id: int, image_name: Optional[str] = None, db: Session = Depends(get_db)):
     """Retrieve all human verifications for a project or specific image."""
-    query = db.query(HumanVerification).filter(HumanVerification.project_id == project_id).order_by(HumanVerification.updated_at.desc())
+    query = db.query(
+        HumanVerification,
+        ModelExperiment.name.label("experiment_name"),
+        TrainingSession.name.label("training_name")
+    ).outerjoin(
+        ModelExperiment, HumanVerification.experiment_id == ModelExperiment.id
+    ).outerjoin(
+        TrainingSession, ModelExperiment.training_id == TrainingSession.id
+    ).filter(
+        HumanVerification.project_id == project_id
+    ).order_by(
+        HumanVerification.updated_at.desc()
+    )
+
     if image_name:
         query = query.filter(HumanVerification.image_name == image_name)
     
-    vers = query.all()
+    results = query.all()
+    
     return [{
-        "id": v.id,
-        "image_name": v.image_name,
-        "class_name": v.class_name,
-        "bbox": [v.x_min, v.y_min, v.x_max, v.y_max],
-        "status": v.status,
-        "notes": v.notes,
-        "image_hash_md5": v.image_hash_md5,
-        "experiment_id": v.experiment_id,
-        "updated_at": v.updated_at
-    } for v in vers]
+        "id": row.HumanVerification.id,
+        "image_name": row.HumanVerification.image_name,
+        "class_name": row.HumanVerification.class_name,
+        "bbox": [row.HumanVerification.x_min, row.HumanVerification.y_min, row.HumanVerification.x_max, row.HumanVerification.y_max],
+        "status": row.HumanVerification.status,
+        "notes": row.HumanVerification.notes,
+        "image_hash_md5": row.HumanVerification.image_hash_md5,
+        "experiment_id": row.HumanVerification.experiment_id,
+        "experiment_name": row.experiment_name,
+        "training_name": row.training_name,
+        "updated_at": row.HumanVerification.updated_at
+    } for row in results]
 
 
 # Training session upsert/get (identity fields)
