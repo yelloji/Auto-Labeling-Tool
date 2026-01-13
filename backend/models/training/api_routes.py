@@ -265,10 +265,15 @@ async def verify_detection(payload: VerificationRequest, db: Session = Depends(g
             HumanVerification.y_max <= y_max + eps
         )
         
-        # Identity match logic: Prefer Hash, fallback to Name
+        # Identity match logic: 
+        # 1. Prefer Hash match (Perfect identity)
+        # 2. Fallback to Name match (Legacy records without hash)
+        existing = None
         if image_md5:
             existing = query.filter(HumanVerification.image_hash_md5 == image_md5).first()
-        else:
+        
+        if not existing:
+            # Fallback for legacy or records missing the hash
             existing = query.filter(HumanVerification.image_name == payload.image_name).first()
         
         # 3. Upsert
@@ -305,7 +310,7 @@ async def verify_detection(payload: VerificationRequest, db: Session = Depends(g
 @router.get("/projects/{project_id}/verifications")
 async def get_project_verifications(project_id: int, image_name: Optional[str] = None, db: Session = Depends(get_db)):
     """Retrieve all human verifications for a project or specific image."""
-    query = db.query(HumanVerification).filter(HumanVerification.project_id == project_id)
+    query = db.query(HumanVerification).filter(HumanVerification.project_id == project_id).order_by(HumanVerification.updated_at.desc())
     if image_name:
         query = query.filter(HumanVerification.image_name == image_name)
     
@@ -317,6 +322,7 @@ async def get_project_verifications(project_id: int, image_name: Optional[str] =
         "bbox": [v.x_min, v.y_min, v.x_max, v.y_max],
         "status": v.status,
         "notes": v.notes,
+        "image_hash_md5": v.image_hash_md5,
         "experiment_id": v.experiment_id,
         "updated_at": v.updated_at
     } for v in vers]
@@ -1844,7 +1850,10 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
                 except Exception as e:
                     logger.error("errors.system", f"Failed to delete temp source: {str(e)}", "temp_source_delete_failure")
 
-    # 4. Delete the database record
+    # 4. Delete associated Human Verifications (cleanup matching records)
+    db.query(HumanVerification).filter(HumanVerification.experiment_id == experiment_id).delete()
+
+    # 5. Delete the database record
     db.delete(exp)
     db.commit()
     

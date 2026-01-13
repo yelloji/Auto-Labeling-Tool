@@ -315,10 +315,10 @@ const PredictionView = ({ training }) => {
 
     // Initial load for verifications
     useEffect(() => {
-        if (training?.project_id) {
+        if (training?.project_id || training?.projectId) {
             fetchVerifications();
         }
-    }, [training?.project_id, fetchVerifications]);
+    }, [training?.project_id, training?.projectId, fetchVerifications]);
 
     useEffect(() => {
         if (pollingActive) {

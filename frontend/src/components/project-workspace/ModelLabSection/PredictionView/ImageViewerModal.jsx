@@ -387,20 +387,23 @@ const ImageViewerModal = ({
                 </Space>
             </div>
 
-            {/* Main Content: Image & Nav & Overlay */}
-            <div
-                style={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    position: 'relative'
-                }}
+            {/* Image Container */}
+            <div style={{
+                flex: 1,
+                position: 'relative',
+                background: '#000',
+                overflow: 'hidden',
+                cursor: isDragging ? 'grabbing' : 'grab',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+            }}
+                onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
             >
+                {/* Main Image Layer */}
                 {/* Navigation Buttons */}
                 <Button
                     className="nav-btn left"
@@ -660,21 +663,41 @@ const ImageViewerModal = ({
 
                         // Find matching verification
                         const fileName = currentImage.split('/').pop();
-                        const imgMetadata = experiment?.input_images || {};
-                        const currentImgHash = typeof imgMetadata === 'object' && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
+                        let imgMetadata = experiment?.input_images || {};
 
+                        // Parse JSON string if needed
+                        if (typeof imgMetadata === 'string') {
+                            try {
+                                imgMetadata = JSON.parse(imgMetadata);
+                            } catch (e) {
+                                console.error('Failed to parse input_images metadata:', e);
+                                imgMetadata = {};
+                            }
+                        }
+
+                        const currentImgHash = imgMetadata && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
+
+                        let matchMethod = null;
                         const verification = verifications.find(v => {
-                            // Match by Hash (Preferred) or Filename
-                            const isIdentityMatch = currentImgHash
-                                ? v.image_hash_md5 === currentImgHash
-                                : v.image_name === fileName;
+                            const vHash = v.image_hash_md5 || v.imageHashMd5;
+                            const hashMatch = currentImgHash && vHash === currentImgHash;
+                            const nameMatch = v.image_name === fileName;
 
-                            return isIdentityMatch &&
+                            // Match by Hash (Preferred) or Fallback to Filename
+                            const isIdentityMatch = hashMatch || nameMatch;
+
+                            const isMatch = isIdentityMatch &&
                                 v.class_name === d.class &&
-                                Math.abs(v.bbox[0] - d.bbox[0]) < 0.01 &&
-                                Math.abs(v.bbox[1] - d.bbox[1]) < 0.01 &&
-                                Math.abs(v.bbox[2] - d.bbox[2]) < 0.01 &&
-                                Math.abs(v.bbox[3] - d.bbox[3]) < 0.01
+                                Math.abs(v.bbox[0] - d.bbox[0]) < 1.0 &&
+                                Math.abs(v.bbox[1] - d.bbox[1]) < 1.0 &&
+                                Math.abs(v.bbox[2] - d.bbox[2]) < 1.0 &&
+                                Math.abs(v.bbox[3] - d.bbox[3]) < 1.0;
+
+                            if (isMatch) {
+                                matchMethod = hashMatch ? 'HASH' : 'NAME';
+                                return true;
+                            }
+                            return false;
                         });
                         const vStatus = verification?.status || 'unverified';
 
@@ -724,46 +747,81 @@ const ImageViewerModal = ({
                                     style={{ color: isSelected ? color : '#888', fontSize: '0.8125rem', fontWeight: 500 }}
                                 >
                                     <strong>{d.class}</strong>: {(d.confidence * 100).toFixed(1)}%
+                                    {matchMethod && (
+                                        <span title={`Matched by ${matchMethod}`} style={{ fontSize: '0.7rem', marginLeft: '6px' }}>
+                                            {matchMethod === 'HASH' ? '🔑' : '📄'}
+                                        </span>
+                                    )}
                                 </Text>
 
-                                {/* Verification Status Icons */}
-                                <Space size={4} style={{ marginLeft: '4px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '8px' }}>
-                                    <Tooltip title="Mark as Correct (Pass)">
-                                        <Button
-                                            size="small"
-                                            type="text"
-                                            icon={vStatus === 'pass' ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : <CheckCircleOutlined style={{ color: 'rgba(255,255,255,0.15)' }} />}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onVerify({
-                                                    image_name: fileName,
-                                                    class_name: d.class,
-                                                    bbox: d.bbox,
-                                                    status: 'pass',
-                                                    experiment_id: experiment.id
-                                                });
-                                            }}
-                                            style={{ height: '20px', width: '20px', padding: 0 }}
-                                        />
-                                    </Tooltip>
-                                    <Tooltip title="Mark as Wrong (Fail)">
-                                        <Button
-                                            size="small"
-                                            type="text"
-                                            icon={vStatus === 'fail' ? <CloseCircleOutlined style={{ color: '#ff4d4f' }} /> : <CloseOutlined style={{ color: 'rgba(255,255,255,0.15)' }} />}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onVerify({
-                                                    image_name: fileName,
-                                                    class_name: d.class,
-                                                    bbox: d.bbox,
-                                                    status: 'fail',
-                                                    experiment_id: experiment.id
-                                                });
-                                            }}
-                                            style={{ height: '20px', width: '20px', padding: 0 }}
-                                        />
-                                    </Tooltip>
+                                {/* 3-Button Verification Status Selector */}
+                                <Space size={6} style={{ marginLeft: '8px' }}>
+                                    {/* UNVERIFIED Button */}
+                                    <div style={{
+                                        padding: '2px 8px',
+                                        borderRadius: '4px',
+                                        fontSize: '0.65rem',
+                                        fontWeight: 'bold',
+                                        background: vStatus === 'unverified' ? 'rgba(128, 128, 128, 0.2)' : 'transparent',
+                                        border: `1px solid ${vStatus === 'unverified' ? '#888' : 'rgba(255,255,255,0.1)'}`,
+                                        color: vStatus === 'unverified' ? '#888' : 'rgba(255,255,255,0.3)',
+                                        cursor: 'default',
+                                        transition: 'all 0.2s ease'
+                                    }}>
+                                        UNVERIFIED
+                                    </div>
+
+                                    {/* PASS Button */}
+                                    <div
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onVerify({
+                                                image_name: fileName,
+                                                class_name: d.class,
+                                                bbox: d.bbox,
+                                                status: 'pass',
+                                                experiment_id: experiment.id
+                                            });
+                                        }}
+                                        style={{
+                                            padding: '2px 8px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.65rem',
+                                            fontWeight: 'bold',
+                                            background: vStatus === 'pass' ? 'rgba(24, 144, 255, 0.2)' : 'transparent',
+                                            border: `1px solid ${vStatus === 'pass' ? '#1890ff' : 'rgba(255,255,255,0.1)'}`,
+                                            color: vStatus === 'pass' ? '#1890ff' : 'rgba(255,255,255,0.3)',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease'
+                                        }}>
+                                        ✅ PASS
+                                    </div>
+
+                                    {/* FAIL Button */}
+                                    <div
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onVerify({
+                                                image_name: fileName,
+                                                class_name: d.class,
+                                                bbox: d.bbox,
+                                                status: 'fail',
+                                                experiment_id: experiment.id
+                                            });
+                                        }}
+                                        style={{
+                                            padding: '2px 8px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.65rem',
+                                            fontWeight: 'bold',
+                                            background: vStatus === 'fail' ? 'rgba(250, 140, 22, 0.2)' : 'transparent',
+                                            border: `1px solid ${vStatus === 'fail' ? '#fa8c16' : 'rgba(255,255,255,0.1)'}`,
+                                            color: vStatus === 'fail' ? '#fa8c16' : 'rgba(255,255,255,0.3)',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease'
+                                        }}>
+                                        ❌ FAIL
+                                    </div>
                                 </Space>
                             </div>
                         );
