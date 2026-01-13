@@ -8,7 +8,9 @@ import {
     InfoCircleOutlined,
     ZoomInOutlined,
     ZoomOutOutlined,
-    ReloadOutlined
+    ReloadOutlined,
+    CheckCircleOutlined,
+    CloseCircleOutlined
 } from '@ant-design/icons';
 
 const { Text } = Typography;
@@ -18,7 +20,17 @@ const { Text } = Typography;
  * 
  * Provides a full-screen detailed view of a prediction result with pixel-perfect overlays.
  */
-const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment, onNavigate, filters }) => {
+const ImageViewerModal = ({
+    visible,
+    onCancel,
+    currentImage,
+    images,
+    experiment,
+    onNavigate,
+    filters,
+    verifications = [], // New: Project-level human reviews
+    onVerify // New: Function to trigger save to DB
+}) => {
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [scale, setScale] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -26,6 +38,8 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
     const [isImgLoading, setIsImgLoading] = useState(true); // New: Guard for sync
     const [lastLoadTime, setLastLoadTime] = useState(0);
+    const [hoveredIndex, setHoveredIndex] = useState(null); // New: Bidirectional bridge
+    const [focusedIndex, setFocusedIndex] = useState(null); // New: For toggle logic
     const loadStartTime = React.useRef(performance.now());
     const hasInitSelection = React.useRef(false);
 
@@ -132,6 +146,41 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
     const handleResetZoom = () => {
         setScale(1);
         setOffset({ x: 0, y: 0 });
+    };
+
+    /**
+     * CLICK-TO-FOCUS (Precision Zoom)
+     * Calculates the center of a detection and zooms to it.
+     */
+    const handleFocusDetection = (index) => {
+        // Toggle Logic: If clicking the same box while zoomed in, reset.
+        if (focusedIndex === index && scale > 1.1) {
+            handleResetZoom();
+            setFocusedIndex(null);
+            return;
+        }
+
+        const d = filteredDets[index];
+        if (!d || !d.bbox || dimensions.width === 0) return;
+
+        const [x1, y1, x2, y2] = d.bbox;
+        const boxW = x2 - x1;
+        const boxH = y2 - y1;
+        const centerX = (x1 + x2) / 2;
+        const centerY = (y1 + y2) / 2;
+
+        // Smart Zoom Level: Aim for 70% of the view, clamped between 1.5x and 4x
+        const targetScale = Math.min(4, Math.max(1.5, Math.min(dimensions.width / boxW, dimensions.height / boxH) * 0.7));
+
+        // Offset: Displacement from center, scaled
+        const targetOffset = {
+            x: (dimensions.width / 2 - centerX) * targetScale,
+            y: (dimensions.height / 2 - centerY) * targetScale
+        };
+
+        setScale(targetScale);
+        setOffset(targetOffset);
+        setFocusedIndex(index);
     };
 
     // Panning Handlers
@@ -387,6 +436,13 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                     */}
                     <div
                         onMouseDown={handleMouseDown}
+                        onClick={(e) => {
+                            // If clicked exactly on the background (not a box), reset zoom
+                            if (e.target.tagName !== 'rect' && e.target.tagName !== 'g' && e.target.tagName !== 'text' && scale > 1) {
+                                handleResetZoom();
+                                setFocusedIndex(null);
+                            }
+                        }}
                         style={{
                             position: 'relative',
                             display: 'flex',
@@ -395,7 +451,8 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
                             transformOrigin: 'center center',
                             transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                            userSelect: 'none'
+                            userSelect: 'none',
+                            cursor: scale > 1 ? 'zoom-out' : 'default'
                         }}
                     >
                         <img
@@ -423,10 +480,13 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                                     width: '100%',
                                     height: '100%',
                                     pointerEvents: 'none',
-                                    zIndex: 5
+                                    zIndex: 10
                                 }}
                             >
                                 {filteredDets.map((d, i) => {
+                                    if (!selectedIndices.includes(i)) return null;
+
+                                    const isHovered = hoveredIndex === i;
                                     // Risk coloring logic
                                     let riskColor = '#52c41a';
                                     let riskClass = 'low-risk';
@@ -437,6 +497,10 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                                         riskColor = '#faad14';
                                         riskClass = 'medium-risk';
                                     }
+
+                                    const labelX = d.bbox[0];
+                                    const labelY = d.bbox[1] < 20 ? d.bbox[1] + 20 : d.bbox[1] - 4;
+                                    const indexLabel = `#${i + 1}`;
 
                                     return (
                                         <g key={i}>
@@ -453,47 +517,61 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
                                             )}
 
                                             {/* 2. RENDER BOUNDING BOXES */}
-                                            {showBoxes && d.bbox && selectedIndices.includes(i) && (
+                                            {showBoxes && d.bbox && (
                                                 <rect
                                                     x={d.bbox[0]}
                                                     y={d.bbox[1]}
                                                     width={d.bbox[2] - d.bbox[0]}
                                                     height={d.bbox[3] - d.bbox[1]}
-                                                    className={`detection-highlight-rect ${riskClass}`}
+                                                    className={`detection-highlight-rect ${riskClass} ${isHovered ? 'hovered' : ''}`}
+                                                    onMouseEnter={() => setHoveredIndex(i)}
+                                                    onMouseLeave={() => setHoveredIndex(null)}
+                                                    onClick={(e) => { e.stopPropagation(); handleFocusDetection(i); }}
                                                     style={{
-                                                        strokeWidth: 2,
-                                                        fill: 'transparent',
-                                                        transition: 'none'
+                                                        strokeWidth: isHovered ? 4 : 2,
+                                                        stroke: isHovered ? '#fff' : riskColor,
+                                                        fill: isHovered ? `${riskColor}22` : 'transparent',
+                                                        transition: 'all 0.1s ease',
+                                                        pointerEvents: 'all',
+                                                        cursor: focusedIndex === i && scale > 1.1 ? 'zoom-out' : 'zoom-in',
+                                                        filter: isHovered ? 'drop-shadow(0 0 8px rgba(255,255,255,0.8))' : 'none'
                                                     }}
                                                 />
                                             )}
 
                                             {/* 3. RENDER SMART LABELS (Text) */}
-                                            {showLabels && d.bbox && selectedIndices.includes(i) && (
-                                                <g transform={`translate(${d.bbox[0]}, ${d.bbox[1] < 20 ? d.bbox[1] + 20 : d.bbox[1] - 4})`}>
+                                            {(showLabels || isHovered) && d.bbox && (
+                                                <g
+                                                    transform={`translate(${labelX}, ${labelY})`}
+                                                    onMouseEnter={() => setHoveredIndex(i)}
+                                                    onMouseLeave={() => setHoveredIndex(null)}
+                                                    style={{ pointerEvents: 'all', cursor: 'pointer' }}
+                                                >
                                                     {/* Label Background */}
                                                     <rect
                                                         x={0}
                                                         y={-18}
-                                                        width={Math.max(d.class.length * 8 + 45, 80)}
+                                                        width={Math.max((indexLabel.length + d.class.length) * 9 + 45, 90)}
                                                         height={18}
-                                                        fill={riskColor}
-                                                        opacity={0.85}
+                                                        fill={isHovered ? '#fff' : riskColor}
+                                                        opacity={isHovered ? 1 : 0.85}
                                                         rx={2}
+                                                        style={{ transition: 'all 0.1s ease' }}
                                                     />
                                                     {/* Label Text */}
                                                     <text
                                                         x={4}
                                                         y={-5}
-                                                        fill="#fff"
+                                                        fill={isHovered ? '#000' : '#fff'}
                                                         style={{
                                                             fontSize: '14px',
-                                                            fontWeight: '600',
+                                                            fontWeight: '700',
                                                             fontFamily: 'monospace',
-                                                            textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+                                                            textShadow: isHovered ? 'none' : '0 1px 2px rgba(0,0,0,0.5)',
+                                                            transition: 'all 0.1s ease'
                                                         }}
                                                     >
-                                                        {d.class} {(d.confidence * 100).toFixed(0)}%
+                                                        {isHovered ? `${indexLabel} ` : ''}{d.class} {(d.confidence * 100).toFixed(0)}%
                                                     </text>
                                                 </g>
                                             )}
@@ -580,39 +658,113 @@ const ImageViewerModal = ({ visible, onCancel, currentImage, images, experiment,
 
                         const isSelected = selectedIndices.includes(i);
 
+                        // Find matching verification
+                        const fileName = currentImage.split('/').pop();
+                        const imgMetadata = experiment?.input_images || {};
+                        const currentImgHash = typeof imgMetadata === 'object' && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
+
+                        const verification = verifications.find(v => {
+                            // Match by Hash (Preferred) or Filename
+                            const isIdentityMatch = currentImgHash
+                                ? v.image_hash_md5 === currentImgHash
+                                : v.image_name === fileName;
+
+                            return isIdentityMatch &&
+                                v.class_name === d.class &&
+                                Math.abs(v.bbox[0] - d.bbox[0]) < 0.01 &&
+                                Math.abs(v.bbox[1] - d.bbox[1]) < 0.01 &&
+                                Math.abs(v.bbox[2] - d.bbox[2]) < 0.01 &&
+                                Math.abs(v.bbox[3] - d.bbox[3]) < 0.01
+                        });
+                        const vStatus = verification?.status || 'unverified';
+
+                        const isHovered = hoveredIndex === i;
+
                         return (
                             <div
                                 key={i}
-                                onClick={() => toggleDetection(i)}
+                                onMouseEnter={() => setHoveredIndex(i)}
+                                onMouseLeave={() => setHoveredIndex(null)}
                                 style={{
                                     background: isSelected ? bg : 'rgba(255,255,255,0.02)',
-                                    border: `1px solid ${isSelected ? color : 'rgba(255,255,255,0.1)'}`,
+                                    border: `1px solid ${isHovered ? '#fff' : (isSelected ? color : 'rgba(255,255,255,0.1)')}`,
                                     padding: '2px 8px',
                                     borderRadius: '4px',
                                     cursor: 'pointer',
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '6px',
+                                    gap: '8px',
                                     transition: 'all 0.2s ease',
-                                    opacity: isSelected ? 1 : 0.5
+                                    opacity: isSelected ? 1 : 0.5,
+                                    position: 'relative',
+                                    transform: isHovered ? 'translateY(-2px)' : 'none',
+                                    boxShadow: isHovered ? `0 0 12px ${color}` : 'none'
                                 }}
+                                onClick={() => handleFocusDetection(i)}
                             >
-                                <div style={{
-                                    width: 12,
-                                    height: 12,
-                                    borderRadius: '2px',
-                                    border: `1.5px solid ${isSelected ? color : '#555'}`,
-                                    background: isSelected ? color : 'transparent',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    transition: 'all 0.2s ease'
-                                }}>
-                                    {isSelected && <div style={{ width: 6, height: 6, background: '#fff', borderRadius: '1px' }} />}
+                                <Text style={{ color: '#fff', fontSize: '0.7rem', opacity: 0.5, fontWeight: 'bold' }}>#{i + 1}</Text>
+                                <div
+                                    onClick={(e) => { e.stopPropagation(); toggleDetection(i); }}
+                                    style={{
+                                        width: 14,
+                                        height: 14,
+                                        borderRadius: '2px',
+                                        border: `1.5px solid ${isSelected ? color : '#555'}`,
+                                        background: isSelected ? color : 'transparent',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    {isSelected && <div style={{ width: 8, height: 2, background: '#fff', borderRadius: '1px' }} />}
                                 </div>
-                                <Text style={{ color: isSelected ? color : '#888', fontSize: '0.8125rem', fontWeight: 500 }}>
+                                <Text
+                                    onClick={() => toggleDetection(i)}
+                                    style={{ color: isSelected ? color : '#888', fontSize: '0.8125rem', fontWeight: 500 }}
+                                >
                                     <strong>{d.class}</strong>: {(d.confidence * 100).toFixed(1)}%
                                 </Text>
+
+                                {/* Verification Status Icons */}
+                                <Space size={4} style={{ marginLeft: '4px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '8px' }}>
+                                    <Tooltip title="Mark as Correct (Pass)">
+                                        <Button
+                                            size="small"
+                                            type="text"
+                                            icon={vStatus === 'pass' ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : <CheckCircleOutlined style={{ color: 'rgba(255,255,255,0.15)' }} />}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onVerify({
+                                                    image_name: fileName,
+                                                    class_name: d.class,
+                                                    bbox: d.bbox,
+                                                    status: 'pass',
+                                                    experiment_id: experiment.id
+                                                });
+                                            }}
+                                            style={{ height: '20px', width: '20px', padding: 0 }}
+                                        />
+                                    </Tooltip>
+                                    <Tooltip title="Mark as Wrong (Fail)">
+                                        <Button
+                                            size="small"
+                                            type="text"
+                                            icon={vStatus === 'fail' ? <CloseCircleOutlined style={{ color: '#ff4d4f' }} /> : <CloseOutlined style={{ color: 'rgba(255,255,255,0.15)' }} />}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onVerify({
+                                                    image_name: fileName,
+                                                    class_name: d.class,
+                                                    bbox: d.bbox,
+                                                    status: 'fail',
+                                                    experiment_id: experiment.id
+                                                });
+                                            }}
+                                            style={{ height: '20px', width: '20px', padding: 0 }}
+                                        />
+                                    </Tooltip>
+                                </Space>
                             </div>
                         );
                     }) : (

@@ -41,7 +41,8 @@ import {
     SyncOutlined,
     PlusOutlined,
     CloudUploadOutlined,
-    InboxOutlined
+    InboxOutlined,
+    InfoCircleOutlined
 } from '@ant-design/icons';
 
 // Modular Components
@@ -76,6 +77,7 @@ const PredictionView = ({ training }) => {
     const [previewVisible, setPreviewVisible] = useState(false);
     const [previewImage, setPreviewImage] = useState(''); // current image name
     const [fetchingResults, setFetchingResults] = useState(false);
+    const [verifications, setVerifications] = useState([]); // Project-level manual reviews
 
     // Advanced Features Modals
     const [compareVisible, setCompareVisible] = useState(false);
@@ -87,7 +89,8 @@ const PredictionView = ({ training }) => {
         className: 'all',
         confidenceRange: [10, 100], // Default range 10% to 100%
         imageSearch: '',
-        riskLevel: 'any'
+        riskLevel: 'any',
+        reviewStatus: 'any' // 'any', 'pass', 'fail', 'unsure', 'unverified'
     });
 
     // Pagination State
@@ -221,6 +224,33 @@ const PredictionView = ({ training }) => {
         }
     };
 
+    const fetchVerifications = useCallback(async () => {
+        const pId = training?.project_id || training?.projectId;
+        if (!pId) return;
+        try {
+            const data = await projectsAPI.getProjectVerifications(pId);
+            setVerifications(data);
+        } catch (error) {
+            console.error("Failed to fetch verifications", error);
+        }
+    }, [training?.project_id, training?.projectId]);
+
+    const handleVerify = async (payload) => {
+        const pId = training?.project_id || training?.projectId;
+        if (!pId) return;
+        try {
+            await projectsAPI.verifyDetection({
+                ...payload,
+                project_id: pId
+            });
+            // Refresh verifications to reflect changes in UI
+            fetchVerifications();
+            message.success(`Status updated to ${payload.status}`);
+        } catch (error) {
+            handleAPIError(error, 'Failed to update verification');
+        }
+    };
+
     // --- Data Fetching ---
     const fetchExperiments = useCallback(async (isPolling = false) => {
         if (!training?.id) return;
@@ -282,6 +312,13 @@ const PredictionView = ({ training }) => {
             if (!isPolling) setLoading(false);
         }
     }, [training?.id, selectedExp, training?.taskType]);
+
+    // Initial load for verifications
+    useEffect(() => {
+        if (training?.project_id) {
+            fetchVerifications();
+        }
+    }, [training?.project_id, fetchVerifications]);
 
     useEffect(() => {
         if (pollingActive) {
@@ -357,7 +394,6 @@ const PredictionView = ({ training }) => {
             }
 
             // 4. Strict Risk Level Filter
-            // Only show detections that match the selected risk category
             const matchingDets = detections.filter(d => {
                 if (riskLevel === 'any') return true;
                 if (riskLevel === 'high') return d.confidence < 0.4;
@@ -366,15 +402,36 @@ const PredictionView = ({ training }) => {
                 return true;
             });
 
+            // If we selected a risk level and nothing matches, hide the image
             if (riskLevel !== 'any' && matchingDets.length === 0) {
                 return false;
+            }
+
+            // 5. Review Status Filter (Independent)
+            if (filters.reviewStatus !== 'any') {
+                const fileName = imgName.split('/').pop();
+                const imgMetadata = selectedExp?.input_images || {};
+                const imgHash = typeof imgMetadata === 'object' && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
+
+                const imgVerifications = verifications.filter(v =>
+                    imgHash ? v.image_hash_md5 === imgHash : v.image_name === fileName
+                );
+
+                if (filters.reviewStatus === 'unverified') {
+                    // Image has detections but none are verified
+                    if (!(detections.length > 0 && imgVerifications.length === 0)) return false;
+                } else {
+                    // Check if image has at least one detection with matching status
+                    const hasMatch = imgVerifications.some(v => v.status === filters.reviewStatus);
+                    if (!hasMatch) return false;
+                }
             }
 
             return true;
         });
 
         setFilteredImages(filtered);
-    }, [filters, selectedExp, experimentImages]);
+    }, [filters, selectedExp, experimentImages, verifications]);
 
     // --- Actions ---
     const updateParam = async (key, value) => {
@@ -730,6 +787,43 @@ const PredictionView = ({ training }) => {
                                     </Select>
                                 </div>
 
+                                {/* Review Status Filter */}
+                                <div>
+                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Review Status (Master Truth)</Text>
+                                    <Select
+                                        value={filters.reviewStatus}
+                                        onChange={val => setFilters(f => ({ ...f, reviewStatus: val }))}
+                                        style={{ width: '100%' }}
+                                        size="small"
+                                    >
+                                        <Option value="any">Any Status</Option>
+                                        <Option value="pass">
+                                            <Space>
+                                                <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                                                <span>Verified Correct (Pass)</span>
+                                            </Space>
+                                        </Option>
+                                        <Option value="fail">
+                                            <Space>
+                                                <CloseCircleOutlined style={{ color: '#ff4d4f' }} />
+                                                <span>Verified Wrong (Fail)</span>
+                                            </Space>
+                                        </Option>
+                                        <Option value="unsure">
+                                            <Space>
+                                                <InfoCircleOutlined style={{ color: '#faad14' }} />
+                                                <span>Unsure / Needs Check</span>
+                                            </Space>
+                                        </Option>
+                                        <Option value="unverified">
+                                            <Space>
+                                                <div style={{ width: 14, height: 14, border: '1px dashed #666', borderRadius: '50%' }} />
+                                                <span>Unverified Detections</span>
+                                            </Space>
+                                        </Option>
+                                    </Select>
+                                </div>
+
                                 {/* Results Counter & Clear */}
                                 <div style={{
                                     display: 'flex',
@@ -744,7 +838,7 @@ const PredictionView = ({ training }) => {
                                     <Button
                                         type="link"
                                         size="small"
-                                        onClick={() => setFilters({ detectionCount: 'any', className: 'all', confidenceRange: [10, 100], imageSearch: '', riskLevel: 'any' })}
+                                        onClick={() => setFilters({ detectionCount: 'any', className: 'all', confidenceRange: [10, 100], imageSearch: '', riskLevel: 'any', reviewStatus: 'any' })}
                                     >
                                         Clear
                                     </Button>
@@ -1291,6 +1385,8 @@ const PredictionView = ({ training }) => {
                 experiment={selectedExp}
                 onNavigate={(newImg) => setPreviewImage(newImg)}
                 filters={filters}
+                verifications={verifications}
+                onVerify={handleVerify}
             />
 
             < AnalyticsModal

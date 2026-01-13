@@ -82,7 +82,70 @@ class DatabaseDebugger:
             # Get row count
             cursor.execute(f"SELECT COUNT(*) FROM {table_name};")
             count = cursor.fetchone()[0]
-        print(f"   📊 Total rows: {count}")
+            print(f"   📊 Total rows: {count}")
+
+    def get_human_verifications_table(self):
+        """Detailed info about human_verifications table (Pass/Fail reviews)"""
+        cursor = self.conn.cursor()
+        self.print_header("HUMAN VERIFICATIONS TABLE (PASS/FAIL)")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='human_verifications'")
+        if not cursor.fetchone():
+            print("❌ human_verifications table does not exist yet!")
+            return
+            
+        print("\n📐 Schema:")
+        cursor.execute("PRAGMA table_info('human_verifications')")
+        for col in cursor.fetchall():
+            col_info = f"   - {col[1]} ({col[2]})"
+            if col[3]: col_info += " NOT NULL"
+            if col[4] is not None: col_info += f" DEFAULT {col[4]}"
+            if col[5]: col_info += " PRIMARY KEY"
+            print(col_info)
+            
+        cursor.execute("SELECT COUNT(*) FROM human_verifications")
+        count = cursor.fetchone()[0]
+        print(f"\n📊 Total rows: {count}")
+        
+        if count:
+            print("\n✅ RECENT VERIFICATIONS (with full context):")
+            cursor.execute("""
+                SELECT 
+                    hv.*,
+                    me.dataset_source,
+                    me.training_id,
+                    me.dataset_path,
+                    me.name as experiment_name,
+                    p.name as project_name,
+                    ts.name as training_name
+                FROM human_verifications hv
+                LEFT JOIN model_experiments me ON hv.experiment_id = me.id
+                LEFT JOIN projects p ON hv.project_id = p.id
+                LEFT JOIN training_sessions ts ON me.training_id = ts.id
+                ORDER BY hv.created_at DESC 
+                LIMIT 20
+            """)
+            for row in cursor.fetchall():
+                status_icon = "🟢" if row['status'] == 'pass' else "🔴" if row['status'] == 'fail' else "🟡"
+                print(f"\n   {status_icon} [{row['status'].upper()}] - {row['image_name']} (ID: {row['id'][:8]})")
+                
+                # Project info with name
+                project_display = f"{row['project_name'] or 'Unknown'} (ID: {row['project_id']})"
+                print(f"      ├─ Project: {project_display}")
+                
+                print(f"      ├─ Match: {row['class_name']} at [{row['x_min']:.2f}, {row['y_min']:.2f}, {row['x_max']:.2f}, {row['y_max']:.2f}]")
+                print(f"      ├─ Hashes: MD5: {row['image_hash_md5'] or 'N/A'}, Perceptual: {row['image_hash_perceptual'] or 'N/A'}")
+                print(f"      ├─ Experiment: {row['experiment_name'] or 'N/A'} (ID: {row['experiment_id'][:8] if row['experiment_id'] else 'N/A'})")
+                print(f"      ├─ Dataset Source: {row['dataset_source'] or 'N/A'}")
+                print(f"      ├─ Dataset Path: {row['dataset_path'] or 'N/A'}")
+                
+                # Training info with name
+                training_display = f"{row['training_name'] or 'N/A'} (ID: {row['training_id'] or 'N/A'})"
+                print(f"      ├─ Training: {training_display}")
+                
+                if row['notes']:
+                    print(f"      ├─ Notes: {row['notes']}")
+                print(f"      ├─ Created: {row['created_at']}")
+                print(f"      └─ Updated: {row['updated_at']}")
 
     def get_training_sessions_table(self):
         """Detailed info about training_sessions table"""
@@ -1587,6 +1650,7 @@ class DatabaseDebugger:
             self.get_training_sessions_table()  # Training sessions table analysis
             self.get_projects_overview()
             self.get_datasets_detailed()
+            self.get_human_verifications_table()  # Show manual Pass/Fail reviews
             self.get_labels_table()  # Add labels table analysis
             self.get_releases_table()  # Add releases table analysis
             self.get_image_transformations_table()  # Add image transformations table analysis
@@ -1628,6 +1692,7 @@ def main():
     parser.add_argument('--relationships', action='store_true', help='Show transformation-release relationships')
     parser.add_argument('--stats', action='store_true', help='Show database statistics')
     parser.add_argument('--schema', action='store_true', help='Show database schema information')
+    parser.add_argument('--human-verify', action='store_true', help='Show human verifications (Pass/Fail)')
     parser.add_argument('--filesystem', action='store_true', help='Compare file system vs database')
     args = parser.parse_args()
     
@@ -1659,6 +1724,7 @@ def main():
         args.relationships,
         args.stats,
         args.schema,
+        args.human_verify,
         args.filesystem,
     ]
     if any(targets):
@@ -1693,6 +1759,8 @@ def main():
                 debugger.get_database_statistics()
             if args.schema:
                 debugger.get_table_info()
+            if args.human_verify:
+                debugger.get_human_verifications_table()
             if args.filesystem:
                 debugger.get_file_system_vs_database()
             debugger.close()

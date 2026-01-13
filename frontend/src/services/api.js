@@ -463,11 +463,14 @@ export const projectsAPI = {
   // Get recent images for project (placeholder - implement if backend supports it)
   getRecentImages: async (projectId, limit = 6) => {
     try {
-      // This endpoint might not exist yet, so we'll return empty array for now
-      // const response = await api.get(`/api/v1/projects/${projectId}/recent-images`, {
-      //   params: { limit }
-      // });
-      // return response.data;
+      // NOTE: This endpoint is currently a placeholder.
+      // When the backend is ready, uncomment the lines below:
+      /*
+      const response = await api.get(`/api/v1/projects/${projectId}/recent-images`, {
+        params: { limit }
+      });
+      return response.data;
+      */
       return [];
     } catch (error) {
       console.warn('Recent images endpoint not available:', error);
@@ -495,6 +498,18 @@ export const projectsAPI = {
       handleAPIError(error, 'Failed to load image annotations');
       throw error;
     }
+  },
+
+  // --- Human Verification API ---
+  verifyDetection: async (payload) => {
+    const response = await api.post('/api/v1/experiments/verify-detection', payload);
+    return response.data;
+  },
+
+  getProjectVerifications: async (projectId, imageName = null) => {
+    const params = imageName ? { image_name: imageName } : {};
+    const response = await api.get(`/api/v1/projects/${projectId}/verifications`, { params });
+    return response.data;
   },
 
   // Get project labels
@@ -848,7 +863,7 @@ export const releasesAPI = {
       handleAPIError(error, 'Failed to get download information');
       throw error;
     }
-  }
+  },
 };
 
 // ==================== TRAINING API ====================

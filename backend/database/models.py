@@ -673,6 +673,48 @@ class ModelExperiment(Base):
         return f"<ModelExperiment(id={self.id}, type={self.experiment_type}, status={self.status})>"
 
 
+
+class HumanVerification(Base):
+    """
+    Persists manual human feedback (Pass/Fail) across experiments in a project.
+    Used for cross-model consistency and ground truth verification.
+    """
+    __tablename__ = "human_verifications"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    
+    # Matching Keys
+    image_name = Column(String, nullable=False) # e.g. "0-1.png"
+    image_hash_md5 = Column(String(32), nullable=True, index=True) # Exact bit-match
+    image_hash_perceptual = Column(String(64), nullable=True, index=True) # Structural match
+    class_name = Column(String, nullable=False)
+    
+    # Bounding Box (Normalized) - used for spatial matching logic
+    x_min = Column(Float, nullable=False)
+    y_min = Column(Float, nullable=False)
+    x_max = Column(Float, nullable=False)
+    y_max = Column(Float, nullable=False)
+    
+    # Verification Data
+    status = Column(String(50), default="unverified") # 'pass', 'fail', 'unsure'
+    notes = Column(Text, nullable=True)
+    
+    # Metadata
+    experiment_id = Column(String, nullable=True) # Which experiment was active when marked
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Indexes for fast spatial/image lookups
+    __table_args__ = (
+        sa.Index("ix_verification_project_image", "project_id", "image_name"),
+        sa.Index("ix_verification_project_hash", "project_id", "image_hash_md5"),
+    )
+
+    def __repr__(self):
+        return f"<HumanVerification(image={self.image_name}, class={self.class_name}, status={self.status})>"
+
+
 class DevModeSetting(Base):
     __tablename__ = "dev_mode_settings"
 

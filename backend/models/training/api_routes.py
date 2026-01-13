@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 from database.models import TrainingSession
 from database.database import get_db, SessionLocal
@@ -16,10 +17,7 @@ from models.training.yaml_generator import generate_ultralytics_training_yaml
 from models.training.executor import start_ultralytics_training
 import json
 from pathlib import Path
-from sqlalchemy import and_
-from database.models import Release
-from database.models import Project
-from database.models import DevModeSetting
+from database.models import Release, Project, DevModeSetting, HumanVerification
 from datetime import datetime, timedelta
 import uuid
 import asyncio
@@ -196,6 +194,132 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+def get_image_md5(file_path: Path) -> Optional[str]:
+    """Calculate MD5 hash of a file."""
+    if not file_path.exists():
+        return None
+    hash_md5 = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
+class VerificationRequest(BaseModel):
+    project_id: int
+    image_name: str
+    class_name: str
+    bbox: List[float] # [x1, y1, x2, y2]
+    status: str
+    notes: Optional[str] = None
+    experiment_id: Optional[str] = None
+
+@router.post("/experiments/verify-detection")
+async def verify_detection(payload: VerificationRequest, db: Session = Depends(get_db)):
+    """Upsert a human verification for a specific detection area."""
+    try:
+        x_min, y_min, x_max, y_max = payload.bbox
+        
+        # 1. Resolve Image Hash (MD5)
+        image_md5 = None
+        if payload.experiment_id:
+            exp = db.query(ModelExperiment).get(payload.experiment_id)
+            if exp:
+                # FIRST: Check if hash is already stored in experiment metadata
+                if exp.input_images:
+                    try:
+                        # input_images can be JSON string or dict: {"filename.png": "md5hash", ...}
+                        img_metadata = json.loads(exp.input_images) if isinstance(exp.input_images, str) else exp.input_images
+                        if isinstance(img_metadata, dict):
+                            image_md5 = img_metadata.get(payload.image_name)
+                    except:
+                        pass  # If parsing fails, continue to disk fallback
+                
+                # FALLBACK: Calculate from disk if not found in metadata
+                if not image_md5 and exp.output_folder:
+                    # First check input_images folder (Stage 1/2 persistence)
+                    input_path = Path(exp.output_folder).parent / "input_images" / payload.image_name
+                    if input_path.exists():
+                        image_md5 = get_image_md5(input_path)
+                    else:
+                        # Fallback to scanning dataset path if upload persistence wasn't used
+                        if exp.dataset_path:
+                            ds_path = Path(exp.dataset_path)
+                            # Scan recursively for the file
+                            matches = list(ds_path.rglob(payload.image_name))
+                            if matches:
+                                image_md5 = get_image_md5(matches[0])
+
+        # 2. Try to find existing verification
+        eps = 0.0001
+        query = db.query(HumanVerification).filter(
+            HumanVerification.project_id == payload.project_id,
+            HumanVerification.class_name == payload.class_name,
+            HumanVerification.x_min >= x_min - eps,
+            HumanVerification.x_min <= x_min + eps,
+            HumanVerification.y_min >= y_min - eps,
+            HumanVerification.y_min <= y_min + eps,
+            HumanVerification.x_max >= x_max - eps,
+            HumanVerification.x_max <= x_max + eps,
+            HumanVerification.y_max >= y_max - eps,
+            HumanVerification.y_max <= y_max + eps
+        )
+        
+        # Identity match logic: Prefer Hash, fallback to Name
+        if image_md5:
+            existing = query.filter(HumanVerification.image_hash_md5 == image_md5).first()
+        else:
+            existing = query.filter(HumanVerification.image_name == payload.image_name).first()
+        
+        # 3. Upsert
+        if existing:
+            existing.status = payload.status
+            existing.notes = payload.notes
+            existing.experiment_id = payload.experiment_id
+            existing.updated_at = datetime.utcnow()
+            # Backfill hash if missing
+            if image_md5 and not existing.image_hash_md5:
+                existing.image_hash_md5 = image_md5
+        else:
+            new_v = HumanVerification(
+                project_id=payload.project_id,
+                image_name=payload.image_name,
+                image_hash_md5=image_md5,
+                class_name=payload.class_name,
+                x_min=x_min,
+                y_min=y_min,
+                x_max=x_max,
+                y_max=y_max,
+                status=payload.status,
+                notes=payload.notes,
+                experiment_id=payload.experiment_id
+            )
+            db.add(new_v)
+            
+        db.commit()
+        return {"status": "success", "image_hash": image_md5}
+    except Exception as e:
+        logger.error("errors.system", f"Failed to save verification: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/projects/{project_id}/verifications")
+async def get_project_verifications(project_id: int, image_name: Optional[str] = None, db: Session = Depends(get_db)):
+    """Retrieve all human verifications for a project or specific image."""
+    query = db.query(HumanVerification).filter(HumanVerification.project_id == project_id)
+    if image_name:
+        query = query.filter(HumanVerification.image_name == image_name)
+    
+    vers = query.all()
+    return [{
+        "id": v.id,
+        "image_name": v.image_name,
+        "class_name": v.class_name,
+        "bbox": [v.x_min, v.y_min, v.x_max, v.y_max],
+        "status": v.status,
+        "notes": v.notes,
+        "experiment_id": v.experiment_id,
+        "updated_at": v.updated_at
+    } for v in vers]
 
 
 # Training session upsert/get (identity fields)
@@ -2038,8 +2162,7 @@ async def trigger_prediction(
         # Ensure path is granular even if resumed from draft
         if payload.dataset_source in ['test', 'val', 'train']:
             experiment.dataset_path = (Path(ts.dataset_release_dir) / "images" / payload.dataset_source).as_posix()
-        else:
-            experiment.dataset_path = None
+        # For upload source, preserve the existing dataset_path (set during upload)
         
         # SAFE MERGE: Only overwrite if payload explicitly provides images
         if payload.uploaded_images:

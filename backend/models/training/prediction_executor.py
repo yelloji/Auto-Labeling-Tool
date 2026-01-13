@@ -23,6 +23,18 @@ from logging_system.professional_logger import get_professional_logger
 
 logger = get_professional_logger()
 
+import hashlib
+
+def calculate_md5(file_path):
+    """Calculate MD5 hash of a file."""
+    if not os.path.exists(file_path):
+        return None
+    hash_md5 = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
 def run_executor():
     parser = argparse.ArgumentParser(description="Run model prediction in a separate process.")
     parser.add_argument("--experiment_id", required=True, help="UUID of the experiment record")
@@ -71,6 +83,17 @@ def run_executor():
         experiment.predictions = results['predictions']
         experiment.analytics_summary = results['analytics_summary']
         experiment.image_count = results['image_count']
+
+        # NEW: Hashing Foundation (Media Identity)
+        # Store {image_name: md5_hash} for 100% stable identity
+        image_metadata = {}
+        for img_path_str in images:
+            img_path = Path(img_path_str)
+            if img_path.exists():
+                md5 = calculate_md5(img_path_str)
+                if md5:
+                    image_metadata[img_path.name] = md5
+        experiment.input_images = image_metadata
         
         # Ensure path uses forward slashes
         rel_output_dir = Path(args.output_folder).relative_to(Path(os.getcwd()))
