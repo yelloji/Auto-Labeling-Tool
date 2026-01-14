@@ -72,6 +72,11 @@ const ImageViewerModal = ({
     const [selectedHint, setSelectedHint] = useState(null);
     const [hintConfirmPosition, setHintConfirmPosition] = useState({ x: 0, y: 0 });
 
+    // Phase 4: Manual box details popup state  
+    const [showManualDetails, setShowManualDetails] = useState(false);
+    const [selectedManualForDetails, setSelectedManualForDetails] = useState(null);
+    const [manualDetailsPosition, setManualDetailsPosition] = useState({ x: 0, y: 0 });
+
     const svgRef = React.useRef(null);
 
     // Individual Detection Selection State (Phase 2.4)
@@ -412,7 +417,18 @@ const ImageViewerModal = ({
         setIsDrawingMode(false);
     };
 
+    // Single click: Show details popup
     const handleManualBoxClick = (e, v) => {
+        if (isDrawingMode) return;
+        e.stopPropagation();
+
+        setSelectedManualForDetails(v);
+        setManualDetailsPosition({ x: e.clientX, y: e.clientY });
+        setShowManualDetails(true);
+    };
+
+    // Double click: Show delete confirmation  
+    const handleManualBoxDoubleClick = (e, v) => {
         if (isDrawingMode) return;
         e.stopPropagation();
 
@@ -1005,9 +1021,10 @@ const ImageViewerModal = ({
                                     <g
                                         key={`manual-${v.id || i}`}
                                         onClick={(e) => handleManualBoxClick(e, v)}
+                                        onDoubleClick={(e) => handleManualBoxDoubleClick(e, v)}
                                         style={{ cursor: isDrawingMode ? 'crosshair' : 'pointer' }}
                                     >
-                                        <title>{`You marked this ${v.class_name} as missing from AI model prediction in this experiment.\n\nClick to delete this mark.`}</title>
+                                        <title>{`You marked this ${v.class_name} as missing from AI model prediction in this experiment.\n\nClick for details. Double-click to delete.`}</title>
                                         <rect
                                             x={v.bbox[0]}
                                             y={v.bbox[1]}
