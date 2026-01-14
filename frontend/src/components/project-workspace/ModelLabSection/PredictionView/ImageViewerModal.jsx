@@ -81,6 +81,7 @@ const ImageViewerModal = ({
     const [hoverTooltip, setHoverTooltip] = useState({ show: false, content: '', x: 0, y: 0, type: 'manual' });
 
     const svgRef = React.useRef(null);
+    const clickTimer = React.useRef(null);
 
     // Individual Detection Selection State (Phase 2.4)
     // We store the INDICES of the detections that are checked.
@@ -423,25 +424,44 @@ const ImageViewerModal = ({
         setIsDrawingMode(false);
     };
 
-    // Single click: Show details popup (Toggle behavior)
+    // Single click: Show details popup (Toggle behavior with debouncing)
     const handleManualBoxClick = (e, v) => {
         if (isDrawingMode) return;
         e.stopPropagation();
 
-        if (showManualDetails && selectedManualForDetails?.id === v.id) {
-            setShowManualDetails(false);
-            setSelectedManualForDetails(null);
-        } else {
-            setSelectedManualForDetails(v);
-            setManualDetailsPosition({ x: e.clientX, y: e.clientY });
-            setShowManualDetails(true);
-        }
+        // If a timer is already running, this is effectively a Double Click 
+        // (the double click handler will clear it)
+        if (clickTimer.current) return;
+
+        const x = e.clientX;
+        const y = e.clientY;
+
+        clickTimer.current = setTimeout(() => {
+            if (showManualDetails && selectedManualForDetails?.id === v.id) {
+                setShowManualDetails(false);
+                setSelectedManualForDetails(null);
+            } else {
+                setSelectedManualForDetails(v);
+                setManualDetailsPosition({ x, y });
+                setShowManualDetails(true);
+            }
+            clickTimer.current = null;
+        }, 300); // 300ms window to detect double click
     };
 
-    // Double click: Show delete confirmation  
+    // Double click: Show delete confirmation (Overrides single click details)
     const handleManualBoxDoubleClick = (e, v) => {
         if (isDrawingMode) return;
         e.stopPropagation();
+
+        // Cancel the pending single click (Details popup)
+        if (clickTimer.current) {
+            clearTimeout(clickTimer.current);
+            clickTimer.current = null;
+        }
+
+        // Explicitly hide details to prevent flicker
+        setShowManualDetails(false);
 
         setSelectedVerifyForDelete(v);
         setDeletePopupPosition({ x: e.clientX, y: e.clientY });
