@@ -131,6 +131,31 @@ const ImageViewerModal = ({
         .filter(v => v.experiment_id !== experiment?.id)
         .filter(hint => !myBoxes.some(myBox => bboxesMatch(hint.bbox, myBox.bbox)));
 
+    // Helper to build tooltip content for a hint box
+    const getHintTooltip = (hint) => {
+        // Find all verifications at this location (from different experiments)
+        const allAtLocation = currentImageVerifications.filter(v =>
+            v.experiment_id !== experiment?.id &&
+            bboxesMatch(v.bbox, hint.bbox)
+        );
+
+        const className = hint.class_name;
+
+        if (allAtLocation.length === 1) {
+            const v = allAtLocation[0];
+            const expName = v.experiment_name || `Experiment ${v.experiment_id?.slice(0, 8)}`;
+            const trainingName = v.training_name || 'Training';
+            return `A ${className} was previously marked here during prediction experiment '${expName}' from training '${trainingName}'.\n\nClick to accept for your current experiment.`;
+        } else {
+            const expList = allAtLocation.map(v => {
+                const expName = v.experiment_name || `Exp ${v.experiment_id?.slice(0, 8)}`;
+                const trainingName = v.training_name || 'Training';
+                return `  • Experiment '${expName}' from training '${trainingName}'`;
+            }).join('\n');
+            return `A ${className} was previously marked in ${allAtLocation.length} prediction experiments:\n${expList}\n\nClick to accept for your current experiment.`;
+        }
+    };
+
     // 1. IMAGE NAVIGATION TRIGGER
     // Only resets zoom and turns on the "Sync Guard" when the actual image changes.
     React.useEffect(() => {
@@ -982,6 +1007,7 @@ const ImageViewerModal = ({
                                         onClick={(e) => handleManualBoxClick(e, v)}
                                         style={{ cursor: isDrawingMode ? 'crosshair' : 'pointer' }}
                                     >
+                                        <title>{`You marked this ${v.class_name} as missing from AI model prediction in this experiment.\n\nClick to delete this mark.`}</title>
                                         <rect
                                             x={v.bbox[0]}
                                             y={v.bbox[1]}
@@ -996,30 +1022,6 @@ const ImageViewerModal = ({
                                                 transition: 'all 0.2s'
                                             }}
                                         />
-                                        {(showLabels) && (
-                                            <g transform={`translate(${v.bbox[0]}, ${v.bbox[1] < 20 ? v.bbox[1] + 20 : v.bbox[1] - 4})`} style={{ pointerEvents: 'none' }}>
-                                                <rect
-                                                    x={0}
-                                                    y={-18}
-                                                    width={v.class_name.length * 9 + 45}
-                                                    height={18}
-                                                    fill="#a335ee"
-                                                    rx={2}
-                                                />
-                                                <text
-                                                    x={5}
-                                                    y={-5}
-                                                    fill="#fff"
-                                                    style={{
-                                                        fontSize: '11px',
-                                                        fontWeight: '900',
-                                                        fontFamily: 'monospace'
-                                                    }}
-                                                >
-                                                    [MANUAL] {v.class_name}
-                                                </text>
-                                            </g>
-                                        )}
                                     </g>
                                 ))}
 
@@ -1030,6 +1032,7 @@ const ImageViewerModal = ({
                                         onClick={(e) => handleHintBoxClick(e, v)}
                                         style={{ cursor: 'pointer' }}
                                     >
+                                        <title>{getHintTooltip(v)}</title>
                                         <rect
                                             x={v.bbox[0]}
                                             y={v.bbox[1]}
@@ -1044,30 +1047,6 @@ const ImageViewerModal = ({
                                                 strokeOpacity: 0.7
                                             }}
                                         />
-                                        {(showLabels) && (
-                                            <g transform={`translate(${v.bbox[0]}, ${v.bbox[1] < 20 ? v.bbox[1] + 20 : v.bbox[1] - 4})`} style={{ pointerEvents: 'none' }}>
-                                                <rect
-                                                    x={0}
-                                                    y={-18}
-                                                    width={v.class_name.length * 9 + 30}
-                                                    height={18}
-                                                    fill="#ff8c00"
-                                                    rx={2}
-                                                />
-                                                <text
-                                                    x={5}
-                                                    y={-5}
-                                                    fill="#fff"
-                                                    style={{
-                                                        fontSize: '11px',
-                                                        fontWeight: '900',
-                                                        fontFamily: 'monospace'
-                                                    }}
-                                                >
-                                                    [HINT] {v.class_name}
-                                                </text>
-                                            </g>
-                                        )}
                                     </g>
                                 ))}
                                 {filteredDets.map((d, i) => {
