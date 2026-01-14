@@ -125,8 +125,12 @@ class DatabaseDebugger:
                 LIMIT 20
             """)
             for row in cursor.fetchall():
+                # Status and is_manual flag
+                is_manual_str = " [MANUAL]" if row['is_manual'] else ""
                 status_icon = "🟢" if row['status'] == 'pass' else "🔴" if row['status'] == 'fail' else "🟡"
-                print(f"\n   {status_icon} [{row['status'].upper()}] - {row['image_name']} (ID: {row['id'][:8]})")
+                if row['status'] == 'missing':
+                    status_icon = "🟣"
+                print(f"\n   {status_icon} [{row['status'].upper()}]{is_manual_str} - {row['image_name']} (ID: {row['id'][:8]})")
                 
                 # Project info with name
                 project_display = f"{row['project_name'] or 'Unknown'} (ID: {row['project_id']})"
@@ -135,6 +139,10 @@ class DatabaseDebugger:
                 print(f"      ├─ Match: {row['class_name']} at [{row['x_min']:.2f}, {row['y_min']:.2f}, {row['x_max']:.2f}, {row['y_max']:.2f}]")
                 print(f"      ├─ Hashes: MD5: {row['image_hash_md5'] or 'N/A'}, Perceptual: {row['image_hash_perceptual'] or 'N/A'}")
                 print(f"      ├─ Experiment: {row['experiment_name'] or 'N/A'} (ID: {row['experiment_id'][:8] if row['experiment_id'] else 'N/A'})")
+                if row['is_manual']:
+                    print(f"      ├─ Source: HUMAN (Manual Box)")
+                else:
+                    print(f"      ├─ Source: AI Predicted")
                 print(f"      ├─ Dataset Source: {row['dataset_source'] or 'N/A'}")
                 print(f"      ├─ Dataset Path: {row['dataset_path'] or 'N/A'}")
                 

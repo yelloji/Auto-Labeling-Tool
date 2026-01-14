@@ -214,6 +214,14 @@ class VerificationRequest(BaseModel):
     notes: Optional[str] = None
     experiment_id: Optional[str] = None
 
+class ManualVerificationRequest(BaseModel):
+    project_id: int
+    image_name: str
+    class_name: str
+    bbox: List[float] # [x1, y1, x2, y2]
+    experiment_id: Optional[str] = None
+    notes: Optional[str] = None
+
 @router.post("/experiments/verify-detection")
 async def verify_detection(payload: VerificationRequest, db: Session = Depends(get_db)):
     """Upsert a human verification for a specific detection area."""
@@ -344,8 +352,96 @@ async def get_project_verifications(project_id: int, image_name: Optional[str] =
         "experiment_id": row.HumanVerification.experiment_id,
         "experiment_name": row.experiment_name,
         "training_name": row.training_name,
+        "is_manual": row.HumanVerification.is_manual,
         "updated_at": row.HumanVerification.updated_at
     } for row in results]
+
+@router.post("/experiments/manual-verification")
+async def save_manual_verification(payload: ManualVerificationRequest, db: Session = Depends(get_db)):
+    """Save a manually drawn box as a 'Missing Defect' verification."""
+    try:
+        x_min, y_min, x_max, y_max = payload.bbox
+        
+        # 1. Resolve Image Hash (MD5)
+        image_md5 = None
+        if payload.experiment_id:
+            exp = db.query(ModelExperiment).get(payload.experiment_id)
+            if exp:
+                if exp.input_images:
+                    try:
+                        img_metadata = json.loads(exp.input_images) if isinstance(exp.input_images, str) else exp.input_images
+                        if isinstance(img_metadata, dict):
+                            image_md5 = img_metadata.get(payload.image_name)
+                    except: pass
+                
+                if not image_md5 and exp.output_folder:
+                    input_path = Path(exp.output_folder).parent / "input_images" / payload.image_name
+                    if input_path.exists():
+                        image_md5 = get_image_md5(input_path)
+                    elif exp.dataset_path:
+                        ds_path = Path(exp.dataset_path)
+                        matches = list(ds_path.rglob(payload.image_name))
+                        if matches:
+                            image_md5 = get_image_md5(matches[0])
+
+        # 2. Manual boxes are status='missing' (AI missed it) + is_manual=True
+        new_v = HumanVerification(
+            project_id=payload.project_id,
+            image_name=payload.image_name,
+            image_hash_md5=image_md5,
+            class_name=payload.class_name,
+            x_min=x_min,
+            y_min=y_min,
+            x_max=x_max,
+            y_max=y_max,
+            status='missing', 
+            is_manual=True,
+            notes=payload.notes,
+            experiment_id=payload.experiment_id
+        )
+        db.add(new_v)
+        db.commit()
+        return {"status": "success", "id": new_v.id, "image_hash": image_md5}
+    except Exception as e:
+        logger.error("errors.system", f"Failed to save manual verification: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/projects/{project_id}/manual-verifications")
+async def get_manual_verifications(project_id: int, image_name: Optional[str] = None, db: Session = Depends(get_db)):
+    """Retrieve only manually drawn verifications."""
+    query = db.query(HumanVerification).filter(
+        HumanVerification.project_id == project_id,
+        HumanVerification.is_manual == True
+    )
+    if image_name:
+        query = query.filter(HumanVerification.image_name == image_name)
+    
+    results = query.all()
+    return [{
+        "id": v.id,
+        "image_name": v.image_name,
+        "class_name": v.class_name,
+        "bbox": [v.x_min, v.y_min, v.x_max, v.y_max],
+        "status": v.status,
+        "notes": v.notes,
+        "image_hash_md5": v.image_hash_md5,
+        "experiment_id": v.experiment_id,
+        "updated_at": v.updated_at
+    } for v in results]
+
+@router.delete("/experiments/manual-verification/{verification_id}")
+async def delete_manual_verification(verification_id: str, db: Session = Depends(get_db)):
+    """Delete a manual verification."""
+    try:
+        v = db.query(HumanVerification).get(verification_id)
+        if not v:
+            raise HTTPException(status_code=404, detail="Manual verification not found")
+        db.delete(v)
+        db.commit()
+        return {"status": "success", "action": "deleted"}
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Training session upsert/get (identity fields)

@@ -700,6 +700,9 @@ class HumanVerification(Base):
     status = Column(String(50), default="unverified") # 'pass', 'fail', 'unsure'
     notes = Column(Text, nullable=True)
     
+    # NEW: Missing Defect Tracking
+    is_manual = Column(Boolean, default=False) # True if the box was drawn manually by a human
+    
     # Metadata
     experiment_id = Column(String, nullable=True) # Which experiment was active when marked
     created_at = Column(DateTime, default=datetime.utcnow)
