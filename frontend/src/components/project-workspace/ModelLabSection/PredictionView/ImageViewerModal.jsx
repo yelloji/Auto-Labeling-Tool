@@ -341,6 +341,9 @@ const ImageViewerModal = ({
             // Don't start new drawing if popup is showing - user needs to finish current action first
             if (showClassPopup) return;
 
+            // Close details popup when starting a new drawing
+            setShowManualDetails(false);
+
             e.stopPropagation();
             const coords = getPixelCoords(e);
             if (coords) {
@@ -417,14 +420,19 @@ const ImageViewerModal = ({
         setIsDrawingMode(false);
     };
 
-    // Single click: Show details popup
+    // Single click: Show details popup (Toggle behavior)
     const handleManualBoxClick = (e, v) => {
         if (isDrawingMode) return;
         e.stopPropagation();
 
-        setSelectedManualForDetails(v);
-        setManualDetailsPosition({ x: e.clientX, y: e.clientY });
-        setShowManualDetails(true);
+        if (showManualDetails && selectedManualForDetails?.id === v.id) {
+            setShowManualDetails(false);
+            setSelectedManualForDetails(null);
+        } else {
+            setSelectedManualForDetails(v);
+            setManualDetailsPosition({ x: e.clientX, y: e.clientY });
+            setShowManualDetails(true);
+        }
     };
 
     // Double click: Show delete confirmation  
@@ -677,7 +685,11 @@ const ImageViewerModal = ({
                     <Tooltip title="Image Viewer Guide">
                         <Button
                             type="text"
-                            onClick={(e) => { e.stopPropagation(); setShowHelp(!showHelp); }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (!showHelp) setShowManualDetails(false);
+                                setShowHelp(!showHelp);
+                            }}
                             style={{
                                 color: showHelp ? '#1890ff' : '#fff',
                                 background: showHelp ? 'rgba(24, 144, 255, 0.15)' : 'rgba(255,255,255,0.05)',
@@ -951,9 +963,10 @@ const ImageViewerModal = ({
                             }
                         }}
                         onClick={(e) => {
-                            // Single click: only reset zoom if zoomed in
-                            if (e.target.tagName !== 'rect' && e.target.tagName !== 'g' && e.target.tagName !== 'text' && scale > 1) {
-                                handleResetZoom();
+                            // Single click: reset zoom and close details
+                            if (e.target.tagName !== 'rect' && e.target.tagName !== 'g' && e.target.tagName !== 'text') {
+                                if (scale > 1) handleResetZoom();
+                                setShowManualDetails(false);
                                 setFocusedIndex(null);
                             }
                         }}
@@ -1593,6 +1606,104 @@ const ImageViewerModal = ({
                         >
                             Accept
                         </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* Phase 4: Manual Box Details Popup (Premium Frosted Glass) */}
+            {showManualDetails && selectedManualForDetails && (
+                <div style={{
+                    position: 'fixed',
+                    top: manualDetailsPosition.y,
+                    left: manualDetailsPosition.x,
+                    transform: 'translate(-50%, -105%)',
+                    zIndex: 2000,
+                    background: 'rgba(28, 28, 30, 0.85)',
+                    backdropFilter: 'blur(20px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    border: '1px solid rgba(163, 53, 238, 0.3)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    animation: 'popupAppear 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28)',
+                    minWidth: '240px',
+                    maxWidth: '320px',
+                    color: '#fff'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ fontSize: '1rem', fontWeight: 600, color: '#a335ee' }}>
+                            Correction History
+                        </div>
+                        <Button
+                            type="text"
+                            size="small"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowManualDetails(false);
+                            }}
+                            style={{ color: '#999', padding: '0 4px', height: '20px' }}
+                        >
+                            ✕
+                        </Button>
+                    </div>
+
+                    <div style={{ fontSize: '0.9rem', lineHeight: '1.4', opacity: 0.9 }}>
+                        You marked this <span style={{ fontWeight: 600, color: '#fff' }}>{selectedManualForDetails.class_name}</span> as missing from AI model prediction here.
+                    </div>
+
+                    {(() => {
+                        const others = currentImageVerifications.filter(v =>
+                            v.experiment_id !== experiment?.id &&
+                            bboxesMatch(v.bbox, selectedManualForDetails.bbox)
+                        );
+
+                        if (others.length > 0) {
+                            return (
+                                <div style={{
+                                    borderTop: '1px solid rgba(255,255,255,0.1)',
+                                    paddingTop: '10px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '6px'
+                                }}>
+                                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#ffcc00', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span>⚠️</span> AI also missed this in {others.length} other experiments:
+                                    </div>
+                                    <div style={{
+                                        fontSize: '0.8rem',
+                                        color: '#bbb',
+                                        maxHeight: '100px',
+                                        overflowY: 'auto',
+                                        paddingRight: '4px'
+                                    }}>
+                                        {others.map((v, idx) => (
+                                            <div key={idx} style={{ marginBottom: '6px' }}>
+                                                • Prediction experiment '<span style={{ color: '#eee' }}>{v.experiment_name || v.experiment_id?.slice(0, 8)}</span>'
+                                                <br />&nbsp;&nbsp;from training '<span style={{ color: '#eee' }}>{v.training_name || 'unknown'}</span>'
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div style={{ fontSize: '0.8rem', fontStyle: 'italic', color: '#888', marginTop: '4px' }}>
+                                        This suggests a persistent blind spot in the AI model.
+                                    </div>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()}
+
+                    <div style={{
+                        fontSize: '0.75rem',
+                        color: '#666',
+                        textAlign: 'center',
+                        marginTop: '4px',
+                        borderTop: '1px solid rgba(255,255,255,0.05)',
+                        paddingTop: '8px'
+                    }}>
+                        Double-click the box if you want to delete this mark.
                     </div>
                 </div>
             )}
