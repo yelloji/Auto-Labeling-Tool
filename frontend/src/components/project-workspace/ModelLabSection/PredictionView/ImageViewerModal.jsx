@@ -279,6 +279,9 @@ const ImageViewerModal = ({
 
     const handleMouseDown = (e) => {
         if (isDrawingMode) {
+            // Don't start new drawing if popup is showing - user needs to finish current action first
+            if (showClassPopup) return;
+
             e.stopPropagation();
             const coords = getPixelCoords(e);
             if (coords) {
@@ -837,8 +840,18 @@ const ImageViewerModal = ({
                     */}
                     <div
                         onMouseDown={handleMouseDown}
+                        onDoubleClick={(e) => {
+                            // Double-click outside = Cancel: dismiss box and popup (but keep drawing mode active)
+                            if (e.target.tagName !== 'rect' && e.target.tagName !== 'g' && e.target.tagName !== 'text') {
+                                if (showClassPopup || tempBox) {
+                                    setShowClassPopup(false);
+                                    setTempBox(null);
+                                    setSelectedBoxForClass(null);
+                                }
+                            }
+                        }}
                         onClick={(e) => {
-                            // If clicked exactly on the background (not a box), reset zoom
+                            // Single click: only reset zoom if zoomed in
                             if (e.target.tagName !== 'rect' && e.target.tagName !== 'g' && e.target.tagName !== 'text' && scale > 1) {
                                 handleResetZoom();
                                 setFocusedIndex(null);
