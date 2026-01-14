@@ -10,8 +10,11 @@ import {
     ZoomOutOutlined,
     ReloadOutlined,
     CheckCircleOutlined,
-    CloseCircleOutlined
+    CloseCircleOutlined,
+    DeleteOutlined
 } from '@ant-design/icons';
+
+import ManualClassPopup from './ManualClassPopup';
 
 const { Text } = Typography;
 
@@ -29,7 +32,9 @@ const ImageViewerModal = ({
     onNavigate,
     filters,
     verifications = [], // New: Project-level human reviews
-    onVerify // New: Function to trigger save to DB
+    onVerify, // New: Function to trigger save
+    onDeleteVerification, // New: Function to trigger deletion
+    projectLabels = [] // New: Project-level labels for classification
 }) => {
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [scale, setScale] = useState(1);
@@ -49,10 +54,18 @@ const ImageViewerModal = ({
     const [showContours, setShowContours] = useState(true);
     const [showLabels, setShowLabels] = useState(true);
 
-    // Drawing Mode States (Phase 2.1)
+    // Drawing Mode States (Phase 3)
     const [isDrawingMode, setIsDrawingMode] = useState(false);
     const [isDrawing, setIsDrawing] = useState(false);
     const [tempBox, setTempBox] = useState(null); // { x, y, width, height, startX, startY }
+    const [showClassPopup, setShowClassPopup] = useState(false);
+    const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
+    const [selectedBoxForClass, setSelectedBoxForClass] = useState(null);
+
+    // Phase 3.5: Deletion state
+    const [showDeletePopup, setShowDeletePopup] = useState(false);
+    const [selectedVerifyForDelete, setSelectedVerifyForDelete] = useState(null);
+    const [deletePopupPosition, setDeletePopupPosition] = useState({ x: 0, y: 0 });
     const svgRef = React.useRef(null);
 
     // Individual Detection Selection State (Phase 2.4)
@@ -304,18 +317,59 @@ const ImageViewerModal = ({
         });
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e) => {
         if (isDrawing) {
             setIsDrawing(false);
             if (tempBox && tempBox.width > 2 && tempBox.height > 2) {
-                // Phase 3: Classification popup will trigger here
-                console.log("Phase 2 Complete: Manual Box Area Selected", tempBox);
+                // Phase 3: Classification popup
+                setSelectedBoxForClass({
+                    bbox: [tempBox.x, tempBox.y, tempBox.x + tempBox.width, tempBox.y + tempBox.height]
+                });
+                setPopupPosition({ x: e.clientX, y: e.clientY });
+                setShowClassPopup(true);
             } else {
                 setTempBox(null);
             }
             return;
         }
         setIsDragging(false);
+    };
+
+    const handleClassSelect = (className) => {
+        if (!selectedBoxForClass) return;
+
+        const fileName = currentImage.split('/').pop();
+        onVerify({
+            image_name: fileName,
+            class_name: className,
+            bbox: selectedBoxForClass.bbox,
+            status: 'missing',
+            is_manual: true,
+            experiment_id: experiment.id
+        });
+
+        // Reset state
+        setShowClassPopup(false);
+        setSelectedBoxForClass(null);
+        setTempBox(null);
+        setIsDrawingMode(false);
+    };
+
+    const handleManualBoxClick = (e, v) => {
+        if (isDrawingMode) return;
+        e.stopPropagation();
+
+        setSelectedVerifyForDelete(v);
+        setDeletePopupPosition({ x: e.clientX, y: e.clientY });
+        setShowDeletePopup(true);
+    };
+
+    const confirmDelete = () => {
+        if (selectedVerifyForDelete) {
+            onDeleteVerification(selectedVerifyForDelete.id);
+            setShowDeletePopup(false);
+            setSelectedVerifyForDelete(null);
+        }
     };
 
 
@@ -830,11 +884,11 @@ const ImageViewerModal = ({
                                     left: 0,
                                     width: '100%',
                                     height: '100%',
-                                    pointerEvents: isDrawingMode ? 'all' : 'none',
+                                    pointerEvents: (isDrawingMode || selectedVerifyForDelete) ? 'all' : 'all', // Always allow events but control target
                                     zIndex: 10
                                 }}
                             >
-                                {/* Phase 2: Drawing Temporary Box */}
+                                {/* Phase 2/3: Drawing Temporary Box */}
                                 {tempBox && (
                                     <rect
                                         x={tempBox.x}
@@ -842,12 +896,60 @@ const ImageViewerModal = ({
                                         width={tempBox.width}
                                         height={tempBox.height}
                                         fill="rgba(24, 144, 255, 0.1)"
-                                        stroke="#1890ff"
+                                        stroke={showClassPopup ? "#a335ee" : "#1890ff"}
                                         strokeWidth={3 / scale}
-                                        strokeDasharray={`${8 / scale},${4 / scale}`}
+                                        strokeDasharray={showClassPopup ? "none" : `${8 / scale},${4 / scale}`}
                                         style={{ pointerEvents: 'none' }}
                                     />
                                 )}
+
+                                {/* Phase 3: Manual Verifications (Missing Defects) */}
+                                {verifications.filter(v => v.status === 'missing' || v.is_manual).map((v, i) => (
+                                    <g
+                                        key={`manual-${v.id || i}`}
+                                        onClick={(e) => handleManualBoxClick(e, v)}
+                                        style={{ cursor: isDrawingMode ? 'crosshair' : 'pointer' }}
+                                    >
+                                        <rect
+                                            x={v.bbox[0]}
+                                            y={v.bbox[1]}
+                                            width={v.bbox[2] - v.bbox[0]}
+                                            height={v.bbox[3] - v.bbox[1]}
+                                            fill={selectedVerifyForDelete?.id === v.id ? "rgba(255, 77, 79, 0.2)" : "rgba(163, 53, 238, 0.1)"}
+                                            stroke={selectedVerifyForDelete?.id === v.id ? "#ff4d4f" : "#a335ee"}
+                                            strokeWidth={(selectedVerifyForDelete?.id === v.id ? 4 : 3) / scale}
+                                            style={{
+                                                pointerEvents: 'all', // Ensure individual boxes can be clicked
+                                                strokeOpacity: 0.8,
+                                                transition: 'all 0.2s'
+                                            }}
+                                        />
+                                        {(showLabels) && (
+                                            <g transform={`translate(${v.bbox[0]}, ${v.bbox[1] < 20 ? v.bbox[1] + 20 : v.bbox[1] - 4})`} style={{ pointerEvents: 'none' }}>
+                                                <rect
+                                                    x={0}
+                                                    y={-18}
+                                                    width={v.class_name.length * 9 + 45}
+                                                    height={18}
+                                                    fill="#a335ee"
+                                                    rx={2}
+                                                />
+                                                <text
+                                                    x={5}
+                                                    y={-5}
+                                                    fill="#fff"
+                                                    style={{
+                                                        fontSize: '11px',
+                                                        fontWeight: '900',
+                                                        fontFamily: 'monospace'
+                                                    }}
+                                                >
+                                                    [MANUAL] {v.class_name}
+                                                </text>
+                                            </g>
+                                        )}
+                                    </g>
+                                ))}
                                 {filteredDets.map((d, i) => {
                                     if (!selectedIndices.includes(i)) return null;
 
@@ -1264,6 +1366,72 @@ const ImageViewerModal = ({
                 </div>
             </div>
 
+            <ManualClassPopup
+                visible={showClassPopup}
+                labels={projectLabels}
+                position={popupPosition}
+                onSelect={handleClassSelect}
+                onCancel={() => {
+                    setShowClassPopup(false);
+                    setTempBox(null);
+                }}
+            />
+
+            {/* Phase 3.5: Deletion Confirmation Popup */}
+            {showDeletePopup && (
+                <div style={{
+                    position: 'fixed',
+                    top: deletePopupPosition.y,
+                    left: deletePopupPosition.x,
+                    transform: 'translate(-50%, -120%)',
+                    zIndex: 2000,
+                    background: 'rgba(28, 28, 30, 0.85)',
+                    backdropFilter: 'blur(16px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+                    borderRadius: '12px',
+                    padding: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    animation: 'popupAppear 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28)',
+                    minWidth: '160px'
+                }}>
+                    <style>{`
+                        @keyframes popupAppear {
+                            from { opacity: 0; transform: translate(-50%, -100%) scale(0.9); }
+                            to { opacity: 1; transform: translate(-50%, -120%) scale(1); }
+                        }
+                    `}</style>
+                    <div style={{ padding: '4px 8px', color: '#fff', fontSize: '0.9rem', fontWeight: 500, textAlign: 'center' }}>
+                        Delete this box?
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button
+                            size="small"
+                            type="text"
+                            onClick={() => {
+                                setShowDeletePopup(false);
+                                setSelectedVerifyForDelete(null);
+                            }}
+                            style={{ flex: 1, color: '#999' }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            size="small"
+                            type="primary"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={confirmDelete}
+                            style={{ flex: 1 }}
+                        >
+                            Delete
+                        </Button>
+                    </div>
+                </div>
+            )}
         </Modal>
     );
 };

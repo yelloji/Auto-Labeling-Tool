@@ -82,6 +82,7 @@ const PredictionView = ({ training }) => {
     // Advanced Features Modals
     const [compareVisible, setCompareVisible] = useState(false);
     const [analyticsVisible, setAnalyticsVisible] = useState(false);
+    const [projectLabels, setProjectLabels] = useState([]); // All used labels in the project
 
     // Filter State
     const [filters, setFilters] = useState({
@@ -235,10 +236,24 @@ const PredictionView = ({ training }) => {
         }
     }, [training?.project_id, training?.projectId]);
 
+    const fetchProjectLabels = useCallback(async () => {
+        const pId = training?.project_id || training?.projectId;
+        if (!pId) return;
+        try {
+            const data = await projectsAPI.getProjectLabels(pId);
+            setProjectLabels(data);
+        } catch (error) {
+            console.error("Failed to fetch project labels", error);
+        }
+    }, [training?.project_id, training?.projectId]);
+
     const handleVerify = async (payload) => {
         const pId = training?.project_id || training?.projectId;
         if (!pId) return;
         try {
+            // If it's a manual missing defect, we can use the specific manual API
+            // but the updated verifyDetection also handles it now.
+            // Let's stick to verifyDetection for uniformity if it works.
             await projectsAPI.verifyDetection({
                 ...payload,
                 project_id: pId
@@ -247,7 +262,20 @@ const PredictionView = ({ training }) => {
             fetchVerifications();
             message.success(`Status updated to ${payload.status}`);
         } catch (error) {
-            handleAPIError(error, 'Failed to update verification');
+            console.error("Failed to update status", error);
+            message.error("Failed to update status");
+        }
+    };
+
+    const handleDeleteVerification = async (verificationId) => {
+        try {
+            await projectsAPI.deleteManualVerification(verificationId);
+            // Instant UI feedback: refresh the list
+            fetchVerifications();
+            message.success("Manual box deleted successfully");
+        } catch (error) {
+            console.error("Failed to delete manual verification", error);
+            message.error("Failed to delete box");
         }
     };
 
@@ -311,14 +339,15 @@ const PredictionView = ({ training }) => {
         } finally {
             if (!isPolling) setLoading(false);
         }
-    }, [training?.id, selectedExp, training?.taskType]);
+    }, [training?.id, selectedExp, training?.taskType, getDefaultSplit, getDetectedImgsz]);
 
-    // Initial load for verifications
+    // Initial load for verifications & labels
     useEffect(() => {
         if (training?.project_id || training?.projectId) {
             fetchVerifications();
+            fetchProjectLabels();
         }
-    }, [training?.project_id, training?.projectId, fetchVerifications]);
+    }, [training?.project_id, training?.projectId, fetchVerifications, fetchProjectLabels]);
 
     useEffect(() => {
         if (pollingActive) {
@@ -1387,6 +1416,8 @@ const PredictionView = ({ training }) => {
                 filters={filters}
                 verifications={verifications}
                 onVerify={handleVerify}
+                onDeleteVerification={handleDeleteVerification}
+                projectLabels={projectLabels}
             />
 
             < AnalyticsModal

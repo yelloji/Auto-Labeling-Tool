@@ -213,6 +213,7 @@ class VerificationRequest(BaseModel):
     status: str
     notes: Optional[str] = None
     experiment_id: Optional[str] = None
+    is_manual: bool = False
 
 class ManualVerificationRequest(BaseModel):
     project_id: int
@@ -293,6 +294,9 @@ async def verify_detection(payload: VerificationRequest, db: Session = Depends(g
             existing.status = payload.status
             existing.notes = payload.notes
             existing.experiment_id = payload.experiment_id
+            # If specifically provided as manual, or if it's a 'missing' defect, set is_manual
+            if payload.is_manual or payload.status == 'missing':
+                existing.is_manual = True
             existing.updated_at = datetime.utcnow()
             # Backfill hash if missing
             if image_md5 and not existing.image_hash_md5:
@@ -309,7 +313,8 @@ async def verify_detection(payload: VerificationRequest, db: Session = Depends(g
                 y_max=y_max,
                 status=payload.status,
                 notes=payload.notes,
-                experiment_id=payload.experiment_id
+                experiment_id=payload.experiment_id,
+                is_manual=payload.is_manual or (payload.status == 'missing')
             )
             db.add(new_v)
             

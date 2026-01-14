@@ -577,6 +577,12 @@ export const projectsAPI = {
     return response.data;
   },
 
+  // Delete manual verification
+  deleteManualVerification: async (verificationId) => {
+    const response = await api.delete(`/api/v1/experiments/manual-verification/${verificationId}`);
+    return response.data;
+  },
+
   // --- Prediction API ---
 
   // Get active queued prediction draft for a model
