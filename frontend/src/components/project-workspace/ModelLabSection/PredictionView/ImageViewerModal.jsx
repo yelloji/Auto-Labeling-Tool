@@ -1024,7 +1024,7 @@ const ImageViewerModal = ({
                                         onDoubleClick={(e) => handleManualBoxDoubleClick(e, v)}
                                         style={{ cursor: isDrawingMode ? 'crosshair' : 'pointer' }}
                                     >
-                                        <title>{`You marked this ${v.class_name} as missing from AI model prediction in this experiment.\n\nClick for details. Double-click to delete.`}</title>
+                                        <title>{`You marked this ${v.class_name} as missing from AI model prediction in this experiment.\n\nSingle-click for more details. Double-click to delete this mark.`}</title>
                                         <rect
                                             x={v.bbox[0]}
                                             y={v.bbox[1]}
