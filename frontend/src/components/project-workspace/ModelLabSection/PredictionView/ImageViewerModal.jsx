@@ -357,7 +357,6 @@ const ImageViewerModal = ({
             return;
         }
 
-        if (scale <= 1) return;
         setIsDragging(true);
         setStartPos({ x: e.clientX - offset.x, y: e.clientY - offset.y });
     };
@@ -830,7 +829,7 @@ const ImageViewerModal = ({
                 position: 'relative',
                 background: '#000',
                 overflow: 'hidden',
-                cursor: isDrawingMode ? 'crosshair' : (isDragging ? 'grabbing' : (scale > 1 ? 'grab' : 'default')),
+                cursor: isDrawingMode ? 'crosshair' : (scale > 1 ? 'zoom-out' : 'default'),
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
@@ -839,6 +838,9 @@ const ImageViewerModal = ({
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                onClick={() => {
+                    if (scale > 1 && !isDragging) handleResetZoom();
+                }}
             >
                 {/* Main Image Layer */}
                 {/* Navigation Buttons */}
@@ -1055,7 +1057,7 @@ const ImageViewerModal = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: isDrawingMode ? 'crosshair' : (scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default')
+                    cursor: isDrawingMode ? 'crosshair' : (scale > 1 ? 'zoom-out' : 'default')
                 }}>
                     {/* 
                         ROBUST SHRINK-WRAP WRAPPER with ZOOM & PANNING:
@@ -1073,9 +1075,9 @@ const ImageViewerModal = ({
                             }
                         }}
                         onClick={(e) => {
-                            // Single click: reset zoom and close details
+                            // Image area: Only close popups/details, do NOT reset zoom
+                            e.stopPropagation(); // Prevent background reset
                             if (e.target.tagName !== 'rect' && e.target.tagName !== 'g' && e.target.tagName !== 'text') {
-                                if (scale > 1) handleResetZoom();
                                 setShowManualDetails(false);
                                 setFocusedIndex(null);
                             }
@@ -1089,7 +1091,7 @@ const ImageViewerModal = ({
                             transformOrigin: 'center center',
                             transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                             userSelect: 'none',
-                            cursor: isDrawingMode ? 'crosshair' : (scale > 1 ? 'zoom-out' : 'default')
+                            cursor: isDrawingMode ? 'crosshair' : (isDragging ? 'grabbing' : 'grab')
                         }}
                     >
                         <img
