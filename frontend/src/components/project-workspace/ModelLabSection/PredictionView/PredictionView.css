@@ -694,3 +694,13 @@
         width: 15rem;
     }
 }
+/* Custom Premium Animations */
+@keyframes tooltipFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes popupAppear {
+    from { opacity: 0; transform: translate(-50%, -95%) scale(0.95); }
+    to { opacity: 1; transform: translate(-50%, -105%) scale(1); }
+}
