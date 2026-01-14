@@ -830,7 +830,7 @@ const ImageViewerModal = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+                    cursor: isDrawingMode ? 'crosshair' : (scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default')
                 }}>
                     {/* 
                         ROBUST SHRINK-WRAP WRAPPER with ZOOM & PANNING:
@@ -853,7 +853,7 @@ const ImageViewerModal = ({
                             transformOrigin: 'center center',
                             transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                             userSelect: 'none',
-                            cursor: scale > 1 ? 'zoom-out' : 'default'
+                            cursor: isDrawingMode ? 'crosshair' : (scale > 1 ? 'zoom-out' : 'default')
                         }}
                     >
                         <img
