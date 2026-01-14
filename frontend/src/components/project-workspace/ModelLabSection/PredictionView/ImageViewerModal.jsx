@@ -861,7 +861,7 @@ const ImageViewerModal = ({
                             borderTop: '2px solid rgba(255,255,255,0.8)', // Brilliant refractive rim
                             borderLeft: '1.5px solid rgba(255,255,255,0.5)', // Sharp side edge
                             borderRadius: '20px',
-                            padding: '12px 20px', // Shorter padding
+                            padding: '10px 18px', // Shorter padding
                             zIndex: 1000,
                             boxShadow: `
                                 0 30px 80px -20px rgba(0,0,0,0.5), 
@@ -910,7 +910,7 @@ const ImageViewerModal = ({
                                 }}>
                                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '50%', background: 'linear-gradient(to bottom, rgba(255,255,255,0.4), transparent)' }} />
                                 </div>
-                                <Text style={{ color: '#fff', fontSize: '1rem', fontWeight: 900, letterSpacing: '1.2px', textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>INTELLIGENCE HUD</Text>
+                                <Text style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 900, letterSpacing: '1px', textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>INTELLIGENCE HUD</Text>
                             </div>
                             <CloseOutlined
                                 onClick={() => setShowHelp(false)}
@@ -919,32 +919,28 @@ const ImageViewerModal = ({
                         </div>
 
                         {/* NEW: PRIMARY ACTION - ADD MISSING DEFECT */}
-                        <div style={{ margin: '4px 0 8px 0' }}>
+                        <div style={{ margin: '2px 0 6px 0' }}>
                             <Button
                                 block
-                                icon={<span>➕</span>}
+                                icon={<span style={{ fontSize: '12px' }}>➕</span>}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setIsDrawingMode(!isDrawingMode);
-                                    if (!isDrawingMode) {
-                                        // Optional: Inform user
-                                        console.log("Entering DRAWING MODE...");
-                                    }
                                 }}
                                 style={{
-                                    height: '38px',
-                                    background: isDrawingMode ? '#ff4d4f' : 'rgba(24, 144, 255, 0.2)',
-                                    border: `1px solid ${isDrawingMode ? '#ff4d4f' : '#1890ff'}`,
+                                    height: '30px',
+                                    background: isDrawingMode ? 'linear-gradient(135deg, #ff4d4f 0%, #cf1322 100%)' : 'rgba(24, 144, 255, 0.15)',
+                                    border: `1px solid ${isDrawingMode ? 'rgba(255,255,255,0.2)' : 'rgba(24, 144, 255, 0.3)'}`,
                                     color: '#fff',
-                                    fontWeight: 800,
-                                    fontSize: '0.85rem',
-                                    borderRadius: '10px',
-                                    boxShadow: isDrawingMode ? '0 0 20px rgba(255,77,79,0.4)' : '0 0 20px rgba(24,144,255,0.2)',
+                                    fontWeight: 700,
+                                    fontSize: '0.75rem',
+                                    borderRadius: '8px',
+                                    boxShadow: isDrawingMode ? '0 4px 12px rgba(255,77,79,0.3)' : 'none',
                                     transition: 'all 0.3s cubic-bezier(0.19, 1, 0.22, 1)',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    gap: '10px'
+                                    gap: '8px'
                                 }}
                             >
                                 {isDrawingMode ? 'CANCEL DRAWING' : 'ADD MISSING DEFECT'}
@@ -968,45 +964,67 @@ const ImageViewerModal = ({
                         </div>
 
                         {/* Section 1: Visual Intelligence */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <Text style={{ color: '#1890ff', fontSize: '0.62rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1.2px' }}>Visual Intelligence</Text>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                <Text style={{ color: '#fff', fontSize: '0.75rem', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>• <strong>Box Colors:</strong> <span style={{ color: '#52c41a', fontWeight: 800 }}>Safe</span> | <span style={{ color: '#faad14', fontWeight: 800 }}>Review</span> | <span style={{ color: '#ff4d4f', fontWeight: 800 }}>Risk</span></Text>
-                                <Text style={{ color: '#fff', fontSize: '0.75rem' }}>• <strong>View Toggles:</strong> Use <strong>Aa Labels</strong>, <strong>Boxes</strong>, and <strong>Contours</strong> to filter details.</Text>
-                                <Text style={{ color: '#fff', fontSize: '0.75rem' }}>• <strong>Download:</strong> Save this image with its results.</Text>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <Text style={{ color: '#1890ff', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px' }}>Visual Intelligence</Text>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                                <Text style={{ color: '#fff', fontSize: '0.7rem', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>• Box Colors: <span style={{ color: '#52c41a', fontWeight: 800 }}>Safe</span> | <span style={{ color: '#faad14', fontWeight: 800 }}>Review</span> | <span style={{ color: '#ff4d4f', fontWeight: 800 }}>Risk</span></Text>
+                                <Text style={{ color: '#fff', fontSize: '0.7rem' }}>• Toggles: Use <strong>Aa</strong>, <strong>Boxes</strong>, <strong>Contours</strong>.</Text>
+                                <Text style={{ color: '#fff', fontSize: '0.7rem' }}>• Download: Save this image with results.</Text>
                             </div>
                         </div>
 
                         {/* Section 2: Precision Verification */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <Text style={{ color: '#1890ff', fontSize: '0.62rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1.2px' }}>Precision Verification</Text>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <div style={{ width: 12, height: 12, border: '1px solid rgba(255,255,255,0.5)', borderRadius: '3px', background: '#52c41a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <div style={{ width: 6, height: 2, background: '#fff' }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <Text style={{ color: '#1890ff', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px' }}>Precision Verification</Text>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+
+                                {/* 1. The 5 Tools (Operational Area) */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <div style={{ width: 12, height: 12, border: '1px solid rgba(255,255,255,0.5)', borderRadius: '3px', background: '#52c41a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <div style={{ width: 6, height: 2, background: '#fff' }} />
+                                            </div>
+                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>Checkbox:</strong> Hide/Show box.</Text>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <Text style={{ color: '#1890ff', fontSize: '0.7rem', fontWeight: 900 }}>Class Name</Text>
+                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}>Click to Zoom.</Text>
+                                        </div>
                                     </div>
-                                    <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>Checkbox:</strong> Hide/Show box.</Text>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Text style={{ color: '#1890ff', fontSize: '0.72rem', fontWeight: 900 }}>Class Name (e.g. defect)</Text>
-                                    <Text style={{ color: '#fff', fontSize: '0.72rem' }}>Click to Zoom.</Text>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <div style={{ fontSize: '8px', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', padding: '1px 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(255,255,255,0.1)' }}>UNVERIFIED</div>
-                                    <Text style={{ color: '#fff', fontSize: '0.72rem' }}>Reset decision.</Text>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <div style={{ fontSize: '9px', color: '#faad14', border: '1px solid rgba(250,173,20,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(250,173,20,0.1)' }}>HINT</div>
-                                    <Text style={{ color: '#fff', fontSize: '0.72rem' }}>Story History.</Text>
-                                </div>
-                                <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                                    <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
-                                        <div style={{ fontSize: '8px', color: '#1890ff', border: '1px solid rgba(24,144,255,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(24,144,255,0.1)' }}>PASS</div>
-                                        <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>AI is Correct.</strong> Save as a baseline to compare next experiments.</Text>
+
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{ fontSize: '8px', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', padding: '1px 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(255,255,255,0.1)' }}>UNVERIFIED</div>
+                                        <Text style={{ color: '#fff', fontSize: '0.68rem' }}>Reset decision.</Text>
                                     </div>
-                                    <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
-                                        <div style={{ fontSize: '8px', color: '#ff4d4f', border: '1px solid rgba(255,77,79,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(255,77,79,0.1)' }}>FAIL</div>
-                                        <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>False Positive.</strong> Track error to see if future models improve.</Text>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
+                                            <div style={{ fontSize: '8px', color: '#1890ff', border: '1px solid rgba(24,144,255,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(24,144,255,0.1)' }}>PASS</div>
+                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>AI is Correct.</strong> Save as a baseline to compare next experiments.</Text>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
+                                            <div style={{ fontSize: '8px', color: '#ff4d4f', border: '1px solid rgba(255,77,79,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(255,77,79,0.1)' }}>FAIL</div>
+                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>False Positive.</strong> Track error to see if future models improve.</Text>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 2. The Story Box (Documentation Area) */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <div style={{ width: 10, height: 10, background: 'rgba(163, 53, 238, 0.2)', border: '1px solid #a335ee', borderRadius: '2px' }} />
+                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>Purple:</strong> Manual Marks.</Text>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <div style={{ width: 10, height: 10, background: 'transparent', border: '1px dashed #ff8c00', borderRadius: '2px' }} />
+                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>Orange:</strong> History Hints.</Text>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                                        <div style={{ fontSize: '9px', color: '#faad14', border: '1px solid rgba(250,173,20,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(250,173,20,0.1)' }}>STORY</div>
+                                        <Text style={{ color: '#fff', fontSize: '0.68rem', fontStyle: 'italic' }}><strong>Story History:</strong> Hover any box for its full evolution details.</Text>
                                     </div>
                                 </div>
                             </div>
@@ -1016,11 +1034,12 @@ const ImageViewerModal = ({
                         </div>
 
                         {/* Section 3: Navigation */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <Text style={{ color: '#1890ff', fontSize: '0.62rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1.2px' }}>Dynamic Navigation</Text>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                <Text style={{ color: '#fff', fontSize: '0.75rem', textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>• <strong>Drag Image:</strong> Move mouse <strong>outside</strong> to get handle ✋, then drag.</Text>
-                                <Text style={{ color: '#fff', fontSize: '0.75rem', textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>• <strong>Zoom Out:</strong> Click anywhere <strong>inside</strong> the zoomed image.</Text>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <Text style={{ color: '#1890ff', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px' }}>Dynamic Navigation</Text>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                                <Text style={{ color: '#fff', fontSize: '0.7rem', textShadow: '0 1px 2px rgba(0,0,0,0.4)', fontWeight: 700 }}>• Hover any box to see its "Evolution Story".</Text>
+                                <Text style={{ color: '#fff', fontSize: '0.7rem', textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>• <strong>Drag:</strong> Hold and move image to see edges.</Text>
+                                <Text style={{ color: '#fff', fontSize: '0.7rem', textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>• <strong>Reset:</strong> Click the black background area.</Text>
                             </div>
                         </div>
 
