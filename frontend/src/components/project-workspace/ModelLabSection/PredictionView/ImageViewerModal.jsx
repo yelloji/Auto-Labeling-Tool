@@ -66,6 +66,12 @@ const ImageViewerModal = ({
     const [showDeletePopup, setShowDeletePopup] = useState(false);
     const [selectedVerifyForDelete, setSelectedVerifyForDelete] = useState(null);
     const [deletePopupPosition, setDeletePopupPosition] = useState({ x: 0, y: 0 });
+
+    // Phase 4: Hint confirmation state
+    const [showHintConfirm, setShowHintConfirm] = useState(false);
+    const [selectedHint, setSelectedHint] = useState(null);
+    const [hintConfirmPosition, setHintConfirmPosition] = useState({ x: 0, y: 0 });
+
     const svgRef = React.useRef(null);
 
     // Individual Detection Selection State (Phase 2.4)
@@ -111,8 +117,19 @@ const ImageViewerModal = ({
     // My boxes: verifications for THIS experiment
     const myBoxes = currentImageVerifications.filter(v => v.experiment_id === experiment?.id);
 
-    // Hint boxes: verifications from OTHER experiments (same project, different experiment)
-    const hintBoxes = currentImageVerifications.filter(v => v.experiment_id !== experiment?.id);
+    // Hint boxes: verifications from OTHER experiments that DON'T overlap with myBoxes
+    // Helper to check if two bboxes are roughly the same (within small threshold)
+    const bboxesMatch = (bbox1, bbox2) => {
+        const threshold = 5; // pixels
+        return Math.abs(bbox1[0] - bbox2[0]) < threshold &&
+            Math.abs(bbox1[1] - bbox2[1]) < threshold &&
+            Math.abs(bbox1[2] - bbox2[2]) < threshold &&
+            Math.abs(bbox1[3] - bbox2[3]) < threshold;
+    };
+
+    const hintBoxes = currentImageVerifications
+        .filter(v => v.experiment_id !== experiment?.id)
+        .filter(hint => !myBoxes.some(myBox => bboxesMatch(hint.bbox, myBox.bbox)));
 
     // 1. IMAGE NAVIGATION TRIGGER
     // Only resets zoom and turns on the "Sync Guard" when the actual image changes.
@@ -385,6 +402,36 @@ const ImageViewerModal = ({
             setShowDeletePopup(false);
             setSelectedVerifyForDelete(null);
         }
+    };
+
+    // Phase 4: Show confirmation popup for hint acceptance
+    const handleHintBoxClick = (e, hintBox) => {
+        if (isDrawingMode) return;
+        e.stopPropagation();
+
+        // Store hint and show confirmation
+        setSelectedHint(hintBox);
+        setHintConfirmPosition({ x: e.clientX, y: e.clientY });
+        setShowHintConfirm(true);
+    };
+
+    const confirmAcceptHint = () => {
+        if (!selectedHint) return;
+
+        // Create a new verification for THIS experiment using the hint's bbox and class
+        const fileName = currentImage.split('/').pop();
+        onVerify({
+            image_name: fileName,
+            class_name: selectedHint.class_name,
+            bbox: selectedHint.bbox,
+            status: 'missing',
+            is_manual: true,
+            experiment_id: experiment.id
+        });
+
+        // Reset
+        setShowHintConfirm(false);
+        setSelectedHint(null);
     };
 
 
@@ -980,6 +1027,7 @@ const ImageViewerModal = ({
                                 {hintBoxes.map((v, i) => (
                                     <g
                                         key={`hint-${v.id || i}`}
+                                        onClick={(e) => handleHintBoxClick(e, v)}
                                         style={{ cursor: 'pointer' }}
                                     >
                                         <rect
@@ -1500,6 +1548,54 @@ const ImageViewerModal = ({
                             style={{ flex: 1 }}
                         >
                             Delete
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* Phase 4: Hint Confirmation Popup */}
+            {showHintConfirm && (
+                <div style={{
+                    position: 'fixed',
+                    top: hintConfirmPosition.y,
+                    left: hintConfirmPosition.x,
+                    transform: 'translate(-50%, -120%)',
+                    zIndex: 2000,
+                    background: 'rgba(28, 28, 30, 0.85)',
+                    backdropFilter: 'blur(16px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+                    borderRadius: '12px',
+                    padding: '8px',
+                    border: '1px solid rgba(255, 140, 0, 0.3)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    animation: 'popupAppear 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28)',
+                    minWidth: '180px'
+                }}>
+                    <div style={{ padding: '4px 8px', color: '#fff', fontSize: '0.9rem', fontWeight: 500, textAlign: 'center' }}>
+                        Accept this hint?
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button
+                            size="small"
+                            type="text"
+                            onClick={() => {
+                                setShowHintConfirm(false);
+                                setSelectedHint(null);
+                            }}
+                            style={{ flex: 1, color: '#999' }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            size="small"
+                            type="primary"
+                            style={{ flex: 1, background: '#ff8c00', borderColor: '#ff8c00' }}
+                            onClick={confirmAcceptHint}
+                        >
+                            Accept
                         </Button>
                     </div>
                 </div>
