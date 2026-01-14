@@ -50,6 +50,8 @@ const ImageViewerModal = ({
 
     // Individual Detection Selection State (Phase 2.4)
     // We store the INDICES of the detections that are checked.
+    const [showHelp, setShowHelp] = useState(false);
+    const helpRef = React.useRef(null);
     const [selectedIndices, setSelectedIndices] = useState([]);
 
     const currentIndex = images.indexOf(currentImage);
@@ -100,6 +102,27 @@ const ImageViewerModal = ({
     }, [currentImage, filteredDets.length]);
 
     // (Logic moved to unified handler above for perfect synchronization)
+
+    React.useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (helpRef.current && !helpRef.current.contains(event.target)) {
+                // Check if the click was on the help button itself to avoid toggling twice
+                const helpBtn = document.querySelector('[title="Image Viewer Guide"]');
+                if (helpBtn && helpBtn.contains(event.target)) return;
+
+                setShowHelp(false);
+            }
+        };
+
+        if (showHelp) {
+            document.addEventListener('mousedown', handleClickOutside);
+        } else {
+            document.removeEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showHelp]);
 
     // Dynamic Story Engine for Historical Hints
     const generateVerificationStory = (hints) => {
@@ -230,6 +253,7 @@ const ImageViewerModal = ({
     };
 
     const handleMouseUp = () => setIsDragging(false);
+
 
     return (
         <Modal
@@ -409,6 +433,27 @@ const ImageViewerModal = ({
                         </Button>
                     </Tooltip>
 
+                    <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)' }} />
+
+                    <Tooltip title="Image Viewer Guide">
+                        <Button
+                            type="text"
+                            onClick={(e) => { e.stopPropagation(); setShowHelp(!showHelp); }}
+                            style={{
+                                color: showHelp ? '#1890ff' : '#fff',
+                                background: showHelp ? 'rgba(24, 144, 255, 0.15)' : 'rgba(255,255,255,0.05)',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                border: `1px solid ${showHelp ? '#1890ff' : 'transparent'}`
+                            }}
+                        >
+                            <InfoCircleOutlined style={{ fontSize: '16px' }} />
+                            <span style={{ fontSize: '12px', fontWeight: 600 }}>HELP</span>
+                        </Button>
+                    </Tooltip>
+
                     <Button
                         type="text"
                         icon={<CloseOutlined style={{ color: '#fff', fontSize: 18 }} />}
@@ -436,6 +481,143 @@ const ImageViewerModal = ({
             >
                 {/* Main Image Layer */}
                 {/* Navigation Buttons */}
+                {/* Floating Intelligence HUD Side Panel */}
+                {/* Floating Intelligence HUD Side Panel - Premium Crystal Glass Redesign */}
+                {showHelp && (
+                    <div
+                        ref={helpRef}
+                        style={{
+                            position: 'absolute',
+                            left: '2.5rem',
+                            top: '54%', // Shifted down slightly to utilize bottom space and feel more 'in the middle'
+                            transform: 'translateY(-50%)',
+                            width: '380px',
+                            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.1))', // Lighter Prism base
+                            backdropFilter: 'blur(50px) saturate(210%)', // Ultra-clear frosted crystal
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            borderTop: '2px solid rgba(255,255,255,0.8)', // Brilliant refractive rim
+                            borderLeft: '1.5px solid rgba(255,255,255,0.5)', // Sharp side edge
+                            borderRadius: '20px',
+                            padding: '12px 20px', // Shorter padding
+                            zIndex: 1000,
+                            boxShadow: `
+                                0 30px 80px -20px rgba(0,0,0,0.5), 
+                                0 0 0 1px rgba(255,255,255,0.1) inset,
+                                0 1px 0 0 rgba(255,255,255,0.4) inset
+                            `,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px', // Tighter gaps
+                            animation: 'fadeInCrystal3D 0.7s cubic-bezier(0.19, 1, 0.22, 1)',
+                            overflow: 'hidden'
+                        }}
+                    >
+                        {/* Prism Sheen Highlight */}
+                        <div style={{
+                            position: 'absolute',
+                            top: '-50%',
+                            left: '-50%',
+                            width: '200%',
+                            height: '200%',
+                            background: 'radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%)',
+                            pointerEvents: 'none',
+                            transform: 'rotate(-20deg)',
+                            zIndex: -1
+                        }} />
+                        <style>
+                            {`
+                                @keyframes fadeInCrystal3D {
+                                    from { opacity: 0; transform: translateY(-50%) translateX(-60px) perspective(2000px) rotateY(25deg) scale(0.98); }
+                                    to { opacity: 1; transform: translateY(-50%) translateX(0) perspective(2000px) rotateY(0deg) scale(1); }
+                                }
+                            `}
+                        </style>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '-2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {/* Premium Crystal Indicator Symbol */}
+                                <div style={{
+                                    width: 6,
+                                    height: 22,
+                                    background: 'linear-gradient(to bottom, #1890ff, #0050b3)',
+                                    borderRadius: '6px',
+                                    boxShadow: '0 0 15px rgba(24,144,255,0.6), inset 0 1px 1px rgba(255,255,255,0.8)',
+                                    position: 'relative',
+                                    overflow: 'hidden'
+                                }}>
+                                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '50%', background: 'linear-gradient(to bottom, rgba(255,255,255,0.4), transparent)' }} />
+                                </div>
+                                <Text style={{ color: '#fff', fontSize: '1rem', fontWeight: 900, letterSpacing: '1.2px', textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>INTELLIGENCE HUD</Text>
+                            </div>
+                            <CloseOutlined
+                                onClick={() => setShowHelp(false)}
+                                style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '16px', transition: 'all 0.3s' }}
+                            />
+                        </div>
+
+                        {/* Section 1: Visual Intelligence */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <Text style={{ color: '#1890ff', fontSize: '0.62rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1.2px' }}>Visual Intelligence</Text>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                                <Text style={{ color: '#fff', fontSize: '0.75rem', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>• <strong>Box Colors:</strong> <span style={{ color: '#52c41a', fontWeight: 800 }}>Safe</span> | <span style={{ color: '#faad14', fontWeight: 800 }}>Review</span> | <span style={{ color: '#ff4d4f', fontWeight: 800 }}>Risk</span></Text>
+                                <Text style={{ color: '#fff', fontSize: '0.75rem' }}>• <strong>View Toggles:</strong> Use <strong>Aa Labels</strong>, <strong>Boxes</strong>, and <strong>Contours</strong> to filter details.</Text>
+                                <Text style={{ color: '#fff', fontSize: '0.75rem' }}>• <strong>Download:</strong> Save this image with its results.</Text>
+                            </div>
+                        </div>
+
+                        {/* Section 2: Precision Verification */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <Text style={{ color: '#1890ff', fontSize: '0.62rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1.2px' }}>Precision Verification</Text>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <div style={{ width: 12, height: 12, border: '1px solid rgba(255,255,255,0.5)', borderRadius: '3px', background: '#52c41a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <div style={{ width: 6, height: 2, background: '#fff' }} />
+                                    </div>
+                                    <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>Checkbox:</strong> Hide/Show box.</Text>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Text style={{ color: '#1890ff', fontSize: '0.72rem', fontWeight: 900 }}>Class Name (e.g. defect)</Text>
+                                    <Text style={{ color: '#fff', fontSize: '0.72rem' }}>Click to Zoom.</Text>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ fontSize: '8px', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', padding: '1px 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(255,255,255,0.1)' }}>UNVERIFIED</div>
+                                    <Text style={{ color: '#fff', fontSize: '0.72rem' }}>Reset decision.</Text>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ fontSize: '9px', color: '#faad14', border: '1px solid rgba(250,173,20,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(250,173,20,0.1)' }}>HINT</div>
+                                    <Text style={{ color: '#fff', fontSize: '0.72rem' }}>Story History.</Text>
+                                </div>
+                                <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
+                                        <div style={{ fontSize: '8px', color: '#1890ff', border: '1px solid rgba(24,144,255,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(24,144,255,0.1)' }}>PASS</div>
+                                        <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>AI is Correct.</strong> Save as a baseline to compare next experiments.</Text>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
+                                        <div style={{ fontSize: '8px', color: '#ff4d4f', border: '1px solid rgba(255,77,79,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(255,77,79,0.1)' }}>FAIL</div>
+                                        <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>False Positive.</strong> Track error to see if future models improve.</Text>
+                                    </div>
+                                </div>
+                            </div>
+                            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.7rem', paddingLeft: '4px', fontStyle: 'italic', marginTop: '2px' }}>
+                                Tip: Use <u>Select All</u> / <u>Unselect All</u> for bulk actions.
+                            </Text>
+                        </div>
+
+                        {/* Section 3: Navigation */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <Text style={{ color: '#1890ff', fontSize: '0.62rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1.2px' }}>Dynamic Navigation</Text>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                                <Text style={{ color: '#fff', fontSize: '0.75rem', textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>• <strong>Drag Image:</strong> Move mouse <strong>outside</strong> to get handle ✋, then drag.</Text>
+                                <Text style={{ color: '#fff', fontSize: '0.75rem', textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>• <strong>Zoom Out:</strong> Click anywhere <strong>inside</strong> the zoomed image.</Text>
+                            </div>
+                        </div>
+
+                        <div style={{ marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+                            <Text style={{ color: '#52c41a', fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.5px' }}>STRATEGY: Build a baseline to compare next models.</Text>
+                        </div>
+                    </div>
+                )}
+
                 <Button
                     className="nav-btn left"
                     icon={<LeftOutlined />}
@@ -493,6 +675,9 @@ const ImageViewerModal = ({
                             src={imageUrl}
                             alt={currentImage}
                             onLoad={handleImgLoad}
+                            onClick={() => {
+                                if (showHelp) setShowHelp(false);
+                            }}
                             style={{
                                 maxWidth: '100%',
                                 maxHeight: '100%',
