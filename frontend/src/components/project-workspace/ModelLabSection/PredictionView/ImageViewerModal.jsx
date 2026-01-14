@@ -553,13 +553,16 @@ const ImageViewerModal = ({
                 top: 0,
                 left: 0,
                 right: 0,
-                padding: '0.75rem 1.25rem',
-                background: 'rgba(0,0,0,0.8)',
+                padding: '0.6rem 1.25rem',
+                background: 'rgba(28, 28, 30, 0.7)',
+                backdropFilter: 'blur(25px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(25px) saturate(180%)',
                 zIndex: 100,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                borderBottom: '1px solid rgba(255,255,255,0.1)'
+                borderBottom: '1px solid rgba(255,255,255,0.12)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
             }}>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <Space align="center">
@@ -589,13 +592,30 @@ const ImageViewerModal = ({
                     </Space>
                 </div>
 
-                <Space size={16}>
+                <Space size={14} align="center" style={{
+                    background: 'rgba(28, 28, 30, 0.75)',
+                    backdropFilter: 'blur(24px) saturate(200%)',
+                    WebkitBackdropFilter: 'blur(24px) saturate(200%)',
+                    height: '42px',
+                    padding: '0 16px',
+                    borderRadius: '40px',
+                    position: 'absolute',
+                    bottom: '16px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 1000,
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
                     <div style={{
-                        background: 'rgba(255,255,255,0.08)',
-                        borderRadius: '8px',
-                        padding: '3px',
+                        background: 'rgba(255,255,255,0.05)',
+                        borderRadius: '10px',
+                        padding: '2px',
                         display: 'flex',
-                        gap: '6px',
+                        gap: '4px',
                         alignItems: 'center'
                     }}>
                         {/* 1. Precision Overlay Filters */}
@@ -697,8 +717,23 @@ const ImageViewerModal = ({
 
                     <Tooltip title="Download Image">
                         <Button
-                            style={{ background: '#1890ff', borderColor: '#1890ff', color: '#fff', borderRadius: '6px' }}
-                            icon={<DownloadOutlined />}
+                            className="premium-action-btn"
+                            style={{
+                                background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)',
+                                border: 'none',
+                                color: '#fff',
+                                borderRadius: '8px',
+                                fontWeight: 700,
+                                height: '30px',
+                                padding: '0 12px',
+                                fontSize: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: '0 4px 12px rgba(24, 144, 255, 0.25)',
+                                letterSpacing: '0.4px'
+                            }}
+                            icon={<DownloadOutlined style={{ fontSize: '14px' }} />}
                             onClick={handleDownload}
                         >
                             Download
@@ -707,18 +742,31 @@ const ImageViewerModal = ({
 
                     <Tooltip title={isDrawingMode ? "Cancel Drawing" : "Add Missing Defect"}>
                         <Button
+                            className="premium-action-btn"
                             onClick={() => {
                                 setIsDrawingMode(!isDrawingMode);
                                 setTempBox(null);
                             }}
                             style={{
-                                background: isDrawingMode ? '#ff4d4f' : '#52c41a',
-                                borderColor: isDrawingMode ? '#ff4d4f' : '#52c41a',
+                                background: isDrawingMode
+                                    ? 'linear-gradient(135deg, #ff4d4f 0%, #cf1322 100%)'
+                                    : 'linear-gradient(135deg, #52c41a 0%, #237804 100%)',
+                                border: 'none',
                                 color: '#fff',
-                                borderRadius: '6px',
-                                fontWeight: 'bold'
+                                borderRadius: '8px',
+                                fontWeight: 800,
+                                height: '30px',
+                                padding: '0 12px',
+                                fontSize: '11px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: isDrawingMode
+                                    ? '0 4px 12px rgba(255, 77, 79, 0.25)'
+                                    : '0 4px 12px rgba(82, 196, 26, 0.25)',
+                                letterSpacing: '0.6px'
                             }}
-                            icon={isDrawingMode ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
+                            icon={isDrawingMode ? <CloseCircleOutlined style={{ fontSize: '14px' }} /> : <CheckCircleOutlined style={{ fontSize: '14px' }} />}
                         >
                             {isDrawingMode ? "CANCEL" : "ADD MISSING"}
                         </Button>
@@ -728,32 +776,50 @@ const ImageViewerModal = ({
 
                     <Tooltip title="Image Viewer Guide">
                         <Button
-                            type="text"
+                            className="premium-action-btn"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 if (!showHelp) setShowManualDetails(false);
                                 setShowHelp(!showHelp);
                             }}
                             style={{
-                                color: showHelp ? '#1890ff' : '#fff',
-                                background: showHelp ? 'rgba(24, 144, 255, 0.15)' : 'rgba(255,255,255,0.05)',
-                                borderRadius: '6px',
+                                background: showHelp
+                                    ? 'linear-gradient(135deg, #722ed1 0%, #1890ff 100%)'
+                                    : 'rgba(255,255,255,0.08)',
+                                color: '#fff',
+                                borderRadius: '8px',
+                                height: '30px',
+                                padding: '0 12px',
+                                fontSize: '11px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '6px',
-                                border: `1px solid ${showHelp ? '#1890ff' : 'transparent'}`
+                                border: `1px solid ${showHelp ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)'}`,
+                                fontWeight: 700,
+                                letterSpacing: '0.6px',
+                                boxShadow: showHelp ? '0 4px 12px rgba(114, 46, 209, 0.3)' : 'none'
                             }}
                         >
-                            <InfoCircleOutlined style={{ fontSize: '16px' }} />
-                            <span style={{ fontSize: '12px', fontWeight: 600 }}>HELP</span>
+                            <InfoCircleOutlined style={{ fontSize: '14px' }} />
+                            <span>HELP</span>
                         </Button>
                     </Tooltip>
 
                     <Button
                         type="text"
-                        icon={<CloseOutlined style={{ color: '#fff', fontSize: 18 }} />}
+                        icon={<CloseOutlined style={{ color: '#fff', fontSize: 16 }} />}
                         onClick={onCancel}
-                        style={{ marginLeft: '8px' }}
+                        style={{
+                            marginLeft: '2px',
+                            background: 'rgba(255,255,255,0.05)',
+                            borderRadius: '50%',
+                            width: '30px',
+                            height: '30px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            border: '1px solid rgba(255,255,255,0.08)'
+                        }}
                     />
                 </Space>
             </div>
