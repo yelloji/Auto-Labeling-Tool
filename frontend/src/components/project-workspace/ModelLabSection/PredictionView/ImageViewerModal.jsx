@@ -77,6 +77,9 @@ const ImageViewerModal = ({
     const [selectedManualForDetails, setSelectedManualForDetails] = useState(null);
     const [manualDetailsPosition, setManualDetailsPosition] = useState({ x: 0, y: 0 });
 
+    // Phase 4.5: Custom Hover Tooltip (Premium Design)
+    const [hoverTooltip, setHoverTooltip] = useState({ show: false, content: '', x: 0, y: 0, type: 'manual' });
+
     const svgRef = React.useRef(null);
 
     // Individual Detection Selection State (Phase 2.4)
@@ -451,6 +454,27 @@ const ImageViewerModal = ({
             setShowDeletePopup(false);
             setSelectedVerifyForDelete(null);
         }
+    };
+
+    // Custom Hover Handlers for Bounding Boxes (Premium Design)
+    const handleBoxMouseEnter = (e, content, type = 'manual') => {
+        setHoverTooltip({
+            show: true,
+            content,
+            x: e.clientX,
+            y: e.clientY,
+            type
+        });
+    };
+
+    const handleBoxMouseMove = (e) => {
+        if (hoverTooltip.show) {
+            setHoverTooltip(prev => ({ ...prev, x: e.clientX, y: e.clientY }));
+        }
+    };
+
+    const handleBoxMouseLeave = () => {
+        setHoverTooltip({ show: false, content: '', x: 0, y: 0, type: 'manual' });
     };
 
     // Phase 4: Show confirmation popup for hint acceptance
@@ -1035,9 +1059,11 @@ const ImageViewerModal = ({
                                         key={`manual-${v.id || i}`}
                                         onClick={(e) => handleManualBoxClick(e, v)}
                                         onDoubleClick={(e) => handleManualBoxDoubleClick(e, v)}
+                                        onMouseEnter={(e) => handleBoxMouseEnter(e, `You marked this ${v.class_name} as missing from AI model prediction in this experiment.\n\nSingle-click for more details. Double-click to delete this mark.`, 'manual')}
+                                        onMouseMove={handleBoxMouseMove}
+                                        onMouseLeave={handleBoxMouseLeave}
                                         style={{ cursor: isDrawingMode ? 'crosshair' : 'pointer' }}
                                     >
-                                        <title>{`You marked this ${v.class_name} as missing from AI model prediction in this experiment.\n\nSingle-click for more details. Double-click to delete this mark.`}</title>
                                         <rect
                                             x={v.bbox[0]}
                                             y={v.bbox[1]}
@@ -1060,9 +1086,11 @@ const ImageViewerModal = ({
                                     <g
                                         key={`hint-${v.id || i}`}
                                         onClick={(e) => handleHintBoxClick(e, v)}
+                                        onMouseEnter={(e) => handleBoxMouseEnter(e, getHintTooltip(v), 'hint')}
+                                        onMouseMove={handleBoxMouseMove}
+                                        onMouseLeave={handleBoxMouseLeave}
                                         style={{ cursor: 'pointer' }}
                                     >
-                                        <title>{getHintTooltip(v)}</title>
                                         <rect
                                             x={v.bbox[0]}
                                             y={v.bbox[1]}
@@ -1705,6 +1733,32 @@ const ImageViewerModal = ({
                     }}>
                         Double-click the box if you want to delete this mark.
                     </div>
+                </div>
+            )}
+
+            {/* Phase 4.5: Custom Premium Hover Tooltip (Frosted Glass) */}
+            {hoverTooltip.show && (
+                <div style={{
+                    position: 'fixed',
+                    top: hoverTooltip.y + 15,
+                    left: hoverTooltip.x + 15,
+                    zIndex: 3000,
+                    pointerEvents: 'none',
+                    background: 'rgba(28, 28, 30, 0.85)',
+                    backdropFilter: 'blur(12px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    border: `1px solid ${hoverTooltip.type === 'manual' ? 'rgba(163, 53, 238, 0.4)' : 'rgba(255, 140, 0, 0.4)'}`,
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+                    animation: 'tooltipFadeIn 0.15s ease-out',
+                    maxWidth: '300px',
+                    color: '#fff',
+                    fontSize: '0.85rem',
+                    lineHeight: '1.4',
+                    whiteSpace: 'pre-wrap'
+                }}>
+                    {hoverTooltip.content}
                 </div>
             )}
         </Modal>
