@@ -102,6 +102,18 @@ const ImageViewerModal = ({
         return confMatch && classMatch && riskMatch;
     });
 
+    // Phase 4: Split verifications for current image into "mine" and "hints"
+    const currentFileName = currentImage?.split('/').pop();
+    const currentImageVerifications = verifications.filter(v =>
+        v.image_name === currentFileName && (v.status === 'missing' || v.is_manual)
+    );
+
+    // My boxes: verifications for THIS experiment
+    const myBoxes = currentImageVerifications.filter(v => v.experiment_id === experiment?.id);
+
+    // Hint boxes: verifications from OTHER experiments (same project, different experiment)
+    const hintBoxes = currentImageVerifications.filter(v => v.experiment_id !== experiment?.id);
+
     // 1. IMAGE NAVIGATION TRIGGER
     // Only resets zoom and turns on the "Sync Guard" when the actual image changes.
     React.useEffect(() => {
@@ -916,8 +928,8 @@ const ImageViewerModal = ({
                                     />
                                 )}
 
-                                {/* Phase 3: Manual Verifications (Missing Defects) */}
-                                {verifications.filter(v => v.status === 'missing' || v.is_manual).map((v, i) => (
+                                {/* Phase 3: My Manual Boxes (Solid Purple) */}
+                                {myBoxes.map((v, i) => (
                                     <g
                                         key={`manual-${v.id || i}`}
                                         onClick={(e) => handleManualBoxClick(e, v)}
@@ -932,7 +944,7 @@ const ImageViewerModal = ({
                                             stroke={selectedVerifyForDelete?.id === v.id ? "#ff4d4f" : "#a335ee"}
                                             strokeWidth={(selectedVerifyForDelete?.id === v.id ? 4 : 3) / scale}
                                             style={{
-                                                pointerEvents: 'all', // Ensure individual boxes can be clicked
+                                                pointerEvents: 'all',
                                                 strokeOpacity: 0.8,
                                                 transition: 'all 0.2s'
                                             }}
@@ -958,6 +970,53 @@ const ImageViewerModal = ({
                                                     }}
                                                 >
                                                     [MANUAL] {v.class_name}
+                                                </text>
+                                            </g>
+                                        )}
+                                    </g>
+                                ))}
+
+                                {/* Phase 4: Hint Boxes from Other Experiments (Orange Dotted) */}
+                                {hintBoxes.map((v, i) => (
+                                    <g
+                                        key={`hint-${v.id || i}`}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        <rect
+                                            x={v.bbox[0]}
+                                            y={v.bbox[1]}
+                                            width={v.bbox[2] - v.bbox[0]}
+                                            height={v.bbox[3] - v.bbox[1]}
+                                            fill="rgba(255, 140, 0, 0.05)"
+                                            stroke="#ff8c00"
+                                            strokeWidth={2 / scale}
+                                            strokeDasharray={`${8 / scale},${4 / scale}`}
+                                            style={{
+                                                pointerEvents: 'all',
+                                                strokeOpacity: 0.7
+                                            }}
+                                        />
+                                        {(showLabels) && (
+                                            <g transform={`translate(${v.bbox[0]}, ${v.bbox[1] < 20 ? v.bbox[1] + 20 : v.bbox[1] - 4})`} style={{ pointerEvents: 'none' }}>
+                                                <rect
+                                                    x={0}
+                                                    y={-18}
+                                                    width={v.class_name.length * 9 + 30}
+                                                    height={18}
+                                                    fill="#ff8c00"
+                                                    rx={2}
+                                                />
+                                                <text
+                                                    x={5}
+                                                    y={-5}
+                                                    fill="#fff"
+                                                    style={{
+                                                        fontSize: '11px',
+                                                        fontWeight: '900',
+                                                        fontFamily: 'monospace'
+                                                    }}
+                                                >
+                                                    [HINT] {v.class_name}
                                                 </text>
                                             </g>
                                         )}
