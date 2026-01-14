@@ -164,6 +164,10 @@
     overflow: hidden;
 }
 
+.prediction-image-container.drawing-active {
+    cursor: crosshair !important;
+}
+
 .detection-overlay-svg {
     position: absolute;
     top: 0;
@@ -184,6 +188,26 @@
     vector-effect: non-scaling-stroke;
     /* Keep stroke thin regardless of zoom */
     paint-order: stroke;
+}
+
+/* New: Manual Drawing "Ghost" Box */
+.manual-drawing-box {
+    fill: rgba(24, 144, 255, 0.1);
+    stroke: #1890ff;
+    stroke-width: 2;
+    stroke-dasharray: 4, 4;
+    vector-effect: non-scaling-stroke;
+    animation: dashLoop 0.5s linear infinite;
+}
+
+@keyframes dashLoop {
+    from {
+        stroke-dashoffset: 0;
+    }
+
+    to {
+        stroke-dashoffset: 8;
+    }
 }
 
 .detection-highlight-rect.medium-risk {

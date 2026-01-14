@@ -36,6 +36,7 @@ const ImageViewerModal = ({
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+
     const [isImgLoading, setIsImgLoading] = useState(true); // New: Guard for sync
     const [lastLoadTime, setLastLoadTime] = useState(0);
     const [hoveredIndex, setHoveredIndex] = useState(null); // New: Bidirectional bridge
@@ -47,6 +48,12 @@ const ImageViewerModal = ({
     const [showBoxes, setShowBoxes] = useState(true);
     const [showContours, setShowContours] = useState(true);
     const [showLabels, setShowLabels] = useState(true);
+
+    // Drawing Mode States (Phase 2.1)
+    const [isDrawingMode, setIsDrawingMode] = useState(false);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [tempBox, setTempBox] = useState(null); // { x, y, width, height, startX, startY }
+    const svgRef = React.useRef(null);
 
     // Individual Detection Selection State (Phase 2.4)
     // We store the INDICES of the detections that are checked.
@@ -237,14 +244,59 @@ const ImageViewerModal = ({
         setFocusedIndex(index);
     };
 
-    // Panning Handlers
+    /**
+     * PIXEL-PERFECT COORDINATE CONVERSION
+     * Maps mouse coordinates to original image pixels via SVG Space.
+     */
+    const getPixelCoords = (e) => {
+        if (!svgRef.current) return null;
+        const svg = svgRef.current;
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+
+        // Use the SVG Matrix Transform to invert screen clicks into image pixels
+        // This automatically handles Scale, Pan, and DOM positioning.
+        const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+        return {
+            x: Math.max(0, Math.min(svgP.x, dimensions.width)),
+            y: Math.max(0, Math.min(svgP.y, dimensions.height))
+        };
+    };
+
     const handleMouseDown = (e) => {
+        if (isDrawingMode) {
+            e.stopPropagation();
+            const coords = getPixelCoords(e);
+            if (coords) {
+                setIsDrawing(true);
+                setTempBox({ x: coords.x, y: coords.y, width: 0, height: 0, startX: coords.x, startY: coords.y });
+            }
+            return;
+        }
+
         if (scale <= 1) return;
         setIsDragging(true);
         setStartPos({ x: e.clientX - offset.x, y: e.clientY - offset.y });
     };
 
     const handleMouseMove = (e) => {
+        if (isDrawing && tempBox) {
+            const coords = getPixelCoords(e);
+            if (coords) {
+                const startX = tempBox.startX;
+                const startY = tempBox.startY;
+                setTempBox({
+                    ...tempBox,
+                    x: Math.min(coords.x, startX),
+                    y: Math.min(coords.y, startY),
+                    width: Math.abs(coords.x - startX),
+                    height: Math.abs(coords.y - startY)
+                });
+            }
+            return;
+        }
+
         if (!isDragging) return;
         setOffset({
             x: e.clientX - startPos.x,
@@ -252,7 +304,19 @@ const ImageViewerModal = ({
         });
     };
 
-    const handleMouseUp = () => setIsDragging(false);
+    const handleMouseUp = () => {
+        if (isDrawing) {
+            setIsDrawing(false);
+            if (tempBox && tempBox.width > 2 && tempBox.height > 2) {
+                // Phase 3: Classification popup will trigger here
+                console.log("Phase 2 Complete: Manual Box Area Selected", tempBox);
+            } else {
+                setTempBox(null);
+            }
+            return;
+        }
+        setIsDragging(false);
+    };
 
 
     return (
@@ -403,7 +467,6 @@ const ImageViewerModal = ({
                                         fontSize: '0.75rem',
                                         fontWeight: 600,
                                         padding: '0 8px',
-                                        cursor: 'pointer',
                                         minWidth: '45px',
                                         textAlign: 'center',
                                         userSelect: 'none'
@@ -430,6 +493,25 @@ const ImageViewerModal = ({
                             onClick={handleDownload}
                         >
                             Download
+                        </Button>
+                    </Tooltip>
+
+                    <Tooltip title={isDrawingMode ? "Cancel Drawing" : "Add Missing Defect"}>
+                        <Button
+                            onClick={() => {
+                                setIsDrawingMode(!isDrawingMode);
+                                setTempBox(null);
+                            }}
+                            style={{
+                                background: isDrawingMode ? '#ff4d4f' : '#52c41a',
+                                borderColor: isDrawingMode ? '#ff4d4f' : '#52c41a',
+                                color: '#fff',
+                                borderRadius: '6px',
+                                fontWeight: 'bold'
+                            }}
+                            icon={isDrawingMode ? <CloseCircleOutlined /> : <CheckCircleOutlined />}
+                        >
+                            {isDrawingMode ? "CANCEL" : "ADD MISSING"}
                         </Button>
                     </Tooltip>
 
@@ -464,12 +546,12 @@ const ImageViewerModal = ({
             </div>
 
             {/* Image Container */}
-            <div style={{
+            <div className={`prediction-image-container ${isDrawingMode ? 'drawing-active' : ''}`} style={{
                 flex: 1,
                 position: 'relative',
                 background: '#000',
                 overflow: 'hidden',
-                cursor: isDragging ? 'grabbing' : 'grab',
+                cursor: isDrawingMode ? 'crosshair' : (isDragging ? 'grabbing' : (scale > 1 ? 'grab' : 'default')),
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
@@ -553,6 +635,55 @@ const ImageViewerModal = ({
                                 onClick={() => setShowHelp(false)}
                                 style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '16px', transition: 'all 0.3s' }}
                             />
+                        </div>
+
+                        {/* NEW: PRIMARY ACTION - ADD MISSING DEFECT */}
+                        <div style={{ margin: '4px 0 8px 0' }}>
+                            <Button
+                                block
+                                icon={<span>➕</span>}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsDrawingMode(!isDrawingMode);
+                                    if (!isDrawingMode) {
+                                        // Optional: Inform user
+                                        console.log("Entering DRAWING MODE...");
+                                    }
+                                }}
+                                style={{
+                                    height: '38px',
+                                    background: isDrawingMode ? '#ff4d4f' : 'rgba(24, 144, 255, 0.2)',
+                                    border: `1px solid ${isDrawingMode ? '#ff4d4f' : '#1890ff'}`,
+                                    color: '#fff',
+                                    fontWeight: 800,
+                                    fontSize: '0.85rem',
+                                    borderRadius: '10px',
+                                    boxShadow: isDrawingMode ? '0 0 20px rgba(255,77,79,0.4)' : '0 0 20px rgba(24,144,255,0.2)',
+                                    transition: 'all 0.3s cubic-bezier(0.19, 1, 0.22, 1)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '10px'
+                                }}
+                            >
+                                {isDrawingMode ? 'CANCEL DRAWING' : 'ADD MISSING DEFECT'}
+                            </Button>
+                            {isDrawingMode && (
+                                <div style={{ textAlign: 'center', marginTop: '6px', animation: 'pulseText 1.5s infinite' }}>
+                                    <Text style={{ color: '#ff4d4f', fontSize: '0.65rem', fontWeight: 900, textTransform: 'uppercase' }}>
+                                        Mode: Drawing on Image...
+                                    </Text>
+                                </div>
+                            )}
+                            <style>
+                                {`
+                                 @keyframes pulseText {
+                                     0% { opacity: 0.5; }
+                                     50% { opacity: 1; }
+                                     100% { opacity: 0.5; }
+                                 }
+                               `}
+                            </style>
                         </div>
 
                         {/* Section 1: Visual Intelligence */}
@@ -688,8 +819,9 @@ const ImageViewerModal = ({
                         />
 
                         {/* SVG Dynamic Overlay - NATURALLY PERFECT ALIGNMENT */}
-                        {dimensions.width > 0 && filteredDets.length > 0 && !isImgLoading && (
+                        {dimensions.width > 0 && !isImgLoading && (
                             <svg
+                                ref={svgRef}
                                 className="detection-overlay-svg"
                                 viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
                                 style={{
@@ -698,10 +830,24 @@ const ImageViewerModal = ({
                                     left: 0,
                                     width: '100%',
                                     height: '100%',
-                                    pointerEvents: 'none',
+                                    pointerEvents: isDrawingMode ? 'all' : 'none',
                                     zIndex: 10
                                 }}
                             >
+                                {/* Phase 2: Drawing Temporary Box */}
+                                {tempBox && (
+                                    <rect
+                                        x={tempBox.x}
+                                        y={tempBox.y}
+                                        width={tempBox.width}
+                                        height={tempBox.height}
+                                        fill="rgba(24, 144, 255, 0.1)"
+                                        stroke="#1890ff"
+                                        strokeWidth={3 / scale}
+                                        strokeDasharray={`${8 / scale},${4 / scale}`}
+                                        style={{ pointerEvents: 'none' }}
+                                    />
+                                )}
                                 {filteredDets.map((d, i) => {
                                     if (!selectedIndices.includes(i)) return null;
 
