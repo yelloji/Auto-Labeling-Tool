@@ -265,16 +265,132 @@ const ImageViewerModal = ({
     };
 
     /**
-     * PRO DOWNLOAD HANDLER:
-     * Uses the backend proxy to force a download via Content-Disposition.
-     * This bypasses CORS fetch issues and "new tab" frustrations.
+     * PRO COMPOSITE DOWNLOAD HANDLER:
+     * Creates a high-res canvas composite of the original image + all visible annotations.
+     * Respects visibility toggles (Boxes, Contours, Labels) and filters.
      */
-    const handleDownload = () => {
-        const downloadUrl = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experiment.id}/original-image/${currentImage}?download=true`;
+    const handleDownload = async () => {
+        if (!dimensions.width || !dimensions.height || isImgLoading) return;
 
-        // This will trigger the browser's save dialog without navigating away
-        // because the backend sends 'Content-Disposition: attachment'
-        window.location.href = downloadUrl;
+        // 1. Create off-screen canvas at ORIGINAL image resolution
+        const canvas = document.createElement('canvas');
+        canvas.width = dimensions.width;
+        canvas.height = dimensions.height;
+        const ctx = canvas.getContext('2d');
+
+        // 2. Load the image into an Image object to draw on canvas
+        const img = new Image();
+        img.crossOrigin = "anonymous"; // Essential for toDataURL to work with external URLs
+        img.src = imageUrl;
+
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+        });
+
+        // 3. Draw Base Image
+        ctx.drawImage(img, 0, 0);
+
+        // 4. Draw Detections (following same logic as SVG overlay)
+        filteredDets.forEach((d, i) => {
+            if (!selectedIndices.includes(i)) return;
+
+            // Risk coloring logic (consistent with SVG)
+            let riskColor = '#52c41a';
+            if (d.confidence < 0.4) riskColor = '#ff4d4f';
+            else if (d.confidence < 0.7) riskColor = '#faad14';
+
+            const [x1, y1, x2, y2] = d.bbox;
+            const w = x2 - x1;
+            const h = y2 - y1;
+
+            // A. Draw Contour (Polygon)
+            if (showContours && d.segmentation) {
+                ctx.beginPath();
+                ctx.moveTo(d.segmentation[0][0], d.segmentation[0][1]);
+                for (let p = 1; p < d.segmentation.length; p++) {
+                    ctx.lineTo(d.segmentation[p][0], d.segmentation[p][1]);
+                }
+                ctx.closePath();
+                ctx.fillStyle = riskColor + '33'; // 20% opacity
+                ctx.fill();
+                ctx.strokeStyle = riskColor;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 4]); // Dashed contours
+                ctx.stroke();
+                ctx.setLineDash([]); // Reset dash for boxes
+            }
+
+            // B. Draw Bounding Box
+            if (showBoxes) {
+                ctx.strokeStyle = riskColor;
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x1, y1, w, h);
+            }
+
+            // C. Draw Label
+            if (showLabels) {
+                const labelText = `${d.class} ${(d.confidence * 100).toFixed(0)}%`;
+                const fontSize = 16;
+                ctx.font = `bold ${fontSize}px monospace`;
+                const textWidth = ctx.measureText(labelText).width;
+
+                const labelX = x1;
+                const labelY = y1 < 20 ? y1 : y1 - 4;
+
+                // Label Background
+                ctx.fillStyle = riskColor;
+                ctx.globalAlpha = 0.85;
+                ctx.fillRect(labelX, labelY - fontSize - 4, textWidth + 12, fontSize + 8);
+                ctx.globalAlpha = 1.0;
+
+                // Label Text
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(labelText, labelX + 6, labelY - 3);
+            }
+        });
+
+        // 5. Draw Manual Boxes (Solid Purple)
+        myBoxes.forEach(v => {
+            const [x1, y1, x2, y2] = v.bbox;
+            const w = x2 - x1;
+            const h = y2 - y1;
+
+            ctx.strokeStyle = '#a335ee';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(x1, y1, w, h);
+
+            ctx.fillStyle = 'rgba(163, 53, 238, 0.1)';
+            ctx.fillRect(x1, y1, w, h);
+
+            // Manual Label
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillStyle = '#a335ee';
+            ctx.fillRect(x1, y1 - 22, ctx.measureText(v.class_name).width + 12, 22);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(v.class_name, x1 + 6, y1 - 6);
+        });
+
+        // 6. Draw Hint Boxes (Orange Dashed)
+        hintBoxes.forEach(v => {
+            const [x1, y1, x2, y2] = v.bbox;
+            const w = x2 - x1;
+            const h = y2 - y1;
+
+            ctx.strokeStyle = '#ff8c00';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 5]);
+            ctx.strokeRect(x1, y1, w, h);
+            ctx.setLineDash([]);
+        });
+
+        // 7. Trigger Browser Download
+        const fileName = `prediction_${currentImage.split('/').pop()}`;
+        const dataUrl = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = dataUrl;
+        link.click();
     };
 
     // Zoom Handlers
