@@ -11,7 +11,9 @@ import {
     ReloadOutlined,
     CheckCircleOutlined,
     CloseCircleOutlined,
-    DeleteOutlined
+    DeleteOutlined,
+    UpOutlined,
+    DownOutlined
 } from '@ant-design/icons';
 
 import ManualClassPopup from './ManualClassPopup';
@@ -88,6 +90,7 @@ const ImageViewerModal = ({
     const [showHelp, setShowHelp] = useState(false);
     const helpRef = React.useRef(null);
     const [selectedIndices, setSelectedIndices] = useState([]);
+    const [isFooterCollapsed, setIsFooterCollapsed] = useState(false); // Phase 6.8: Collapsible Footer
 
     const currentIndex = images.indexOf(currentImage);
 
@@ -206,6 +209,40 @@ const ImageViewerModal = ({
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [showHelp]);
+
+    // Phase 6.9: Keyboard Navigation (Arrow Keys)
+    React.useEffect(() => {
+        const handleKeyDown = (event) => {
+            // Only handle arrow keys when modal is visible and no input is focused
+            if (!visible) return;
+            const activeElement = document.activeElement;
+            if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+                return; // Don't interfere with text input
+            }
+
+            if (event.key === 'ArrowLeft') {
+                // Navigate to previous image
+                if (currentIndex > 0) {
+                    event.preventDefault();
+                    onNavigate(images[currentIndex - 1]);
+                }
+            } else if (event.key === 'ArrowRight') {
+                // Navigate to next image
+                if (currentIndex < images.length - 1) {
+                    event.preventDefault();
+                    onNavigate(images[currentIndex + 1]);
+                }
+            }
+        };
+
+        if (visible) {
+            document.addEventListener('keydown', handleKeyDown);
+        }
+
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [visible, currentIndex, images, onNavigate]);
 
     // Dynamic Story Engine for Historical Hints
     const generateVerificationStory = (hints) => {
@@ -1453,297 +1490,325 @@ const ImageViewerModal = ({
 
             {/* Footer: Detection Details */}
             <div style={{
-                padding: '0.75rem 1.25rem',
+                padding: isFooterCollapsed ? '0.4rem 1.25rem' : '0.75rem 1.25rem',
                 background: 'rgba(10,10,10,0.95)',
                 borderTop: '1px solid rgba(255,255,255,0.1)',
-                maxHeight: '12rem',
-                overflowY: 'auto',
-                zIndex: 100
+                maxHeight: isFooterCollapsed ? '50px' : '12rem',
+                overflowY: isFooterCollapsed ? 'hidden' : 'auto',
+                zIndex: 100,
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
             }}>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <Text type="secondary" style={{ color: '#888', fontSize: '0.75rem', fontWeight: 600 }}>
-                        <InfoCircleOutlined /> MATCHING FILTERS ({filteredDets.length})
-                    </Text>
-                    <Space size={8}>
-                        <Button
-                            size="small"
-                            type="text"
-                            style={{ color: '#1890ff', fontSize: '0.7rem', padding: '0 4px' }}
-                            onClick={selectAll}
-                        >
-                            Select All
-                        </Button>
-                        <span style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
-                        <Button
-                            size="small"
-                            type="text"
-                            style={{ color: '#ff4d4f', fontSize: '0.7rem', padding: '0 4px' }}
-                            onClick={selectNone}
-                        >
-                            Unselect All
-                        </Button>
-                    </Space>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        <Text type="secondary" style={{ color: '#888', fontSize: '0.75rem', fontWeight: 600 }}>
+                            <InfoCircleOutlined /> MATCHING FILTERS ({filteredDets.length})
+                        </Text>
+                        {!isFooterCollapsed && (
+                            <Space size={8}>
+                                <Button
+                                    size="small"
+                                    type="text"
+                                    style={{ color: '#1890ff', fontSize: '0.7rem', padding: '0 4px' }}
+                                    onClick={selectAll}
+                                >
+                                    Select All
+                                </Button>
+                                <span style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
+                                <Button
+                                    size="small"
+                                    type="text"
+                                    style={{ color: '#ff4d4f', fontSize: '0.7rem', padding: '0 4px' }}
+                                    onClick={selectNone}
+                                >
+                                    Unselect All
+                                </Button>
+                            </Space>
+                        )}
+                    </div>
+
+                    <Button
+                        type="text"
+                        size="small"
+                        onClick={() => setIsFooterCollapsed(!isFooterCollapsed)}
+                        icon={isFooterCollapsed ? <UpOutlined /> : <DownOutlined />}
+                        style={{
+                            color: isFooterCollapsed ? '#1890ff' : '#666',
+                            background: isFooterCollapsed ? 'rgba(24,144,255,0.1)' : 'rgba(255,255,255,0.05)',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 800,
+                            padding: '0 8px',
+                            height: '22px'
+                        }}
+                    >
+                        {isFooterCollapsed ? 'EXPAND' : 'MINIMIZE'}
+                    </Button>
                 </div>
-                {scale > 1 && (
-                    <Text style={{ color: '#444', fontSize: '0.7rem' }}>Click and Drag to Pan Image</Text>
-                )}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    {filteredDets.length > 0 ? filteredDets.map((d, i) => {
-                        let color = '#1890ff'; // Default Blue
-                        let bg = 'rgba(24, 144, 255, 0.15)';
 
-                        if (d.confidence < 0.4) {
-                            color = '#ff4d4f'; // High Risk
-                            bg = 'rgba(255, 77, 79, 0.15)';
-                        } else if (d.confidence < 0.7) {
-                            color = '#faad14'; // Medium Risk
-                            bg = 'rgba(250, 173, 20, 0.15)';
-                        } else {
-                            color = '#52c41a'; // Low Risk
-                            bg = 'rgba(82, 196, 26, 0.15)';
-                        }
+                {!isFooterCollapsed && (
+                    <>
+                        {scale > 1 && (
+                            <Text style={{ color: '#444', fontSize: '0.7rem', marginTop: '4px', display: 'block' }}>Click and Drag to Pan Image</Text>
+                        )}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '8px' }}>
+                            {filteredDets.length > 0 ? filteredDets.map((d, i) => {
+                                let color = '#1890ff'; // Default Blue
+                                let bg = 'rgba(24, 144, 255, 0.15)';
 
-                        const isSelected = selectedIndices.includes(i);
-
-                        // Find matching verification
-                        const fileName = currentImage.split('/').pop();
-                        let imgMetadata = experiment?.input_images || {};
-
-                        // Parse JSON string if needed
-                        if (typeof imgMetadata === 'string') {
-                            try {
-                                imgMetadata = JSON.parse(imgMetadata);
-                            } catch (e) {
-                                console.error('Failed to parse input_images metadata:', e);
-                                imgMetadata = {};
-                            }
-                        }
-
-                        const currentImgHash = imgMetadata && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
-
-                        let activeVerification = null;
-                        let hintVerifications = []; // Store all historical hints
-                        let currentMatchMethod = null;
-
-                        verifications.forEach(v => {
-                            const vHash = v.image_hash_md5 || v.imageHashMd5;
-                            const hashMatch = currentImgHash && vHash === currentImgHash;
-                            const nameMatch = v.image_name === fileName;
-
-                            const isIdentityMatch = hashMatch || nameMatch;
-
-                            const isMatch = isIdentityMatch &&
-                                v.class_name === d.class &&
-                                Math.abs(v.bbox[0] - d.bbox[0]) < 1.0 &&
-                                Math.abs(v.bbox[1] - d.bbox[1]) < 1.0 &&
-                                Math.abs(v.bbox[2] - d.bbox[2]) < 1.0 &&
-                                Math.abs(v.bbox[3] - d.bbox[3]) < 1.0;
-
-                            if (isMatch) {
-                                if (v.experiment_id === experiment.id) {
-                                    activeVerification = v;
-                                    currentMatchMethod = hashMatch ? 'HASH' : 'NAME';
+                                if (d.confidence < 0.4) {
+                                    color = '#ff4d4f'; // High Risk
+                                    bg = 'rgba(255, 77, 79, 0.15)';
+                                } else if (d.confidence < 0.7) {
+                                    color = '#faad14'; // Medium Risk
+                                    bg = 'rgba(250, 173, 20, 0.15)';
                                 } else {
-                                    hintVerifications.push(v);
+                                    color = '#52c41a'; // Low Risk
+                                    bg = 'rgba(82, 196, 26, 0.15)';
                                 }
-                            }
-                        });
 
-                        const vStatus = activeVerification?.status || 'unverified';
-                        const primaryHint = hintVerifications.length > 0 ? hintVerifications[0] : null;
+                                const isSelected = selectedIndices.includes(i);
 
-                        const isHovered = hoveredIndex === i;
+                                // Find matching verification
+                                const fileName = currentImage.split('/').pop();
+                                let imgMetadata = experiment?.input_images || {};
 
-                        return (
-                            <div
-                                key={i}
-                                onMouseEnter={() => setHoveredIndex(i)}
-                                onMouseLeave={() => setHoveredIndex(null)}
-                                style={{
-                                    background: isSelected ? bg : 'rgba(255,255,255,0.02)',
-                                    border: `1px solid ${isHovered ? '#fff' : (isSelected ? color : 'rgba(255,255,255,0.1)')}`,
-                                    padding: '2px 8px',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    transition: 'all 0.2s ease',
-                                    opacity: isSelected ? 1 : 0.5,
-                                    position: 'relative',
-                                    transform: isHovered ? 'translateY(-2px)' : 'none',
-                                    boxShadow: isHovered ? `0 0 12px ${color}` : 'none'
-                                }}
-                                onClick={() => handleFocusDetection(i)}
-                            >
-                                <Text style={{ color: '#fff', fontSize: '0.7rem', opacity: 0.5, fontWeight: 'bold' }}>#{i + 1}</Text>
-                                <div
-                                    onClick={(e) => { e.stopPropagation(); toggleDetection(i); }}
-                                    style={{
-                                        width: 14,
-                                        height: 14,
-                                        borderRadius: '2px',
-                                        border: `1.5px solid ${isSelected ? color : '#555'}`,
-                                        background: isSelected ? color : 'transparent',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        transition: 'all 0.2s ease'
-                                    }}
-                                >
-                                    {isSelected && <div style={{ width: 8, height: 2, background: '#fff', borderRadius: '1px' }} />}
-                                </div>
-                                <Text
-                                    style={{ color: isSelected ? color : '#888', fontSize: '0.8125rem', fontWeight: 500 }}
-                                >
-                                    <strong>{d.class}</strong>: {(d.confidence * 100).toFixed(1)}%
-                                    {activeVerification && (
-                                        <span title={`Verified in Current Experiment (via ${currentMatchMethod})`} style={{ fontSize: '0.7rem', marginLeft: '6px' }}>
-                                            {currentMatchMethod === 'HASH' ? '🔑' : '📄'}
-                                        </span>
-                                    )}
-                                    {!activeVerification && primaryHint && (
-                                        <span title="Historical Hint available" style={{ fontSize: '0.7rem', marginLeft: '6px', filter: 'grayscale(1)', opacity: 0.4 }}>
-                                            🔑
-                                        </span>
-                                    )}
-                                </Text>
+                                // Parse JSON string if needed
+                                if (typeof imgMetadata === 'string') {
+                                    try {
+                                        imgMetadata = JSON.parse(imgMetadata);
+                                    } catch (e) {
+                                        console.error('Failed to parse input_images metadata:', e);
+                                        imgMetadata = {};
+                                    }
+                                }
 
-                                {/* 3-Button Verification Status Selector */}
-                                <Space size={6} style={{ marginLeft: '8px' }}>
-                                    {/* UNVERIFIED Button */}
-                                    <div
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onVerify({
-                                                image_name: fileName,
-                                                class_name: d.class,
-                                                bbox: d.bbox,
-                                                status: 'unverified',
-                                                experiment_id: experiment.id
-                                            });
-                                        }}
-                                        style={{
-                                            padding: '2px 8px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.65rem',
-                                            fontWeight: 'bold',
-                                            background: vStatus === 'unverified' ? 'rgba(128, 128, 128, 0.2)' : 'transparent',
-                                            border: `1px solid ${vStatus === 'unverified' ? '#888' : 'rgba(255,255,255,0.1)'}`,
-                                            color: vStatus === 'unverified' ? '#fff' : 'rgba(255,255,255,0.3)',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s ease'
-                                        }}>
-                                        UNVERIFIED
-                                    </div>
+                                const currentImgHash = imgMetadata && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
 
-                                    {/* PASS Button */}
-                                    <div
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onVerify({
-                                                image_name: fileName,
-                                                class_name: d.class,
-                                                bbox: d.bbox,
-                                                status: 'pass',
-                                                experiment_id: experiment.id
-                                            });
-                                        }}
-                                        style={{
-                                            padding: '2px 8px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.65rem',
-                                            fontWeight: 'bold',
-                                            background: vStatus === 'pass' ? 'rgba(24, 144, 255, 0.2)' : 'transparent',
-                                            border: `1px solid ${vStatus === 'pass' ? '#1890ff' : 'rgba(255,255,255,0.1)'}`,
-                                            color: vStatus === 'pass' ? '#1890ff' : 'rgba(255,255,255,0.3)',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s ease'
-                                        }}>
-                                        ✅ PASS
-                                    </div>
+                                let activeVerification = null;
+                                let hintVerifications = []; // Store all historical hints
+                                let currentMatchMethod = null;
 
-                                    {/* FAIL Button */}
-                                    <div
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onVerify({
-                                                image_name: fileName,
-                                                class_name: d.class,
-                                                bbox: d.bbox,
-                                                status: 'fail',
-                                                experiment_id: experiment.id
-                                            });
-                                        }}
-                                        style={{
-                                            padding: '2px 8px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.65rem',
-                                            fontWeight: 'bold',
-                                            background: vStatus === 'fail' ? 'rgba(250, 140, 22, 0.2)' : 'transparent',
-                                            border: `1px solid ${vStatus === 'fail' ? '#fa8c16' : 'rgba(255,255,255,0.1)'}`,
-                                            color: vStatus === 'fail' ? '#fa8c16' : 'rgba(255,255,255,0.3)',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s ease'
-                                        }}>
-                                        ❌ FAIL
-                                    </div>
-                                </Space>
+                                verifications.forEach(v => {
+                                    const vHash = v.image_hash_md5 || v.imageHashMd5;
+                                    const hashMatch = currentImgHash && vHash === currentImgHash;
+                                    const nameMatch = v.image_name === fileName;
 
-                                {/* Historical Hint Badge */}
-                                {!activeVerification && hintVerifications.length > 0 && primaryHint && (
-                                    <Tooltip
-                                        title={
-                                            <div style={{ fontSize: '0.78rem', lineHeight: '1.4' }}>
-                                                <div style={{ fontWeight: 'bold', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '4px', marginBottom: '8px', color: '#1890ff' }}>
-                                                    VERIFICATION STORY
-                                                </div>
-                                                <div style={{ marginBottom: '12px', borderBottom: '1px dashed rgba(255,255,255,0.1)', pb: '8px' }}>
-                                                    {generateVerificationStory(hintVerifications)}
-                                                </div>
-                                                <div style={{ maxHeight: '150px', overflowY: 'auto', pr: '4px' }}>
-                                                    <div style={{ fontSize: '0.65rem', fontWeight: 'bold', mb: '4px', opacity: 0.5 }}>NAME LOG:</div>
-                                                    {hintVerifications.map((hv, idx) => (
-                                                        <div key={idx} style={{ fontSize: '0.65rem', marginBottom: '4px', background: 'rgba(255,255,255,0.03)', padding: '2px 6px', borderRadius: '3px' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                                <span style={{ color: '#fff' }}>{hv.training_name || 'Legacy'}</span>
-                                                                <span style={{ color: hv.status === 'pass' ? '#52c41a' : '#ff4d4f', fontWeight: 'bold' }}>{hv.status.toUpperCase()}</span>
-                                                            </div>
-                                                            <div style={{ opacity: 0.5 }}>Expt: {hv.experiment_name || hv.experiment_id?.slice(0, 8)}</div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
+                                    const isIdentityMatch = hashMatch || nameMatch;
+
+                                    const isMatch = isIdentityMatch &&
+                                        v.class_name === d.class &&
+                                        Math.abs(v.bbox[0] - d.bbox[0]) < 1.0 &&
+                                        Math.abs(v.bbox[1] - d.bbox[1]) < 1.0 &&
+                                        Math.abs(v.bbox[2] - d.bbox[2]) < 1.0 &&
+                                        Math.abs(v.bbox[3] - d.bbox[3]) < 1.0;
+
+                                    if (isMatch) {
+                                        if (v.experiment_id === experiment.id) {
+                                            activeVerification = v;
+                                            currentMatchMethod = hashMatch ? 'HASH' : 'NAME';
+                                        } else {
+                                            hintVerifications.push(v);
                                         }
-                                        overlayStyle={{ maxWidth: '320px' }}
-                                    >
-                                        <div style={{
-                                            marginLeft: 'auto',
-                                            padding: '2px 6px',
-                                            background: 'rgba(255,255,255,0.03)',
+                                    }
+                                });
+
+                                const vStatus = activeVerification?.status || 'unverified';
+                                const primaryHint = hintVerifications.length > 0 ? hintVerifications[0] : null;
+
+                                const isHovered = hoveredIndex === i;
+
+                                return (
+                                    <div
+                                        key={i}
+                                        onMouseEnter={() => setHoveredIndex(i)}
+                                        onMouseLeave={() => setHoveredIndex(null)}
+                                        style={{
+                                            background: isSelected ? bg : 'rgba(255,255,255,0.02)',
+                                            border: `1px solid ${isHovered ? '#fff' : (isSelected ? color : 'rgba(255,255,255,0.1)')}`,
+                                            padding: '2px 8px',
                                             borderRadius: '4px',
-                                            border: '1px dashed rgba(255,255,255,0.15)',
+                                            cursor: 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
-                                            gap: '4px',
-                                            height: '24px'
-                                        }}>
-                                            <span style={{ fontSize: '0.6rem', color: '#666', fontWeight: 600 }}>HINT:</span>
-                                            <Tag
-                                                color={primaryHint.status === 'pass' ? 'success' : 'error'}
-                                                style={{ fontSize: '0.6rem', padding: '0 4px', height: '16px', lineHeight: '14.5px', margin: 0, border: 'none', borderRadius: '2px' }}
-                                            >
-                                                {primaryHint.status.toUpperCase()}
-                                            </Tag>
+                                            gap: '8px',
+                                            transition: 'all 0.2s ease',
+                                            opacity: isSelected ? 1 : 0.5,
+                                            position: 'relative',
+                                            transform: isHovered ? 'translateY(-2px)' : 'none',
+                                            boxShadow: isHovered ? `0 0 12px ${color}` : 'none'
+                                        }}
+                                        onClick={() => handleFocusDetection(i)}
+                                    >
+                                        <Text style={{ color: '#fff', fontSize: '0.7rem', opacity: 0.5, fontWeight: 'bold' }}>#{i + 1}</Text>
+                                        <div
+                                            onClick={(e) => { e.stopPropagation(); toggleDetection(i); }}
+                                            style={{
+                                                width: 14,
+                                                height: 14,
+                                                borderRadius: '2px',
+                                                border: `1.5px solid ${isSelected ? color : '#555'}`,
+                                                background: isSelected ? color : 'transparent',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                transition: 'all 0.2s ease'
+                                            }}
+                                        >
+                                            {isSelected && <div style={{ width: 8, height: 2, background: '#fff', borderRadius: '1px' }} />}
                                         </div>
-                                    </Tooltip>
-                                )}
-                            </div>
-                        );
-                    }) : (
-                        <Text type="secondary" style={{ color: '#666' }}>No matching objects with current filters.</Text>
-                    )}
-                </div>
+                                        <Text
+                                            style={{ color: isSelected ? color : '#888', fontSize: '0.8125rem', fontWeight: 500 }}
+                                        >
+                                            <strong>{d.class}</strong>: {(d.confidence * 100).toFixed(1)}%
+                                            {activeVerification && (
+                                                <span title={`Verified in Current Experiment (via ${currentMatchMethod})`} style={{ fontSize: '0.7rem', marginLeft: '6px' }}>
+                                                    {currentMatchMethod === 'HASH' ? '🔑' : '📄'}
+                                                </span>
+                                            )}
+                                            {!activeVerification && primaryHint && (
+                                                <span title="Historical Hint available" style={{ fontSize: '0.7rem', marginLeft: '6px', filter: 'grayscale(1)', opacity: 0.4 }}>
+                                                    🔑
+                                                </span>
+                                            )}
+                                        </Text>
+
+                                        {/* 3-Button Verification Status Selector */}
+                                        <Space size={6} style={{ marginLeft: '8px' }}>
+                                            {/* UNVERIFIED Button */}
+                                            <div
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onVerify({
+                                                        image_name: fileName,
+                                                        class_name: d.class,
+                                                        bbox: d.bbox,
+                                                        status: 'unverified',
+                                                        experiment_id: experiment.id
+                                                    });
+                                                }}
+                                                style={{
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.65rem',
+                                                    fontWeight: 'bold',
+                                                    background: vStatus === 'unverified' ? 'rgba(128, 128, 128, 0.2)' : 'transparent',
+                                                    border: `1px solid ${vStatus === 'unverified' ? '#888' : 'rgba(255,255,255,0.1)'}`,
+                                                    color: vStatus === 'unverified' ? '#fff' : 'rgba(255,255,255,0.3)',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s ease'
+                                                }}>
+                                                UNVERIFIED
+                                            </div>
+
+                                            {/* PASS Button */}
+                                            <div
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onVerify({
+                                                        image_name: fileName,
+                                                        class_name: d.class,
+                                                        bbox: d.bbox,
+                                                        status: 'pass',
+                                                        experiment_id: experiment.id
+                                                    });
+                                                }}
+                                                style={{
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.65rem',
+                                                    fontWeight: 'bold',
+                                                    background: vStatus === 'pass' ? 'rgba(24, 144, 255, 0.2)' : 'transparent',
+                                                    border: `1px solid ${vStatus === 'pass' ? '#1890ff' : 'rgba(255,255,255,0.1)'}`,
+                                                    color: vStatus === 'pass' ? '#1890ff' : 'rgba(255,255,255,0.3)',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s ease'
+                                                }}>
+                                                ✅ PASS
+                                            </div>
+
+                                            {/* FAIL Button */}
+                                            <div
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onVerify({
+                                                        image_name: fileName,
+                                                        class_name: d.class,
+                                                        bbox: d.bbox,
+                                                        status: 'fail',
+                                                        experiment_id: experiment.id
+                                                    });
+                                                }}
+                                                style={{
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.65rem',
+                                                    fontWeight: 'bold',
+                                                    background: vStatus === 'fail' ? 'rgba(250, 140, 22, 0.2)' : 'transparent',
+                                                    border: `1px solid ${vStatus === 'fail' ? '#fa8c16' : 'rgba(255,255,255,0.1)'}`,
+                                                    color: vStatus === 'fail' ? '#fa8c16' : 'rgba(255,255,255,0.3)',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s ease'
+                                                }}>
+                                                ❌ FAIL
+                                            </div>
+                                        </Space>
+
+                                        {/* Historical Hint Badge */}
+                                        {!activeVerification && hintVerifications.length > 0 && primaryHint && (
+                                            <Tooltip
+                                                title={
+                                                    <div style={{ fontSize: '0.78rem', lineHeight: '1.4' }}>
+                                                        <div style={{ fontWeight: 'bold', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '4px', marginBottom: '8px', color: '#1890ff' }}>
+                                                            VERIFICATION STORY
+                                                        </div>
+                                                        <div style={{ marginBottom: '12px', borderBottom: '1px dashed rgba(255,255,255,0.1)', pb: '8px' }}>
+                                                            {generateVerificationStory(hintVerifications)}
+                                                        </div>
+                                                        <div style={{ maxHeight: '150px', overflowY: 'auto', pr: '4px' }}>
+                                                            <div style={{ fontSize: '0.65rem', fontWeight: 'bold', mb: '4px', opacity: 0.5 }}>NAME LOG:</div>
+                                                            {hintVerifications.map((hv, idx) => (
+                                                                <div key={idx} style={{ fontSize: '0.65rem', marginBottom: '4px', background: 'rgba(255,255,255,0.03)', padding: '2px 6px', borderRadius: '3px' }}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                        <span style={{ color: '#fff' }}>{hv.training_name || 'Legacy'}</span>
+                                                                        <span style={{ color: hv.status === 'pass' ? '#52c41a' : '#ff4d4f', fontWeight: 'bold' }}>{hv.status.toUpperCase()}</span>
+                                                                    </div>
+                                                                    <div style={{ opacity: 0.5 }}>Expt: {hv.experiment_name || hv.experiment_id?.slice(0, 8)}</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                }
+                                                overlayStyle={{ maxWidth: '320px' }}
+                                            >
+                                                <div style={{
+                                                    marginLeft: 'auto',
+                                                    padding: '2px 6px',
+                                                    background: 'rgba(255,255,255,0.03)',
+                                                    borderRadius: '4px',
+                                                    border: '1px dashed rgba(255,255,255,0.15)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    height: '24px'
+                                                }}>
+                                                    <span style={{ fontSize: '0.6rem', color: '#666', fontWeight: 600 }}>HINT:</span>
+                                                    <Tag
+                                                        color={primaryHint.status === 'pass' ? 'success' : 'error'}
+                                                        style={{ fontSize: '0.6rem', padding: '0 4px', height: '16px', lineHeight: '14.5px', margin: 0, border: 'none', borderRadius: '2px' }}
+                                                    >
+                                                        {primaryHint.status.toUpperCase()}
+                                                    </Tag>
+                                                </div>
+                                            </Tooltip>
+                                        )}
+                                    </div>
+                                );
+                            }) : (
+                                <Text type="secondary" style={{ color: '#666' }}>No matching objects with current filters.</Text>
+                            )}
+                        </div>
+                    </>
+                )}
             </div>
 
             <ManualClassPopup
