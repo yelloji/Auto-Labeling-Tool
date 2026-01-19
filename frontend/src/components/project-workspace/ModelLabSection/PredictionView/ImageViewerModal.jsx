@@ -129,14 +129,30 @@ const ImageViewerModal = ({
     // My boxes: verifications for THIS experiment
     const myBoxes = currentImageVerifications.filter(v => v.experiment_id === experiment?.id);
 
-    // Hint boxes: verifications from OTHER experiments that DON'T overlap with myBoxes
-    // Helper to check if two bboxes are roughly the same (within small threshold)
-    const bboxesMatch = (bbox1, bbox2) => {
-        const threshold = 5; // pixels
-        return Math.abs(bbox1[0] - bbox2[0]) < threshold &&
-            Math.abs(bbox1[1] - bbox2[1]) < threshold &&
-            Math.abs(bbox1[2] - bbox2[2]) < threshold &&
-            Math.abs(bbox1[3] - bbox2[3]) < threshold;
+    // Phase 7.0: Calculate IoU (Intersection over Union) for accurate box comparison
+    const calculateIoU = (bbox1, bbox2) => {
+        // bbox format: [x1, y1, x2, y2]
+        const x1 = Math.max(bbox1[0], bbox2[0]);
+        const y1 = Math.max(bbox1[1], bbox2[1]);
+        const x2 = Math.min(bbox1[2], bbox2[2]);
+        const y2 = Math.min(bbox1[3], bbox2[3]);
+
+        // No intersection
+        if (x2 < x1 || y2 < y1) {
+            return 0.0;
+        }
+
+        const intersection = (x2 - x1) * (y2 - y1);
+        const area1 = (bbox1[2] - bbox1[0]) * (bbox1[3] - bbox1[1]);
+        const area2 = (bbox2[2] - bbox2[0]) * (bbox2[3] - bbox2[1]);
+        const union = area1 + area2 - intersection;
+
+        return union > 0 ? intersection / union : 0.0;
+    };
+
+    // Helper to check if two bboxes match using IoU threshold
+    const bboxesMatch = (bbox1, bbox2, iouThreshold = 0.3) => {
+        return calculateIoU(bbox1, bbox2) >= iouThreshold;
     };
 
     const hintBoxes = currentImageVerifications
