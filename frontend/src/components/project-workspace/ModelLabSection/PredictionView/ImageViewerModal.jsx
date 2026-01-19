@@ -408,35 +408,36 @@ const ImageViewerModal = ({
             // B. Draw Bounding Box
             if (showBoxes) {
                 ctx.strokeStyle = riskColor;
-                ctx.lineWidth = 3;
+                ctx.lineWidth = 2; // Match UI (2px)
                 ctx.strokeRect(x1, y1, w, h);
             }
 
-            // C. Draw Label
+            // C. Draw Label (MATCH SVG DYNAMIC LOGIC PIXEL-PER-PIXEL)
             if (showLabels) {
                 const labelText = `${d.class} ${(d.confidence * 100).toFixed(0)}%`;
                 const fontSize = 14;
-                ctx.font = `bold ${fontSize}px sans-serif`;
+                ctx.font = `bold ${fontSize}px monospace`; // MIRROR FONT
                 const textWidth = ctx.measureText(labelText).width;
-                const labelWidth = textWidth + 8;
+                const labelWidth = textWidth + 10;
                 const labelHeight = 18;
 
-                // Dynamic Horizontal Position (Bound check)
+                // 1. Dynamic X (Bound check)
                 let labelDrawX = x1;
                 if (labelDrawX + labelWidth > img.naturalWidth) {
                     labelDrawX = Math.max(0, img.naturalWidth - labelWidth);
                 }
 
-                // Dynamic Vertical Position
-                let labelDrawY = y1 - labelHeight - 4; // Preferred: Above
-                if (labelDrawY < 0) {
-                    // Try below
-                    if (y2 + labelHeight + 4 < img.naturalHeight) {
-                        labelDrawY = y2 + 4;
-                    } else {
-                        // Force inside top
-                        labelDrawY = y1;
-                    }
+                // 2. Dynamic Y (Mirror UI: Above > Below > Inside hierarchy)
+                let labelDrawY;
+                const spaceAbove = y1;
+                const spaceBelow = img.naturalHeight - y2;
+
+                if (spaceAbove >= labelHeight + 4) {
+                    labelDrawY = y1 - labelHeight - 4; // Above
+                } else if (spaceBelow >= labelHeight + 4) {
+                    labelDrawY = y2 + 4; // Below
+                } else {
+                    labelDrawY = y1 + 4; // Inside Top
                 }
 
                 // Label Background
@@ -447,7 +448,7 @@ const ImageViewerModal = ({
 
                 // Label Text
                 ctx.fillStyle = '#ffffff';
-                ctx.fillText(labelText, labelDrawX + 4, labelDrawY + 14);
+                ctx.fillText(labelText, labelDrawX + 5, labelDrawY + 14); // Perfect Mirror Offset
             }
         });
 
@@ -458,14 +459,15 @@ const ImageViewerModal = ({
             const h = y2 - y1;
 
             ctx.strokeStyle = '#a335ee';
-            ctx.lineWidth = 4;
+            ctx.lineWidth = 3; // Match UI (3px)
             ctx.strokeRect(x1, y1, w, h);
 
             ctx.fillStyle = 'rgba(163, 53, 238, 0.1)';
             ctx.fillRect(x1, y1, w, h);
 
-            // Dynamic Manual Label Position
+            // Dynamic Manual Label Position (Mirror UI)
             const manualLabel = v.class_name;
+            ctx.font = 'bold 14px monospace'; // MIRROR FONT
             const manualLabelWidth = ctx.measureText(manualLabel).width + 12;
             const manualLabelHeight = 22;
 
@@ -478,11 +480,10 @@ const ImageViewerModal = ({
                 else mY = y1;
             }
 
-            ctx.font = 'bold 14px sans-serif';
             ctx.fillStyle = '#a335ee';
             ctx.fillRect(mX, mY, manualLabelWidth, manualLabelHeight);
             ctx.fillStyle = '#ffffff';
-            ctx.fillText(manualLabel, mX + 6, mY + 16);
+            ctx.fillText(manualLabel, mX + 6, mY + 17); // Mirror vertical baseline
         });
 
         // 6. Draw Hint Boxes (Orange Dashed)
@@ -516,25 +517,31 @@ const ImageViewerModal = ({
                 ctx.fillStyle = 'rgba(208,208,208,0.08)';
                 ctx.fillRect(x1, y1, w, h);
 
-                // Dynamic Missed Label Position
+                // Dynamic Missed Label Position (Mirror UI Text-only Dynamic style)
                 const missedLabel = `${missed.class_name} - MISSED`;
-                ctx.font = 'bold 13px monospace';
-                const missedWidth = ctx.measureText(missedLabel).width + 8;
+                ctx.font = 'bold 13px monospace'; // MIRROR FONT
+                const missedWidth = ctx.measureText(missedLabel).width + 10;
                 const missedHeight = 18;
 
                 let mtX = x1;
                 if (mtX + missedWidth > img.naturalWidth) mtX = Math.max(0, img.naturalWidth - missedWidth);
 
-                let mtY = y1 - missedHeight;
-                if (mtY < 0) {
-                    if (y2 + missedHeight < img.naturalHeight) mtY = y2 + missedHeight;
-                    else mtY = y1 + missedHeight;
+                let mtY;
+                const sAbove = y1;
+                const sBelow = img.naturalHeight - y2;
+
+                if (sAbove >= missedHeight + 4) {
+                    mtY = y1 - 4; // Position baseline above box
+                } else if (sBelow >= missedHeight + 4) {
+                    mtY = y2 + missedHeight + 4; // Position baseline below box
+                } else {
+                    mtY = y1 + missedHeight + 4; // Position baseline inside top
                 }
 
                 ctx.fillStyle = '#d0d0d0';
                 ctx.shadowColor = '#000';
                 ctx.shadowBlur = 6;
-                ctx.fillText(missedLabel, mtX + 4, mtY - 4);
+                ctx.fillText(missedLabel, mtX + 4, mtY); // Mirror SVG text-baseline positioning
                 ctx.shadowBlur = 0; // Reset shadow
             });
         }
@@ -1679,34 +1686,60 @@ const ImageViewerModal = ({
                                 })}
 
                                 {/* Phase 7.1: Render Missed Ground Truth Detections (Light Gray) */}
-                                {showMissed && missedDetections.map((missed, idx) => (
-                                    <g key={`missed-${idx}`}>
-                                        <rect
-                                            x={missed.bbox[0]}
-                                            y={missed.bbox[1]}
-                                            width={missed.bbox[2] - missed.bbox[0]}
-                                            height={missed.bbox[3] - missed.bbox[1]}
-                                            stroke="#d0d0d0"
-                                            strokeWidth={3}
-                                            strokeDasharray="8,4"
-                                            fill="rgba(208,208,208,0.08)"
-                                            pointerEvents="none"
-                                        />
-                                        <text
-                                            x={missed.bbox[0] + 4}
-                                            y={missed.bbox[1] + 17}
-                                            fill="#d0d0d0"
-                                            style={{
-                                                fontSize: '13px',
-                                                fontWeight: 800,
-                                                fontFamily: 'monospace',
-                                                textShadow: '0 0 6px #000, 0 0 3px #000'
-                                            }}
-                                        >
-                                            {missed.class_name} - MISSED
-                                        </text>
-                                    </g>
-                                ))}
+                                {showMissed && missedDetections.map((missed, idx) => {
+                                    const labelText = `${missed.class_name} - MISSED`;
+                                    const charWidth = 8.5;
+                                    const labelWidth = (labelText.length * charWidth) + 12;
+                                    const labelHeight = 18;
+
+                                    // Dynamic X
+                                    let mtX = missed.bbox[0];
+                                    if (mtX + labelWidth > dimensions.width) {
+                                        mtX = Math.max(0, dimensions.width - labelWidth);
+                                    }
+
+                                    // Dynamic Y
+                                    let mtY;
+                                    const spaceAbove = missed.bbox[1];
+                                    const spaceBelow = dimensions.height - missed.bbox[3];
+
+                                    if (spaceAbove >= labelHeight + 4) {
+                                        mtY = missed.bbox[1] - 4; // Above
+                                    } else if (spaceBelow >= labelHeight + 4) {
+                                        mtY = missed.bbox[3] + labelHeight + 4; // Below
+                                    } else {
+                                        mtY = missed.bbox[1] + labelHeight + 4; // Inside top
+                                    }
+
+                                    return (
+                                        <g key={`missed-${idx}`}>
+                                            <rect
+                                                x={missed.bbox[0]}
+                                                y={missed.bbox[1]}
+                                                width={missed.bbox[2] - missed.bbox[0]}
+                                                height={missed.bbox[3] - missed.bbox[1]}
+                                                stroke="#d0d0d0"
+                                                strokeWidth={3}
+                                                strokeDasharray="8,4"
+                                                fill="rgba(208,208,208,0.08)"
+                                                pointerEvents="none"
+                                            />
+                                            <text
+                                                x={mtX + 4}
+                                                y={mtY - 4}
+                                                fill="#d0d0d0"
+                                                style={{
+                                                    fontSize: '13px',
+                                                    fontWeight: 800,
+                                                    fontFamily: 'monospace',
+                                                    textShadow: '0 0 6px #000, 0 0 3px #000'
+                                                }}
+                                            >
+                                                {labelText}
+                                            </text>
+                                        </g>
+                                    );
+                                })}
                             </svg>
                         )}
                     </div>
