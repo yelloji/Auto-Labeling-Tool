@@ -2485,3 +2485,71 @@ async def trigger_prediction(
 
     return {"experiment_id": experiment.id, "status": "running"}
 
+
+# Phase 7.1: Get missed ground truth detections
+@router.get("/experiments/{experiment_id}/missed-detections/{image_name}")
+async def get_missed_ground_truth(
+    experiment_id: str,
+    image_name: str,
+    iou_threshold: float = Query(0.3, ge=0.1, le=0.9),
+    db: Session = Depends(get_db)
+):
+    """Get ground truth objects that the model failed to detect."""
+    from utils.ground_truth_loader import load_split_annotations, get_missed_detections
+    
+    # Get experiment
+    experiment = db.get(ModelExperiment, experiment_id)
+    if not experiment:
+        raise HTTPException(404, "Experiment not found")
+    
+    if not experiment.dataset_path or not experiment.dataset_source:
+        return []
+    
+    try:
+        # Load annotations for this split
+        annotations = load_split_annotations(experiment.dataset_path, experiment.dataset_source)
+        
+        # Get predictions for this image
+        if isinstance(experiment.predictions, str):
+            predictions = json.loads(experiment.predictions)
+        else:
+            predictions = experiment.predictions or {}
+        
+        image_predictions = predictions.get(image_name, [])
+        
+        # Get image dimensions
+        if isinstance(experiment.input_images, str):
+            input_images = json.loads(experiment.input_images)
+        else:
+            input_images = experiment.input_images or {}
+        
+        img_metadata = input_images.get(image_name, {})
+        img_width = img_metadata.get('width', 640)
+        img_height = img_metadata.get('height', 640)
+        
+        # Build label mapping from project labels
+        project = db.get(Project, experiment.project_id)
+        label_mapping = {label.id: label.name for label in project.labels}
+        
+        # Construct image key
+        image_key = f"images\\{experiment.dataset_source}\\{image_name}"
+        
+        # Find missed detections
+        missed = get_missed_detections(
+            annotations,
+            image_key,
+            image_predictions,
+            img_width,
+            img_height,
+            label_mapping,
+            iou_threshold
+        )
+        
+        return missed
+    
+    except FileNotFoundError:
+        # No annotations.json file
+        return []
+    except Exception as e:
+        logger.error(f"Error loading missed detections: {e}")
+        return []

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Button, Space, Typography, Tag, Tooltip } from 'antd';
+import { Modal, Button, Space, Typography, Tag, Tooltip, Slider } from 'antd';
 import {
     LeftOutlined,
     RightOutlined,
@@ -91,6 +91,11 @@ const ImageViewerModal = ({
     const helpRef = React.useRef(null);
     const [selectedIndices, setSelectedIndices] = useState([]);
     const [isFooterCollapsed, setIsFooterCollapsed] = useState(false); // Phase 6.8: Collapsible Footer
+
+    // Phase 7.1: Missed Ground Truth Detections
+    const [missedDetections, setMissedDetections] = useState([]);
+    const [showMissed, setShowMissed] = useState(true);
+    const [iouThreshold, setIouThreshold] = useState(0.3);
 
     const currentIndex = images.indexOf(currentImage);
 
@@ -259,6 +264,32 @@ const ImageViewerModal = ({
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, [visible, currentIndex, images, onNavigate]);
+
+    // Phase 7.1: Fetch missed detections when image or IoU changes
+    React.useEffect(() => {
+        if (!currentImage || !experiment) {
+            setMissedDetections([]);
+            return;
+        }
+
+        const fetchMissedDetections = async () => {
+            try {
+                const { missedDetectionsAPI } = await import('../../../../services/api');
+                const fileName = currentImage.split('/').pop();
+                const missed = await missedDetectionsAPI.getMissedDetections(
+                    experiment.id,
+                    fileName,
+                    iouThreshold
+                );
+                setMissedDetections(missed || []);
+            } catch (error) {
+                console.error('Error fetching missed detections:', error);
+                setMissedDetections([]);
+            }
+        };
+
+        fetchMissedDetections();
+    }, [currentImage, experiment, iouThreshold]);
 
     // Dynamic Story Engine for Historical Hints
     const generateVerificationStory = (hints) => {

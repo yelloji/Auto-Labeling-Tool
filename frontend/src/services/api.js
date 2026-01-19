@@ -1404,5 +1404,20 @@ export const systemAPI = {
   }
 };
 
+// Phase 7.1: Missed Ground Truth Detections
+export const missedDetectionsAPI = {
+  getMissedDetections: async (experimentId, imageName, iouThreshold = 0.3) => {
+    try {
+      const response = await api.get(`/api/v1/experiments/${experimentId}/missed-detections/${imageName}`, {
+        params: { iou_threshold: iouThreshold }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to get missed detections:', error);
+      return [];
+    }
+  }
+};
+
 
 export default api;
