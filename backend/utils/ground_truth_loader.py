@@ -26,13 +26,16 @@ def load_split_annotations(dataset_path: str, split: str) -> Dict:
     with open(json_path, 'r') as f:
         all_annotations = json.load(f)
     
-    # Filter by split - image paths like "images\\val\\defect_001.png"
-    split_prefix = f"images\\{split}\\"
-    return {
-        path: anns 
-        for path, anns in all_annotations.items()
-        if path.startswith(split_prefix)
-    }
+    # Filter by split and normalize paths to use /
+    split_prefix = f"images/{split}/"
+    normalized_annotations = {}
+    
+    for path, anns in all_annotations.items():
+        standard_path = path.replace('\\', '/')
+        if standard_path.startswith(split_prefix):
+            normalized_annotations[standard_path] = anns
+            
+    return normalized_annotations
 
 
 def calculate_iou(box1: List[float], box2: List[float]) -> float:
@@ -135,13 +138,12 @@ def get_missed_detections(
         has_match = False
         
         for pred in predictions:
-            # Check if same class
-            if pred.get('class') == gt['class_name']:
-                # Calculate IoU
-                iou = calculate_iou(gt['bbox'], pred['bbox'])
-                if iou >= iou_threshold:
-                    has_match = True
-                    break
+            # Match purely by Location (IoU) 
+            # If the model saw ANYTHING here (even with wrong label), it's not a "miss"
+            iou = calculate_iou(gt['bbox'], pred['bbox'])
+            if iou >= iou_threshold:
+                has_match = True
+                break
         
         if not has_match:
             missed.append(gt)

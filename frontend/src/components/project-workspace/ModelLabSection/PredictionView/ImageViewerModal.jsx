@@ -782,6 +782,8 @@ const ImageViewerModal = ({
                         <Tag color="blue" style={{ borderRadius: '4px', border: 'none', background: 'rgba(24, 144, 255, 0.2)', color: '#1890ff' }}>
                             {filteredDets.length} Matching Detections
                         </Tag>
+
+
                         <Text style={{ color: '#888', fontSize: '0.75rem' }}>{currentIndex + 1} of {images.length}</Text>
                         {lastLoadTime > 0 && (
                             <Tag color="cyan" style={{ borderRadius: '4px', border: 'none', background: 'rgba(0, 255, 255, 0.1)', color: '#00ffff', fontSize: '10px' }}>
@@ -970,6 +972,75 @@ const ImageViewerModal = ({
                             {isDrawingMode ? "CANCEL" : "ADD MISSING"}
                         </Button>
                     </Tooltip>
+
+                    {/* Phase 7.1: Missed Detections Toggle */}
+                    {missedDetections.length > 0 && (
+                        <>
+                            <Tooltip title="Show/Hide Missed Ground Truth Detections">
+                                <Button
+                                    className="premium-action-btn"
+                                    onClick={() => setShowMissed(!showMissed)}
+                                    style={{
+                                        background: showMissed
+                                            ? 'linear-gradient(135deg, rgba(208,208,208,0.15) 0%, rgba(160,160,160,0.15) 100%)'
+                                            : 'rgba(0,0,0,0.3)',
+                                        border: `1px solid ${showMissed ? '#d0d0d0' : 'rgba(255,255,255,0.1)'}`,
+                                        color: showMissed ? '#d0d0d0' : '#666',
+                                        borderRadius: '8px',
+                                        padding: '4px 10px',
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        height: '28px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        transition: 'all 0.2s ease',
+                                        boxShadow: showMissed ? '0 0 15px rgba(208,208,208,0.3)' : 'none',
+                                        letterSpacing: '0.6px'
+                                    }}
+                                >
+                                    <span style={{ fontSize: '13px' }}>◻️</span>
+                                    MISSED ({missedDetections.length})
+                                </Button>
+                            </Tooltip>
+
+                            {showMissed && (
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    background: 'rgba(0,0,0,0.3)',
+                                    padding: '3px 10px',
+                                    borderRadius: '6px',
+                                    border: '1px solid rgba(255,255,255,0.1)'
+                                }}>
+                                    <span style={{ fontSize: '10px', color: '#888', fontWeight: 600 }}>IoU:</span>
+                                    <input
+                                        type="number"
+                                        min="0.1"
+                                        max="0.9"
+                                        step="0.05"
+                                        value={iouThreshold}
+                                        onChange={(e) => {
+                                            const val = parseFloat(e.target.value);
+                                            if (val >= 0.1 && val <= 0.9) setIouThreshold(val);
+                                        }}
+                                        style={{
+                                            width: '50px',
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            borderRadius: '4px',
+                                            color: '#fff',
+                                            fontSize: '11px',
+                                            padding: '2px 6px',
+                                            textAlign: 'center',
+                                            fontWeight: 600
+                                        }}
+                                    />
+                                </div>
+                            )}
+                        </>
+                    )}
 
                     <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)' }} />
 
@@ -1509,6 +1580,36 @@ const ImageViewerModal = ({
                                         </g>
                                     );
                                 })}
+
+                                {/* Phase 7.1: Render Missed Ground Truth Detections (Light Gray) */}
+                                {showMissed && missedDetections.map((missed, idx) => (
+                                    <g key={`missed-${idx}`}>
+                                        <rect
+                                            x={missed.bbox[0]}
+                                            y={missed.bbox[1]}
+                                            width={missed.bbox[2] - missed.bbox[0]}
+                                            height={missed.bbox[3] - missed.bbox[1]}
+                                            stroke="#d0d0d0"
+                                            strokeWidth={3}
+                                            strokeDasharray="8,4"
+                                            fill="rgba(208,208,208,0.08)"
+                                            pointerEvents="none"
+                                        />
+                                        <text
+                                            x={missed.bbox[0] + 4}
+                                            y={missed.bbox[1] + 17}
+                                            fill="#d0d0d0"
+                                            style={{
+                                                fontSize: '13px',
+                                                fontWeight: 800,
+                                                fontFamily: 'monospace',
+                                                textShadow: '0 0 6px #000, 0 0 3px #000'
+                                            }}
+                                        >
+                                            {missed.class_name} - MISSED
+                                        </text>
+                                    </g>
+                                ))}
                             </svg>
                         )}
                     </div>

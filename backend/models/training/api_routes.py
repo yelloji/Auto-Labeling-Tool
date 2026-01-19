@@ -2506,8 +2506,23 @@ async def get_missed_ground_truth(
         return []
     
     try:
+        from pathlib import Path
+        # Resolve absolute path to dataset base
+        # dataset_path is like "projects/.../images/train"
+        # We need "projects/.../"
+        rel_path = experiment.dataset_path
+        if "images" in rel_path:
+            # Get everything before "images"
+            base_rel_path = rel_path.split("images")[0].rstrip("/\\")
+        else:
+            base_rel_path = rel_path
+            
+        # Project root is 3 levels up from backend/models/training/api_routes.py
+        project_root = Path(__file__).resolve().parents[3]
+        abs_dataset_path = str((project_root / base_rel_path).resolve())
+        
         # Load annotations for this split
-        annotations = load_split_annotations(experiment.dataset_path, experiment.dataset_source)
+        annotations = load_split_annotations(abs_dataset_path, experiment.dataset_source)
         
         # Get predictions for this image
         if isinstance(experiment.predictions, str):
@@ -2524,15 +2539,29 @@ async def get_missed_ground_truth(
             input_images = experiment.input_images or {}
         
         img_metadata = input_images.get(image_name, {})
-        img_width = img_metadata.get('width', 640)
-        img_height = img_metadata.get('height', 640)
+        
+        # Handle case where metadata might be a JSON string
+        if isinstance(img_metadata, str):
+            try:
+                img_metadata = json.loads(img_metadata)
+            except (json.JSONDecodeError, ValueError):
+                # If parsing fails, treat as empty metadata
+                img_metadata = {}
+        
+        # Safely extract dimensions with fallback
+        if isinstance(img_metadata, dict):
+            img_width = img_metadata.get('width', 640)
+            img_height = img_metadata.get('height', 640)
+        else:
+            img_width = 640
+            img_height = 640
         
         # Build label mapping from project labels
         project = db.get(Project, experiment.project_id)
         label_mapping = {label.id: label.name for label in project.labels}
         
-        # Construct image key
-        image_key = f"images\\{experiment.dataset_source}\\{image_name}"
+        # Construct image key using forward slashes (normalized)
+        image_key = f"images/{experiment.dataset_source}/{image_name}"
         
         # Find missed detections
         missed = get_missed_detections(
@@ -2551,5 +2580,5 @@ async def get_missed_ground_truth(
         # No annotations.json file
         return []
     except Exception as e:
-        logger.error(f"Error loading missed detections: {e}")
+        logger.error("errors.system", f"Error loading missed detections: {e}", "missed_detections_error")
         return []
