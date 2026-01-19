@@ -2518,11 +2518,12 @@ async def get_missed_ground_truth(
             base_rel_path = rel_path
             
         # Project root is 3 levels up from backend/models/training/api_routes.py
+        # Project root is 3 levels up from backend/models/training/api_routes.py
         project_root = Path(__file__).resolve().parents[3]
-        abs_dataset_path = str((project_root / base_rel_path).resolve())
+        abs_dataset_path = (project_root / base_rel_path).resolve()
         
         # Load annotations for this split
-        annotations = load_split_annotations(abs_dataset_path, experiment.dataset_source)
+        annotations = load_split_annotations(str(abs_dataset_path), experiment.dataset_source)
         
         # Get predictions for this image
         if isinstance(experiment.predictions, str):
@@ -2530,6 +2531,7 @@ async def get_missed_ground_truth(
         else:
             predictions = experiment.predictions or {}
         
+        image_name = Path(image_name).name # Ensure we have just the filename
         image_predictions = predictions.get(image_name, [])
         
         # Get image dimensions
@@ -2556,9 +2558,30 @@ async def get_missed_ground_truth(
             img_width = 640
             img_height = 640
         
-        # Build label mapping from project labels
-        project = db.get(Project, experiment.project_id)
-        label_mapping = {label.id: label.name for label in project.labels}
+        # Build label mapping
+        label_mapping = {}
+        data_yaml_path = abs_dataset_path / "data.yaml"
+        if data_yaml_path.exists():
+            try:
+                import yaml
+                with open(data_yaml_path, 'r') as f:
+                    data_yaml = yaml.safe_load(f)
+                    if 'names' in data_yaml:
+                        names = data_yaml['names']
+                        if isinstance(names, list):
+                            # index is class_id
+                            label_mapping = {i: name for i, name in enumerate(names)}
+                        elif isinstance(names, dict):
+                            label_mapping = {int(k): v for k, v in names.items()}
+            except Exception as e:
+                logger.error("errors.system", f"Error loading data.yaml for labels: {e}", "data_yaml_error")
+
+        if not label_mapping:
+            # Fallback to project labels - Use alphabetical order as YOLO usually does this if not specified
+            project = db.get(Project, experiment.project_id)
+            if project and project.labels:
+                sorted_labels = sorted(project.labels, key=lambda l: l.name)
+                label_mapping = {i: label.name for i, label in enumerate(sorted_labels)}
         
         # Construct image key using forward slashes (normalized)
         image_key = f"images/{experiment.dataset_source}/{image_name}"
@@ -2580,5 +2603,7 @@ async def get_missed_ground_truth(
         # No annotations.json file
         return []
     except Exception as e:
-        logger.error("errors.system", f"Error loading missed detections: {e}", "missed_detections_error")
-        return []
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error("errors.system", f"Error loading missed detections: {e}\n{error_details}", "missed_detections_error")
+        raise HTTPException(status_code=500, detail=str(e))
