@@ -4308,7 +4308,7 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
     try:
         print(f"🔧 ABOUT TO IMPORT annotation_transformer...")
         # Import the enhanced annotation transformer
-        from backend.core.annotation_transformer import update_annotations_for_transformations, BoundingBox, Polygon
+        from core.annotation_transformer import update_annotations_for_transformations, BoundingBox, Polygon
         print(f"✅ IMPORT SUCCESSFUL!")
         
         # Convert DB annotations to BoundingBox/Polygon objects if needed
