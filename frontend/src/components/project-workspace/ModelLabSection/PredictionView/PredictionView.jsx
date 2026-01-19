@@ -321,17 +321,17 @@ const PredictionView = ({ training }) => {
                 // If not, or if nothing selected, force load latest
                 if (!selectedExp || !preds.find(e => e.id === selectedExp.id)) {
                     setSelectedExp(latest);
-                    if (latest.status === 'queued') {
-                        setConfig({
-                            name: latest.name || '',
-                            dataset_source: latest.dataset_source || getDefaultSplit(),
-                            task: latest.task || training?.taskType || 'detection',
-                            confidence: latest.confidence || 0.25,
-                            iou_threshold: latest.iou_threshold || 0.45,
-                            imgsz: latest.imgsz || getDetectedImgsz(),
-                            weights_type: latest.weights_type || 'best'
-                        });
-                    }
+                    // Always populate config when auto-selecting, regardless of status
+                    setConfig({
+                        name: latest.name || '',
+                        dataset_source: latest.dataset_source || getDefaultSplit(),
+                        task: latest.task || training?.taskType || 'detection',
+                        confidence: latest.confidence || 0.25,
+                        iou_threshold: latest.iou_threshold || 0.45,
+                        imgsz: latest.imgsz || getDetectedImgsz(),
+                        weights_type: latest.weights_type || 'best',
+                        max_det: latest.max_det || 300
+                    });
                 }
             }
         } catch (error) {
@@ -663,19 +663,17 @@ const PredictionView = ({ training }) => {
                                     className={`exp-list-item ${selectedExp?.id === item.id ? 'active' : ''}`}
                                     onClick={() => {
                                         setSelectedExp(item);
-                                        // "Dont change that": Only overwrite form if we click an unrun DRAFT
-                                        if (item.status === 'queued') {
-                                            setConfig({
-                                                name: item.name || '',
-                                                dataset_source: item.dataset_source || 'test',
-                                                confidence: item.confidence || 0.25,
-                                                iou_threshold: item.iou_threshold || 0.45,
-                                                imgsz: item.imgsz || 640,
-                                                weights_type: item.weights_type || 'best',
-                                                max_det: item.max_det || 300,
-                                                task: item.task || training?.taskType || 'detection'
-                                            });
-                                        }
+                                        // Always populate the configuration panel with the clicked experiment's settings
+                                        setConfig({
+                                            name: item.name || '',
+                                            dataset_source: item.dataset_source || 'test',
+                                            confidence: item.confidence || 0.25,
+                                            iou_threshold: item.iou_threshold || 0.45,
+                                            imgsz: item.imgsz || 640,
+                                            weights_type: item.weights_type || 'best',
+                                            max_det: item.max_det || 300,
+                                            task: item.task || training?.taskType || 'detection'
+                                        });
                                     }}
                                 >
                                     <div className="history-item-meta">
@@ -1017,6 +1015,7 @@ const PredictionView = ({ training }) => {
                                                 multiple
                                                 directory={false}
                                                 showUploadList={false}
+                                                disabled={selectedExp && selectedExp.status !== 'queued'}
                                                 beforeUpload={(file, fileList) => {
                                                     // Ensure we capture all files in the selection
                                                     setPendingFiles(prev => {
@@ -1035,6 +1034,7 @@ const PredictionView = ({ training }) => {
                                                     icon={<CloudUploadOutlined />}
                                                     className="compact-upload-btn"
                                                     loading={uploading}
+                                                    disabled={selectedExp && selectedExp.status !== 'queued'}
                                                 >
                                                     {pendingFiles.length > 0
                                                         ? `${pendingFiles.length} Images Selected`
