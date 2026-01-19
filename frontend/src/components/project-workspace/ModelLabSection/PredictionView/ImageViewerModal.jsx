@@ -356,13 +356,7 @@ const ImageViewerModal = ({
     const handleDownload = async () => {
         if (!dimensions.width || !dimensions.height || isImgLoading) return;
 
-        // 1. Create off-screen canvas at ORIGINAL image resolution
-        const canvas = document.createElement('canvas');
-        canvas.width = dimensions.width;
-        canvas.height = dimensions.height;
-        const ctx = canvas.getContext('2d');
-
-        // 2. Load the image into an Image object to draw on canvas
+        // 1. Load the image first to get true dimensions
         const img = new Image();
         img.crossOrigin = "anonymous"; // Essential for toDataURL to work with external URLs
         img.src = imageUrl;
@@ -371,6 +365,12 @@ const ImageViewerModal = ({
             img.onload = resolve;
             img.onerror = reject;
         });
+
+        // 2. Create off-screen canvas using the ACTUAL loaded image dimensions
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
 
         // 3. Draw Base Image
         ctx.drawImage(img, 0, 0);
@@ -415,22 +415,23 @@ const ImageViewerModal = ({
             // C. Draw Label
             if (showLabels) {
                 const labelText = `${d.class} ${(d.confidence * 100).toFixed(0)}%`;
-                const fontSize = 16;
-                ctx.font = `bold ${fontSize}px monospace`;
+                const fontSize = 14; // Match SVG font size
+                ctx.font = `bold ${fontSize}px sans-serif`; // Match SVG font family
                 const textWidth = ctx.measureText(labelText).width;
 
                 const labelX = x1;
-                const labelY = y1 < 20 ? y1 : y1 - 4;
+                // FIXED: Match SVG logic - if near top, label goes BELOW, else ABOVE
+                const labelY = y1 < 20 ? y1 + 20 : y1 - 4;
 
-                // Label Background
+                // Label Background - Match SVG dimensions
                 ctx.fillStyle = riskColor;
                 ctx.globalAlpha = 0.85;
-                ctx.fillRect(labelX, labelY - fontSize - 4, textWidth + 12, fontSize + 8);
+                ctx.fillRect(labelX, labelY - 18, textWidth + 8, 18); // Match SVG height
                 ctx.globalAlpha = 1.0;
 
                 // Label Text
                 ctx.fillStyle = '#ffffff';
-                ctx.fillText(labelText, labelX + 6, labelY - 3);
+                ctx.fillText(labelText, labelX + 4, labelY - 5); // Match SVG positioning
             }
         });
 
