@@ -415,23 +415,39 @@ const ImageViewerModal = ({
             // C. Draw Label
             if (showLabels) {
                 const labelText = `${d.class} ${(d.confidence * 100).toFixed(0)}%`;
-                const fontSize = 14; // Match SVG font size
-                ctx.font = `bold ${fontSize}px sans-serif`; // Match SVG font family
+                const fontSize = 14;
+                ctx.font = `bold ${fontSize}px sans-serif`;
                 const textWidth = ctx.measureText(labelText).width;
+                const labelWidth = textWidth + 8;
+                const labelHeight = 18;
 
-                const labelX = x1;
-                // FIXED: Match SVG logic - if near top, label goes BELOW, else ABOVE
-                const labelY = y1 < 20 ? y1 + 20 : y1 - 4;
+                // Dynamic Horizontal Position (Bound check)
+                let labelDrawX = x1;
+                if (labelDrawX + labelWidth > img.naturalWidth) {
+                    labelDrawX = Math.max(0, img.naturalWidth - labelWidth);
+                }
 
-                // Label Background - Match SVG dimensions
+                // Dynamic Vertical Position
+                let labelDrawY = y1 - labelHeight - 4; // Preferred: Above
+                if (labelDrawY < 0) {
+                    // Try below
+                    if (y2 + labelHeight + 4 < img.naturalHeight) {
+                        labelDrawY = y2 + 4;
+                    } else {
+                        // Force inside top
+                        labelDrawY = y1;
+                    }
+                }
+
+                // Label Background
                 ctx.fillStyle = riskColor;
                 ctx.globalAlpha = 0.85;
-                ctx.fillRect(labelX, labelY - 18, textWidth + 8, 18); // Match SVG height
+                ctx.fillRect(labelDrawX, labelDrawY, labelWidth, labelHeight);
                 ctx.globalAlpha = 1.0;
 
                 // Label Text
                 ctx.fillStyle = '#ffffff';
-                ctx.fillText(labelText, labelX + 4, labelY - 5); // Match SVG positioning
+                ctx.fillText(labelText, labelDrawX + 4, labelDrawY + 14);
             }
         });
 
@@ -448,12 +464,25 @@ const ImageViewerModal = ({
             ctx.fillStyle = 'rgba(163, 53, 238, 0.1)';
             ctx.fillRect(x1, y1, w, h);
 
-            // Manual Label
+            // Dynamic Manual Label Position
+            const manualLabel = v.class_name;
+            const manualLabelWidth = ctx.measureText(manualLabel).width + 12;
+            const manualLabelHeight = 22;
+
+            let mX = x1;
+            if (mX + manualLabelWidth > img.naturalWidth) mX = Math.max(0, img.naturalWidth - manualLabelWidth);
+
+            let mY = y1 - manualLabelHeight;
+            if (mY < 0) {
+                if (y2 + manualLabelHeight < img.naturalHeight) mY = y2;
+                else mY = y1;
+            }
+
             ctx.font = 'bold 14px sans-serif';
             ctx.fillStyle = '#a335ee';
-            ctx.fillRect(x1, y1 - 22, ctx.measureText(v.class_name).width + 12, 22);
+            ctx.fillRect(mX, mY, manualLabelWidth, manualLabelHeight);
             ctx.fillStyle = '#ffffff';
-            ctx.fillText(v.class_name, x1 + 6, y1 - 6);
+            ctx.fillText(manualLabel, mX + 6, mY + 16);
         });
 
         // 6. Draw Hint Boxes (Orange Dashed)
@@ -487,12 +516,25 @@ const ImageViewerModal = ({
                 ctx.fillStyle = 'rgba(208,208,208,0.08)';
                 ctx.fillRect(x1, y1, w, h);
 
-                // Draw label
+                // Dynamic Missed Label Position
+                const missedLabel = `${missed.class_name} - MISSED`;
                 ctx.font = 'bold 13px monospace';
+                const missedWidth = ctx.measureText(missedLabel).width + 8;
+                const missedHeight = 18;
+
+                let mtX = x1;
+                if (mtX + missedWidth > img.naturalWidth) mtX = Math.max(0, img.naturalWidth - missedWidth);
+
+                let mtY = y1 - missedHeight;
+                if (mtY < 0) {
+                    if (y2 + missedHeight < img.naturalHeight) mtY = y2 + missedHeight;
+                    else mtY = y1 + missedHeight;
+                }
+
                 ctx.fillStyle = '#d0d0d0';
                 ctx.shadowColor = '#000';
                 ctx.shadowBlur = 6;
-                ctx.fillText(`${missed.class_name} - MISSED`, x1 + 4, y1 + 17);
+                ctx.fillText(missedLabel, mtX + 4, mtY - 4);
                 ctx.shadowBlur = 0; // Reset shadow
             });
         }
@@ -1529,9 +1571,35 @@ const ImageViewerModal = ({
                                         riskClass = 'medium-risk';
                                     }
 
-                                    const labelX = d.bbox[0];
-                                    const labelY = d.bbox[1] < 20 ? d.bbox[1] + 20 : d.bbox[1] - 4;
                                     const indexLabel = `#${i + 1}`;
+                                    const labelText = `${indexLabel} ${d.class} ${(d.confidence * 100).toFixed(0)}%`;
+                                    const charWidth = 8.5; // Estimated monospace width
+                                    const labelPadding = 45;
+                                    const labelWidth = Math.max((indexLabel.length + d.class.length) * charWidth + labelPadding, 90);
+                                    const labelHeight = 18;
+
+                                    // 1. Dynamic X (Don't go off right edge)
+                                    let labelX = d.bbox[0];
+                                    if (labelX + labelWidth > dimensions.width) {
+                                        labelX = Math.max(0, dimensions.width - labelWidth);
+                                    }
+
+                                    // 2. Dynamic Y (Avoid clipping and overlap)
+                                    // Logic: Find best baseline vertical position
+                                    let labelY;
+                                    const spaceAbove = d.bbox[1];
+                                    const spaceBelow = dimensions.height - d.bbox[3];
+
+                                    if (spaceAbove >= labelHeight + 4) {
+                                        // Case A: Plenty of space ABOVE
+                                        labelY = d.bbox[1] - 4;
+                                    } else if (spaceBelow >= labelHeight + 4) {
+                                        // Case B: Not enough space above, but space BELOW
+                                        labelY = d.bbox[3] + labelHeight + 4;
+                                    } else {
+                                        // Case C: Box covers almost full height, put INSIDE top
+                                        labelY = d.bbox[1] + labelHeight + 4;
+                                    }
 
                                     return (
                                         <g key={i}>
@@ -1582,7 +1650,7 @@ const ImageViewerModal = ({
                                                     <rect
                                                         x={0}
                                                         y={-18}
-                                                        width={Math.max((indexLabel.length + d.class.length) * 9 + 45, 90)}
+                                                        width={labelWidth}
                                                         height={18}
                                                         fill={isHovered ? '#fff' : riskColor}
                                                         opacity={isHovered ? 1 : 0.85}
@@ -1602,7 +1670,7 @@ const ImageViewerModal = ({
                                                             transition: 'all 0.1s ease'
                                                         }}
                                                     >
-                                                        {isHovered ? `${indexLabel} ` : ''}{d.class} {(d.confidence * 100).toFixed(0)}%
+                                                        {isHovered ? labelText : `${d.class} ${(d.confidence * 100).toFixed(0)}%`}
                                                     </text>
                                                 </g>
                                             )}
