@@ -468,7 +468,35 @@ const ImageViewerModal = ({
             ctx.setLineDash([]);
         });
 
-        // 7. Trigger Browser Download
+        // 7. Draw Missed Ground Truth Detections (Light Gray) - Phase 7.1
+        if (showMissed && missedDetections.length > 0) {
+            missedDetections.forEach(missed => {
+                const [x1, y1, x2, y2] = missed.bbox;
+                const w = x2 - x1;
+                const h = y2 - y1;
+
+                // Draw dashed rectangle
+                ctx.strokeStyle = '#d0d0d0';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([8, 4]);
+                ctx.strokeRect(x1, y1, w, h);
+                ctx.setLineDash([]);
+
+                // Draw semi-transparent fill
+                ctx.fillStyle = 'rgba(208,208,208,0.08)';
+                ctx.fillRect(x1, y1, w, h);
+
+                // Draw label
+                ctx.font = 'bold 13px monospace';
+                ctx.fillStyle = '#d0d0d0';
+                ctx.shadowColor = '#000';
+                ctx.shadowBlur = 6;
+                ctx.fillText(`${missed.class_name} - MISSED`, x1 + 4, y1 + 17);
+                ctx.shadowBlur = 0; // Reset shadow
+            });
+        }
+
+        // 8. Trigger Browser Download
         const fileName = `prediction_${currentImage.split('/').pop()}`;
         const dataUrl = canvas.toDataURL('image/png');
         const link = document.createElement('a');
