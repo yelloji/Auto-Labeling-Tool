@@ -1,8 +1,11 @@
 ID,Filename,Original Filename,File Path,Project,Dataset,Width,Height,Format,File Size,Split Type,Split Section,Is Labeled,Is Auto Labeled,Is Verified,Annotations,File Exists,Created,Updated
-812da977-4eb2-4e30-8096-9ce785ac37f0,car.jpg,car.jpg,projects/gevis/dataset/animal/val/car.jpg,gevis,animal,800,600,JPEG,57407,dataset,val,Yes,No,No,1,No,2025-09-21 16:42:50,2025-12-31 16:52:33.307668
-333c172a-6e96-4e6d-88b6-c20c11fa83d5,cat.jpg,cat.jpg,projects/gevis/dataset/animal/train/cat.jpg,gevis,animal,800,600,JPEG,54749,dataset,train,Yes,No,No,1,No,2025-09-21 16:42:50,2025-12-31 16:52:33.318681
-94e66fc7-b4be-4a9a-af15-756985ef9b73,dog.jpg,dog.jpg,projects/gevis/dataset/animal/test/dog.jpg,gevis,animal,800,600,JPEG,76182,dataset,test,Yes,No,No,1,No,2025-09-21 16:42:50,2025-12-31 16:52:33.330772
-a83adae8-ae9f-480a-b7ee-7845b77c4054,0-1.bmp,0-1.bmp,projects/gevis/annotating/Reject/0-1.bmp,gevis,Reject,1468,1468,BMP,2156102,annotating,train,Yes,No,No,9,No,2025-09-22 07:07:14,2026-01-07 09:01:46.018319
+812da977-4eb2-4e30-8096-9ce785ac37f0,car.jpg,car.jpg,projects/gevis/dataset/animal/val/car.jpg,gevis,animal,800,600,JPEG,57407,dataset,val,Yes,No,No,1,No,2025-09-21 16:42:50,2026-01-20 11:11:39.422116
+333c172a-6e96-4e6d-88b6-c20c11fa83d5,cat.jpg,cat.jpg,projects/gevis/dataset/animal/train/cat.jpg,gevis,animal,800,600,JPEG,54749,dataset,train,Yes,No,No,1,No,2025-09-21 16:42:50,2026-01-20 11:11:39.434212
+94e66fc7-b4be-4a9a-af15-756985ef9b73,dog.jpg,dog.jpg,projects/gevis/dataset/animal/test/dog.jpg,gevis,animal,800,600,JPEG,76182,dataset,test,Yes,No,No,1,No,2025-09-21 16:42:50,2026-01-20 11:11:39.446864
+a83adae8-ae9f-480a-b7ee-7845b77c4054,0-1.bmp,0-1.bmp,projects/gevis/dataset/Reject/train/0-1.bmp,gevis,Reject,1468,1468,BMP,2156102,dataset,train,Yes,No,No,9,No,2025-09-22 07:07:14,2026-01-20 11:11:36.655522
+a9a4f7f8-288e-467b-83ba-5a08f0997024,155.png,155.png,projects/gevis/annotating/bread_dataset/155.png,gevis,bread_dataset,164,164,PNG,44275,annotating,train,Yes,No,No,1,No,2026-01-20 10:03:43,2026-01-20 12:58:11.768051
+332ba365-6b88-4255-83fb-85a9d286ee88,347.png,347.png,projects/gevis/annotating/bread_dataset/347.png,gevis,bread_dataset,150,142,PNG,35736,annotating,train,Yes,No,No,1,No,2026-01-20 10:03:43,2026-01-20 12:57:41.354110
+1a0918bd-4c7e-450b-a245-6b6af2503b30,386.png,386.png,projects/gevis/annotating/bread_dataset/386.png,gevis,bread_dataset,148,142,PNG,33723,annotating,train,Yes,No,No,1,No,2026-01-20 10:03:43,2026-01-20 12:57:41.356111
 e5e2720d-c132-4d9a-9e47-4782c90dad11,0-1.bmp,0-1.bmp,projects/MASMAC-O-RING/dataset/Reject/train/0-1.bmp,MASMAC-O-RING,Reject,1468,1468,BMP,2156102,dataset,train,Yes,No,No,10,No,2025-09-23 10:32:21,2025-09-26 11:50:52.830769
 976f9ec6-3282-4f83-b090-48c0f385ce2d,0-2.bmp,0-2.bmp,projects/MASMAC-O-RING/dataset/Reject/train/0-2.bmp,MASMAC-O-RING,Reject,1468,1468,BMP,2156102,dataset,train,Yes,No,No,10,No,2025-09-23 10:32:21,2025-09-26 11:50:52.846773
 366e8104-2e41-4da4-860c-2b80d92cea56,0.bmp,0.bmp,projects/MASMAC-O-RING/dataset/Reject/val/0.bmp,MASMAC-O-RING,Reject,1468,1468,BMP,2156102,dataset,val,Yes,No,No,10,No,2025-09-23 10:32:21,2025-09-26 11:50:52.862303

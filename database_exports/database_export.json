@@ -1,5 +1,5 @@
 {
-  "export_timestamp": "2026-01-19T14:20:00.905136",
+  "export_timestamp": "2026-01-20T13:58:19.681282",
   "database_path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\database.db",
   "projects": [
     {
@@ -10,11 +10,11 @@
       "created_at": "2025-06-17 12:00:38",
       "updated_at": "2025-06-17 12:00:38",
       "statistics": {
-        "datasets": 2,
-        "total_images": 4,
-        "labeled_images": 4,
+        "datasets": 3,
+        "total_images": 7,
+        "labeled_images": 7,
         "unlabeled_images": 0,
-        "annotations": 12
+        "annotations": 15
       },
       "datasets": [
         {
@@ -22,7 +22,7 @@
           "name": "animal",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-21 16:42:50",
-          "updated_at": "2025-12-31 16:52:33.352795",
+          "updated_at": "2026-01-20 11:11:39.459946",
           "statistics": {
             "total_images": 3,
             "labeled_images": 3,
@@ -46,7 +46,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-12-31 16:52:33.307668",
+              "updated_at": "2026-01-20 11:11:39.422116",
               "file_exists": false
             },
             {
@@ -65,7 +65,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-12-31 16:52:33.318681",
+              "updated_at": "2026-01-20 11:11:39.434212",
               "file_exists": false
             },
             {
@@ -84,7 +84,7 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-12-31 16:52:33.330772",
+              "updated_at": "2026-01-20 11:11:39.446864",
               "file_exists": false
             }
           ]
@@ -94,7 +94,7 @@
           "name": "Reject",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-22 07:07:14",
-          "updated_at": "2026-01-07 09:01:46.024831",
+          "updated_at": "2026-01-20 11:11:36.672216",
           "statistics": {
             "total_images": 1,
             "labeled_images": 1,
@@ -106,19 +106,91 @@
               "id": "a83adae8-ae9f-480a-b7ee-7845b77c4054",
               "filename": "0-1.bmp",
               "original_filename": "0-1.bmp",
-              "file_path": "projects/gevis/annotating/Reject/0-1.bmp",
+              "file_path": "projects/gevis/dataset/Reject/train/0-1.bmp",
               "width": 1468,
               "height": 1468,
               "format": "BMP",
               "file_size": 2156102,
-              "split_type": "annotating",
+              "split_type": "dataset",
               "split_section": "train",
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
               "annotation_count": 9,
               "created_at": "2025-09-22 07:07:14",
-              "updated_at": "2026-01-07 09:01:46.018319",
+              "updated_at": "2026-01-20 11:11:36.655522",
+              "file_exists": false
+            }
+          ]
+        },
+        {
+          "id": "86451fe3-1dff-4290-adfb-e4bc03b1d2be",
+          "name": "bread_dataset",
+          "description": "Images uploaded to gevis",
+          "created_at": "2026-01-20 10:03:43",
+          "updated_at": "2026-01-20 12:58:11.775071",
+          "statistics": {
+            "total_images": 3,
+            "labeled_images": 3,
+            "unlabeled_images": 0,
+            "annotations": 3
+          },
+          "images": [
+            {
+              "id": "a9a4f7f8-288e-467b-83ba-5a08f0997024",
+              "filename": "155.png",
+              "original_filename": "155.png",
+              "file_path": "projects/gevis/annotating/bread_dataset/155.png",
+              "width": 164,
+              "height": 164,
+              "format": "PNG",
+              "file_size": 44275,
+              "split_type": "annotating",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2026-01-20 10:03:43",
+              "updated_at": "2026-01-20 12:58:11.768051",
+              "file_exists": false
+            },
+            {
+              "id": "332ba365-6b88-4255-83fb-85a9d286ee88",
+              "filename": "347.png",
+              "original_filename": "347.png",
+              "file_path": "projects/gevis/annotating/bread_dataset/347.png",
+              "width": 150,
+              "height": 142,
+              "format": "PNG",
+              "file_size": 35736,
+              "split_type": "annotating",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2026-01-20 10:03:43",
+              "updated_at": "2026-01-20 12:57:41.354110",
+              "file_exists": false
+            },
+            {
+              "id": "1a0918bd-4c7e-450b-a245-6b6af2503b30",
+              "filename": "386.png",
+              "original_filename": "386.png",
+              "file_path": "projects/gevis/annotating/bread_dataset/386.png",
+              "width": 148,
+              "height": 142,
+              "format": "PNG",
+              "file_size": 33723,
+              "split_type": "annotating",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2026-01-20 10:03:43",
+              "updated_at": "2026-01-20 12:57:41.356111",
               "file_exists": false
             }
           ]
@@ -1568,10 +1640,10 @@
   ],
   "summary": {
     "total_projects": 6,
-    "total_datasets": 10,
-    "total_images": 69,
-    "total_annotations": 350,
-    "labeled_images": 69,
+    "total_datasets": 11,
+    "total_images": 72,
+    "total_annotations": 353,
+    "labeled_images": 72,
     "unlabeled_images": 0
   }
 }

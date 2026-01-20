@@ -1222,6 +1222,16 @@ const ManualLabeling = () => {
       throw new Error('Invalid label name');
     }
 
+    // CRITICAL: Block any manual assignment of the reserved 'null' label
+    // Use lowercase check to be robust
+    if (labelName.trim().toLowerCase() === 'null') {
+      message.warning('The "null" label is reserved for system use. Please use a different name.');
+      logInfo('app.frontend.validation', 'null_label_assignment_blocked', 'Manual assignment of null label blocked', {
+        datasetId, imageId: imageData?.id
+      });
+      return;
+    }
+
     if (isEditing) {
       logInfo('app.frontend.interactions', 'editing_existing_annotation', 'Editing existing annotation', {
         datasetId,
