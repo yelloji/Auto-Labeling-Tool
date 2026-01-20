@@ -674,6 +674,7 @@ const ManualLabeling = () => {
             percentage: prev.total > 0 ? Math.round(((Math.max(0, prev.labeled - 1)) / prev.total) * 100) : 0
           }));
           setImageData(prev => ({ ...prev, is_labeled: false }));
+          setImageList(prev => prev.map(img => img.id === imageData.id ? { ...img, is_labeled: false } : img));
         }
 
         if (deletionErrors > 0) {
@@ -1026,6 +1027,16 @@ const ManualLabeling = () => {
         });
       setImageLabels(uniqueLabels);
 
+      // CRITICAL: If image is marked as null, force the active tool to 'select'
+      // This prevents accidental drawing after a page reload or navigation
+      const hasNullMarker = fetchedAnnotations.some(ann =>
+        (ann.class_name || ann.label || '').toLowerCase() === 'null'
+      );
+      if (hasNullMarker) {
+        console.log('🔍 Null marker detected on load, forcing "select" tool');
+        setActiveTool('select');
+      }
+
     } catch (error) {
       logError('app.frontend.validation', 'image_data_load_failed', 'Failed to load image data', error, {
         datasetId,
@@ -1045,6 +1056,13 @@ const ManualLabeling = () => {
     console.log('🎯 Current activeTool:', activeTool);
     console.log('🎯 handleToolChange function called with tool:', tool);
 
+    // CRITICAL: If image is marked as null, only allow 'select' and 'null' tools
+    const isLabeledNull = annotations.some(ann => (ann.class_name || ann.label || '').toLowerCase() === 'null');
+    if (isLabeledNull && tool !== 'select' && tool !== 'null') {
+      message.warning('Drawing tools are disabled for Background (Null) images');
+      return;
+    }
+
     console.log('🎯 About to call setActiveTool with:', tool);
     // Set the tool immediately for UI responsiveness
     setActiveTool(tool);
@@ -1063,7 +1081,7 @@ const ManualLabeling = () => {
       newTool: tool,
       timestamp: new Date().toISOString()
     }).catch(err => console.error('Logging error:', err));
-  }, [datasetId, activeTool]);
+  }, [datasetId, activeTool, annotations]);
 
   const handleShapeComplete = useCallback(async (shape) => {
     console.log('🎯 handleShapeComplete called with shape:', shape);
@@ -1074,6 +1092,16 @@ const ManualLabeling = () => {
       shapeType: shape.type,
       timestamp: new Date().toISOString()
     });
+
+    // CRITICAL: Prevent saving boxes if image is marked as null
+    const isLabeledNull = annotations.some(ann => (ann.class_name || ann.label || '').toLowerCase() === 'null');
+    if (isLabeledNull) {
+      logInfo('app.frontend.interactions', 'shape_blocked_on_null', 'Shape completion blocked: image is marked as null', {
+        datasetId, imageId: imageData?.id
+      });
+      message.warning('Cannot add annotations to a Background (Null) image. Please remove null marking first.');
+      return;
+    }
 
     // Make a deep copy to avoid reference issues
     const shapeCopy = JSON.parse(JSON.stringify(shape));
@@ -1158,7 +1186,7 @@ const ManualLabeling = () => {
       shapeType: shapeCopy.type,
       timestamp: new Date().toISOString()
     });
-  }, [datasetId, imageData]);
+  }, [datasetId, imageData, annotations]);
 
   const handleLabelAssignment = useCallback(async (labelName) => {
     // Check if we're editing an existing annotation or creating a new one
@@ -1695,6 +1723,7 @@ const ManualLabeling = () => {
           percentage: Math.round(((prev.labeled + 1) / prev.total) * 100)
         }));
         setImageData(prev => ({ ...prev, is_labeled: true }));
+        setImageList(prev => prev.map(img => img.id === imageData.id ? { ...img, is_labeled: true } : img));
       }
       message.success(`Annotation saved with label "${labelName}"`);
       logInfo('app.frontend.interactions', 'annotation_complete', 'Annotation process completed', {
@@ -1799,6 +1828,19 @@ const ManualLabeling = () => {
         setImageLabels(prev => prev.map(l =>
           l.name === deletedAnnotation.label ? { ...l, count: Math.max(0, l.count - 1) } : l
         ).filter(l => l.count > 0));
+      }
+
+      // Sync progress if this was the last annotation
+      // Check length - 1 because we haven't updated annotations state yet with setAnnotations (which is async)
+      // or check the current annotations array directly
+      if (annotations.length === 1 && imageData?.is_labeled) {
+        setDatasetProgress(prev => ({
+          ...prev,
+          labeled: Math.max(0, prev.labeled - 1),
+          percentage: prev.total > 0 ? Math.round((Math.max(0, prev.labeled - 1) / prev.total) * 100) : 0
+        }));
+        setImageData(prev => ({ ...prev, is_labeled: false }));
+        setImageList(prev => prev.map(img => img.id === imageData.id ? { ...img, is_labeled: false } : img));
       }
     } catch (error) {
       logError('app.frontend.validation', 'annotation_delete_failed', 'Failed to delete annotation', error, {
