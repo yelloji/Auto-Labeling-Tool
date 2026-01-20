@@ -6,6 +6,7 @@ import {
   Typography,
   message,
   Space,
+  Modal,
   Progress,
   Divider,
   Tooltip
@@ -78,6 +79,101 @@ const ManualLabeling = () => {
     } catch (error) {
       message.error('Failed to delete image');
       console.error('Delete image error:', error);
+    }
+  };
+
+  // Mark as Null handler
+  const handleMarkAsNull = async () => {
+    if (!imageData || !imageData.id) return;
+
+    // Check if null marker already exists (using full annotations, not filtered)
+    const allAnnotations = await AnnotationAPI.getImageAnnotations(imageData.id);
+    const existingNullMarker = allAnnotations.find(ann =>
+      (ann.class_name || ann.label || '').toLowerCase() === 'null'
+    );
+
+    // TOGGLE: If null marker exists, remove it (undo)
+    if (existingNullMarker) {
+      try {
+        logInfo('app.frontend.interactions', 'remove_null_started', 'Removing null marking', {
+          datasetId,
+          imageId: imageData.id,
+          nullAnnotationId: existingNullMarker.id
+        });
+
+        // Delete the null marker from database
+        await AnnotationAPI.deleteAnnotation(existingNullMarker.id);
+
+        // Sync everything: update memory list and re-load current image
+        const updatedImage = { ...imageData, is_labeled: false };
+        setImageList(prev => prev.map(img => img.id === imageData.id ? updatedImage : img));
+        setDatasetProgress(prev => ({
+          ...prev,
+          labeled: Math.max(0, prev.labeled - 1),
+          percentage: prev.total > 0 ? Math.round((Math.max(0, prev.labeled - 1) / prev.total) * 100) : 0
+        }));
+
+        await loadImageData(updatedImage);
+        message.success('Null marking removed');
+
+        logInfo('app.frontend.interactions', 'remove_null_success', 'Null marking removed successfully', {
+          datasetId,
+          imageId: imageData.id
+        });
+
+      } catch (error) {
+        logError('app.frontend.interactions', 'remove_null_failed', 'Failed to remove null marking', error);
+        message.error('Failed to remove null marking');
+      }
+      return;
+    }
+
+    // SAFETY: Block if regular annotations exist - null button has no deletion rights
+    if (annotations.length > 0) {
+      message.error('Please remove all existing annotations first');
+      return;
+    }
+
+    // CREATE: Add null marker for clean image
+    try {
+      logInfo('app.frontend.interactions', 'mark_as_null_started', 'Marking image as Null', {
+        datasetId,
+        imageId: imageData.id
+      });
+
+      // Create a specialized 'null' annotation marker (degenerate bbox)
+      // This marks is_labeled=true and results in empty export file
+      // Includes segmentation=[] for compatibility with both box and polygon exports
+      const createdAnnotation = await AnnotationAPI.createAnnotation({
+        image_id: imageData.id,
+        type: 'box',
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        class_name: 'null',
+        segmentation: []
+      });
+
+      // Sync everything: update memory list and re-load current image
+      const updatedImage = { ...imageData, is_labeled: true };
+      setImageList(prev => prev.map(img => img.id === imageData.id ? updatedImage : img));
+
+      if (!imageData.is_labeled) {
+        setDatasetProgress(prev => ({
+          ...prev,
+          labeled: prev.labeled + 1,
+          percentage: prev.total > 0 ? Math.round(((prev.labeled + 1) / prev.total) * 100) : 0
+        }));
+      }
+
+      await loadImageData(updatedImage);
+      setActiveTool('select');
+      message.success('Image marked as Background (Null)');
+
+    } catch (error) {
+      logError('app.frontend.interactions', 'mark_as_null_failed', 'Failed to mark as Null', error);
+      message.error('Failed to mark image as Null');
     }
   };
 
@@ -825,6 +921,7 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
       setImageData(image);
+      console.log('🔍 LOADED IMAGE DATA:', { filename: image.filename, is_labeled: image.is_labeled, id: image.id });
       // Use split_section instead of split_type for train/val/test
       setCurrentSplit(image.split_section || 'train');
 
@@ -834,16 +931,23 @@ const ManualLabeling = () => {
 
       // Load annotations
       const fetchedAnnotations = await AnnotationAPI.getImageAnnotations(image.id);
+
+      // DO NOT filter out 'null' markers here - they need to stay in state for button highlighting
+      // Filtering for display happens at render time in AnnotationCanvas
+      const physicalAnnotations = fetchedAnnotations;
+
       console.log('Fetched annotations:', fetchedAnnotations);
+      console.log('Physical annotations (filtered):', physicalAnnotations);
+
       logInfo('app.frontend.interactions', 'image_annotations_loaded', 'Image annotations loaded', {
         datasetId,
         imageId: image.id,
-        annotationCount: fetchedAnnotations.length,
+        annotationCount: physicalAnnotations.length,
         timestamp: new Date().toISOString()
       });
 
       // Transform annotations for UI display
-      const transformedAnnotations = fetchedAnnotations.map(ann => {
+      const transformedAnnotations = physicalAnnotations.map(ann => {
         console.log('Processing annotation:', ann);
 
         // CRITICAL: Determine the annotation type
@@ -908,9 +1012,9 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
 
-      // Extract unique labels from annotations
+      // Extract unique labels from annotations (exclude 'null' markers from UI list)
       const uniqueLabels = [...new Set(fetchedAnnotations.map(ann => ann.class_name || ann.label))]
-        .filter(labelName => labelName) // Remove null/undefined labels
+        .filter(labelName => labelName && labelName.toLowerCase() !== 'null')
         .map(labelName => {
           const existingLabel = projectLabels.find(l => l.name === labelName);
           return existingLabel || {
@@ -1903,21 +2007,23 @@ const ManualLabeling = () => {
           gap: '1.5rem',
           flexShrink: 0
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
-            <InfoCircleOutlined style={{ color: '#3498db', fontSize: '1rem', flexShrink: 0 }} />
-            <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-              <Text style={{ fontSize: '0.8125rem', color: '#95a5a6', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Progress</Text>
-              <Progress
-                percent={datasetProgress.percentage}
-                size="small"
-                style={{ width: '5rem', margin: 0 }}
-                showInfo={false}
-              />
+          <Tooltip title={`Dataset Progress: ${datasetProgress.labeled} of ${datasetProgress.total} images labeled.`} placement="bottom">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, cursor: 'help' }}>
+              <InfoCircleOutlined style={{ color: '#3498db', fontSize: '1rem', flexShrink: 0 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                <Text style={{ fontSize: '0.8125rem', color: '#95a5a6', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Progress</Text>
+                <Progress
+                  percent={datasetProgress.percentage}
+                  size="small"
+                  style={{ width: '5rem', margin: 0 }}
+                  showInfo={false}
+                />
+              </div>
+              <Text style={{ fontSize: '0.875rem', color: '#bdc3c7', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {datasetProgress.labeled}/{datasetProgress.total}
+              </Text>
             </div>
-            <Text style={{ fontSize: '0.875rem', color: '#bdc3c7', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {datasetProgress.labeled}/{datasetProgress.total}
-            </Text>
-          </div>
+          </Tooltip>
 
           <AnnotationSplitControl
             currentSplit={currentSplit}
@@ -1939,7 +2045,7 @@ const ManualLabeling = () => {
         >
           <LabelSidebar
             projectLabels={projectLabels}
-            imageAnnotations={annotations}
+            imageAnnotations={annotations.filter(ann => (ann.class_name || ann.label || '').toLowerCase() !== 'null')}
             selectedLabel={selectedLabel}
             onLabelSelect={setSelectedLabel}
             onLabelHighlight={(labelName) => {
@@ -1974,7 +2080,7 @@ const ManualLabeling = () => {
               <AnnotationCanvas
                 imageUrl={imageUrl}
                 imageId={imageData?.id}
-                annotations={annotations}
+                annotations={annotations.filter(ann => (ann.class_name || ann.label || '').toLowerCase() !== 'null')}
                 selectedAnnotation={selectedAnnotation}
                 activeTool={activeTool}
                 zoomLevel={zoomLevel}
@@ -2020,6 +2126,8 @@ const ManualLabeling = () => {
             canUndo={canUndo}
             canRedo={canRedo}
             onDeleteImage={handleDeleteImage}
+            onMarkAsNull={handleMarkAsNull}
+            isLabeledNull={annotations.some(ann => (ann.class_name || ann.label || '').toLowerCase() === 'null')}
             onDeleteSelected={handleDeleteSelected}
             selectedAnnotation={selectedAnnotation}
             annotations={annotations}
