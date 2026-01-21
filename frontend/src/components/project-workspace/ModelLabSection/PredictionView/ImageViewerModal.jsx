@@ -1672,9 +1672,9 @@ const ImageViewerModal = ({
                                     const sizeLabel = ` [${w}x${h} | ${area.toLocaleString()}px²]`;
                                     const labelText = isHovered ? `${baseLabel}${fpTag}${sizeLabel}` : `${baseLabel}${fpTag}`;
 
-                                    const charWidth = 8.5; // Estimated monospace width
-                                    const labelPadding = 45;
-                                    const labelWidth = Math.max((labelText.length) * charWidth + labelPadding, isHovered ? 180 : 90);
+                                    const charWidth = 8.2; // Optimized for monospace
+                                    const labelPadding = 5; // Tight padding
+                                    const labelWidth = (labelText.length) * charWidth + labelPadding;
                                     const labelHeight = 18;
 
                                     // 1. Dynamic X (Don't go off right edge)
