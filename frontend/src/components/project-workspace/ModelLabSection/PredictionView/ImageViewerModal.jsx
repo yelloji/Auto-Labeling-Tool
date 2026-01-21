@@ -108,37 +108,10 @@ const ImageViewerModal = ({
     };
     const allDets = getDetectionsForImage(currentImage);
 
-    // Apply active filters to detections shown in big view
-    const filteredDets = allDets.filter(d => {
-        if (!filters) return true;
-        const [minConf, maxConf] = [filters.confidenceRange[0] / 100, filters.confidenceRange[1] / 100];
-        const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
-        const classMatch = (filters.selectedClasses && filters.selectedClasses.length > 0)
-            ? filters.selectedClasses.includes(d.class)
-            : (filters.className === 'all' || d.class === filters.className);
-
-        // Apply Strict Risk Level Filter
-        const riskLevel = filters.riskLevel;
-        let riskMatch = true;
-        if (riskLevel === 'high') riskMatch = d.confidence < 0.4;
-        else if (riskLevel === 'medium') riskMatch = d.confidence >= 0.4 && d.confidence < 0.7;
-        else if (riskLevel === 'low') riskMatch = d.confidence >= 0.7;
-
-        return confMatch && classMatch && riskMatch;
-    });
-
-    // Phase 4: Split verifications for current image into "mine" and "hints"
-    const currentFileName = currentImage?.split('/').pop();
-    const currentImageVerifications = verifications.filter(v =>
-        v.image_name === currentFileName && (v.status === 'missing' || v.is_manual)
-    );
-
-    // My boxes: verifications for THIS experiment
-    const myBoxes = currentImageVerifications.filter(v => v.experiment_id === experiment?.id);
-
     // Phase 7.0: Calculate IoU (Intersection over Union) for accurate box comparison
     const calculateIoU = (bbox1, bbox2) => {
         // bbox format: [x1, y1, x2, y2]
+        if (!bbox1 || !bbox2) return 0.0;
         const x1 = Math.max(bbox1[0], bbox2[0]);
         const y1 = Math.max(bbox1[1], bbox2[1]);
         const x2 = Math.min(bbox1[2], bbox2[2]);
@@ -156,6 +129,44 @@ const ImageViewerModal = ({
 
         return union > 0 ? intersection / union : 0.0;
     };
+
+    // Apply active filters to detections shown in big view
+    const filteredDets = allDets.filter((d, idx) => {
+        if (!filters) return true;
+        const [minConf, maxConf] = [filters.confidenceRange[0] / 100, filters.confidenceRange[1] / 100];
+        const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
+        const classMatch = (filters.selectedClasses && filters.selectedClasses.length > 0)
+            ? filters.selectedClasses.includes(d.class)
+            : (filters.className === 'all' || d.class === filters.className);
+
+        // Apply Strict Risk Level Filter
+        const riskLevel = filters.riskLevel;
+        let riskMatch = true;
+        if (riskLevel === 'high') riskMatch = d.confidence < 0.4;
+        else if (riskLevel === 'medium') riskMatch = d.confidence >= 0.4 && d.confidence < 0.7;
+        else if (riskLevel === 'low') riskMatch = d.confidence >= 0.7;
+
+        // ONLY show boxes that are actually overlapping? (Isolation Mode)
+        let overlapMatch = true;
+        if (filters.showOverlapping && filters.isolateOverlaps) {
+            overlapMatch = allDets.some((otherD, otherIdx) => {
+                if (idx === otherIdx) return false;
+                const iou = calculateIoU(d.bbox, otherD.bbox);
+                return iou >= filters.overlapIoU;
+            });
+        }
+
+        return confMatch && classMatch && riskMatch && overlapMatch;
+    });
+
+    // Phase 4: Split verifications for current image into "mine" and "hints"
+    const currentFileName = currentImage?.split('/').pop();
+    const currentImageVerifications = verifications.filter(v =>
+        v.image_name === currentFileName && (v.status === 'missing' || v.is_manual)
+    );
+
+    // My boxes: verifications for THIS experiment
+    const myBoxes = currentImageVerifications.filter(v => v.experiment_id === experiment?.id);
 
     // Helper to check if two bboxes match using IoU threshold
     const bboxesMatch = (bbox1, bbox2, iouThreshold = 0.3) => {

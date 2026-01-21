@@ -24,7 +24,8 @@ import {
     Segmented,
     Pagination,
     Divider,
-    Switch
+    Switch,
+    Checkbox
 } from 'antd';
 import {
     ExperimentOutlined,
@@ -97,6 +98,7 @@ const PredictionView = ({ training }) => {
         reviewStatus: 'any',
         overlapIoU: 0.5, // Phase 1: IoU Threshold
         showOverlapping: false, // Phase 1: Toggle for overlap mode
+        isolateOverlaps: false, // Phase 1.5: ONLY show overlapping boxes
         showOnlyDuplicates: false // Phase 1: Toggle for duplicates
     });
 
@@ -237,6 +239,7 @@ const PredictionView = ({ training }) => {
      * bbox format: [x1, y1, x2, y2]
      */
     const calculateIoU = useCallback((boxA, boxB) => {
+        if (!boxA || !boxB) return 0;
         const xA = Math.max(boxA[0], boxB[0]);
         const yA = Math.max(boxA[1], boxB[1]);
         const xB = Math.min(boxA[2], boxB[2]);
@@ -881,6 +884,17 @@ const PredictionView = ({ training }) => {
                                                     value={filters.overlapIoU}
                                                     onChange={val => setFilters(f => ({ ...f, overlapIoU: val }))}
                                                 />
+                                                <div style={{ marginTop: '4px' }}>
+                                                    <Checkbox
+                                                        checked={filters.isolateOverlaps}
+                                                        onChange={e => setFilters(f => ({ ...f, isolateOverlaps: e.target.checked }))}
+                                                        style={{ fontSize: '0.7rem' }}
+                                                    >
+                                                        <Tooltip title="Hide all boxes that are NOT overlapping. Focus only on the problem areas.">
+                                                            <Text type="secondary" style={{ fontSize: '0.7rem' }}>Isolate Overlaps Only</Text>
+                                                        </Tooltip>
+                                                    </Checkbox>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -1003,6 +1017,7 @@ const PredictionView = ({ training }) => {
                                             reviewStatus: 'any',
                                             overlapIoU: 0.5,
                                             showOverlapping: false,
+                                            isolateOverlaps: false,
                                             showOnlyDuplicates: false
                                         })}
                                     >
@@ -1431,7 +1446,7 @@ const PredictionView = ({ training }) => {
                                                     };
                                                     const allDets = getDetections(imgName);
                                                     const [minConf, maxConf] = [filters.confidenceRange[0] / 100, filters.confidenceRange[1] / 100];
-                                                    const detections = allDets.filter(d => {
+                                                    const detections = allDets.filter((d, idx) => {
                                                         const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
                                                         const classMatch = (filters.selectedClasses && filters.selectedClasses.length > 0)
                                                             ? filters.selectedClasses.includes(d.class)
@@ -1444,7 +1459,17 @@ const PredictionView = ({ training }) => {
                                                         else if (riskLevel === 'medium') riskMatch = d.confidence >= 0.4 && d.confidence < 0.7;
                                                         else if (riskLevel === 'low') riskMatch = d.confidence >= 0.7;
 
-                                                        return confMatch && classMatch && riskMatch;
+                                                        // ONLY show boxes that are actually overlapping? (Isolation Mode)
+                                                        let overlapMatch = true;
+                                                        if (filters.showOverlapping && filters.isolateOverlaps) {
+                                                            overlapMatch = allDets.some((otherD, otherIdx) => {
+                                                                if (idx === otherIdx) return false;
+                                                                const iou = calculateIoU(d.bbox, otherD.bbox);
+                                                                return iou >= filters.overlapIoU;
+                                                            });
+                                                        }
+
+                                                        return confMatch && classMatch && riskMatch && overlapMatch;
                                                     });
                                                     const imageUrl = selectedExp?.id
                                                         ? `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${selectedExp.id}/original-image/${imgName}`
