@@ -22,7 +22,9 @@ import {
     Radio,
     Upload,
     Segmented,
-    Pagination
+    Pagination,
+    Divider,
+    Switch
 } from 'antd';
 import {
     ExperimentOutlined,
@@ -87,11 +89,15 @@ const PredictionView = ({ training }) => {
     // Filter State
     const [filters, setFilters] = useState({
         detectionCount: 'any',
-        className: 'all',
-        confidenceRange: [10, 100], // Default range 10% to 100%
+        className: 'all', // LEGACY: Restored to prevent breakage
+        selectedClasses: [], // Phase 1: Dynamic Multi-select
+        confidenceRange: [10, 100],
         imageSearch: '',
         riskLevel: 'any',
-        reviewStatus: 'any' // 'any', 'pass', 'fail', 'unsure', 'unverified'
+        reviewStatus: 'any',
+        overlapIoU: 0.5, // Phase 1: IoU Threshold
+        showOverlapping: false, // Phase 1: Toggle for overlap mode
+        showOnlyDuplicates: false // Phase 1: Toggle for duplicates
     });
 
     // Pagination State
@@ -225,6 +231,25 @@ const PredictionView = ({ training }) => {
             default: return <Tag>{status?.toUpperCase()}</Tag>;
         }
     };
+
+    /**
+     * Helper: Calculate Intersection over Union (IoU) for two boxes
+     * bbox format: [x1, y1, x2, y2]
+     */
+    const calculateIoU = useCallback((boxA, boxB) => {
+        const xA = Math.max(boxA[0], boxB[0]);
+        const yA = Math.max(boxA[1], boxB[1]);
+        const xB = Math.min(boxA[2], boxB[2]);
+        const yB = Math.min(boxA[3], boxB[3]);
+
+        const interArea = Math.max(0, xB - xA) * Math.max(0, yB - yA);
+        if (interArea === 0) return 0;
+
+        const boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1]);
+        const boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1]);
+
+        return interArea / (boxAArea + boxBArea - interArea);
+    }, []);
 
     const fetchVerifications = useCallback(async () => {
         const pId = training?.project_id || training?.projectId;
@@ -382,35 +407,76 @@ const PredictionView = ({ training }) => {
             return;
         }
 
-        const { detectionCount, className, confidenceRange, imageSearch, riskLevel } = filters;
+        const {
+            detectionCount, selectedClasses, confidenceRange,
+            imageSearch, riskLevel, showOverlapping, overlapIoU, showOnlyDuplicates
+        } = filters;
+
         const preds = selectedExp.predictions;
         const [minConf, maxConf] = [confidenceRange[0] / 100, confidenceRange[1] / 100];
 
-
+        // 0. Pre-identify Duplicates if needed
+        let duplicateHashes = new Set();
+        if (showOnlyDuplicates) {
+            const imgMetadata = selectedExp?.input_images || {};
+            const hashCounts = {};
+            Object.values(imgMetadata).forEach(h => {
+                if (h) hashCounts[h] = (hashCounts[h] || 0) + 1;
+            });
+            Object.keys(hashCounts).forEach(h => {
+                if (hashCounts[h] > 1) duplicateHashes.add(h);
+            });
+        }
 
         const filtered = experimentImages.filter(imgName => {
-            // Helper to get detections
-            const getDetections = (name) => {
-                if (preds[name]) return preds[name];
-                const fileName = name.split('/').pop();
-                return preds[fileName] || [];
-            };
+            const fileName = imgName.split('/').pop();
+            const imgMetadata = selectedExp?.input_images || {};
+            const imgHash = typeof imgMetadata === 'object' && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
 
-            const allDets = getDetections(imgName);
-            // Filter detections by current filters (Range + Class)
-            const detections = allDets.filter(d => {
-                const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
-                const classMatch = className === 'all' || d.class === className;
-                return confMatch && classMatch;
-            });
+            // 1. Duplicate Filter
+            if (showOnlyDuplicates && (!imgHash || !duplicateHashes.has(imgHash))) {
+                return false;
+            }
 
-            // 1. Image Search Filter
+            // 2. Image Search Filter
             if (imageSearch && !imgName.toLowerCase().includes(imageSearch.toLowerCase())) {
                 return false;
             }
 
-            // 2. Detection Count Filter
+            // Helper to get detections
+            const getDetections = (name) => {
+                if (preds[name]) return preds[name];
+                const fName = name.split('/').pop();
+                return preds[fName] || [];
+            };
 
+            const allDets = getDetections(imgName);
+
+            // 3. Overlap Filter (Must check ALL pairs in the image)
+            if (showOverlapping) {
+                let hasOverlap = false;
+                for (let i = 0; i < allDets.length; i++) {
+                    for (let j = i + 1; j < allDets.length; j++) {
+                        if (calculateIoU(allDets[i].bbox, allDets[j].bbox) >= overlapIoU) {
+                            hasOverlap = true;
+                            break;
+                        }
+                    }
+                    if (hasOverlap) break;
+                }
+                if (!hasOverlap) return false;
+            }
+
+            // Filter detections by current filters (Range + Class)
+            const detections = allDets.filter(d => {
+                const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
+                const classMatch = (selectedClasses && selectedClasses.length > 0)
+                    ? selectedClasses.includes(d.class)
+                    : (filters.className === 'all' || d.class === filters.className);
+                return confMatch && classMatch;
+            });
+
+            // 4. Detection Count Filter
             let countMatch = true;
             if (detectionCount === 'no') countMatch = allDets.length === 0;
             else if (detectionCount === 'yes') countMatch = detections.length > 0;
@@ -420,12 +486,13 @@ const PredictionView = ({ training }) => {
 
             if (!countMatch) return false;
 
-            // 3. Class Filter
-            if (className !== 'all' && !detections.some(d => d.class === className)) {
+            // 5. Multi-Class Filter (AND/OR logic)
+            // If classes are selected, at least one MUST be present in the filtered detections
+            if (selectedClasses.length > 0 && detections.length === 0) {
                 return false;
             }
 
-            // 4. Strict Risk Level Filter
+            // 6. Strict Risk Level Filter
             const matchingDets = detections.filter(d => {
                 if (riskLevel === 'any') return true;
                 if (riskLevel === 'high') return d.confidence < 0.4;
@@ -434,26 +501,19 @@ const PredictionView = ({ training }) => {
                 return true;
             });
 
-            // If we selected a risk level and nothing matches, hide the image
             if (riskLevel !== 'any' && matchingDets.length === 0) {
                 return false;
             }
 
-            // 5. Review Status Filter (Independent)
+            // 7. Review Status Filter (Independent)
             if (filters.reviewStatus !== 'any') {
-                const fileName = imgName.split('/').pop();
-                const imgMetadata = selectedExp?.input_images || {};
-                const imgHash = typeof imgMetadata === 'object' && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
-
                 const imgVerifications = verifications.filter(v =>
                     imgHash ? v.image_hash_md5 === imgHash : v.image_name === fileName
                 );
 
                 if (filters.reviewStatus === 'unverified') {
-                    // Image has detections but none are verified
                     if (!(detections.length > 0 && imgVerifications.length === 0)) return false;
                 } else {
-                    // Check if image has at least one detection with matching status
                     const hasMatch = imgVerifications.some(v => v.status === filters.reviewStatus);
                     if (!hasMatch) return false;
                 }
@@ -463,7 +523,7 @@ const PredictionView = ({ training }) => {
         });
 
         setFilteredImages(filtered);
-    }, [filters, selectedExp, experimentImages, verifications]);
+    }, [filters, selectedExp, experimentImages, verifications, calculateIoU]);
 
     // --- Actions ---
     const updateParam = async (key, value) => {
@@ -748,14 +808,16 @@ const PredictionView = ({ training }) => {
 
                                 {/* Class Filter */}
                                 <div>
-                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Class</Text>
+                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Class (Multi-Select)</Text>
                                     <Select
-                                        value={filters.className}
-                                        onChange={val => setFilters(f => ({ ...f, className: val }))}
+                                        mode="multiple"
+                                        placeholder="Select classes..."
+                                        value={filters.selectedClasses}
+                                        onChange={val => setFilters(f => ({ ...f, selectedClasses: val }))}
                                         style={{ width: '100%' }}
                                         size="small"
+                                        maxTagCount="responsive"
                                     >
-                                        <Option value="all">All Classes</Option>
                                         {availableClasses.map(c => <Option key={c} value={c}>{c}</Option>)}
                                     </Select>
                                 </div>
@@ -775,6 +837,58 @@ const PredictionView = ({ training }) => {
                                         onChange={val => setFilters(f => ({ ...f, confidenceRange: val }))}
                                     />
                                 </div>
+
+                                <Divider style={{ margin: '8px 0' }} />
+
+                                {/* Expert Diagnostic Filters */}
+                                <div>
+                                    <Text strong style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.75rem', color: '#1890ff' }}>
+                                        EXPERT DIAGNOSTICS
+                                    </Text>
+
+                                    {/* Overlapping Filter */}
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                            <Tooltip title="Find images where detections significantly overlap (possible NMS failure).">
+                                                <Text type="secondary" style={{ fontSize: '0.75rem' }}>Detect Overlaps</Text>
+                                            </Tooltip>
+                                            <Switch
+                                                size="small"
+                                                checked={filters.showOverlapping}
+                                                onChange={val => setFilters(f => ({ ...f, showOverlapping: val }))}
+                                            />
+                                        </div>
+                                        {filters.showOverlapping && (
+                                            <div style={{ padding: '0 8px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                    <Text type="secondary" style={{ fontSize: '0.7rem' }}>IoU Threshold</Text>
+                                                    <Text style={{ fontSize: '0.7rem' }}>{filters.overlapIoU}</Text>
+                                                </div>
+                                                <Slider
+                                                    min={0.1}
+                                                    max={0.9}
+                                                    step={0.05}
+                                                    value={filters.overlapIoU}
+                                                    onChange={val => setFilters(f => ({ ...f, overlapIoU: val }))}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Duplicate Filter */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Tooltip title="Find images with identical binary content (Content Collision).">
+                                            <Text type="secondary" style={{ fontSize: '0.75rem' }}>Content Duplicates</Text>
+                                        </Tooltip>
+                                        <Switch
+                                            size="small"
+                                            checked={filters.showOnlyDuplicates}
+                                            onChange={val => setFilters(f => ({ ...f, showOnlyDuplicates: val }))}
+                                        />
+                                    </div>
+                                </div>
+
+                                <Divider style={{ margin: '12px 0 8px 0' }} />
 
                                 {/* Risk Level Filter */}
                                 <div>
@@ -842,12 +956,6 @@ const PredictionView = ({ training }) => {
                                                 <span>Verified Wrong (Fail)</span>
                                             </Space>
                                         </Option>
-                                        <Option value="unsure">
-                                            <Space>
-                                                <InfoCircleOutlined style={{ color: '#faad14' }} />
-                                                <span>Unsure / Needs Check</span>
-                                            </Space>
-                                        </Option>
                                         <Option value="unverified">
                                             <Space>
                                                 <div style={{ width: 14, height: 14, border: '1px dashed #666', borderRadius: '50%' }} />
@@ -871,9 +979,20 @@ const PredictionView = ({ training }) => {
                                     <Button
                                         type="link"
                                         size="small"
-                                        onClick={() => setFilters({ detectionCount: 'any', className: 'all', confidenceRange: [10, 100], imageSearch: '', riskLevel: 'any', reviewStatus: 'any' })}
+                                        onClick={() => setFilters({
+                                            detectionCount: 'any',
+                                            className: 'all', // LEGACY: Restored
+                                            selectedClasses: [],
+                                            confidenceRange: [10, 100],
+                                            imageSearch: '',
+                                            riskLevel: 'any',
+                                            reviewStatus: 'any',
+                                            overlapIoU: 0.5,
+                                            showOverlapping: false,
+                                            showOnlyDuplicates: false
+                                        })}
                                     >
-                                        Clear
+                                        Clear All
                                     </Button>
                                 </div>
                             </Space>
@@ -1300,7 +1419,9 @@ const PredictionView = ({ training }) => {
                                                     const [minConf, maxConf] = [filters.confidenceRange[0] / 100, filters.confidenceRange[1] / 100];
                                                     const detections = allDets.filter(d => {
                                                         const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
-                                                        const classMatch = filters.className === 'all' || d.class === filters.className;
+                                                        const classMatch = (filters.selectedClasses && filters.selectedClasses.length > 0)
+                                                            ? filters.selectedClasses.includes(d.class)
+                                                            : (filters.className === 'all' || d.class === filters.className);
 
                                                         // Apply Strict Risk Level Filter in Gallery Thumbnails
                                                         const riskLevel = filters.riskLevel;

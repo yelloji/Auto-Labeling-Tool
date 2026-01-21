@@ -113,7 +113,9 @@ const ImageViewerModal = ({
         if (!filters) return true;
         const [minConf, maxConf] = [filters.confidenceRange[0] / 100, filters.confidenceRange[1] / 100];
         const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
-        const classMatch = filters.className === 'all' || d.class === filters.className;
+        const classMatch = (filters.selectedClasses && filters.selectedClasses.length > 0)
+            ? filters.selectedClasses.includes(d.class)
+            : (filters.className === 'all' || d.class === filters.className);
 
         // Apply Strict Risk Level Filter
         const riskLevel = filters.riskLevel;
