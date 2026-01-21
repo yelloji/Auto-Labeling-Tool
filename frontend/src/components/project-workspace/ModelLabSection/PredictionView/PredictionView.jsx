@@ -778,7 +778,9 @@ const PredictionView = ({ training }) => {
                             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                                 {/* Search Filter */}
                                 <div>
-                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Search Image</Text>
+                                    <Tooltip title="Find a specific image by its filename.">
+                                        <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Search Image</Text>
+                                    </Tooltip>
                                     <Input
                                         placeholder="Search by name..."
                                         size="small"
@@ -790,7 +792,9 @@ const PredictionView = ({ training }) => {
                                 </div>
                                 {/* Detection Count Filter */}
                                 <div>
-                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Detection Count</Text>
+                                    <Tooltip title="Filter images by the total number of boxes the model found.">
+                                        <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Detection Count</Text>
+                                    </Tooltip>
                                     <Select
                                         value={filters.detectionCount}
                                         onChange={val => setFilters(f => ({ ...f, detectionCount: val }))}
@@ -808,7 +812,9 @@ const PredictionView = ({ training }) => {
 
                                 {/* Class Filter */}
                                 <div>
-                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Class (Multi-Select)</Text>
+                                    <Tooltip title="See only images containing these specific object types.">
+                                        <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Class (Multi-Select)</Text>
+                                    </Tooltip>
                                     <Select
                                         mode="multiple"
                                         placeholder="Select classes..."
@@ -825,7 +831,9 @@ const PredictionView = ({ training }) => {
                                 {/* Confidence Range Filter */}
                                 <div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                        <Text type="secondary" style={{ fontSize: '0.75rem' }}>Confidence Range</Text>
+                                        <Tooltip title="View boxes based on how 'sure' the model is (suggested: 10-40% for debugging).">
+                                            <Text type="secondary" style={{ fontSize: '0.75rem' }}>Confidence Range</Text>
+                                        </Tooltip>
                                         <Text type="secondary" style={{ fontSize: '0.75rem' }}>{filters.confidenceRange[0]}% - {filters.confidenceRange[1]}%</Text>
                                     </div>
                                     <Slider
@@ -849,7 +857,7 @@ const PredictionView = ({ training }) => {
                                     {/* Overlapping Filter */}
                                     <div style={{ marginBottom: '1rem' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                            <Tooltip title="Find images where detections significantly overlap (possible NMS failure).">
+                                            <Tooltip title="Find 'Stacked Boxes' in the same spot. Great for fixing double-counting issues.">
                                                 <Text type="secondary" style={{ fontSize: '0.75rem' }}>Detect Overlaps</Text>
                                             </Tooltip>
                                             <Switch
@@ -861,7 +869,9 @@ const PredictionView = ({ training }) => {
                                         {filters.showOverlapping && (
                                             <div style={{ padding: '0 8px' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                                    <Text type="secondary" style={{ fontSize: '0.7rem' }}>IoU Threshold</Text>
+                                                    <Tooltip title="Adjust how much boxes must touch to be flagged as an overlap.">
+                                                        <Text type="secondary" style={{ fontSize: '0.7rem' }}>IoU Threshold</Text>
+                                                    </Tooltip>
                                                     <Text style={{ fontSize: '0.7rem' }}>{filters.overlapIoU}</Text>
                                                 </div>
                                                 <Slider
@@ -877,7 +887,7 @@ const PredictionView = ({ training }) => {
 
                                     {/* Duplicate Filter */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <Tooltip title="Find images with identical binary content (Content Collision).">
+                                        <Tooltip title="Find images that are 100% identical files—even if names are different.">
                                             <Text type="secondary" style={{ fontSize: '0.75rem' }}>Content Duplicates</Text>
                                         </Tooltip>
                                         <Switch
@@ -892,20 +902,22 @@ const PredictionView = ({ training }) => {
 
                                 {/* Risk Level Filter */}
                                 <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                        <Text type="secondary" style={{ fontSize: '0.75rem' }}>Risk Level</Text>
-                                        <Space size={8}>
-                                            <Tooltip title="High Risk: < 40% Confidence">
-                                                <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ff4d4f', boxShadow: '0 0 8px rgba(255, 77, 79, 0.6)' }} />
-                                            </Tooltip>
-                                            <Tooltip title="Medium Risk: 40-70% Confidence">
-                                                <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#faad14', boxShadow: '0 0 8px rgba(250, 173, 20, 0.6)' }} />
-                                            </Tooltip>
-                                            <Tooltip title="Low Risk: > 70% Confidence">
-                                                <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#52c41a', boxShadow: '0 0 8px rgba(82, 196, 26, 0.6)' }} />
-                                            </Tooltip>
-                                        </Space>
-                                    </div>
+                                    <Tooltip title="Instantly see 'High Risk' images that probably need a human eyes.">
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                            <Text type="secondary" style={{ fontSize: '0.75rem' }}>Risk Level</Text>
+                                            <Space size={8}>
+                                                <Tooltip title="High Risk: < 40% Confidence">
+                                                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ff4d4f', boxShadow: '0 0 8px rgba(255, 77, 79, 0.6)' }} />
+                                                </Tooltip>
+                                                <Tooltip title="Medium Risk: 40-70% Confidence">
+                                                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#faad14', boxShadow: '0 0 8px rgba(250, 173, 20, 0.6)' }} />
+                                                </Tooltip>
+                                                <Tooltip title="Low Risk: > 70% Confidence">
+                                                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#52c41a', boxShadow: '0 0 8px rgba(82, 196, 26, 0.6)' }} />
+                                                </Tooltip>
+                                            </Space>
+                                        </div>
+                                    </Tooltip>
                                     <Select
                                         value={filters.riskLevel}
                                         onChange={val => setFilters(f => ({ ...f, riskLevel: val }))}
@@ -936,7 +948,9 @@ const PredictionView = ({ training }) => {
 
                                 {/* Review Status Filter */}
                                 <div>
-                                    <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Review Status (Master Truth)</Text>
+                                    <Tooltip title="Filter by images you've already audited as Correct (Pass) or Wrong (Fail).">
+                                        <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Review Status (Master Truth)</Text>
+                                    </Tooltip>
                                     <Select
                                         value={filters.reviewStatus}
                                         onChange={val => setFilters(f => ({ ...f, reviewStatus: val }))}
