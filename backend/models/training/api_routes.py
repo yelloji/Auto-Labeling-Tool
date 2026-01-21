@@ -28,7 +28,7 @@ import shutil
 import subprocess
 import sys
 from core.config import settings
-from database.models import ModelExperiment
+from database.models import ModelExperiment, Project
 from models.training.validator import ValidatorRegistry
 from models.training.predictor import PredictorRegistry
 import re
@@ -2594,8 +2594,8 @@ async def get_missed_ground_truth(
         # Construct image key using forward slashes (normalized)
         image_key = f"images/{experiment.dataset_source}/{image_name}"
         
-        # Find missed detections
-        missed = get_missed_detections(
+        # Find missed detections and false positives
+        result = get_missed_detections(
             annotations,
             image_key,
             image_predictions,
@@ -2605,7 +2605,7 @@ async def get_missed_ground_truth(
             iou_threshold
         )
         
-        return missed
+        return result
     
     except FileNotFoundError:
         # No annotations.json file

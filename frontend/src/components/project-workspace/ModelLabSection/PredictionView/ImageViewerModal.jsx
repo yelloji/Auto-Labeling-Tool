@@ -99,6 +99,7 @@ const ImageViewerModal = ({
     const [missedDetections, setMissedDetections] = useState([]);
     const [showMissed, setShowMissed] = useState(true);
     const [iouThreshold, setIouThreshold] = useState(0.3);
+    const [fpIndices, setFpIndices] = useState([]); // Phase 7.2: Unmatched prediction indices (False Positives)
 
     const currentIndex = images.indexOf(currentImage);
 
@@ -304,15 +305,19 @@ const ImageViewerModal = ({
             try {
                 const { missedDetectionsAPI } = await import('../../../../services/api');
                 const fileName = currentImage.split('/').pop();
-                const missed = await missedDetectionsAPI.getMissedDetections(
+                const data = await missedDetectionsAPI.getMissedDetections(
                     experiment.id,
                     fileName,
                     iouThreshold
                 );
-                setMissedDetections(missed || []);
+
+                // data is now { missed: [], fp_indices: [] }
+                setMissedDetections(data.missed || []);
+                setFpIndices(data.fp_indices || []);
             } catch (error) {
-                console.error('Error fetching missed detections:', error);
+                console.error('Error fetching verification data:', error);
                 setMissedDetections([]);
+                setFpIndices([]);
             }
         };
 
@@ -1647,6 +1652,15 @@ const ImageViewerModal = ({
                                         riskClass = 'medium-risk';
                                     }
 
+                                    // FALSE POSITIVE DETECTION: Override ONLY for the label background
+                                    // Use local fpIndices check (from verification API) OR flag on the detection object
+                                    const isPossibleFP = fpIndices.includes(allDets.indexOf(d)) || d.has_ground_truth_match === false;
+
+                                    let labelColor = riskColor;
+                                    if (isPossibleFP) {
+                                        labelColor = '#ff8c00';  // Orange (same as missing defect hints)
+                                    }
+
                                     const [x1, y1, x2, y2] = d.bbox;
                                     const w = Math.round(x2 - x1);
                                     const h = Math.round(y2 - y1);
@@ -1654,8 +1668,9 @@ const ImageViewerModal = ({
 
                                     const indexLabel = `#${i + 1}`;
                                     const baseLabel = `${indexLabel} ${d.class} ${(d.confidence * 100).toFixed(0)}%`;
+                                    const fpTag = isPossibleFP ? ' [CHECK FP?]' : '';  // Add tag for possible FP
                                     const sizeLabel = ` [${w}x${h} | ${area.toLocaleString()}px²]`;
-                                    const labelText = isHovered ? `${baseLabel}${sizeLabel}` : baseLabel;
+                                    const labelText = isHovered ? `${baseLabel}${fpTag}${sizeLabel}` : `${baseLabel}${fpTag}`;
 
                                     const charWidth = 8.5; // Estimated monospace width
                                     const labelPadding = 45;
@@ -1736,7 +1751,7 @@ const ImageViewerModal = ({
                                                         y={-18}
                                                         width={labelWidth}
                                                         height={18}
-                                                        fill={isHovered ? '#fff' : riskColor}
+                                                        fill={isHovered ? '#fff' : labelColor}
                                                         opacity={isHovered ? 1 : 0.85}
                                                         rx={2}
                                                         style={{ transition: 'all 0.1s ease' }}

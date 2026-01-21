@@ -132,20 +132,32 @@ def get_missed_detections(
             'class_id': ann['class_id']
         })
     
-    # Find missed detections
+    # Find missed detections and track prediction matches
     missed = []
+    matched_prediction_indices = set()
+    
     for gt in ground_truth:
         has_match = False
         
-        for pred in predictions:
+        for i, pred in enumerate(predictions):
             # Match purely by Location (IoU) 
             # If the model saw ANYTHING here (even with wrong label), it's not a "miss"
             iou = calculate_iou(gt['bbox'], pred['bbox'])
             if iou >= iou_threshold:
                 has_match = True
-                break
+                matched_prediction_indices.add(i)
+                # Note: We don't break here if we want to track ALL matches, 
+                # but for "missed detection" we just need one.
+                # However, for FP we want to know if this prediction matched ANY GT.
+                # So we continue the inner loop to mark other predictions as matched too.
         
         if not has_match:
             missed.append(gt)
+            
+    # False Positives are predictions that didn't match ANY ground truth
+    fp_indices = [i for i in range(len(predictions)) if i not in matched_prediction_indices]
     
-    return missed
+    return {
+        "missed": missed,
+        "fp_indices": fp_indices
+    }
