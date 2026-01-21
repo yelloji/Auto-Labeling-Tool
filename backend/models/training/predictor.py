@@ -1,5 +1,7 @@
 import os
 import json
+import gc
+import torch
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -69,25 +71,7 @@ class UltralyticsPredictor(BasePredictor):
             elif task_name == 'segmentation':
                 task_name = 'segment'
             
-            # Note: name='' ensures results are saved DIRECTLY in output_folder, no /predict/ subfolder
-            results = model.predict(
-                source=images,  # Can be list of paths, folder path, or single image
-                task=task_name,  # 'detect' or 'segment' (YOLO format)
-                imgsz=params.get('imgsz', 640),
-                conf=params.get('confidence', 0.25),
-                iou=params.get('iou_threshold', 0.45),
-                max_det=params.get('max_det', 300),
-                device=params.get('device', '0'),  # '0' for GPU, 'cpu' for CPU
-                project=output_folder,
-                name='',  # Save directly in output_folder
-                save=False,  # DO NOT Save annotated images (Memory Optimization Phase 2)
-                save_txt=True,  # Keep labels for debugging/backup
-                save_conf=True, 
-                show_labels=False, 
-                show_conf=False
-            )
-            
-            # 5. Extract predictions per image
+            # Analytics data initialization
             predictions = {}
             total_detections = 0
             classes_detected = {}
@@ -101,59 +85,92 @@ class UltralyticsPredictor(BasePredictor):
                 "0.5-0.8": 0,
                 "0.8-1.0": 0
             }
+
+            # Strategy: Manual Batching to mimic Training behavior
+            # Instead of 1-by-1 or tossing "Everything", we process in controlled chunks.
+            batch_size = int(params.get('batch', 1))
+            img_list = images if isinstance(images, list) else [images]
+            processed_count = 0
             
-            for result in results:
-                # Use the original filename as the key
-                image_name = Path(result.path).name
+            # Divide image list into smaller batches manually
+            for i in range(0, len(img_list), batch_size):
+                batch_chunk = img_list[i : i + batch_size]
                 
-                boxes = result.boxes
-                masks = result.masks # Get segmentation masks if the model is a -seg model
+                # Run prediction on the CURRENT batch only
+                results = model.predict(
+                    source=batch_chunk,
+                    task=task_name,
+                    imgsz=params.get('imgsz', 640),
+                    conf=params.get('confidence', 0.25),
+                    iou=params.get('iou_threshold', 0.45),
+                    max_det=params.get('max_det', 300),
+                    device=params.get('device', '0'),
+                    half=params.get('half', False),
+                    project=output_folder,
+                    name='',
+                    save=False,
+                    save_txt=True,
+                    save_conf=True,
+                    show_labels=False,
+                    show_conf=False
+                )
                 
-                image_predictions = []
-                for i in range(len(boxes)):
-                    class_id = int(boxes.cls[i])
-                    class_name = result.names[class_id]
-                    confidence = float(boxes.conf[i])
-                    bbox = boxes.xyxy[i].tolist()  # [x1, y1, x2, y2]
+                # Process results and move to CPU immediately
+                for result in results:
+                    result = result.cpu()
                     
-                    # Extract segmentation polygon if available
-                    segmentation = None
-                    if masks is not None and len(masks.xy) > i:
-                        segmentation = masks.xy[i].tolist() # List of [x, y] coordinates
+                    image_name = Path(result.path).name
+                    boxes = result.boxes
+                    masks = result.masks
                     
-                    image_predictions.append({
-                        'class': class_name,
-                        'confidence': confidence,
-                        'bbox': bbox,
-                        'segmentation': segmentation
-                    })
+                    image_predictions = []
+                    for k in range(len(boxes)):
+                        class_id = int(boxes.cls[k])
+                        class_name = result.names[class_id]
+                        confidence = float(boxes.conf[k])
+                        bbox = boxes.xyxy[k].tolist()
+                        
+                        segmentation = None
+                        if masks is not None and len(masks.xy) > k:
+                            segmentation = masks.xy[k].tolist()
+                        
+                        image_predictions.append({
+                            'class': class_name,
+                            'confidence': confidence,
+                            'bbox': bbox,
+                            'segmentation': segmentation
+                        })
+                        
+                        # Update global analytics
+                        total_detections += 1
+                        classes_detected[class_name] = classes_detected.get(class_name, 0) + 1
+                        confidence_sum += confidence
+                        confidence_count += 1
+                        
+                        if confidence < 0.2:
+                            confidence_distribution["0.0-0.2"] += 1
+                        elif confidence < 0.5:
+                            confidence_distribution["0.2-0.5"] += 1
+                        elif confidence < 0.8:
+                            confidence_distribution["0.5-0.8"] += 1
+                        else:
+                            confidence_distribution["0.8-1.0"] += 1
                     
-                    # Update analytics
-                    total_detections += 1
-                    classes_detected[class_name] = classes_detected.get(class_name, 0) + 1
-                    confidence_sum += confidence
-                    confidence_count += 1
+                    predictions[image_name] = image_predictions
                     
-                    # Confidence distribution
-                    if confidence < 0.2:
-                        confidence_distribution["0.0-0.2"] += 1
-                    elif confidence < 0.5:
-                        confidence_distribution["0.2-0.5"] += 1
-                    elif confidence < 0.8:
-                        confidence_distribution["0.5-0.8"] += 1
+                    if len(image_predictions) > 0:
+                        images_with_detections += 1
                     else:
-                        confidence_distribution["0.8-1.0"] += 1
+                        images_without_detections += 1
+                    
+                    processed_count += 1
                 
-                predictions[image_name] = image_predictions
-                
-                # Track images with/without detections
-                if len(image_predictions) > 0:
-                    images_with_detections += 1
-                else:
-                    images_without_detections += 1
-            
-            # 6. Compute analytics summary
-            image_count = len(results)
+                # Frequent cache clearing to keep VRAM footprint low
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+            # 6. Compute final analytics summary
+            image_count = processed_count
             avg_confidence = confidence_sum / confidence_count if confidence_count > 0 else 0.0
             avg_detections_per_image = total_detections / image_count if image_count > 0 else 0.0
             
@@ -182,6 +199,16 @@ class UltralyticsPredictor(BasePredictor):
         except Exception as e:
             logger.error("errors.prediction", f"Ultralytics prediction task hit a critical error: {str(e)}", "prediction_critical_error")
             raise
+        finally:
+            # Absolute cleanup to ensure next run starts fresh
+            try:
+                if 'model' in locals():
+                    del model
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
 
 
 class PredictorRegistry:

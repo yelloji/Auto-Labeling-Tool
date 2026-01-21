@@ -2044,6 +2044,8 @@ class PredictionRequest(BaseModel):
     confidence: float = 0.25
     iou_threshold: float = 0.45
     imgsz: int = 640
+    batch: int = 1  # Standard default for best accuracy
+    half: bool = False # Standard default for compatibility
     weights_type: str = "best"  # 'best' or 'last'
     task: str = "detect"  # 'detect' or 'segment'
     max_det: int = 300
@@ -2060,6 +2062,8 @@ class PredictionUpdate(BaseModel):
     confidence: Optional[float] = None
     iou_threshold: Optional[float] = None
     imgsz: Optional[int] = None
+    batch: Optional[int] = None
+    half: Optional[bool] = None
     weights_type: Optional[str] = None
     task: Optional[str] = None
     max_det: Optional[int] = None
@@ -2137,6 +2141,8 @@ async def init_prediction(training_id: int, payload: PredictionRequest, db: Sess
         confidence=payload.confidence,
         iou_threshold=payload.iou_threshold,
         imgsz=payload.imgsz,
+        batch=payload.batch,
+        half=payload.half,
         weights_type=payload.weights_type,
         input_images=payload.uploaded_images,  # Store uploaded image paths
         status="queued"
@@ -2283,6 +2289,8 @@ async def trigger_prediction(
         experiment.confidence = payload.confidence
         experiment.iou_threshold = payload.iou_threshold
         experiment.imgsz = payload.imgsz
+        experiment.batch = payload.batch
+        experiment.half = payload.half
         experiment.weights_type = payload.weights_type
         experiment.task = payload.task
         experiment.max_detections = payload.max_det

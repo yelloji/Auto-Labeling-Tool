@@ -300,6 +300,8 @@ class DatabaseDebugger:
                 print(f"      │ Confidence: {row['confidence']}")
                 print(f"      │ IoU Threshold: {row['iou_threshold']}")
                 print(f"      │ Image Size: {row['imgsz']}")
+                print(f"      │ Batch Size: {row['batch'] if row['batch'] is not None else 'N/A'}  # New Column")
+                print(f"      │ Half Precision (FP16): {bool(row['half']) if row['half'] is not None else 'N/A'}  # New Column")
                 print(f"      │ Weights Type: {row['weights_type'] or 'N/A'}")
                 print(f"      │ Task: {row['task'] or 'N/A'}")
                 print(f"      │ Framework: {row['framework'] or 'N/A'}")

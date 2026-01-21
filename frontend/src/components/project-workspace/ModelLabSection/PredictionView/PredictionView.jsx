@@ -105,6 +105,7 @@ const PredictionView = ({ training }) => {
         task: training?.taskType || 'detection',  // Default to training's task type
         confidence: 0.25,
         iou_threshold: 0.45,
+        batch: 1,
         imgsz: 640,
         weights_type: 'best',
         max_det: 300,
@@ -311,6 +312,7 @@ const PredictionView = ({ training }) => {
                     task: training?.taskType || 'detection',
                     confidence: 0.25,
                     iou_threshold: 0.45,
+                    batch: 1,
                     imgsz: getDetectedImgsz(),
                     weights_type: 'best'
                 });
@@ -328,6 +330,7 @@ const PredictionView = ({ training }) => {
                         task: latest.task || training?.taskType || 'detection',
                         confidence: latest.confidence || 0.25,
                         iou_threshold: latest.iou_threshold || 0.45,
+                        batch: latest.batch || 1,
                         imgsz: latest.imgsz || getDetectedImgsz(),
                         weights_type: latest.weights_type || 'best',
                         max_det: latest.max_det || 300
@@ -532,6 +535,7 @@ const PredictionView = ({ training }) => {
                     dataset_source: 'test',
                     confidence: 0.25,
                     iou_threshold: 0.45,
+                    batch: 1,
                     imgsz: 640,
                     weights_type: 'best',
                     max_det: 300,
@@ -614,6 +618,7 @@ const PredictionView = ({ training }) => {
             dataset_source: 'test',
             confidence: 0.25,
             iou_threshold: 0.45,
+            batch: 1,
             imgsz: 640,
             weights_type: 'best',
             max_det: 300,
@@ -669,6 +674,7 @@ const PredictionView = ({ training }) => {
                                             dataset_source: item.dataset_source || 'test',
                                             confidence: item.confidence || 0.25,
                                             iou_threshold: item.iou_threshold || 0.45,
+                                            batch: item.batch || 1,
                                             imgsz: item.imgsz || 640,
                                             weights_type: item.weights_type || 'best',
                                             max_det: item.max_det || 300,
@@ -896,6 +902,7 @@ const PredictionView = ({ training }) => {
                                             dataset_source: queuedExp.dataset_source || getDefaultSplit(),
                                             confidence: queuedExp.confidence || 0.25,
                                             iou_threshold: queuedExp.iou_threshold || 0.45,
+                                            batch: queuedExp.batch || 1,
                                             imgsz: queuedExp.imgsz || getDetectedImgsz(),
                                             weights_type: queuedExp.weights_type || 'best',
                                             max_det: queuedExp.max_det || 300,
@@ -910,6 +917,7 @@ const PredictionView = ({ training }) => {
                                             dataset_source: getDefaultSplit(),
                                             confidence: 0.25,
                                             iou_threshold: 0.45,
+                                            batch: 1,
                                             imgsz: getDetectedImgsz(),
                                             weights_type: 'best',
                                             max_det: 300,
@@ -1099,6 +1107,28 @@ const PredictionView = ({ training }) => {
                                         value={config.iou_threshold}
                                         onChange={val => updateParam('iou_threshold', val)}
                                         disabled={selectedExp && selectedExp.status !== 'queued'}
+                                    />
+                                </div>
+                                <div className="config-item">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                        <Tooltip title="Number of images to process per GPU call. Lower values use less VRAM. Set to 1 for maximum accuracy and stability.">
+                                            <Text strong style={{ cursor: 'help' }}>Batch Size</Text>
+                                        </Tooltip>
+                                        <InputNumber
+                                            min={1} max={128} step={1}
+                                            value={config.batch}
+                                            size="small"
+                                            onChange={val => updateParam('batch', val)}
+                                            disabled={selectedExp && selectedExp.status !== 'queued'}
+                                            style={{ width: '80px' }}
+                                        />
+                                    </div>
+                                    <Slider
+                                        min={1} max={32} step={1}
+                                        value={config.batch}
+                                        onChange={val => updateParam('batch', val)}
+                                        disabled={selectedExp && selectedExp.status !== 'queued'}
+                                        marks={{ 1: '1', 8: '8', 16: '16', 32: '32' }}
                                     />
                                 </div>
                             </div>
