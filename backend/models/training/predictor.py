@@ -32,6 +32,34 @@ class BasePredictor(ABC):
             - image_count: Number of images processed
         """
         pass
+    
+    @staticmethod
+    def calculate_bbox_from_polygon(polygon_points: List[List[float]], padding: float = 2.0) -> Optional[List[float]]:
+        """
+        Calculate tight bounding box from segmentation polygon.
+        Framework-agnostic utility for consistent bbox generation.
+        
+        Args:
+            polygon_points: List of [x, y] coordinates
+            padding: Pixels to add around bbox for visual separation (default 2.0)
+            
+        Returns:
+            [x1, y1, x2, y2] in absolute pixels, or None if invalid
+        """
+        if not polygon_points or len(polygon_points) == 0:
+            return None
+        
+        try:
+            xs = [p[0] for p in polygon_points]
+            ys = [p[1] for p in polygon_points]
+            return [
+                min(xs) - padding,  # x1 - left
+                min(ys) - padding,  # y1 - top
+                max(xs) + padding,  # x2 - right
+                max(ys) + padding   # y2 - bottom
+            ]
+        except (IndexError, TypeError, ValueError):
+            return None
 
 
 class UltralyticsPredictor(BasePredictor):
@@ -108,7 +136,7 @@ class UltralyticsPredictor(BasePredictor):
                     half=params.get('half', False),
                     project=output_folder,
                     name='',
-                    save=False,
+                    save=False,  # Disabled after confirming bbox behavior is from Ultralytics
                     save_txt=True,
                     save_conf=True,
                     show_labels=False,
@@ -133,6 +161,16 @@ class UltralyticsPredictor(BasePredictor):
                         segmentation = None
                         if masks is not None and len(masks.xy) > k:
                             segmentation = masks.xy[k].tolist()
+                        
+                        # Smart BBox Strategy (Framework-Agnostic):
+                        # - Object Detection: Use model's direct bbox (standard)
+                        # - Segmentation: Calculate bbox from polygon for pixel-perfect alignment
+                        if task_name == 'segment' and segmentation:
+                            calculated_bbox = self.calculate_bbox_from_polygon(segmentation)
+                            if calculated_bbox:
+                                bbox = calculated_bbox
+                        # else: bbox already set from boxes.xyxy above for detection task
+
                         
                         image_predictions.append({
                             'class': class_name,
