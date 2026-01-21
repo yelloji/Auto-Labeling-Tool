@@ -99,7 +99,9 @@ const PredictionView = ({ training }) => {
         overlapIoU: 0.5, // Phase 1: IoU Threshold
         showOverlapping: false, // Phase 1: Toggle for overlap mode
         isolateOverlaps: false, // Phase 1.5: ONLY show overlapping boxes
-        showOnlyDuplicates: false // Phase 1: Toggle for duplicates
+        showOnlyDuplicates: false, // Phase 1: Toggle for duplicates
+        selectedSizeGroup: 'all', // Phase 2: Object Size Filter (Scale Diagnostic)
+        isolateBySize: false // Phase 2.5: Hide detections not matching size group
     });
 
     // Pagination State
@@ -143,6 +145,37 @@ const PredictionView = ({ training }) => {
         });
         return mapping;
     }, [selectedExp?.input_images]);
+
+    // Phase 2: Dynamic Object Size Bucketing (Scale Diagnostic - 4 Groups)
+    const sizeGroups = React.useMemo(() => {
+        if (!selectedExp?.predictions) return { thresholds: [0, 0, 0], count: 0 };
+
+        let allAreas = [];
+        Object.values(selectedExp.predictions).forEach(detections => {
+            if (Array.isArray(detections)) {
+                detections.forEach(det => {
+                    if (det.bbox && det.bbox.length === 4) {
+                        const [x1, y1, x2, y2] = det.bbox;
+                        const area = (x2 - x1) * (y2 - y1);
+                        allAreas.push(area);
+                    }
+                });
+            }
+        });
+
+        if (allAreas.length === 0) return { thresholds: [0, 0, 0], count: 0 };
+
+        // Sort to find precise quantiles for 4 groups
+        allAreas.sort((a, b) => a - b);
+        const q25 = allAreas[Math.floor(allAreas.length * 0.25)];
+        const q50 = allAreas[Math.floor(allAreas.length * 0.50)];
+        const q75 = allAreas[Math.floor(allAreas.length * 0.75)];
+
+        return {
+            thresholds: [q25, q50, q75],
+            count: allAreas.length
+        };
+    }, [selectedExp]);
 
     // --- References ---
     const pollTimerRef = useRef(null);
@@ -436,7 +469,8 @@ const PredictionView = ({ training }) => {
 
         const {
             detectionCount, selectedClasses, confidenceRange,
-            imageSearch, riskLevel, showOverlapping, overlapIoU, showOnlyDuplicates
+            imageSearch, riskLevel, showOverlapping, overlapIoU, isolateOverlaps, showOnlyDuplicates,
+            selectedSizeGroup, isolateBySize
         } = filters;
 
         const preds = selectedExp.predictions;
@@ -546,11 +580,26 @@ const PredictionView = ({ training }) => {
                 }
             }
 
+            // 8. Object Size Filter (Phase 2)
+            if (selectedSizeGroup !== 'all') {
+                const [q25, q50, q75] = sizeGroups.thresholds;
+                const hasMatchingSize = detections.some(det => {
+                    const [x1, y1, x2, y2] = det.bbox;
+                    const area = (x2 - x1) * (y2 - y1);
+                    if (selectedSizeGroup === 'tiny') return area <= q25;
+                    if (selectedSizeGroup === 'small') return area > q25 && area <= q50;
+                    if (selectedSizeGroup === 'medium') return area > q50 && area <= q75;
+                    if (selectedSizeGroup === 'large') return area > q75;
+                    return false;
+                });
+                if (!hasMatchingSize) return false;
+            }
+
             return true;
         });
 
         setFilteredImages(filtered);
-    }, [filters, selectedExp, experimentImages, verifications, calculateIoU]);
+    }, [filters, selectedExp, experimentImages, verifications, calculateIoU, sizeGroups]);
 
     // --- Actions ---
     const updateParam = async (key, value) => {
@@ -934,6 +983,44 @@ const PredictionView = ({ training }) => {
                                             onChange={val => setFilters(f => ({ ...f, showOnlyDuplicates: val }))}
                                         />
                                     </div>
+
+                                    {/* Object Size Filter (Phase 2) */}
+                                    <div style={{ marginTop: '1rem' }}>
+                                        <Tooltip title="Filter detections by their pixel area (Tiny, Small, Medium, Large). Thresholds are dynamically calculated based on all detections in this experiment.">
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                                                <Text type="secondary" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Object Size</Text>
+                                                {sizeGroups.count > 0 && (
+                                                    <Tag color="default" style={{ fontSize: '9px', margin: 0, padding: '0 4px', background: 'rgba(255,255,255,0.05)', color: '#666', border: 'none' }}>
+                                                        {sizeGroups.count} DETS ANALYZED
+                                                    </Tag>
+                                                )}
+                                            </div>
+                                        </Tooltip>
+                                        <Select
+                                            value={filters.selectedSizeGroup}
+                                            onChange={val => setFilters(f => ({ ...f, selectedSizeGroup: val }))}
+                                            style={{ width: '100%' }}
+                                            size="small"
+                                        >
+                                            <Option value="all">All Sizes</Option>
+                                            <Option value="tiny">Tiny (Bottom 25%)</Option>
+                                            <Option value="small">Small (25-50%)</Option>
+                                            <Option value="medium">Medium (50-75%)</Option>
+                                            <Option value="large">Large (Top 25%)</Option>
+                                        </Select>
+
+                                        {filters.selectedSizeGroup !== 'all' && (
+                                            <div style={{ marginTop: '0.5rem', paddingLeft: '4px' }}>
+                                                <Checkbox
+                                                    checked={filters.isolateBySize}
+                                                    onChange={e => setFilters(f => ({ ...f, isolateBySize: e.target.checked }))}
+                                                    style={{ color: '#888', fontSize: '0.7rem' }}
+                                                >
+                                                    Isolate Selected Size
+                                                </Checkbox>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <Divider style={{ margin: '12px 0 8px 0' }} />
@@ -954,7 +1041,7 @@ const PredictionView = ({ training }) => {
                                                     <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#52c41a', boxShadow: '0 0 8px rgba(82, 196, 26, 0.6)' }} />
                                                 </Tooltip>
                                             </Space>
-                                        </div>
+                                        </div >
                                     </Tooltip>
                                     <Select
                                         value={filters.riskLevel}
@@ -1042,7 +1129,8 @@ const PredictionView = ({ training }) => {
                                             overlapIoU: 0.5,
                                             showOverlapping: false,
                                             isolateOverlaps: false,
-                                            showOnlyDuplicates: false
+                                            showOnlyDuplicates: false,
+                                            selectedSizeGroup: 'all'
                                         })}
                                     >
                                         Clear All
@@ -1483,6 +1571,18 @@ const PredictionView = ({ training }) => {
                                                         else if (riskLevel === 'medium') riskMatch = d.confidence >= 0.4 && d.confidence < 0.7;
                                                         else if (riskLevel === 'low') riskMatch = d.confidence >= 0.7;
 
+                                                        // 8. Size Isolation Logic (Phase 2.5)
+                                                        let sizeMatch = true;
+                                                        if (filters.selectedSizeGroup !== 'all' && filters.isolateBySize) {
+                                                            const [q25, q50, q75] = sizeGroups.thresholds;
+                                                            const [x1, y1, x2, y2] = d.bbox;
+                                                            const area = (x2 - x1) * (y2 - y1);
+                                                            if (filters.selectedSizeGroup === 'tiny') sizeMatch = area <= q25;
+                                                            else if (filters.selectedSizeGroup === 'small') sizeMatch = area > q25 && area <= q50;
+                                                            else if (filters.selectedSizeGroup === 'medium') sizeMatch = area > q50 && area <= q75;
+                                                            else if (filters.selectedSizeGroup === 'large') sizeMatch = area > q75;
+                                                        }
+
                                                         // ONLY show boxes that are actually overlapping? (Isolation Mode)
                                                         let overlapMatch = true;
                                                         if (filters.showOverlapping && filters.isolateOverlaps) {
@@ -1493,7 +1593,7 @@ const PredictionView = ({ training }) => {
                                                             });
                                                         }
 
-                                                        return confMatch && classMatch && riskMatch && overlapMatch;
+                                                        return confMatch && classMatch && riskMatch && overlapMatch && sizeMatch;
                                                     });
                                                     const imageUrl = selectedExp?.id
                                                         ? `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${selectedExp.id}/original-image/${imgName}`
@@ -1644,6 +1744,7 @@ const PredictionView = ({ training }) => {
                 onDeleteVerification={handleDeleteVerification}
                 projectLabels={projectLabels}
                 duplicateMatchMap={duplicateMatchMap}
+                sizeGroups={sizeGroups}
             />
 
             < AnalyticsModal

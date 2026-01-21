@@ -38,7 +38,8 @@ const ImageViewerModal = ({
     onVerify, // New: Function to trigger save
     onDeleteVerification, // New: Function to trigger deletion
     projectLabels = [], // New: Project-level labels for classification
-    duplicateMatchMap = {} // New: Duplicate group insights
+    duplicateMatchMap = {}, // New: Duplicate group insights
+    sizeGroups = { thresholds: [0, 0, 0], count: 0 } // New: Size bucketing data
 }) => {
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [scale, setScale] = useState(1);
@@ -148,7 +149,19 @@ const ImageViewerModal = ({
         else if (riskLevel === 'medium') riskMatch = d.confidence >= 0.4 && d.confidence < 0.7;
         else if (riskLevel === 'low') riskMatch = d.confidence >= 0.7;
 
-        // ONLY show boxes that are actually overlapping? (Isolation Mode)
+        // 8. Size Isolation Logic (Phase 2.5)
+        let sizeMatch = true;
+        if (filters.selectedSizeGroup !== 'all' && filters.isolateBySize) {
+            const [q25, q50, q75] = sizeGroups.thresholds;
+            const [x1, y1, x2, y2] = d.bbox;
+            const area = (x2 - x1) * (y2 - y1);
+            if (filters.selectedSizeGroup === 'tiny') sizeMatch = area <= q25;
+            else if (filters.selectedSizeGroup === 'small') sizeMatch = area > q25 && area <= q50;
+            else if (filters.selectedSizeGroup === 'medium') sizeMatch = area > q50 && area <= q75;
+            else if (filters.selectedSizeGroup === 'large') sizeMatch = area > q75;
+        }
+
+        // 7. Overlap Isolation Mode (Existing Phase 1.5)
         let overlapMatch = true;
         if (filters.showOverlapping && filters.isolateOverlaps) {
             overlapMatch = allDets.some((otherD, otherIdx) => {
@@ -158,7 +171,7 @@ const ImageViewerModal = ({
             });
         }
 
-        return confMatch && classMatch && riskMatch && overlapMatch;
+        return confMatch && classMatch && riskMatch && overlapMatch && sizeMatch;
     });
 
     // Phase 4: Split verifications for current image into "mine" and "hints"
@@ -1351,7 +1364,9 @@ const ImageViewerModal = ({
                             {isDrawingMode && (
                                 <div style={{ textAlign: 'center', marginTop: '6px', animation: 'pulseText 1.5s infinite' }}>
                                     <Text style={{ color: '#ff4d4f', fontSize: '0.65rem', fontWeight: 900, textTransform: 'uppercase' }}>
-                                        Mode: Drawing on Image...
+                                        {tempBox
+                                            ? `Drawing: ${Math.round(tempBox.width)} x ${Math.round(tempBox.height)} (${Math.round(tempBox.width * tempBox.height).toLocaleString()} px²)`
+                                            : "Mode: Drawing on Image..."}
                                     </Text>
                                 </div>
                             )}
@@ -1632,11 +1647,19 @@ const ImageViewerModal = ({
                                         riskClass = 'medium-risk';
                                     }
 
+                                    const [x1, y1, x2, y2] = d.bbox;
+                                    const w = Math.round(x2 - x1);
+                                    const h = Math.round(y2 - y1);
+                                    const area = Math.round(w * h);
+
                                     const indexLabel = `#${i + 1}`;
-                                    const labelText = `${indexLabel} ${d.class} ${(d.confidence * 100).toFixed(0)}%`;
+                                    const baseLabel = `${indexLabel} ${d.class} ${(d.confidence * 100).toFixed(0)}%`;
+                                    const sizeLabel = ` [${w}x${h} | ${area.toLocaleString()}px²]`;
+                                    const labelText = isHovered ? `${baseLabel}${sizeLabel}` : baseLabel;
+
                                     const charWidth = 8.5; // Estimated monospace width
                                     const labelPadding = 45;
-                                    const labelWidth = Math.max((indexLabel.length + d.class.length) * charWidth + labelPadding, 90);
+                                    const labelWidth = Math.max((labelText.length) * charWidth + labelPadding, isHovered ? 180 : 90);
                                     const labelHeight = 18;
 
                                     // 1. Dynamic X (Don't go off right edge)
@@ -1731,7 +1754,7 @@ const ImageViewerModal = ({
                                                             transition: 'all 0.1s ease'
                                                         }}
                                                     >
-                                                        {isHovered ? labelText : `${d.class} ${(d.confidence * 100).toFixed(0)}%`}
+                                                        {labelText}
                                                     </text>
                                                 </g>
                                             )}
@@ -1992,6 +2015,9 @@ const ImageViewerModal = ({
                                             style={{ color: isSelected ? color : '#888', fontSize: '0.8125rem', fontWeight: 500 }}
                                         >
                                             <strong>{d.class}</strong>: {(d.confidence * 100).toFixed(1)}%
+                                            <span style={{ fontSize: '0.7rem', color: '#666', marginLeft: '8px', fontStyle: 'italic' }}>
+                                                ({Math.round(d.bbox[2] - d.bbox[0])} × {Math.round(d.bbox[3] - d.bbox[1])} px)
+                                            </span>
                                             {activeVerification && (
                                                 <span title={`Verified in Current Experiment (via ${currentMatchMethod})`} style={{ fontSize: '0.7rem', marginLeft: '6px' }}>
                                                     {currentMatchMethod === 'HASH' ? '🔑' : '📄'}
