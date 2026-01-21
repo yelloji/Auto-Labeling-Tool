@@ -36,7 +36,8 @@ const ImageViewerModal = ({
     verifications = [], // New: Project-level human reviews
     onVerify, // New: Function to trigger save
     onDeleteVerification, // New: Function to trigger deletion
-    projectLabels = [] // New: Project-level labels for classification
+    projectLabels = [], // New: Project-level labels for classification
+    duplicateMatchMap = {} // New: Duplicate group insights
 }) => {
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [scale, setScale] = useState(1);
@@ -818,6 +819,9 @@ const ImageViewerModal = ({
     };
 
 
+    const isDuplicate = !!(duplicateMatchMap[currentFileName] || duplicateMatchMap[currentImage]);
+    const matchId = duplicateMatchMap[currentFileName] || duplicateMatchMap[currentImage];
+
     return (
         <Modal
             visible={visible}
@@ -837,10 +841,36 @@ const ImageViewerModal = ({
             closeIcon={null} // We will use a custom close button for better UX
             className="image-viewer-modal"
         >
+            {/* Header / Info Bar for Duplicate Insights */}
+            {isDuplicate && filters?.showOnlyDuplicates && (
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 2500,
+                    background: 'linear-gradient(to right, #722ed1, #1890ff)',
+                    color: 'white',
+                    padding: '8px 24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+                    animation: 'tooltipFadeIn 0.3s ease-out'
+                }}>
+                    <InfoCircleOutlined style={{ fontSize: '1.2rem' }} />
+                    <Text style={{ color: 'white', fontSize: '0.9rem', fontWeight: 600 }}>
+                        HISTORICAL INSIGHT: Bit-for-bit identical content found in Match Group #{matchId}.
+                    </Text>
+                    <Tag color="white" style={{ color: '#722ed1', fontWeight: 'bold', borderRadius: '4px' }}>DUPLICATE CONTENT</Tag>
+                </div>
+            )}
+
             {/* Header / Info Bar */}
             <div style={{
                 position: 'absolute',
-                top: 0,
+                top: (isDuplicate && filters?.showOnlyDuplicates) ? '36px' : 0,
                 left: 0,
                 right: 0,
                 padding: '0.6rem 1.25rem',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     Skeleton,
     Card,
@@ -112,13 +112,37 @@ const PredictionView = ({ training }) => {
         dataset_source: 'upload',
         task: training?.taskType || 'detection',  // Default to training's task type
         confidence: 0.25,
-        iou_threshold: 0.45,
-        batch: 1,
-        imgsz: 640,
-        weights_type: 'best',
-        max_det: 300,
-        device: '0'
+        iou_threshold: 0.45
     });
+
+    // Phase 1.5: Pre-calculate Duplicate Groups for Insights
+    const duplicateMatchMap = React.useMemo(() => {
+        if (!selectedExp?.input_images) return {};
+        const imgMetadata = selectedExp.input_images;
+        const hashGroups = {};
+
+        // Group by hash
+        Object.entries(imgMetadata).forEach(([name, hash]) => {
+            if (hash) {
+                if (!hashGroups[hash]) hashGroups[hash] = [];
+                hashGroups[hash].push(name);
+            }
+        });
+
+        const mapping = {};
+        let groupCounter = 1;
+
+        // Only map if there are 2+ images with the same hash
+        Object.values(hashGroups).forEach(names => {
+            if (names.length > 1) {
+                names.forEach(name => {
+                    mapping[name] = groupCounter;
+                });
+                groupCounter++;
+            }
+        });
+        return mapping;
+    }, [selectedExp?.input_images]);
 
     // --- References ---
     const pollTimerRef = useRef(null);
@@ -1476,6 +1500,7 @@ const PredictionView = ({ training }) => {
                                                         : '';
                                                     // Clean filename: remove "predict/" and any path components
                                                     const displayName = imgName.split('/').pop();
+                                                    const matchId = duplicateMatchMap[displayName] || duplicateMatchMap[imgName];
                                                     // Render detection overlay for filtered detections
                                                     const DetectionOverlay = ({ dets, imgKey }) => {
                                                         const [dimensions, setDimensions] = useState({ width: 640, height: 640 });
@@ -1549,7 +1574,16 @@ const PredictionView = ({ training }) => {
                                                                 <DetectionOverlay dets={detections} imgKey={imgName} />
                                                             </div>
                                                             <div className="image-name-label" title={imgName}>
-                                                                {displayName.length > 25 ? displayName.slice(0, 22) + '...' : displayName}
+                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                                                    {matchId && filters.showOnlyDuplicates && (
+                                                                        <Tag color="purple" style={{ fontSize: '0.6rem', fontWeight: 'bold', margin: 0, padding: '0 4px', lineHeight: '14px' }}>
+                                                                            MATCH #{matchId}
+                                                                        </Tag>
+                                                                    )}
+                                                                    <span style={{ fontSize: '0.75rem' }}>
+                                                                        {displayName.length > 25 ? displayName.slice(0, 22) + '...' : displayName}
+                                                                    </span>
+                                                                </div>
                                                                 <Tooltip title={`This image has ${detections.length} detection${detections.length !== 1 ? 's' : ''} found by our model`}>
                                                                     <Badge count={detections.length} style={{ marginLeft: '0.5rem' }} showZero />
                                                                 </Tooltip>
@@ -1608,6 +1642,7 @@ const PredictionView = ({ training }) => {
                 onVerify={handleVerify}
                 onDeleteVerification={handleDeleteVerification}
                 projectLabels={projectLabels}
+                duplicateMatchMap={duplicateMatchMap}
             />
 
             < AnalyticsModal
