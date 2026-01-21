@@ -33,6 +33,7 @@ const ImageViewerModal = ({
     experiment,
     onNavigate,
     filters,
+    setFilters, // New: To trigger global filter updates
     verifications = [], // New: Project-level human reviews
     onVerify, // New: Function to trigger save
     onDeleteVerification, // New: Function to trigger deletion
@@ -838,39 +839,13 @@ const ImageViewerModal = ({
                 flexDirection: 'column',
                 overflow: 'hidden'
             }}
-            closeIcon={null} // We will use a custom close button for better UX
+            closeIcon={null}
             className="image-viewer-modal"
         >
-            {/* Header / Info Bar for Duplicate Insights */}
-            {isDuplicate && filters?.showOnlyDuplicates && (
-                <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    zIndex: 2500,
-                    background: 'linear-gradient(to right, #722ed1, #1890ff)',
-                    color: 'white',
-                    padding: '8px 24px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '12px',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
-                    animation: 'tooltipFadeIn 0.3s ease-out'
-                }}>
-                    <InfoCircleOutlined style={{ fontSize: '1.2rem' }} />
-                    <Text style={{ color: 'white', fontSize: '0.9rem', fontWeight: 600 }}>
-                        HISTORICAL INSIGHT: Bit-for-bit identical content found in Match Group #{matchId}.
-                    </Text>
-                    <Tag color="white" style={{ color: '#722ed1', fontWeight: 'bold', borderRadius: '4px' }}>DUPLICATE CONTENT</Tag>
-                </div>
-            )}
-
             {/* Header / Info Bar */}
             <div style={{
                 position: 'absolute',
-                top: (isDuplicate && filters?.showOnlyDuplicates) ? '36px' : 0,
+                top: 0,
                 left: 0,
                 right: 0,
                 padding: '0.6rem 1.25rem',
@@ -904,7 +879,6 @@ const ImageViewerModal = ({
                             {filteredDets.length} Matching Detections
                         </Tag>
 
-
                         <Text style={{ color: '#888', fontSize: '0.75rem' }}>{currentIndex + 1} of {images.length}</Text>
                         {lastLoadTime > 0 && (
                             <Tag color="cyan" style={{ borderRadius: '4px', border: 'none', background: 'rgba(0, 255, 255, 0.1)', color: '#00ffff', fontSize: '10px' }}>
@@ -912,6 +886,43 @@ const ImageViewerModal = ({
                             </Tag>
                         )}
                     </Space>
+                </div>
+
+                {/* RIGHT SIDE: PROACTIVE DUPLICATE INSIGHTS */}
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                    {isDuplicate && (
+                        <Tooltip title="Click to isolate all matching images in gallery">
+                            <Tag
+                                color="purple"
+                                onClick={() => {
+                                    if (setFilters) {
+                                        setFilters(prev => ({ ...prev, showOnlyDuplicates: true }));
+                                        onCancel(); // Close to show results
+                                    }
+                                }}
+                                style={{
+                                    cursor: 'pointer',
+                                    borderRadius: '4px',
+                                    border: 'none',
+                                    background: 'linear-gradient(135deg, #722ed1 0%, #9254de 100%)',
+                                    color: 'white',
+                                    fontWeight: 700,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    transition: 'all 0.3s',
+                                    padding: '6px 16px',
+                                    boxShadow: '0 4px 15px rgba(114, 46, 209, 0.5)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px'
+                                }}
+                                className="duplicate-tag-hover-reveal"
+                            >
+                                <InfoCircleOutlined style={{ fontSize: '14px', color: 'white' }} />
+                                DUPLICATE IMAGES: MATCH GROUP #{matchId}
+                            </Tag>
+                        </Tooltip>
+                    )}
                 </div>
 
                 <Space size={14} align="center" style={{

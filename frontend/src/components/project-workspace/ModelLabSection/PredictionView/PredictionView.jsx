@@ -1638,6 +1638,7 @@ const PredictionView = ({ training }) => {
                 experiment={selectedExp}
                 onNavigate={(newImg) => setPreviewImage(newImg)}
                 filters={filters}
+                setFilters={setFilters}
                 verifications={verifications}
                 onVerify={handleVerify}
                 onDeleteVerification={handleDeleteVerification}
