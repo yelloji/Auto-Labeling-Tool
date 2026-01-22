@@ -1668,12 +1668,16 @@ const ImageViewerModal = ({
 
                                     const indexLabel = `#${i + 1}`;
                                     const baseLabel = `${indexLabel} ${d.class} ${(d.confidence * 100).toFixed(0)}%`;
-                                    const fpTag = isPossibleFP ? ' [CHECK FP?]' : '';  // Add tag for possible FP
+                                    const fpTag = isPossibleFP ? ' [FALSE POSITIVE]' : '';  // Clearer tag
                                     const sizeLabel = ` [${w}x${h} | ${area.toLocaleString()}px²]`;
                                     const labelText = isHovered ? `${baseLabel}${fpTag}${sizeLabel}` : `${baseLabel}${fpTag}`;
 
-                                    const charWidth = 8.2; // Optimized for monospace
-                                    const labelPadding = 5; // Tight padding
+                                    const tooltipText = isPossibleFP
+                                        ? `Suspected False Positive: The model found a ${d.class} here, but it does NOT match human-verified data.\n\nThis specific detection is likely an AI error.\n\nACTION: Please confirm if this is a real ${d.class} using the PASS/FAIL buttons in the bottom bar.`
+                                        : null;
+
+                                    const charWidth = 8.2;
+                                    const labelPadding = 5;
                                     const labelWidth = (labelText.length) * charWidth + labelPadding;
                                     const labelHeight = 18;
 
@@ -1701,8 +1705,7 @@ const ImageViewerModal = ({
                                     }
 
                                     return (
-                                        <g key={i}>
-                                            {/* 1. RENDER CONTOURS (Polygons) */}
+                                        <g key={i}>                                            {/* 1. RENDER CONTOURS (Polygons) */}
                                             {showContours && d.segmentation && selectedIndices.includes(i) && (
                                                 <polygon
                                                     points={d.segmentation.map(p => `${p[0]},${p[1]}`).join(' ')}
@@ -1722,8 +1725,18 @@ const ImageViewerModal = ({
                                                     width={d.bbox[2] - d.bbox[0]}
                                                     height={d.bbox[3] - d.bbox[1]}
                                                     className={`detection-highlight-rect ${riskClass} ${isHovered ? 'hovered' : ''}`}
-                                                    onMouseEnter={() => setHoveredIndex(i)}
-                                                    onMouseLeave={() => setHoveredIndex(null)}
+                                                    onMouseEnter={(e) => {
+                                                        setHoveredIndex(i);
+                                                        if (isPossibleFP) {
+                                                            const content = `Suspected False Positive: The model found a ${d.class} here, but it does NOT match human-verified data.\n\nThis specific detection is likely an AI error.\n\nACTION: Please confirm if this is a real ${d.class} using the PASS/FAIL buttons in the bottom bar.`;
+                                                            handleBoxMouseEnter(e, content, 'hint');
+                                                        }
+                                                    }}
+                                                    onMouseMove={handleBoxMouseMove}
+                                                    onMouseLeave={() => {
+                                                        setHoveredIndex(null);
+                                                        handleBoxMouseLeave();
+                                                    }}
                                                     onClick={(e) => { e.stopPropagation(); handleFocusDetection(i); }}
                                                     style={{
                                                         strokeWidth: isHovered ? 4 : 2,
@@ -1741,8 +1754,18 @@ const ImageViewerModal = ({
                                             {(showLabels || isHovered) && d.bbox && (
                                                 <g
                                                     transform={`translate(${labelX}, ${labelY})`}
-                                                    onMouseEnter={() => setHoveredIndex(i)}
-                                                    onMouseLeave={() => setHoveredIndex(null)}
+                                                    onMouseEnter={(e) => {
+                                                        setHoveredIndex(i);
+                                                        if (isPossibleFP) {
+                                                            const content = `Suspected False Positive: The model found a ${d.class} here, but it does NOT match human-verified data.\n\nThis specific detection is likely an AI error.\n\nACTION: Please confirm if this is a real ${d.class} using the PASS/FAIL buttons in the bottom bar.`;
+                                                            handleBoxMouseEnter(e, content, 'hint');
+                                                        }
+                                                    }}
+                                                    onMouseMove={handleBoxMouseMove}
+                                                    onMouseLeave={() => {
+                                                        setHoveredIndex(null);
+                                                        handleBoxMouseLeave();
+                                                    }}
                                                     style={{ pointerEvents: 'all', cursor: 'pointer' }}
                                                 >
                                                     {/* Label Background */}
@@ -2427,3 +2450,5 @@ const ImageViewerModal = ({
 };
 
 export default ImageViewerModal;
+
+
