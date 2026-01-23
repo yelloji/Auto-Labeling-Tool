@@ -281,12 +281,25 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
                     >
                         <div className="conf-dist-list">
                             {Object.entries(confidence_distribution).map(([range, count]) => {
-                                const percent = ((count / total_detections) * 100).toFixed(0);
+                                const percent = ((count / total_detections) * 100).toFixed(1);
+                                const isLow = range.includes('0.0') || range.includes('0.1') || range.includes('0.2');
+                                const isMedium = range.includes('0.3') || range.includes('0.4') || range.includes('0.5');
                                 return (
                                     <div key={range} className="conf-range-item">
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                            <Text type="secondary">{range}</Text>
-                                            <Text strong>{count} objects</Text>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <div style={{
+                                                    width: '10px',
+                                                    height: '10px',
+                                                    borderRadius: '50%',
+                                                    background: isLow ? '#ff4d4f' : isMedium ? '#faad14' : '#52c41a',
+                                                    boxShadow: `0 0 6px ${isLow ? '#ff4d4f40' : isMedium ? '#faad1440' : '#52c41a40'}`
+                                                }} />
+                                                <Text strong style={{ fontSize: '0.85rem' }}>{range}</Text>
+                                            </div>
+                                            <Tag color={isLow ? 'red' : isMedium ? 'orange' : 'green'} style={{ fontWeight: 600 }}>
+                                                {count} ({percent}%)
+                                            </Tag>
                                         </div>
                                         <Progress
                                             percent={parseFloat(percent)}

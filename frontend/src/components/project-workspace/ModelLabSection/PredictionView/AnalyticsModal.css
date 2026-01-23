@@ -196,18 +196,21 @@
     border: 1px solid #f0f0f0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
     transition: all 0.3s ease;
+    overflow: hidden;
 }
 
 .distribution-card:hover,
 .confidence-card:hover {
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    transform: translateY(-3px);
+    border-color: #1890ff30;
 }
 
 .distribution-card .ant-card-head,
 .confidence-card .ant-card-head {
-    background: linear-gradient(to right, #fafafa, white);
-    border-bottom: 2px solid #f0f0f0;
+    background: linear-gradient(to right, #f0f7ff, white);
+    border-bottom: 2px solid #e6f7ff;
+    font-weight: 600;
 }
 
 .distribution-card .ant-table {
@@ -228,14 +231,17 @@
 }
 
 .conf-range-item {
-    padding: 0.5rem;
-    background: #fafafa;
+    padding: 0.75rem;
+    background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
     border-radius: 8px;
     transition: all 0.2s ease;
+    border: 1px solid #f0f0f0;
 }
 
 .conf-range-item:hover {
-    background: #f0f0f0;
+    background: linear-gradient(135deg, #f0f0f0 0%, #fafafa 100%);
+    border-color: #d9d9d9;
+    transform: translateX(2px);
 }
 
 /* ========== RESPONSIVE DESIGN ========== */
