@@ -1,0 +1,128 @@
+/* Analytics Modal Styling */
+
+.analytics-modal .ant-modal-body {
+    padding: 1rem;
+}
+
+/* Responsive Tabs */
+.analytics-tabs .ant-tabs-nav {
+    margin-bottom: 1rem;
+}
+
+.analytics-tabs .ant-tabs-tab {
+    padding: 8px 16px;
+}
+
+/* Tab Content */
+.analytics-tab-content {
+    padding: 0.5rem;
+    min-height: 400px;
+}
+
+/* Metric Cards - Responsive */
+.metric-card {
+    text-align: center;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    height: 100%;
+}
+
+.metric-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.metric-card .ant-statistic-title {
+    font-size: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.metric-card .ant-statistic-content {
+    font-size: 1.5rem;
+}
+
+/* Distribution Cards */
+.distribution-card,
+.confidence-card {
+    border-radius: 8px;
+    height: 100%;
+}
+
+.distribution-card .ant-table {
+    font-size: 0.875rem;
+}
+
+.confidence-card .conf-dist-list {
+    min-height: 150px;
+}
+
+/* Responsive breakpoints */
+
+/* Small screens (mobile) */
+@media (max-width: 576px) {
+    .analytics-tab-content {
+        padding: 0.25rem;
+    }
+
+    .metric-card .ant-statistic-content {
+        font-size: 1.2rem;
+    }
+
+    .metric-card .ant-statistic-title {
+        font-size: 0.7rem;
+    }
+
+    .analytics-tabs .ant-tabs-tab {
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+
+    .analytics-tabs .ant-tabs-tab-btn span:not(.anticon) {
+        display: none;
+        /* Hide text on mobile, keep icons */
+    }
+}
+
+/* Medium screens (tablets) */
+@media (min-width: 577px) and (max-width: 992px) {
+    .analytics-tab-content {
+        padding: 0.5rem;
+    }
+
+    .metric-card .ant-statistic-content {
+        font-size: 1.4rem;
+    }
+}
+
+/* Large screens (desktop) */
+@media (min-width: 993px) {
+    .analytics-tab-content {
+        padding: 1rem;
+    }
+
+    .metric-card .ant-statistic-content {
+        font-size: 1.8rem;
+    }
+}
+
+/* Empty state styling */
+.ant-empty-description {
+    margin-top: 1rem;
+}
+
+.ant-empty-description ul {
+    list-style: none;
+    padding: 0;
+}
+
+.ant-empty-description li {
+    padding: 0.5rem 0;
+    text-align: left;
+}
+
+.ant-empty-description li:before {
+    content: "✓ ";
+    color: #52c41a;
+    font-weight: bold;
+    margin-right: 0.5rem;
+}
