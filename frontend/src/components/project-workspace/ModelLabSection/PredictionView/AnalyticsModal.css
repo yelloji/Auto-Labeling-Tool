@@ -1,75 +1,267 @@
-/* Analytics Modal Styling */
+/* ========== ANALYTICS MODAL - PREMIUM STYLING ========== */
 
 .analytics-modal .ant-modal-body {
     padding: 1rem;
 }
 
-/* Responsive Tabs */
+.analytics-modal .ant-modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-bottom: none;
+}
+
+.analytics-modal .ant-modal-title {
+    color: white;
+}
+
+.analytics-modal .ant-modal-close-x {
+    color: white;
+}
+
+/* ========== TABS STYLING ========== */
+
 .analytics-tabs .ant-tabs-nav {
     margin-bottom: 1rem;
 }
 
 .analytics-tabs .ant-tabs-tab {
-    padding: 8px 16px;
+    padding: 10px 20px;
+    font-weight: 500;
+    transition: all 0.3s ease;
 }
 
-/* Tab Content */
+.analytics-tabs .ant-tabs-tab:hover {
+    color: #1890ff;
+}
+
+.analytics-tabs .ant-tabs-tab-active {
+    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+    border-radius: 8px 8px 0 0;
+}
+
+/* ========== TAB CONTENT ========== */
+
 .analytics-tab-content {
     padding: 0.5rem;
     min-height: 400px;
 }
 
-/* Metric Cards - Responsive */
-.metric-card {
-    text-align: center;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-    height: 100%;
+/* ========== PREMIUM METRIC CARDS ========== */
+
+.premium-metrics-row {
+    margin-bottom: 1.5rem;
 }
 
-.metric-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateY(-2px);
+.premium-metric-card {
+    border-radius: 16px;
+    border: none;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    position: relative;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
 }
 
-.metric-card .ant-statistic-title {
+.premium-metric-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.premium-metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
+}
+
+.premium-metric-card .ant-card-body {
+    padding: 1rem;
+    color: white;
+    position: relative;
+    z-index: 1;
+}
+
+.metric-icon {
+    font-size: 2.5rem;
+    opacity: 0.3;
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+}
+
+.metric-content {
+    position: relative;
+    z-index: 2;
+}
+
+.metric-title {
+    display: block;
+    color: rgba(255, 255, 255, 0.9);
     font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
     margin-bottom: 0.5rem;
 }
 
-.metric-card .ant-statistic-content {
-    font-size: 1.5rem;
+.metric-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
 }
 
-/* Distribution Cards */
+.metric-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: white;
+    line-height: 1;
+}
+
+.metric-suffix {
+    font-size: 1rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.metric-trend {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    width: fit-content;
+}
+
+.trend-text {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.metric-insight {
+    display: block;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.75rem;
+    margin-top: 0.75rem;
+    font-weight: 500;
+}
+
+/* ========== SMART INSIGHTS ALERT ========== */
+
+.insights-alert {
+    border-radius: 12px;
+    border: 2px solid #1890ff20;
+    background: linear-gradient(135deg, #e6f7ff 0%, #f0f9ff 100%);
+}
+
+.insights-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.insight-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.insight-item:hover {
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+}
+
+.insight-item .anticon {
+    font-size: 1.2rem;
+}
+
+/* ========== DISTRIBUTION CARDS ========== */
+
 .distribution-card,
 .confidence-card {
-    border-radius: 8px;
-    height: 100%;
+    border-radius: 12px;
+    border: 1px solid #f0f0f0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    transition: all 0.3s ease;
+}
+
+.distribution-card:hover,
+.confidence-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+}
+
+.distribution-card .ant-card-head,
+.confidence-card .ant-card-head {
+    background: linear-gradient(to right, #fafafa, white);
+    border-bottom: 2px solid #f0f0f0;
 }
 
 .distribution-card .ant-table {
     font-size: 0.875rem;
 }
 
-.confidence-card .conf-dist-list {
-    min-height: 150px;
+.distribution-card .ant-table-thead>tr>th {
+    background: #fafafa;
+    font-weight: 600;
 }
 
-/* Responsive breakpoints */
+/* ========== CONFIDENCE RANGES ========== */
 
-/* Small screens (mobile) */
+.conf-dist-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.conf-range-item {
+    padding: 0.5rem;
+    background: #fafafa;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.conf-range-item:hover {
+    background: #f0f0f0;
+}
+
+/* ========== RESPONSIVE DESIGN ========== */
+
+/* Mobile (xs) */
 @media (max-width: 576px) {
     .analytics-tab-content {
         padding: 0.25rem;
     }
 
-    .metric-card .ant-statistic-content {
-        font-size: 1.2rem;
+    .premium-metric-card {
+        min-height: 110px;
     }
 
-    .metric-card .ant-statistic-title {
-        font-size: 0.7rem;
+    .metric-value {
+        font-size: 1.8rem;
+    }
+
+    .metric-icon {
+        font-size: 1.8rem;
+        right: 0.5rem;
+        top: 0.5rem;
+    }
+
+    .metric-title {
+        font-size: 0.65rem;
     }
 
     .analytics-tabs .ant-tabs-tab {
@@ -79,33 +271,56 @@
 
     .analytics-tabs .ant-tabs-tab-btn span:not(.anticon) {
         display: none;
-        /* Hide text on mobile, keep icons */
+    }
+
+    .insights-list {
+        gap: 0.5rem;
+    }
+
+    .insight-item {
+        padding: 0.4rem;
     }
 }
 
-/* Medium screens (tablets) */
-@media (min-width: 577px) and (max-width: 992px) {
-    .analytics-tab-content {
-        padding: 0.5rem;
+/* Tablet (sm) */
+@media (min-width: 577px) and (max-width: 768px) {
+    .premium-metric-card {
+        min-height: 120px;
     }
 
-    .metric-card .ant-statistic-content {
-        font-size: 1.4rem;
-    }
-}
-
-/* Large screens (desktop) */
-@media (min-width: 993px) {
-    .analytics-tab-content {
-        padding: 1rem;
-    }
-
-    .metric-card .ant-statistic-content {
-        font-size: 1.8rem;
+    .metric-value {
+        font-size: 2rem;
     }
 }
 
-/* Empty state styling */
+/* Desktop (md+) */
+@media (min-width: 769px) {
+    .premium-metric-card {
+        min-height: 140px;
+    }
+
+    .metric-value {
+        font-size: 2.5rem;
+    }
+}
+
+/* Large Desktop (lg+) */
+@media (min-width: 992px) {
+    .premium-metric-card {
+        min-height: 150px;
+    }
+
+    .metric-value {
+        font-size: 3rem;
+    }
+
+    .metric-icon {
+        font-size: 3rem;
+    }
+}
+
+/* ========== EMPTY STATES ========== */
+
 .ant-empty-description {
     margin-top: 1rem;
 }
@@ -125,4 +340,58 @@
     color: #52c41a;
     font-weight: bold;
     margin-right: 0.5rem;
+}
+
+/* ========== ANIMATIONS ========== */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.analytics-tab-content {
+    animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.02);
+    }
+}
+
+.premium-metric-card:hover .metric-icon {
+    animation: pulse 2s infinite;
+}
+
+/* ========== SCROLLBAR STYLING ========== */
+
+.analytics-modal .ant-modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.analytics-modal .ant-modal-body::-webkit-scrollbar-track {
+    background: #f0f0f0;
+    border-radius: 4px;
+}
+
+.analytics-modal .ant-modal-body::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 4px;
+}
+
+.analytics-modal .ant-modal-body::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
 }

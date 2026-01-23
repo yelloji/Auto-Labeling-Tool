@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Modal, Row, Col, Card, Statistic, Typography, Divider, Table, Tabs, Empty } from 'antd';
+import React, { useState, useMemo } from 'react';
+import { Modal, Row, Col, Card, Statistic, Typography, Divider, Table, Tabs, Empty, Progress, Tag, Alert } from 'antd';
 import {
     BarChartOutlined,
     PieChartOutlined,
@@ -10,7 +10,13 @@ import {
     FileTextOutlined,
     DownloadOutlined,
     FundOutlined,
-    TrophyOutlined
+    TrophyOutlined,
+    RiseOutlined,
+    FallOutlined,
+    MinusOutlined,
+    WarningOutlined,
+    BulbOutlined,
+    SafetyOutlined
 } from '@ant-design/icons';
 import './AnalyticsModal.css';
 
@@ -19,18 +25,39 @@ const { Title, Text, Paragraph } = Typography;
 /**
  * AnalyticsModal Component
  * 
- * Comprehensive analytics dashboard with 5 tabs:
- * - Overview: Key metrics and distributions (current content)
- * - Quality: Performance analysis (precision, recall, FP rate) [Coming soon]
- * - Charts: Visual data exploration [Coming soon]
- * - Report: Executive summary [Coming soon]
- * - Export: Share and download capabilities [Coming soon]
- * 
- * Fully responsive design that adapts to any screen size
+ * Premium analytics dashboard with 5 tabs
  */
 const AnalyticsModal = ({ visible, onCancel, experiment }) => {
     const [activeTab, setActiveTab] = useState('overview');
 
+    // Calculate insights - with safety checks
+    const insights = useMemo(() => {
+        if (!experiment || !experiment.analytics_summary) return null;
+
+        const summary = experiment.analytics_summary;
+        const {
+            total_detections = 0,
+            images_with_detections = 0,
+            images_without_detections = 0,
+            confidence_distribution = {}
+        } = summary;
+
+        const coveragePercent = experiment.image_count ? Math.round((images_with_detections / experiment.image_count) * 100) : 0;
+        const highConfCount = Object.entries(confidence_distribution)
+            .filter(([range]) => range.includes('0.7') || range.includes('0.8') || range.includes('0.9') || range.includes('1.0'))
+            .reduce((sum, [_, count]) => sum + count, 0);
+        const highConfPercent = total_detections ? Math.round((highConfCount / total_detections) * 100) : 0;
+
+        return {
+            coverage: coveragePercent,
+            highConfidence: highConfPercent,
+            lowCoverage: coveragePercent < 70,
+            goodConfidence: highConfPercent >= 60,
+            hasGaps: images_without_detections > 0
+        };
+    }, [experiment]);
+
+    // Early return AFTER all hooks
     if (!experiment || !experiment.analytics_summary) return null;
 
     const summary = experiment.analytics_summary;
@@ -44,68 +71,175 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
         confidence_distribution = {}
     } = summary;
 
-    // Prepare chart data for classes detected
-    const classData = Object.entries(classes_detected).map(([name, count], index) => ({
-        key: index,
-        class: name,
-        count: count,
-        percent: ((count / total_detections) * 100).toFixed(1) + '%'
-    }));
+    // Prepare class data with visual progress
+    const classData = Object.entries(classes_detected).map(([name, count], index) => {
+        const percentNum = ((count / total_detections) * 100);
+        return {
+            key: index,
+            class: name,
+            count: count,
+            percent: percentNum.toFixed(1),
+            percentNum: percentNum
+        };
+    });
 
     const classColumns = [
-        { title: 'Class Name', dataIndex: 'class', key: 'class' },
-        { title: 'Count', dataIndex: 'count', key: 'count', sorter: (a, b) => a.count - b.count },
-        { title: 'Distribution', dataIndex: 'percent', key: 'percent' }
+        {
+            title: 'Class Name',
+            dataIndex: 'class',
+            key: 'class',
+            render: (text) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)'
+                    }} />
+                    <Text strong style={{ fontSize: '0.9rem' }}>{text}</Text>
+                </div>
+            )
+        },
+        {
+            title: 'Detections',
+            dataIndex: 'count',
+            key: 'count',
+            sorter: (a, b) => a.count - b.count,
+            render: (count) => <Tag color="blue" style={{ fontWeight: 600 }}>{count.toLocaleString()}</Tag>
+        },
+        {
+            title: 'Distribution',
+            dataIndex: 'percent',
+            key: 'percent',
+            render: (percent, record) => (
+                <div style={{ minWidth: '120px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <Text strong style={{ fontSize: '0.85rem' }}>{percent}%</Text>
+                    </div>
+                    <Progress
+                        percent={record.percentNum}
+                        size="small"
+                        strokeColor={{
+                            '0%': '#1890ff',
+                            '100%': '#096dd9'
+                        }}
+                        showInfo={false}
+                    />
+                </div>
+            )
+        }
     ];
 
-    // Overview Tab (existing content)
+    // Premium Metric Card Component
+    const PremiumMetricCard = ({ title, value, suffix, icon, gradient, trend, insight }) => (
+        <Card className="premium-metric-card" style={{ background: gradient }}>
+            <div className="metric-icon">{icon}</div>
+            <div className="metric-content">
+                <Text className="metric-title">{title}</Text>
+                <div className="metric-value-row">
+                    <span className="metric-value">{value}</span>
+                    {suffix && <span className="metric-suffix">{suffix}</span>}
+                </div>
+                {trend && (
+                    <div className="metric-trend">
+                        {trend.direction === 'up' && <RiseOutlined style={{ color: '#52c41a' }} />}
+                        {trend.direction === 'down' && <FallOutlined style={{ color: '#ff4d4f' }} />}
+                        {trend.direction === 'same' && <MinusOutlined style={{ color: '#faad14' }} />}
+                        <Text className="trend-text" style={{
+                            color: trend.direction === 'up' ? '#52c41a' : trend.direction === 'down' ? '#ff4d4f' : '#faad14'
+                        }}>
+                            {trend.text}
+                        </Text>
+                    </div>
+                )}
+                {insight && <Text className="metric-insight">{insight}</Text>}
+            </div>
+        </Card>
+    );
+
+    // Overview Tab
     const renderOverview = () => (
         <div className="analytics-tab-content">
-            {/* Key Metrics Row */}
-            <Row gutter={[16, 16]}>
-                <Col xs={12} sm={12} md={6} lg={6}>
-                    <Card size="small" className="metric-card">
-                        <Statistic
-                            title="Total Detections"
-                            value={total_detections}
-                            valueStyle={{ color: '#1890ff' }}
-                            prefix={<DotChartOutlined />}
-                        />
-                    </Card>
+            {/* Premium Metric Cards */}
+            <Row gutter={[16, 16]} className="premium-metrics-row">
+                <Col xs={24} sm={12} md={6} lg={6}>
+                    <PremiumMetricCard
+                        title="TOTAL DETECTIONS"
+                        value={total_detections}
+                        suffix="objects"
+                        icon={<DotChartOutlined />}
+                        gradient="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                        insight={total_detections > 100 ? "Great volume!" : "Consider more images"}
+                    />
                 </Col>
-                <Col xs={12} sm={12} md={6} lg={6}>
-                    <Card size="small" className="metric-card">
-                        <Statistic
-                            title="Avg Confidence"
-                            value={avg_confidence * 100}
-                            precision={1}
-                            suffix="%"
-                            valueStyle={{ color: '#52c41a' }}
-                            prefix={<CheckCircleOutlined />}
-                        />
-                    </Card>
+                <Col xs={24} sm={12} md={6} lg={6}>
+                    <PremiumMetricCard
+                        title="AVG CONFIDENCE"
+                        value={(avg_confidence * 100).toFixed(1)}
+                        suffix="%"
+                        icon={<CheckCircleOutlined />}
+                        gradient="linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)"
+                        insight={avg_confidence > 0.7 ? "Strong confidence!" : "Needs review"}
+                    />
                 </Col>
-                <Col xs={12} sm={12} md={6} lg={6}>
-                    <Card size="small" className="metric-card">
-                        <Statistic
-                            title="Images w/ Hits"
-                            value={images_with_detections}
-                            suffix={`/ ${experiment.image_count}`}
-                            valueStyle={{ color: '#722ed1' }}
-                        />
-                    </Card>
+                <Col xs={24} sm={12} md={6} lg={6}>
+                    <PremiumMetricCard
+                        title="COVERAGE"
+                        value={`${images_with_detections}/${experiment.image_count}`}
+                        suffix={`${insights.coverage}%`}
+                        icon={<SafetyOutlined />}
+                        gradient="linear-gradient(135deg, #9D50BB 0%, #6E48AA 100%)"
+                        insight={insights.lowCoverage ? "⚠️ Low coverage!" : "✅ Good coverage"}
+                    />
                 </Col>
-                <Col xs={12} sm={12} md={6} lg={6}>
-                    <Card size="small" className="metric-card">
-                        <Statistic
-                            title="Detections/Img"
-                            value={avg_detections_per_image}
-                            precision={2}
-                            valueStyle={{ color: '#faad14' }}
-                        />
-                    </Card>
+                <Col xs={24} sm={12} md={6} lg={6}>
+                    <PremiumMetricCard
+                        title="DENSITY"
+                        value={avg_detections_per_image.toFixed(2)}
+                        suffix="dets/img"
+                        icon={<FundOutlined />}
+                        gradient="linear-gradient(135deg, #FA8BFF 0%, #2BD2FF 100%)"
+                        insight="Distribution metric"
+                    />
                 </Col>
             </Row>
+
+            {/* Smart Insights Box */}
+            <Alert
+                message="🎯 Smart Insights"
+                description={
+                    <div className="insights-list">
+                        {insights.goodConfidence && (
+                            <div className="insight-item">
+                                <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                                <Text>Strong: {insights.highConfidence}% detections have &gt;70% confidence</Text>
+                            </div>
+                        )}
+                        {insights.hasGaps && (
+                            <div className="insight-item">
+                                <WarningOutlined style={{ color: '#faad14' }} />
+                                <Text>Alert: {images_without_detections} images had no detections</Text>
+                            </div>
+                        )}
+                        {insights.coverage >= 90 && (
+                            <div className="insight-item">
+                                <TrophyOutlined style={{ color: '#1890ff' }} />
+                                <Text>Excellent coverage: {insights.coverage}% of images have detections!</Text>
+                            </div>
+                        )}
+                        {!insights.goodConfidence && (
+                            <div className="insight-item">
+                                <BulbOutlined style={{ color: '#722ed1' }} />
+                                <Text>Tip: Consider retraining with more labeled examples</Text>
+                            </div>
+                        )}
+                    </div>
+                }
+                type="info"
+                showIcon={false}
+                style={{ marginTop: '1rem', marginBottom: '1rem' }}
+                className="insights-alert"
+            />
 
             <Divider />
 
@@ -115,11 +249,16 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
                     <Card
                         title={
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <PieChartOutlined /> Class Distribution
+                                <PieChartOutlined style={{ color: '#1890ff' }} />
+                                <span>Class Distribution</span>
                             </div>
                         }
-                        size="small"
                         className="distribution-card"
+                        extra={
+                            <Tag color="blue" style={{ fontWeight: 600 }}>
+                                {Object.keys(classes_detected).length} {Object.keys(classes_detected).length === 1 ? 'class' : 'classes'}
+                            </Tag>
+                        }
                     >
                         <Table
                             dataSource={classData}
@@ -134,27 +273,50 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
                     <Card
                         title={
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <BarChartOutlined /> Confidence Ranges
+                                <BarChartOutlined style={{ color: '#52c41a' }} />
+                                <span>Confidence Ranges</span>
                             </div>
                         }
-                        size="small"
                         className="confidence-card"
                     >
                         <div className="conf-dist-list">
-                            {Object.entries(confidence_distribution).map(([range, count]) => (
-                                <div key={range} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                                    <Text type="secondary">{range}:</Text>
-                                    <Text strong>{count} objects</Text>
-                                </div>
-                            ))}
+                            {Object.entries(confidence_distribution).map(([range, count]) => {
+                                const percent = ((count / total_detections) * 100).toFixed(0);
+                                return (
+                                    <div key={range} className="conf-range-item">
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                            <Text type="secondary">{range}</Text>
+                                            <Text strong>{count} objects</Text>
+                                        </div>
+                                        <Progress
+                                            percent={parseFloat(percent)}
+                                            size="small"
+                                            strokeColor={{
+                                                '0%': range.includes('0.0') || range.includes('0.1') || range.includes('0.2') ? '#ff4d4f' :
+                                                    range.includes('0.3') || range.includes('0.4') || range.includes('0.5') ? '#faad14' :
+                                                        '#52c41a',
+                                                '100%': range.includes('0.0') || range.includes('0.1') || range.includes('0.2') ? '#ff7875' :
+                                                    range.includes('0.3') || range.includes('0.4') || range.includes('0.5') ? '#ffc53d' :
+                                                        '#95de64'
+                                            }}
+                                            showInfo={false}
+                                        />
+                                    </div>
+                                );
+                            })}
                         </div>
-                        <div style={{ marginTop: '1rem', padding: '0.5rem', background: '#e6f7ff', borderRadius: '0.25rem' }}>
-                            <Text size="small" type="secondary">
-                                <InfoCircleOutlined /> Most objects were detected in the {
-                                    Object.entries(confidence_distribution).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
-                                } range.
-                            </Text>
-                        </div>
+                        <Alert
+                            message={
+                                <Text>
+                                    <InfoCircleOutlined /> Peak range: {
+                                        Object.entries(confidence_distribution).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
+                                    }
+                                </Text>
+                            }
+                            type="info"
+                            showIcon={false}
+                            style={{ marginTop: '1rem' }}
+                        />
                     </Card>
                 </Col>
             </Row>
@@ -256,8 +418,8 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
     return (
         <Modal
             title={
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <BarChartOutlined /> Prediction Analytics: {experiment.name}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
+                    <BarChartOutlined /> Prediction Analytics: <Text strong style={{ color: '#1890ff' }}>{experiment.name}</Text>
                 </div>
             }
             visible={visible}
@@ -267,7 +429,7 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
             style={{ maxWidth: '1400px', top: '3vh' }}
             bodyStyle={{
                 padding: '1rem',
-                background: '#f5f7fa',
+                background: 'linear-gradient(to bottom, #f5f7fa 0%, #fafbfc 100%)',
                 height: '82vh',
                 overflowY: 'auto'
             }}
@@ -279,6 +441,7 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
                 onChange={setActiveTab}
                 size="large"
                 className="analytics-tabs"
+                tabBarStyle={{ marginBottom: '1rem' }}
             >
                 <Tabs.TabPane
                     tab={
