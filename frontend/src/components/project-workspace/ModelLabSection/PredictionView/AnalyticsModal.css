@@ -1,7 +1,9 @@
 /* ========== ANALYTICS MODAL - PREMIUM STYLING ========== */
 
 .analytics-modal .ant-modal-body {
-    padding: 1rem;
+    padding: 0.5rem 1rem;
+    overflow-y: auto;
+    max-height: calc(90vh - 110px);
 }
 
 .analytics-modal .ant-modal-header {
@@ -20,13 +22,25 @@
 /* ========== TABS STYLING ========== */
 
 .analytics-tabs .ant-tabs-nav {
-    margin-bottom: 1rem;
+    margin-bottom: 0px !important;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    padding: 0 1rem;
 }
 
 .analytics-tabs .ant-tabs-tab {
-    padding: 10px 20px;
+    padding: 8px 12px !important;
+    margin: 0 !important;
     font-weight: 500;
     transition: all 0.3s ease;
+}
+
+.analytics-tabs .ant-tabs-content-holder {
+    padding: 1rem;
+    overflow-y: auto;
 }
 
 .analytics-tabs .ant-tabs-tab:hover {

@@ -19,6 +19,10 @@ import {
     SafetyOutlined
 } from '@ant-design/icons';
 import './AnalyticsModal.css';
+import QualityView from './AnalyticsViews/QualityView';
+import ChartsView from './AnalyticsViews/ChartsView';
+import ReportView from './AnalyticsViews/ReportView';
+import ExportView from './AnalyticsViews/ExportView';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -441,10 +445,11 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
             width="90vw"
             style={{ maxWidth: '1400px', top: '3vh' }}
             bodyStyle={{
-                padding: '1rem',
+                padding: '0',
                 background: 'linear-gradient(to bottom, #f5f7fa 0%, #fafbfc 100%)',
                 height: '82vh',
-                overflowY: 'auto'
+                display: 'flex',
+                flexDirection: 'column'
             }}
             destroyOnClose
             className="analytics-modal"
@@ -452,9 +457,8 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
             <Tabs
                 activeKey={activeTab}
                 onChange={setActiveTab}
-                size="large"
+                size="small"
                 className="analytics-tabs"
-                tabBarStyle={{ marginBottom: '1rem' }}
             >
                 <Tabs.TabPane
                     tab={
