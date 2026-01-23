@@ -340,97 +340,6 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
         </div>
     );
 
-    // Quality Tab (placeholder)
-    const renderQuality = () => (
-        <div className="analytics-tab-content">
-            <Empty
-                image={<TrophyOutlined style={{ fontSize: '64px', color: '#1890ff' }} />}
-                description={
-                    <div>
-                        <Title level={4}>Quality Analysis Coming Soon!</Title>
-                        <Paragraph type="secondary">
-                            This tab will show:
-                            <ul style={{ textAlign: 'left', display: 'inline-block', marginTop: '1rem' }}>
-                                <li>Precision & Recall metrics</li>
-                                <li>False Positive analysis by class and size</li>
-                                <li>Missed detections breakdown</li>
-                                <li>Human verification progress</li>
-                            </ul>
-                        </Paragraph>
-                    </div>
-                }
-            />
-        </div>
-    );
-
-    // Charts Tab (placeholder)
-    const renderCharts = () => (
-        <div className="analytics-tab-content">
-            <Empty
-                image={<LineChartOutlined style={{ fontSize: '64px', color: '#52c41a' }} />}
-                description={
-                    <div>
-                        <Title level={4}>Visual Charts Coming Soon!</Title>
-                        <Paragraph type="secondary">
-                            This tab will show:
-                            <ul style={{ textAlign: 'left', display: 'inline-block', marginTop: '1rem' }}>
-                                <li>Confidence distribution histogram</li>
-                                <li>Class balance pie chart</li>
-                                <li>Size distribution bar chart</li>
-                                <li>FP rate comparison charts</li>
-                            </ul>
-                        </Paragraph>
-                    </div>
-                }
-            />
-        </div>
-    );
-
-    // Report Tab (placeholder)
-    const renderReport = () => (
-        <div className="analytics-tab-content">
-            <Empty
-                image={<FileTextOutlined style={{ fontSize: '64px', color: '#722ed1' }} />}
-                description={
-                    <div>
-                        <Title level={4}>Executive Report Coming Soon!</Title>
-                        <Paragraph type="secondary">
-                            This tab will show:
-                            <ul style={{ textAlign: 'left', display: 'inline-block', marginTop: '1rem' }}>
-                                <li>AI-generated summary narrative</li>
-                                <li>Strengths & weaknesses analysis</li>
-                                <li>Actionable recommendations</li>
-                                <li>Detailed performance breakdown</li>
-                            </ul>
-                        </Paragraph>
-                    </div>
-                }
-            />
-        </div>
-    );
-
-    // Export Tab (placeholder)
-    const renderExport = () => (
-        <div className="analytics-tab-content">
-            <Empty
-                image={<DownloadOutlined style={{ fontSize: '64px', color: '#faad14' }} />}
-                description={
-                    <div>
-                        <Title level={4}>Export Options Coming Soon!</Title>
-                        <Paragraph type="secondary">
-                            This tab will offer:
-                            <ul style={{ textAlign: 'left', display: 'inline-block', marginTop: '1rem' }}>
-                                <li>PDF report generation</li>
-                                <li>CSV data export</li>
-                                <li>Chart pack download</li>
-                                <li>Share link creation</li>
-                            </ul>
-                        </Paragraph>
-                    </div>
-                }
-            />
-        </div>
-    );
 
     return (
         <Modal
@@ -481,7 +390,7 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
                     }
                     key="quality"
                 >
-                    {renderQuality()}
+                    <QualityView experiment={experiment} />
                 </Tabs.TabPane>
 
                 <Tabs.TabPane
@@ -493,7 +402,7 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
                     }
                     key="charts"
                 >
-                    {renderCharts()}
+                    <ChartsView experiment={experiment} />
                 </Tabs.TabPane>
 
                 <Tabs.TabPane
@@ -505,7 +414,7 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
                     }
                     key="report"
                 >
-                    {renderReport()}
+                    <ReportView experiment={experiment} />
                 </Tabs.TabPane>
 
                 <Tabs.TabPane
@@ -517,7 +426,7 @@ const AnalyticsModal = ({ visible, onCancel, experiment }) => {
                     }
                     key="export"
                 >
-                    {renderExport()}
+                    <ExportView experiment={experiment} />
                 </Tabs.TabPane>
             </Tabs>
         </Modal>
