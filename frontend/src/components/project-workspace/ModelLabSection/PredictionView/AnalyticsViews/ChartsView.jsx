@@ -105,12 +105,17 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                 const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
 
-                if (matchesClass && conf >= confRange[0] && conf <= confRange[1]) {
-                    if (iou >= iouThreshold) {
-                        tpList.push({ ...d, type: 'True Positive' });
+                if (matchesClass) {
+                    if (conf >= confRange[0] && conf <= confRange[1]) {
+                        if (iou >= iouThreshold) {
+                            tpList.push({ ...d, type: 'True Positive' });
+                        } else {
+                            // It matched GT, but is misaligned!
+                            fpList.push({ ...d, type: 'Misaligned', reason: 'Low IoU' });
+                        }
                     } else {
-                        // It matched GT, but is misaligned!
-                        fpList.push({ ...d, type: 'Misaligned', reason: 'Low IoU' });
+                        // DYNAMIC FN: Suppressed by confidence slider = Missing Ground Truth
+                        fnList.push({ ...d, type: 'Missed (Low Confidence)' });
                     }
                 }
             });
@@ -142,7 +147,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 }
             });
 
-            fnList = rawFN;
+            // Combine backend reported missed objects with our confidence-suppressed ones
+            fnList = [...fnList, ...rawFN];
         } else {
             // FALLBACK: Old manual matching (only for uploads or if backend fails)
             // (Keeping this for safety, but with projectLabels awareness)
@@ -215,6 +221,11 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         const purelyFP = filteredFP.filter(i => i.type === 'False Positive');
         const misaligned = filteredFP.filter(i => i.type === 'Misaligned');
 
+        // Separating Real FN (never detected) from Filtered FN (suppressed by confidence)
+        const fnReal = filteredFN.filter(i => i.type !== 'Missed (Low Confidence)');
+        const fnFiltered = filteredFN.filter(i => i.type === 'Missed (Low Confidence)');
+
+
         // --- 5. Metrics & Distributions ---
         const tp = filteredTP.length;
         const fp = purelyFP.length;
@@ -276,6 +287,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         return {
             kpis: {
                 tp, fp, fn, ma, aiGTRatio, totalGT,
+                fnReal: fnReal.length,
+                fnFiltered: fnFiltered.length,
                 precision: precision.toFixed(1),
                 recall: recall.toFixed(1),
                 f1: f1.toFixed(1),
@@ -312,7 +325,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         <Divider style={{ margin: '12px 0' }} />
 
                         <div style={{ marginBottom: 16 }}>
-                            <Text style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8 }}>Class Filter (Isolate)</Text>
+                            <Tooltip title="Select specific object classes to analyze. Metrics will aggregate all selected classes together.">
+                                <Text style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8 }}>Class Filter (Isolate)</Text>
+                            </Tooltip>
                             <Select
                                 mode="multiple"
                                 style={{ width: '100%' }}
@@ -332,7 +347,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                         <div style={{ marginBottom: 16 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Text style={{ fontSize: 13, fontWeight: 600 }}>Confidence Filter</Text>
+                                <Tooltip title="Filters out low-probability AI guesses. Raising this cleans up False Positives but will increase Missed Objects.">
+                                    <Text style={{ fontSize: 13, fontWeight: 600, cursor: 'help' }}>Confidence Filter</Text>
+                                </Tooltip>
                                 <Tag color="blue" style={{ margin: 0 }}>{(confRange[0] / 100).toFixed(2)} - {(confRange[1] / 100).toFixed(2)}</Tag>
                             </div>
                             <Slider
@@ -349,7 +366,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                         <div style={{ marginBottom: 16 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Text style={{ fontSize: 13, fontWeight: 600 }}>Overlap (IoU) Threshold</Text>
+                                <Tooltip title="Defines 'Good Alignment'. Raising this moves poor quality boxes from 'True Positives' into 'Misaligned Objects'.">
+                                    <Text style={{ fontSize: 13, fontWeight: 600, cursor: 'help' }}>Overlap (IoU) Threshold</Text>
+                                </Tooltip>
                                 <Tag color="orange" style={{ margin: 0 }}>{(iouThreshold / 100).toFixed(2)}+</Tag>
                             </div>
                             <Slider
@@ -364,7 +383,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         <Divider style={{ margin: '12px 0' }} />
 
                         <div>
-                            <Text style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 12 }}>Size Distribution Filter</Text>
+                            <Tooltip title="Isolate model bias by size. Use this to see if your model fails specifically on 'Tiny' objects.">
+                                <Text style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 12, cursor: 'help' }}>Size Distribution Filter</Text>
+                            </Tooltip>
                             <div style={{ height: 180 }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart
@@ -417,20 +438,26 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0', background: '#f9f9f9' }}>
-                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>Detection Ratio</Text>
+                                <Tooltip title="The 'Hallucination Index'. Ratio of AI Detections to Ground Truth. Ideally 1.0. If > 1.0, your AI is over-predicting or seeing objects that don't exist.">
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Detection Ratio</Text>
+                                </Tooltip>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                     <Text strong style={{ fontSize: 18, color: '#000' }}>
                                         {isSplit ? `${kpis.aiGTRatio}x` : 'N/A'}
                                     </Text>
-                                    <Text type="secondary" style={{ fontSize: 9 }}>
-                                        {isSplit ? `${tp + fp + ma} AI / ${totalGT} GT` : ''}
-                                    </Text>
+                                    <Tooltip title={`AI found ${tp + fp + ma} objects while there are only ${totalGT} actual objects in reality.`}>
+                                        <Text type="secondary" style={{ fontSize: 9, cursor: 'help' }}>
+                                            {isSplit ? `${tp + fp + ma} AI / ${totalGT} GT` : ''}
+                                        </Text>
+                                    </Tooltip>
                                 </div>
                             </Card>
                         </Col>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f6ffed', background: '#f6ffed' }}>
-                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>True Positives</Text>
+                                <Tooltip title="The 'Success' count. Correct detections that pass your Confidence and IoU bars. These are your model's reliable 'Gold' results.">
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>True Positives</Text>
+                                </Tooltip>
                                 <Text strong style={{ fontSize: 20, color: '#52c41a' }}>
                                     {isSplit ? kpis.tp : 'N/A'}
                                 </Text>
@@ -447,7 +474,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     items: kpis.fpItems
                                 })}
                             >
-                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>False Positives</Text>
+                                <Tooltip title="The 'Junk' count. AI detections where there is no actual object. Raising the 'Confidence' slider will reduce these by ignoring weak guesses.">
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>False Positives</Text>
+                                </Tooltip>
                                 <Text strong style={{ fontSize: 20, color: '#ff4d4f' }}>
                                     {isSplit ? kpis.fp : 'N/A'}
                                 </Text>
@@ -464,7 +493,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     items: kpis.maItems
                                 })}
                             >
-                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>Misaligned Objects</Text>
+                                <Tooltip title="The 'Precision' errors. Right label, but the box is sloppy. Adjust the 'IoU' slider to see how many boxes fail your quality standard.">
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Misaligned Objects</Text>
+                                </Tooltip>
                                 <Text strong style={{ fontSize: 20, color: '#fa8c16' }}>
                                     {isSplit ? kpis.ma : 'N/A'}
                                 </Text>
@@ -481,10 +512,19 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     items: kpis.fnItems
                                 })}
                             >
-                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>Missed Objects</Text>
-                                <Text strong style={{ fontSize: 20, color: '#faad14' }}>
-                                    {isSplit ? kpis.fn : 'N/A'}
-                                </Text>
+                                <Tooltip title="The 'Reality Gap'. Objects the model didn't finalize. 'Real' = Never detected. 'Filtered' = Detected, but hidden by your current Confidence setting.">
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Missed Objects</Text>
+                                </Tooltip>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                    <Text strong style={{ fontSize: 20, color: '#faad14' }}>
+                                        {isSplit ? kpis.fn : 'N/A'}
+                                    </Text>
+                                    <Tooltip title={`'Real' (${kpis.fnReal}) were missed by the model. 'Filtered' (${kpis.fnFiltered}) were found but suppressed by your confidence settings.`}>
+                                        <Text type="secondary" style={{ fontSize: 9, cursor: 'help' }}>
+                                            {isSplit ? `${kpis.fnReal} Real / ${kpis.fnFiltered} Filtered` : ''}
+                                        </Text>
+                                    </Tooltip>
+                                </div>
                             </Card>
                         </Col>
                     </Row>
@@ -492,7 +532,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>Precision</Text>
+                                <Tooltip title="Quality Score: How many AI detections were actually correct? (Higher is better, means less junk).">
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Precision</Text>
+                                </Tooltip>
                                 <Text strong style={{ fontSize: 18, color: '#1890ff' }}>
                                     {isSplit ? `${kpis.precision}%` : 'N/A'}
                                 </Text>
@@ -500,7 +542,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Col>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>Recall</Text>
+                                <Tooltip title="Quantity Score: What percentage of Ground Truth objects did the AI find? (Higher is better, means less missed).">
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Recall</Text>
+                                </Tooltip>
                                 <Text strong style={{ fontSize: 18, color: '#722ed1' }}>
                                     {isSplit ? `${kpis.recall}%` : 'N/A'}
                                 </Text>
@@ -508,7 +552,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Col>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>F1 Score</Text>
+                                <Tooltip title="The Balance Score: A weighted average of Precision and Recall. Use this to compare different versions fairly.">
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>F1 Score</Text>
+                                </Tooltip>
                                 <Text strong style={{ fontSize: 18, color: '#13c2c2' }}>
                                     {isSplit ? `${kpis.f1}%` : 'N/A'}
                                 </Text>
@@ -518,7 +564,11 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                     <Row gutter={[16, 16]}>
                         <Col span={12}>
-                            <Card title={<Space><BarChartOutlined /> Class Matrix</Space>} size="small">
+                            <Card title={
+                                <Tooltip title="Visualizes performance per class. 'Pass' is the ratio of True Positives to the total detections of that class.">
+                                    <Space style={{ cursor: 'help' }}><BarChartOutlined /> Class Matrix</Space>
+                                </Tooltip>
+                            } size="small">
                                 <div style={{ height: 250 }}>
                                     <ResponsiveContainer>
                                         <BarChart data={classChart} layout="vertical">
@@ -534,7 +584,11 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             </Card>
                         </Col>
                         <Col span={12}>
-                            <Card title={<Space><LineChartOutlined /> Stress Curve</Space>} size="small">
+                            <Card title={
+                                <Tooltip title="Shows how 'Yield' (model health) changes as you raise confidence. Steep drops mean the model is unconfident.">
+                                    <Space style={{ cursor: 'help' }}><LineChartOutlined /> Stress Curve</Space>
+                                </Tooltip>
+                            } size="small">
                                 <div style={{ height: 250 }}>
                                     <ResponsiveContainer>
                                         <LineChart data={stressCurve}>
@@ -550,27 +604,28 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Col>
                     </Row>
                 </Col>
-            </Row>
+            </Row >
 
             {/* Error Detail Modal */}
-            <Modal
+            < Modal
                 title={
-                    <Space>
+                    < Space >
                         <WarningOutlined style={{
                             color: errorModal.title.includes('False') ? '#ff4d4f' :
                                 errorModal.title.includes('Misaligned') ? '#d46b08' : '#faad14'
                         }} />
                         {errorModal.title}
                         <Tag>{errorModal.items?.length || 0} Items</Tag>
-                    </Space>
+                    </Space >
                 }
                 visible={errorModal.visible}
                 onCancel={() => setErrorModal({ ...errorModal, visible: false })}
-                footer={[
-                    <Button key="close" onClick={() => setErrorModal({ ...errorModal, visible: false })}>
-                        Close
-                    </Button>
-                ]}
+                footer={
+                    [
+                        <Button key="close" onClick={() => setErrorModal({ ...errorModal, visible: false })}>
+                            Close
+                        </Button>
+                    ]}
                 width={600}
                 bodyStyle={{ maxHeight: '60vh', overflowY: 'auto' }}
             >
@@ -612,8 +667,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         <Empty description="No errors found in this selection" />
                     )
                 }
-            </Modal>
-        </div>
+            </Modal >
+        </div >
     );
 };
 
