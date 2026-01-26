@@ -106,16 +106,24 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
 
                 if (matchesClass) {
+                    // Find Global Index in original predictions array
+                    const originalArray = experiment.predictions[d.image || d.imgName] || [];
+                    const gIdx = originalArray.findIndex(orig =>
+                        orig.bbox && d.bbox &&
+                        orig.bbox[0] === d.bbox[0] && orig.bbox[1] === d.bbox[1] &&
+                        orig.bbox[2] === d.bbox[2] && orig.bbox[3] === d.bbox[3]
+                    );
+
                     if (conf >= confRange[0] && conf <= confRange[1]) {
                         if (iou >= iouThreshold) {
-                            tpList.push({ ...d, type: 'True Positive' });
+                            tpList.push({ ...d, type: 'True Positive', globalIdx: gIdx !== -1 ? gIdx + 1 : null });
                         } else {
                             // It matched GT, but is misaligned!
-                            fpList.push({ ...d, type: 'Misaligned', reason: 'Low IoU' });
+                            fpList.push({ ...d, type: 'Misaligned', reason: 'Low IoU', globalIdx: gIdx !== -1 ? gIdx + 1 : null });
                         }
                     } else {
                         // DYNAMIC FN: Suppressed by confidence slider = Missing Ground Truth
-                        fnList.push({ ...d, type: 'Missed (Low Confidence)' });
+                        fnList.push({ ...d, type: 'Missed (Low Confidence)', globalIdx: gIdx !== -1 ? gIdx + 1 : null });
                     }
                 }
             });
@@ -143,7 +151,14 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
 
                 if (matchesClass && conf >= confRange[0] && conf <= confRange[1]) {
-                    fpList.push({ ...d, type: 'False Positive', reason: 'No Match' });
+                    // Find Global Index in original predictions array
+                    const originalArray = experiment.predictions[d.image || d.imgName] || [];
+                    const gIdx = originalArray.findIndex(orig =>
+                        orig.bbox && d.bbox &&
+                        orig.bbox[0] === d.bbox[0] && orig.bbox[1] === d.bbox[1] &&
+                        orig.bbox[2] === d.bbox[2] && orig.bbox[3] === d.bbox[3]
+                    );
+                    fpList.push({ ...d, type: 'False Positive', reason: 'No Match', globalIdx: gIdx !== -1 ? gIdx + 1 : null });
                 }
             });
 
@@ -293,6 +308,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 recall: recall.toFixed(1),
                 f1: f1.toFixed(1),
                 sizeDistrib,
+                tpItems: filteredTP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 fpItems: purelyFP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 maItems: misaligned.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 fnItems: filteredFN.map(i => ({ ...i, imgName: i.image || i.imgName }))
@@ -474,7 +490,16 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             </Card>
                         </Col>
                         <Col flex="1">
-                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #f6ffed', background: '#f6ffed' }}>
+                            <Card
+                                size="small"
+                                style={{ textAlign: 'center', border: '1px solid #f6ffed', background: '#f6ffed', cursor: 'pointer' }}
+                                hoverable
+                                onClick={() => setErrorModal({
+                                    visible: true,
+                                    title: 'True Positive Detections',
+                                    items: kpis.tpItems
+                                })}
+                            >
                                 <Tooltip title="Correct Results: AI successfully found the right label with high confidence and precision. These are your reliable data points.">
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>True Positives</Text>
                                 </Tooltip>
@@ -631,11 +656,12 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 title={
                     < Space >
                         <WarningOutlined style={{
-                            color: errorModal.title.includes('False') ? '#ff4d4f' :
-                                errorModal.title.includes('Misaligned') ? '#d46b08' : '#faad14'
+                            color: errorModal.title.includes('True') ? '#52c41a' :
+                                errorModal.title.includes('False') ? '#ff4d4f' :
+                                    errorModal.title.includes('Misaligned') ? '#d46b08' : '#faad14'
                         }} />
                         {errorModal.title}
-                        <Tag>{errorModal.items?.length || 0} Items</Tag>
+                        <Tag color={errorModal.title.includes('True') ? 'green' : 'default'}>{errorModal.items?.length || 0} Items</Tag>
                     </Space >
                 }
                 visible={errorModal.visible}
@@ -660,14 +686,28 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                         avatar={
                                             <div style={{
                                                 width: 32, height: 32, borderRadius: 4,
-                                                background: item.type === 'False Positive' ? '#ff4d4f20' : '#faad1420',
+                                                background: item.type === 'True Positive' ? '#52c41a20' :
+                                                    item.type === 'False Positive' ? '#ff4d4f20' : '#faad1420',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                color: item.type === 'False Positive' ? '#ff4d4f' : '#faad14'
+                                                color: item.type === 'True Positive' ? '#52c41a' :
+                                                    item.type === 'False Positive' ? '#ff4d4f' : '#faad14',
+                                                fontWeight: 'bold', fontSize: '10px'
                                             }}>
-                                                {item.type === 'False Positive' ? 'FP' : 'FN'}
+                                                {item.type === 'True Positive' ? 'TP' :
+                                                    item.type === 'False Positive' ? 'FP' :
+                                                        item.type === 'Missed (Low Confidence)' ? 'FL' : 'FN'}
                                             </div>
                                         }
-                                        title={<Text strong>{item.imgName}</Text>}
+                                        title={
+                                            <Space>
+                                                {item.globalIdx && (
+                                                    <Tag color={item.type === 'True Positive' ? "green" : "default"} style={{ fontWeight: 'bold' }}>
+                                                        #{item.globalIdx}
+                                                    </Tag>
+                                                )}
+                                                <Text strong>{item.imgName}</Text>
+                                            </Space>
+                                        }
                                         description={
                                             <Space>
                                                 <Tag>{item.class || item.class_name}</Tag>
