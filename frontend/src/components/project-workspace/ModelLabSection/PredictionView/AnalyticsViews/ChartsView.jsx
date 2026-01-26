@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    Row, Col, Card, Space, Typography, Slider, Segmented,
+    Row, Col, Card, Space, Typography, Slider, Select,
     Tag, Tooltip, Empty, Descriptions, Divider, Modal, List, Button
 } from 'antd';
 import {
@@ -30,7 +30,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
     const [confRange, setConfRange] = useState([10, 100]);
     const [iouThreshold, setIouThreshold] = useState(30); // New: Dynamic IOU (30 = 0.3)
     const [sizeSlice, setSizeSlice] = useState('all');
-    const [classFilter, setClassFilter] = useState('all');
+    const [selectedClasses, setSelectedClasses] = useState([]); // Empty = All
 
     const [qualityStats, setQualityStats] = useState(null);
     const [loadingQuality, setLoadingQuality] = useState(false);
@@ -100,12 +100,12 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             rawTP.forEach(d => {
                 const conf = (d.confidence || 0) * 100;
                 const iou = (d.matched_iou || 0) * 100;
+                const rawCls = d.class || d.class_name || 'Unknown';
+                const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
 
-                // For the "GT Universe" (denominator), we count this object 
-                // IF it passes Class/Size filters, regardless of confidence.
-                // We track this by adding a "proto-object" to a list that ignores confidence.
+                const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
 
-                if (conf >= confRange[0] && conf <= confRange[1]) {
+                if (matchesClass && conf >= confRange[0] && conf <= confRange[1]) {
                     if (iou >= iouThreshold) {
                         tpList.push({ ...d, type: 'True Positive' });
                     } else {
@@ -123,7 +123,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
                 const sz = getSizeGrp(item.bbox);
 
-                const matchesClass = classFilter === 'all' || classFilter === cls;
+                const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
                 const matchesSize = sizeSlice === 'all' || sizeSlice === sz;
                 const matchesTraining = trainingClasses && trainingClasses.length > 0 ? trainingClasses.includes(cls) : true;
 
@@ -133,7 +133,11 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
             rawFP.forEach(d => {
                 const conf = (d.confidence || 0) * 100;
-                if (conf >= confRange[0] && conf <= confRange[1]) {
+                const rawCls = d.class || d.class_name || 'Unknown';
+                const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
+                const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
+
+                if (matchesClass && conf >= confRange[0] && conf <= confRange[1]) {
                     fpList.push({ ...d, type: 'False Positive', reason: 'No Match' });
                 }
             });
@@ -183,7 +187,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             // Fallback GT count
             totalGT = verifications.filter(v => {
                 const cls = (v.class_name || 'Unknown').replace(/^Class\s+/i, '');
-                const matchesClass = classFilter === 'all' || classFilter === cls;
+                const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
                 return matchesClass;
             }).length;
         }
@@ -196,7 +200,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             const sz = getSizeGrp(item.bbox);
 
             const matchesConf = isFN ? true : (conf >= minConf && conf <= maxConf);
-            const matchesClass = classFilter === 'all' || classFilter === cls;
+            const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
             const matchesSize = sizeSlice === 'all' || sizeSlice === sz;
             const matchesTraining = trainingClasses && trainingClasses.length > 0 ? trainingClasses.includes(cls) : true;
 
@@ -230,8 +234,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         [...tpList, ...fpList].forEach(d => {
             const conf = d.confidence || d.conf || 0;
             if (conf >= minConf && conf <= maxConf) {
-                const cls = d.class || d.class_name;
-                if (classFilter === 'all' || classFilter === cls) {
+                const rawCls = d.class || d.class_name;
+                const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
+                if (selectedClasses.length === 0 || selectedClasses.includes(cls)) {
                     sizeDistrib[getSizeGrp(d.bbox)]++;
                 }
             }
@@ -283,7 +288,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             stressCurve,
             availableClasses: Array.from(availableClasses).filter(c => trainingClasses.length > 0 ? trainingClasses.includes(c) : true)
         };
-    }, [experiment, verifications, qualityStats, confRange, iouThreshold, sizeSlice, classFilter, trainingClasses]);
+    }, [experiment, verifications, qualityStats, confRange, iouThreshold, sizeSlice, selectedClasses, trainingClasses]);
 
     if (!processedData) return <Empty />;
 
@@ -308,16 +313,19 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                         <div style={{ marginBottom: 16 }}>
                             <Text style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8 }}>Class Filter (Isolate)</Text>
-                            <Segmented
-                                block
-                                size="small"
-                                value={classFilter}
-                                onChange={setClassFilter}
-                                options={[
-                                    { label: 'All', value: 'all' },
-                                    ...availableClasses.map(c => ({ label: c, value: c }))
-                                ]}
-                            />
+                            <Select
+                                mode="multiple"
+                                style={{ width: '100%' }}
+                                placeholder="All Classes"
+                                value={selectedClasses}
+                                onChange={setSelectedClasses}
+                                allowClear
+                                maxTagCount="responsive"
+                            >
+                                {availableClasses.map(c => (
+                                    <Select.Option key={c} value={c}>{c}</Select.Option>
+                                ))}
+                            </Select>
                         </div>
 
                         <Divider style={{ margin: '12px 0' }} />
