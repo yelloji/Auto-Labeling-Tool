@@ -635,6 +635,12 @@ export const projectsAPI = {
     return response.data;
   },
 
+  // Get quality stats for an experiment
+  getQualityStats: async (experimentId) => {
+    const response = await api.get(`/api/v1/experiments/${experimentId}/quality-stats`);
+    return response.data;
+  },
+
   // Download experiment results as ZIP
   downloadExperimentResults: async (experimentId) => {
     const response = await api.get(`/api/v1/experiments/${experimentId}/download`, {

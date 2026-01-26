@@ -1,5 +1,5 @@
-import React from 'react';
-import { Row, Col, Card, Typography, Progress, Tag, Divider, Empty } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Row, Col, Card, Typography, Progress, Tag, Divider, Empty, Skeleton, message } from 'antd';
 import {
     TrophyOutlined,
     CheckCircleOutlined,
@@ -10,6 +10,7 @@ import {
     DotChartOutlined,
     SafetyCertificateOutlined
 } from '@ant-design/icons';
+import { projectsAPI } from '../../../../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -17,19 +18,40 @@ const { Title, Text, Paragraph } = Typography;
  * QualityView Component - Premium Redesign
  * 
  * Focused on a clean, professional "Modern SaaS" aesthetic.
+ * Connects to real-time experiment quality analytics.
  */
 const QualityView = ({ experiment }) => {
+    const [loading, setLoading] = useState(true);
+    const [metrics, setMetrics] = useState(null);
+    const [error, setError] = useState(null);
+
     // Check if we have ground truth data for comparison
     const hasGroundTruth = experiment?.dataset_source && experiment.dataset_source !== 'upload';
 
-    // Mock metrics for design view (vibrant but professional)
-    const qualityMetrics = {
-        precision: 85.4,
-        recall: 72.1,
-        f1: 78.2,
-        falsePositives: 42,
-        missedObjects: 18,
-        avgIoU: 0.88
+    useEffect(() => {
+        if (hasGroundTruth && experiment?.id) {
+            fetchStats();
+        } else {
+            setLoading(false);
+        }
+    }, [experiment?.id, hasGroundTruth]);
+
+    const fetchStats = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await projectsAPI.getQualityStats(experiment.id);
+            if (data.has_ground_truth) {
+                setMetrics(data);
+            } else {
+                setError(data.error || "Quality stats unavailable");
+            }
+        } catch (err) {
+            console.error("Failed to fetch quality stats:", err);
+            setError("Communication failure with analytics engine");
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (!hasGroundTruth) {
@@ -50,6 +72,34 @@ const QualityView = ({ experiment }) => {
                                     <li>Ensure the selected images have existing labels</li>
                                 </ul>
                             </div>
+                        </div>
+                    }
+                />
+            </div>
+        );
+    }
+
+    if (loading) {
+        return (
+            <div style={{ padding: '24px' }}>
+                <Skeleton active paragraph={{ rows: 4 }} />
+                <Divider />
+                <Skeleton active paragraph={{ rows: 2 }} />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>
+                <Empty
+                    image={<InfoCircleOutlined style={{ fontSize: '64px', color: '#ff4d4f' }} />}
+                    description={
+                        <div>
+                            <Text type="danger" strong>{error}</Text>
+                            <Paragraph style={{ marginTop: '8px' }}>
+                                Ensure the experiment has completed and annotations are present.
+                            </Paragraph>
                         </div>
                     }
                 />
@@ -93,7 +143,7 @@ const QualityView = ({ experiment }) => {
                 <Col xs={24} md={8}>
                     <CustomMetric
                         title="Precision Accuracy"
-                        value={qualityMetrics.precision}
+                        value={metrics?.precision || 0}
                         subtext="Detections correctly identified"
                         icon={<AimOutlined />}
                         color="#1890ff"
@@ -102,7 +152,7 @@ const QualityView = ({ experiment }) => {
                 <Col xs={24} md={8}>
                     <CustomMetric
                         title="Model Recall"
-                        value={qualityMetrics.recall}
+                        value={metrics?.recall || 0}
                         subtext="Actual objects captured by AI"
                         icon={<LineChartOutlined />}
                         color="#722ed1"
@@ -111,7 +161,7 @@ const QualityView = ({ experiment }) => {
                 <Col xs={24} md={8}>
                     <CustomMetric
                         title="F1 Performance"
-                        value={qualityMetrics.f1}
+                        value={metrics?.f1 || 0}
                         subtext="Overall balance of P & R"
                         icon={<SafetyCertificateOutlined />}
                         color="#52c41a"
@@ -131,12 +181,12 @@ const QualityView = ({ experiment }) => {
                             <Row gutter={16}>
                                 <Col span={12} style={{ textAlign: 'center', borderRight: '1px solid #f0f0f0' }}>
                                     <Paragraph style={{ margin: 0, color: '#8c8c8c', fontSize: '0.75rem' }}>FALSE POSITIVES</Paragraph>
-                                    <Title level={2} style={{ margin: '8px 0', color: '#ff4d4f', fontWeight: 700 }}>{qualityMetrics.falsePositives}</Title>
+                                    <Title level={2} style={{ margin: '8px 0', color: '#ff4d4f', fontWeight: 700 }}>{metrics?.false_positives || 0}</Title>
                                     <Tag bordered={false} color="error" style={{ fontSize: '10px', borderRadius: '4px' }}>HALLUCINATIONS</Tag>
                                 </Col>
                                 <Col span={12} style={{ textAlign: 'center' }}>
                                     <Paragraph style={{ margin: 0, color: '#8c8c8c', fontSize: '0.75rem' }}>MISSED OBJECTS</Paragraph>
-                                    <Title level={2} style={{ margin: '8px 0', color: '#faad14', fontWeight: 700 }}>{qualityMetrics.missedObjects}</Title>
+                                    <Title level={2} style={{ margin: '8px 0', color: '#faad14', fontWeight: 700 }}>{metrics?.missed_objects || 0}</Title>
                                     <Tag bordered={false} color="warning" style={{ fontSize: '10px', borderRadius: '4px' }}>FALSE NEGATIVES</Tag>
                                 </Col>
                             </Row>
@@ -148,9 +198,9 @@ const QualityView = ({ experiment }) => {
                             <div style={{ padding: '8px 0' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                                     <Text style={{ color: '#595959', fontSize: '0.85rem' }}>Average IoU</Text>
-                                    <Text strong style={{ color: '#13c2c2' }}>{qualityMetrics.avgIoU}</Text>
+                                    <Text strong style={{ color: '#13c2c2' }}>{metrics?.avg_iou || 0}</Text>
                                 </div>
-                                <Progress percent={qualityMetrics.avgIoU * 100} size="small" strokeColor="#13c2c2" showInfo={false} strokeWidth={8} />
+                                <Progress percent={(metrics?.avg_iou || 0) * 100} size="small" strokeColor="#13c2c2" showInfo={false} strokeWidth={8} />
                                 <Paragraph style={{ fontSize: '11px', color: '#8c8c8c', marginTop: '12px', lineHeight: '1.4' }}>
                                     Mean overlap accuracy between predictions and ground truth. High values indicate precise bounding boxes.
                                 </Paragraph>

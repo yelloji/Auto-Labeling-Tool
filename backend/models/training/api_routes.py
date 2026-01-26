@@ -31,6 +31,7 @@ from core.config import settings
 from database.models import ModelExperiment, Project
 from models.training.validator import ValidatorRegistry
 from models.training.predictor import PredictorRegistry
+from utils.analytics_engine import calculate_experiment_quality
 import re
 import psutil
 import signal
@@ -2031,6 +2032,25 @@ async def download_experiment_results(experiment_id: str, db: Session = Depends(
         media_type="application/zip",
         background=BackgroundTask(cleanup_temp_file)
     )
+
+
+@router.get("/experiments/{experiment_id}/quality-stats")
+async def get_experiment_quality_stats(experiment_id: str, db: Session = Depends(get_db)):
+    """
+    Calculate and return real-time quality metrics for an experiment.
+    Compares predictions with ground truth from annotations.json.
+    """
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    # Resolve project root (portable logic)
+    current_file = Path(__file__).resolve()
+    backend_dir = next(p for p in current_file.parents if p.name == "backend")
+    project_root = backend_dir.parent
+    
+    stats = calculate_experiment_quality(exp, project_root)
+    return stats
 
 
 # =============================================================================

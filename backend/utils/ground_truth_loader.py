@@ -157,7 +157,21 @@ def get_missed_detections(
     # False Positives are predictions that didn't match ANY ground truth
     fp_indices = [i for i in range(len(predictions)) if i not in matched_prediction_indices]
     
+    # Calculate IoUs for all matches to provide Geometric Accuracy
+    # We only care about the best match IoU for each GT (or average of all matches)
+    # For simplicity, we'll return a list of IoUs for everything that was above threshold
+    all_matched_ious = []
+    for gt in ground_truth:
+        best_iou = 0
+        for pred in predictions:
+            iou = calculate_iou(gt['bbox'], pred['bbox'])
+            if iou > best_iou:
+                best_iou = iou
+        if best_iou >= iou_threshold:
+            all_matched_ious.append(best_iou)
+
     return {
         "missed": missed,
-        "fp_indices": fp_indices
+        "fp_indices": fp_indices,
+        "matched_ious": all_matched_ious
     }
