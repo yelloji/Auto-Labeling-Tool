@@ -28,6 +28,7 @@ const { Text } = Typography;
  */
 const ChartsView = ({ experiment, verifications = [], projectLabels = [], trainingClasses = [] }) => {
     const [confRange, setConfRange] = useState([10, 100]);
+    const [iouThreshold, setIouThreshold] = useState(30); // New: Dynamic IOU (30 = 0.3)
     const [sizeSlice, setSizeSlice] = useState('all');
     const [classFilter, setClassFilter] = useState('all');
 
@@ -84,30 +85,60 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             return 'large';
         };
 
-        // --- 3. Base Data from Backend vs Local fallback ---
         let tpList = [];
         let fpList = [];
         let fnList = [];
+        let totalGT = 0; // Initialize early to prevent ReferenceError
 
         if (qualityStats && qualityStats.has_ground_truth) {
             // ELITE MODE: Use Backend matched lists
-            fpList = qualityStats.detailed_false_positives || [];
-            fnList = qualityStats.detailed_missed_objects || [];
+            const rawTP = qualityStats.detailed_true_positives || [];
+            const rawFP = qualityStats.detailed_false_positives || [];
+            const rawFN = qualityStats.detailed_missed_objects || [];
 
-            // True Positives = All predictions NOT in the FP list
-            // We build a quick lookup for FPs to identify TPs
-            const fpLookup = new Set(fpList.map(fp => `${fp.image}_${JSON.stringify(fp.bbox)}`));
+            // 1. Threshold-Sensitive TP/FP/Misaligned Split
+            rawTP.forEach(d => {
+                const conf = (d.confidence || 0) * 100;
+                const iou = (d.matched_iou || 0) * 100;
 
-            Object.entries(experiment.predictions).forEach(([imgName, dets]) => {
-                if (!Array.isArray(dets)) return;
-                const fileName = imgName.split('/').pop();
-                dets.forEach(d => {
-                    const key = `${fileName}_${JSON.stringify(d.bbox)}`;
-                    if (!fpLookup.has(key)) {
-                        tpList.push({ ...d, imgName: fileName, type: 'True Positive' });
+                // For the "GT Universe" (denominator), we count this object 
+                // IF it passes Class/Size filters, regardless of confidence.
+                // We track this by adding a "proto-object" to a list that ignores confidence.
+
+                if (conf >= confRange[0] && conf <= confRange[1]) {
+                    if (iou >= iouThreshold) {
+                        tpList.push({ ...d, type: 'True Positive' });
+                    } else {
+                        // It matched GT, but is misaligned!
+                        fpList.push({ ...d, type: 'Misaligned', reason: 'Low IoU' });
                     }
-                });
+                }
             });
+
+            // DENOMINATOR LOGIC: Calculate total GT objects that pass Class/Size filters
+            // Total GT = All matched objects (rawTP) + All unmatched objects (rawFN)
+            const allGTObjects = [...rawTP, ...rawFN];
+            const filteredGTUniverse = allGTObjects.filter(item => {
+                const rawCls = item.class || item.class_name || 'Unknown';
+                const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
+                const sz = getSizeGrp(item.bbox);
+
+                const matchesClass = classFilter === 'all' || classFilter === cls;
+                const matchesSize = sizeSlice === 'all' || sizeSlice === sz;
+                const matchesTraining = trainingClasses && trainingClasses.length > 0 ? trainingClasses.includes(cls) : true;
+
+                return matchesClass && matchesSize && matchesTraining;
+            });
+            totalGT = filteredGTUniverse.length; // Update the outer variable
+
+            rawFP.forEach(d => {
+                const conf = (d.confidence || 0) * 100;
+                if (conf >= confRange[0] && conf <= confRange[1]) {
+                    fpList.push({ ...d, type: 'False Positive', reason: 'No Match' });
+                }
+            });
+
+            fnList = rawFN;
         } else {
             // FALLBACK: Old manual matching (only for uploads or if backend fails)
             // (Keeping this for safety, but with projectLabels awareness)
@@ -148,6 +179,13 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             });
             // Manual FN calculation is limited here
             fnList = [];
+
+            // Fallback GT count
+            totalGT = verifications.filter(v => {
+                const cls = (v.class_name || 'Unknown').replace(/^Class\s+/i, '');
+                const matchesClass = classFilter === 'all' || classFilter === cls;
+                return matchesClass;
+            }).length;
         }
 
         // --- 4. Apply Filters (The Heart of the UI) ---
@@ -169,12 +207,21 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         const filteredFP = fpList.filter(i => filterItem(i));
         const filteredFN = fnList.filter(i => filterItem(i, true));
 
+        // Separating True False Positives from Misaligned ones
+        const purelyFP = filteredFP.filter(i => i.type === 'False Positive');
+        const misaligned = filteredFP.filter(i => i.type === 'Misaligned');
+
         // --- 5. Metrics & Distributions ---
         const tp = filteredTP.length;
-        const fp = filteredFP.length;
+        const fp = purelyFP.length;
+        const ma = misaligned.length;
         const fn = filteredFN.length;
 
-        const precision = (tp + fp) > 0 ? (tp / (tp + fp)) * 100 : 0;
+        // Ratio Calculation: Numerator is ALL AI detections (TP+FP+MA) / Denominator is ALL GT objects
+        const totalDetections = tp + fp + ma;
+        const aiGTRatio = totalGT > 0 ? (totalDetections / totalGT).toFixed(2) : '0.00';
+
+        const precision = (tp + fp + ma) > 0 ? (tp / (tp + fp + ma)) * 100 : 0;
         const recall = (tp + fn) > 0 ? (tp / (tp + fn)) * 100 : 0;
         const f1 = (precision + recall) > 0 ? (2 * (precision * recall) / (precision + recall)) : 0;
 
@@ -223,23 +270,25 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
         return {
             kpis: {
-                tp, fp, fn,
+                tp, fp, fn, ma, aiGTRatio, totalGT,
                 precision: precision.toFixed(1),
                 recall: recall.toFixed(1),
                 f1: f1.toFixed(1),
                 sizeDistrib,
-                fpItems: filteredFP.map(i => ({ ...i, imgName: i.image || i.imgName })),
+                fpItems: purelyFP.map(i => ({ ...i, imgName: i.image || i.imgName })),
+                maItems: misaligned.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 fnItems: filteredFN.map(i => ({ ...i, imgName: i.image || i.imgName }))
             },
             classChart: Object.values(classStats),
             stressCurve,
             availableClasses: Array.from(availableClasses).filter(c => trainingClasses.length > 0 ? trainingClasses.includes(c) : true)
         };
-    }, [experiment, verifications, qualityStats, confRange, sizeSlice, classFilter, trainingClasses]);
+    }, [experiment, verifications, qualityStats, confRange, iouThreshold, sizeSlice, classFilter, trainingClasses]);
 
     if (!processedData) return <Empty />;
 
     const { kpis, classChart, stressCurve, availableClasses } = processedData;
+    const { tp, fp, ma, fn, totalGT } = kpis;
 
     return (
         <div style={{ padding: '24px', background: '#fff' }}>
@@ -284,6 +333,22 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                 max={100}
                                 value={confRange}
                                 onChange={setConfRange}
+                                tipFormatter={v => (v / 100).toFixed(2)}
+                            />
+                        </div>
+
+                        <Divider style={{ margin: '12px 0' }} />
+
+                        <div style={{ marginBottom: 16 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Text style={{ fontSize: 13, fontWeight: 600 }}>Overlap (IoU) Threshold</Text>
+                                <Tag color="orange" style={{ margin: 0 }}>{(iouThreshold / 100).toFixed(2)}+</Tag>
+                            </div>
+                            <Slider
+                                min={10}
+                                max={90}
+                                value={iouThreshold}
+                                onChange={setIouThreshold}
                                 tipFormatter={v => (v / 100).toFixed(2)}
                             />
                         </div>
@@ -341,19 +406,40 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 {/* --- Main Section --- */}
                 <Col xs={24} lg={18}>
                     {/* 5 KPI Cards - Deep Isolation Logic (Fixed Order) */}
-                    <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
+                    <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
+                        <Col flex="1">
+                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0', background: '#f9f9f9' }}>
+                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>Detection Ratio</Text>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                    <Text strong style={{ fontSize: 18, color: '#000' }}>
+                                        {isSplit ? `${kpis.aiGTRatio}x` : 'N/A'}
+                                    </Text>
+                                    <Text type="secondary" style={{ fontSize: 9 }}>
+                                        {isSplit ? `${tp + fp + ma} AI / ${totalGT} GT` : ''}
+                                    </Text>
+                                </div>
+                            </Card>
+                        </Col>
+                        <Col flex="1">
+                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #f6ffed', background: '#f6ffed' }}>
+                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>True Positives</Text>
+                                <Text strong style={{ fontSize: 20, color: '#52c41a' }}>
+                                    {isSplit ? kpis.tp : 'N/A'}
+                                </Text>
+                            </Card>
+                        </Col>
                         <Col flex="1">
                             <Card
                                 size="small"
-                                style={{ textAlign: 'center', border: '1px solid #f0f0f0', cursor: 'pointer' }}
+                                style={{ textAlign: 'center', border: '1px solid #fff1f0', cursor: 'pointer', background: '#fff1f0' }}
                                 hoverable
                                 onClick={() => setErrorModal({
                                     visible: true,
-                                    title: 'False Positives Triggered',
+                                    title: 'False Positive Detections',
                                     items: kpis.fpItems
                                 })}
                             >
-                                <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>FALSE POSITIVE</Text>
+                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>False Positives</Text>
                                 <Text strong style={{ fontSize: 20, color: '#ff4d4f' }}>
                                     {isSplit ? kpis.fp : 'N/A'}
                                 </Text>
@@ -362,40 +448,60 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         <Col flex="1">
                             <Card
                                 size="small"
-                                style={{ textAlign: 'center', border: '1px solid #f0f0f0', cursor: 'pointer' }}
+                                style={{ textAlign: 'center', border: '1px solid #fff7e6', cursor: 'pointer', background: '#fff7e6' }}
                                 hoverable
                                 onClick={() => setErrorModal({
                                     visible: true,
-                                    title: 'Missed Objects (FN)',
+                                    title: 'Misaligned Objects',
+                                    items: kpis.maItems
+                                })}
+                            >
+                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>Misaligned Objects</Text>
+                                <Text strong style={{ fontSize: 20, color: '#fa8c16' }}>
+                                    {isSplit ? kpis.ma : 'N/A'}
+                                </Text>
+                            </Card>
+                        </Col>
+                        <Col flex="1">
+                            <Card
+                                size="small"
+                                style={{ textAlign: 'center', border: '1px solid #fffbe6', cursor: 'pointer', background: '#fffbe6' }}
+                                hoverable
+                                onClick={() => setErrorModal({
+                                    visible: true,
+                                    title: 'Missed Ground Truth Objects',
                                     items: kpis.fnItems
                                 })}
                             >
-                                <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>MISSING (FN)</Text>
+                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>Missed Objects</Text>
                                 <Text strong style={{ fontSize: 20, color: '#faad14' }}>
                                     {isSplit ? kpis.fn : 'N/A'}
                                 </Text>
                             </Card>
                         </Col>
+                    </Row>
+
+                    <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>PRECISION</Text>
-                                <Text strong style={{ fontSize: 20, color: '#1890ff' }}>
+                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>Precision</Text>
+                                <Text strong style={{ fontSize: 18, color: '#1890ff' }}>
                                     {isSplit ? `${kpis.precision}%` : 'N/A'}
                                 </Text>
                             </Card>
                         </Col>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>RECALL</Text>
-                                <Text strong style={{ fontSize: 20, color: '#722ed1' }}>
+                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>Recall</Text>
+                                <Text strong style={{ fontSize: 18, color: '#722ed1' }}>
                                     {isSplit ? `${kpis.recall}%` : 'N/A'}
                                 </Text>
                             </Card>
                         </Col>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>F1 SCORE</Text>
-                                <Text strong style={{ fontSize: 20, color: '#52c41a' }}>
+                                <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>F1 Score</Text>
+                                <Text strong style={{ fontSize: 18, color: '#13c2c2' }}>
                                     {isSplit ? `${kpis.f1}%` : 'N/A'}
                                 </Text>
                             </Card>
@@ -442,7 +548,10 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             <Modal
                 title={
                     <Space>
-                        <WarningOutlined style={{ color: errorModal.title.includes('False') ? '#ff4d4f' : '#faad14' }} />
+                        <WarningOutlined style={{
+                            color: errorModal.title.includes('False') ? '#ff4d4f' :
+                                errorModal.title.includes('Misaligned') ? '#d46b08' : '#faad14'
+                        }} />
                         {errorModal.title}
                         <Tag>{errorModal.items?.length || 0} Items</Tag>
                     </Space>

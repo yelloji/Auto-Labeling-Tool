@@ -68,9 +68,14 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
         # Detailed lists for frontend filtering
         detailed_false_positives = []
         detailed_missed_objects = []
+        detailed_true_positives = []
 
         # Class-level breakdown (Future expansion)
         class_stats = {}
+        
+        # Aggregate IoU tracking
+        iou_sum = 0.0
+        iou_count = 0
 
         # 7. Process Image by Image
         # Key in annotations is "images/val/image.jpg"
@@ -81,10 +86,6 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
             
             total_gt_objects += len(img_anns)
             total_predictions += len(img_preds)
-            
-            # Use fixed dimensions (we might need real ones from input_images metadata in future)
-            # but for YOLO comparisons, normalized coordinates are used in the loader usually
-            # However, ground_truth_loader.get_missed_detections uses pixels.
             
             # Find dimensions from input_images if available
             img_metadata = {}
@@ -97,7 +98,7 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
                 img_metadata = image_metadata.get(img_name, {})
             
             # Safely get width/height
-            if isinstance(img_metadata, str): img_metadata = {} # Sometimes it's a hash string
+            if isinstance(img_metadata, str): img_metadata = {} 
             width = img_metadata.get('width', 640) if isinstance(img_metadata, dict) else 640
             height = img_metadata.get('height', 640) if isinstance(img_metadata, dict) else 640
 
@@ -114,18 +115,27 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
             
             missed = comp_result.get("missed", [])
             fp_indices = comp_result.get("fp_indices", [])
-            matched_ious = comp_result.get("matched_ious", [])
             
+            # LOCAL IoU MATCHING: Re-calculate best IoU for each prediction locally 
+            # to avoid breaking shared ground_truth_loader.py
+            local_matches = {}
+            from utils.ground_truth_loader import calculate_iou, annotation_to_bbox
+            gt_bboxes = [annotation_to_bbox(ann, width, height) for ann in annotations[img_key_full]]
+            
+            for p_idx, p_det in enumerate(img_preds):
+                best_p_iou = 0.0
+                for g_box in gt_bboxes:
+                    cur_iou = calculate_iou(g_box, p_det['bbox'])
+                    if cur_iou > best_p_iou: best_p_iou = cur_iou
+                if best_p_iou >= 0.3: # Match threshold
+                    local_matches[p_idx] = best_p_iou
+
             total_false_negatives += len(missed)
             total_false_positives += len(fp_indices)
             
             # True Positives = Total Predictions - False Positives
-            img_tp = len(img_preds) - len(fp_indices)
-            total_true_positives += img_tp
-            
-            # Aggregate IoUs
-            iou_sum += sum(matched_ious)
-            iou_count += len(matched_ious)
+            img_tp_count = len(img_preds) - len(fp_indices)
+            total_true_positives += img_tp_count
             
             # --- Collect Detailed Errors for Frontend ---
             
@@ -138,24 +148,32 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
                     "bbox": m.get('bbox', [0,0,0,0])
                 })
                 
-            # 2. Collect False Positives
-            for idx in fp_indices:
-                if idx < len(img_preds):
-                    pred = img_preds[idx]
-                    # Map class ID to name if possible, else use what's in pred
-                    c_id = pred.get('class', -1)
-                    if isinstance(c_id, str):
-                        c_name = c_id
-                    else:
-                        c_name = label_mapping.get(c_id, pred.get('name', f'Class {c_id}'))
+            # 2. Collect Positive Detections (TP and FP)
+            for idx, pred in enumerate(img_preds):
+                c_id = pred.get('class', -1)
+                if isinstance(c_id, str):
+                    c_name = c_id
+                else:
+                    c_name = label_mapping.get(c_id, pred.get('name', f'Class {c_id}'))
+                
+                det_obj = {
+                    "image": img_name,
+                    "class_name": c_name,
+                    "class_id": c_id,
+                    "confidence": pred.get('confidence', 0.0),
+                    "bbox": pred.get('bbox', [0,0,0,0])
+                }
+
+                if idx in fp_indices:
+                    detailed_false_positives.append(det_obj)
+                else:
+                    # It's a match!
+                    match_iou = local_matches.get(idx, 0.0)
+                    det_obj["matched_iou"] = match_iou
+                    detailed_true_positives.append(det_obj)
                     
-                    detailed_false_positives.append({
-                        "image": img_name,
-                        "class_name": c_name,
-                        "class_id": c_id,
-                        "confidence": pred.get('confidence', 0.0),
-                        "bbox": pred.get('bbox', [0,0,0,0]) # usually [x,y,w,h] normalized or pixel depending on format
-                    })
+                    iou_sum += match_iou
+                    iou_count += 1
 
         # 8. Final Calculation
         precision = total_true_positives / (total_predictions) if total_predictions > 0 else 0.0
@@ -172,6 +190,7 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
             "missed_objects": total_false_negatives,
             "detailed_false_positives": detailed_false_positives,
             "detailed_missed_objects": detailed_missed_objects,
+            "detailed_true_positives": detailed_true_positives,
             "avg_iou": round(avg_iou, 2),
             "total_gt": total_gt_objects,
             "total_preds": total_predictions
