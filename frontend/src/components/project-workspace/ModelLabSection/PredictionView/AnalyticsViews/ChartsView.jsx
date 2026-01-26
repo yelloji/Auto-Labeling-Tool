@@ -347,7 +347,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                         <div style={{ marginBottom: 16 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Tooltip title="Filters out low-probability AI guesses. Raising this cleans up False Positives but will increase Missed Objects.">
+                                <Tooltip title="Filters out detections the AI is unsure about. Setting this higher reduces Incorrect Alarms but may cause the AI to miss some objects.">
                                     <Text style={{ fontSize: 13, fontWeight: 600, cursor: 'help' }}>Confidence Filter</Text>
                                 </Tooltip>
                                 <Tag color="blue" style={{ margin: 0 }}>{(confRange[0] / 100).toFixed(2)} - {(confRange[1] / 100).toFixed(2)}</Tag>
@@ -366,7 +366,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                         <div style={{ marginBottom: 16 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Tooltip title="Defines 'Good Alignment'. Raising this moves poor quality boxes from 'True Positives' into 'Misaligned Objects'.">
+                                <Tooltip title="Defines the standard for 'Good Alignment'. Raising this moves poor quality boxes from 'True Positives' into 'Accuracy Errors' live.">
                                     <Text style={{ fontSize: 13, fontWeight: 600, cursor: 'help' }}>Overlap (IoU) Threshold</Text>
                                 </Tooltip>
                                 <Tag color="orange" style={{ margin: 0 }}>{(iouThreshold / 100).toFixed(2)}+</Tag>
@@ -438,7 +438,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0', background: '#f9f9f9' }}>
-                                <Tooltip title="The 'Hallucination Index'. Ratio of AI Detections to Ground Truth. Ideally 1.0. If > 1.0, your AI is over-predicting or seeing objects that don't exist.">
+                                <Tooltip title="Density Score: Compares total AI detections to actual objects. Ideally 1.0. If > 1.0, the AI is 'over-reporting' and seeing objects that don't exist.">
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Detection Ratio</Text>
                                 </Tooltip>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -455,7 +455,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Col>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f6ffed', background: '#f6ffed' }}>
-                                <Tooltip title="The 'Success' count. Correct detections that pass your Confidence and IoU bars. These are your model's reliable 'Gold' results.">
+                                <Tooltip title="Correct Results: AI successfully found the right label with high confidence and precision. These are your reliable data points.">
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>True Positives</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 20, color: '#52c41a' }}>
@@ -474,7 +474,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     items: kpis.fpItems
                                 })}
                             >
-                                <Tooltip title="The 'Junk' count. AI detections where there is no actual object. Raising the 'Confidence' slider will reduce these by ignoring weak guesses.">
+                                <Tooltip title="Incorrect Alarms: Cases where the AI reported an object, but nothing exists at that location. Raising 'Confidence' reduces these.">
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>False Positives</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 20, color: '#ff4d4f' }}>
@@ -493,7 +493,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     items: kpis.maItems
                                 })}
                             >
-                                <Tooltip title="The 'Precision' errors. Right label, but the box is sloppy. Adjust the 'IoU' slider to see how many boxes fail your quality standard.">
+                                <Tooltip title="Accuracy Errors: The AI found the right object but placed the box inaccurately. Adjust the 'IoU' slider to set your precision standard.">
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Misaligned Objects</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 20, color: '#fa8c16' }}>
@@ -512,7 +512,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     items: kpis.fnItems
                                 })}
                             >
-                                <Tooltip title="The 'Reality Gap'. Objects the model didn't finalize. 'Real' = Never detected. 'Filtered' = Detected, but hidden by your current Confidence setting.">
+                                <Tooltip title="Unfound Objects: Actual objects the AI missed. 'Real' were never detected. 'Filtered' are hidden due to your current Confidence setting.">
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Missed Objects</Text>
                                 </Tooltip>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -532,7 +532,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Tooltip title="Quality Score: How many AI detections were actually correct? (Higher is better, means less junk).">
+                                <Tooltip title="Quality Score: Percentage of AI detections that were correct. High score means the model produces clean, reliable results.">
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Precision</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 18, color: '#1890ff' }}>
@@ -542,7 +542,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Col>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Tooltip title="Quantity Score: What percentage of Ground Truth objects did the AI find? (Higher is better, means less missed).">
+                                <Tooltip title="Completion Score: Percentage of actual objects successfully found. High score means the model is not missing things.">
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Recall</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 18, color: '#722ed1' }}>
@@ -552,7 +552,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Col>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Tooltip title="The Balance Score: A weighted average of Precision and Recall. Use this to compare different versions fairly.">
+                                <Tooltip title="Stability Score: A weighted balance of Quality and Completion. Use this single metric to track overall model health.">
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>F1 Score</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 18, color: '#13c2c2' }}>
