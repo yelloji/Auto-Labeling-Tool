@@ -434,6 +434,26 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                 {/* --- Main Section --- */}
                 <Col xs={24} lg={18}>
+                    {/* Dynamic Analytical Header */}
+                    <div style={{ marginBottom: 20, padding: '0 8px' }}>
+                        <Text strong style={{ fontSize: 16, color: '#1890ff', display: 'block', marginBottom: 4 }}>
+                            Analytical Insights & Guidance
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 13, display: 'block' }}>
+                            Configure the filters in the sidebar to perform a deep-dive analysis of your model's performance.
+                            The values below update instantly based on your selection, allowing you to gain deep insights into
+                            how the model performs on specific images, classes, or box sizes.
+                        </Text>
+                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Tag color={(confRange[0] === 10 && confRange[1] === 100 && iouThreshold === 30 && sizeSlice === 'all' && selectedClasses.length === 0) ? "default" : "processing"} icon={<FilterOutlined />}>
+                                {(confRange[0] === 10 && confRange[1] === 100 && iouThreshold === 30 && sizeSlice === 'all' && selectedClasses.length === 0)
+                                    ? "Showing: Global Model Performance (Default)"
+                                    : "Showing: Filtered Model Insights (Custom)"
+                                }
+                            </Tag>
+                        </div>
+                    </div>
+
                     {/* 5 KPI Cards - Deep Isolation Logic (Fixed Order) */}
                     <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
                         <Col flex="1">
