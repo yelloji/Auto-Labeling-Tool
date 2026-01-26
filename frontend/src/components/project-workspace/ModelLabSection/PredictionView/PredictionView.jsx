@@ -277,6 +277,29 @@ const PredictionView = ({ training }) => {
         return 640;
     }, [training?.resolved_config_json]);
 
+    // Helper: Extract Training Classes from config
+    const getTrainingClasses = useCallback(() => {
+        if (training?.resolved_config_json) {
+            try {
+                const cfg = typeof training.resolved_config_json === 'string'
+                    ? JSON.parse(training.resolved_config_json)
+                    : training.resolved_config_json;
+
+                // YOLO format: { names: {0: 'defect', 1: 'ok'} } OR { names: ['defect', 'ok'] }
+                if (cfg.names) {
+                    if (Array.isArray(cfg.names)) return cfg.names;
+                    if (typeof cfg.names === 'object') return Object.values(cfg.names);
+                }
+                // Fallback for some old configs
+                if (cfg.classes && Array.isArray(cfg.classes)) return cfg.classes;
+
+            } catch (e) {
+                console.error("Failed to parse config for classes", e);
+            }
+        }
+        return [];
+    }, [training?.resolved_config_json]);
+
 
 
 
@@ -1751,6 +1774,9 @@ const PredictionView = ({ training }) => {
                 visible={analyticsVisible}
                 onCancel={() => setAnalyticsVisible(false)}
                 experiment={selectedExp}
+                verifications={verifications}
+                projectLabels={projectLabels}
+                trainingClasses={getTrainingClasses()}
             />
 
             <ComparisonModal

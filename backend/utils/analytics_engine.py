@@ -64,6 +64,10 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
         total_false_negatives = 0
         iou_sum = 0.0
         iou_count = 0
+        
+        # Detailed lists for frontend filtering
+        detailed_false_positives = []
+        detailed_missed_objects = []
 
         # Class-level breakdown (Future expansion)
         class_stats = {}
@@ -122,6 +126,36 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
             # Aggregate IoUs
             iou_sum += sum(matched_ious)
             iou_count += len(matched_ious)
+            
+            # --- Collect Detailed Errors for Frontend ---
+            
+            # 1. Collect Missed Objects (False Negatives)
+            for m in missed:
+                detailed_missed_objects.append({
+                    "image": img_name,
+                    "class_name": m.get('class_name', 'Unknown'),
+                    "class_id": m.get('class_id', -1),
+                    "bbox": m.get('bbox', [0,0,0,0])
+                })
+                
+            # 2. Collect False Positives
+            for idx in fp_indices:
+                if idx < len(img_preds):
+                    pred = img_preds[idx]
+                    # Map class ID to name if possible, else use what's in pred
+                    c_id = pred.get('class', -1)
+                    if isinstance(c_id, str):
+                        c_name = c_id
+                    else:
+                        c_name = label_mapping.get(c_id, pred.get('name', f'Class {c_id}'))
+                    
+                    detailed_false_positives.append({
+                        "image": img_name,
+                        "class_name": c_name,
+                        "class_id": c_id,
+                        "confidence": pred.get('confidence', 0.0),
+                        "bbox": pred.get('bbox', [0,0,0,0]) # usually [x,y,w,h] normalized or pixel depending on format
+                    })
 
         # 8. Final Calculation
         precision = total_true_positives / (total_predictions) if total_predictions > 0 else 0.0
@@ -136,6 +170,8 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
             "f1": round(f1 * 100, 1),
             "false_positives": total_false_positives,
             "missed_objects": total_false_negatives,
+            "detailed_false_positives": detailed_false_positives,
+            "detailed_missed_objects": detailed_missed_objects,
             "avg_iou": round(avg_iou, 2),
             "total_gt": total_gt_objects,
             "total_preds": total_predictions
