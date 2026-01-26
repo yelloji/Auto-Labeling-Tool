@@ -415,3 +415,94 @@
 .analytics-modal .ant-modal-body::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
 }
+
+/* ========== PROFESSIONAL GLASS DIAGNOSTICS (PRO MAX) ========== */
+
+.glass-diagnostic-card {
+    background: rgba(255, 255, 255, 0.7) !important;
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05) !important;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    height: 100%;
+    /* Important for balance */
+    display: flex;
+    flex-direction: column;
+}
+
+.glass-diagnostic-card:hover {
+    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.85) !important;
+    box-shadow: 0 12px 40px rgba(31, 38, 135, 0.1) !important;
+}
+
+.glass-inset-container {
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Accuracy Scan - Keep the user's favorite design */
+.luxury-scan-container {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #e6fffb;
+    border: 1px solid #b5f5ec;
+    padding: 1.25rem;
+}
+
+.luxury-scan-line {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(to right,
+            transparent 0%,
+            rgba(24, 144, 255, 0.05) 50%,
+            rgba(19, 194, 194, 0.2) 95%,
+            #13c2c2 100%);
+    box-shadow: 2px 0 8px rgba(19, 194, 194, 0.4);
+    z-index: 5;
+    pointer-events: none;
+    animation: luxuryScanLoop 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes luxuryScanLoop {
+    0% {
+        left: -50%;
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 0.8;
+    }
+
+    90% {
+        opacity: 0.8;
+    }
+
+    100% {
+        left: 100%;
+        opacity: 0;
+    }
+}
+
+.diagnostic-header-vibrant {
+    background: linear-gradient(to right, #f8faff, #ffffff);
+    border-bottom: 2px solid #e6f0ff !important;
+}
+
+.status-value-mono {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    letter-spacing: -0.5px;
+    text-shadow: 0 0 10px rgba(19, 194, 194, 0.1);
+}

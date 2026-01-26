@@ -294,7 +294,7 @@ class DatabaseDebugger:
                 print(f"      │ PID: {row['process_pid'] or 'N/A'}")
                 print(f"      │ Created: {row['created_at']}")
                 
-                print(f"\n      ├─ Configuration")
+                print(f"\n      ├─ Configuration") 
                 print(f"      │ Dataset Split: {row['dataset_source']}")
                 print(f"      │ Image Count: {row['image_count'] if row['image_count'] is not None else 'N/A'}")
                 print(f"      │ Confidence: {row['confidence']}")

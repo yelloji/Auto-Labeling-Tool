@@ -1,31 +1,79 @@
-import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Typography, Progress, Tag, Divider, Empty, Skeleton, message } from 'antd';
+import React, { useState, useEffect, useRef } from 'react';
+import { Row, Col, Card, Typography, Progress, Tag, Divider, Empty, Skeleton, Space } from 'antd';
 import {
-    TrophyOutlined,
-    CheckCircleOutlined,
-    CloseCircleOutlined,
-    InfoCircleOutlined,
-    LineChartOutlined,
     AimOutlined,
-    DotChartOutlined,
-    SafetyCertificateOutlined
+    LineChartOutlined,
+    SafetyCertificateOutlined,
+    InfoCircleOutlined,
+    ExclamationCircleOutlined,
+    ScanOutlined,
+    RadarChartOutlined,
+    SearchOutlined
 } from '@ant-design/icons';
 import { projectsAPI } from '../../../../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 
 /**
- * QualityView Component - Premium Redesign
- * 
- * Focused on a clean, professional "Modern SaaS" aesthetic.
- * Connects to real-time experiment quality analytics.
+ * AnimatedNumber Component
+ * Provides a "Pro Max" feel with smooth value counting on load
  */
+const AnimatedNumber = ({ value, suffix = "", decimal = 1 }) => {
+    const [displayValue, setDisplayValue] = useState(0);
+
+    useEffect(() => {
+        let start = 0;
+        const end = parseFloat(value) || 0;
+        if (start === end) return;
+
+        let totalDuration = 1000;
+        let increment = end / (totalDuration / 16);
+
+        let timer = setInterval(() => {
+            start += increment;
+            if (start >= end) {
+                setDisplayValue(end.toFixed(decimal));
+                clearInterval(timer);
+            } else {
+                setDisplayValue(start.toFixed(decimal));
+            }
+        }, 16);
+
+        return () => clearInterval(timer);
+    }, [value, decimal]);
+
+    return <span>{displayValue}{suffix}</span>;
+};
+
+/**
+ * LuxuryMetricCard Component
+ * Matches the main Analytics dashboard but with specialized diagnostic polish
+ */
+const LuxuryMetricCard = ({ title, value, suffix, icon, gradient, insight }) => (
+    <Card className="premium-metric-card" style={{ background: gradient }}>
+        <div className="metric-icon" style={{ opacity: 0.2 }}>{icon}</div>
+        <div className="metric-content">
+            <Text className="metric-title" style={{ color: 'rgba(255,255,255,0.85)', letterSpacing: '1.5px' }}>{title}</Text>
+            <div className="metric-value-row">
+                <span className="metric-value" style={{ fontSize: '2.8rem' }}>
+                    <AnimatedNumber value={value} decimal={1} />
+                </span>
+                <span className="metric-suffix" style={{ fontSize: '1.2rem', opacity: 0.8 }}>{suffix}</span>
+            </div>
+            {insight && (
+                <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
+                    <Text style={{ color: '#fff', fontSize: '11px', fontWeight: 500 }}>{insight}</Text>
+                </div>
+            )}
+        </div>
+    </Card>
+);
+
 const QualityView = ({ experiment }) => {
     const [loading, setLoading] = useState(true);
     const [metrics, setMetrics] = useState(null);
     const [error, setError] = useState(null);
 
-    // Check if we have ground truth data for comparison
     const hasGroundTruth = experiment?.dataset_source && experiment.dataset_source !== 'upload';
 
     useEffect(() => {
@@ -39,7 +87,6 @@ const QualityView = ({ experiment }) => {
     const fetchStats = async () => {
         try {
             setLoading(true);
-            setError(null);
             const data = await projectsAPI.getQualityStats(experiment.id);
             if (data.has_ground_truth) {
                 setMetrics(data);
@@ -47,8 +94,7 @@ const QualityView = ({ experiment }) => {
                 setError(data.error || "Quality stats unavailable");
             }
         } catch (err) {
-            console.error("Failed to fetch quality stats:", err);
-            setError("Communication failure with analytics engine");
+            setError("Analytics communication failure");
         } finally {
             setLoading(false);
         }
@@ -58,19 +104,30 @@ const QualityView = ({ experiment }) => {
         return (
             <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>
                 <Empty
-                    image={<InfoCircleOutlined style={{ fontSize: '64px', color: '#bfbfbf' }} />}
+                    image={<ScanOutlined style={{ fontSize: '80px', color: '#1890ff', opacity: 0.2 }} />}
                     description={
-                        <div style={{ maxWidth: '440px', margin: '0 auto' }}>
-                            <Title level={4} style={{ color: '#262626' }}>Evaluation Data Missing</Title>
-                            <Paragraph style={{ color: '#8c8c8c' }}>
-                                To calculate quality metrics like **Precision** and **Recall**, the model needs a "Ground Truth" dataset to compare against.
+                        <div style={{ maxWidth: '480px', margin: '0 auto' }}>
+                            <Title level={3} style={{ color: '#262626', fontWeight: 700 }}>Diagnostic Data Locked</Title>
+                            <Paragraph style={{ color: '#8c8c8c', fontSize: '1rem' }}>
+                                To unlock **Precision**, **Recall**, and **Geometric Accuracy**, you must evaluate the model against a labeled dataset.
                             </Paragraph>
-                            <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '8px', marginTop: '1.5rem', textAlign: 'left' }}>
-                                <Text strong style={{ fontSize: '0.8rem', color: '#595959', display: 'block', marginBottom: '0.5rem' }}>HOW TO ENABLE:</Text>
-                                <ul style={{ paddingLeft: '1.2rem', margin: 0, color: '#595959', fontSize: '0.85rem' }}>
-                                    <li>Run predictions on a dataset split (val, test, or train)</li>
-                                    <li>Ensure the selected images have existing labels</li>
-                                </ul>
+                            <Divider dashed />
+                            <div style={{ textAlign: 'left', background: '#f8faff', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e6f0ff' }}>
+                                <Text strong style={{ color: '#1890ff', display: 'block', marginBottom: '1rem', size: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>System Requirements:</Text>
+                                <Space direction="vertical" style={{ width: '100%' }}>
+                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                        <div style={{ background: '#e6f7ff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <Text style={{ color: '#1890ff', fontSize: '12px' }}>1</Text>
+                                        </div>
+                                        <Text style={{ color: '#595959' }}>Use a split dataset (e.g. <b>Val</b> or <b>Test</b>)</Text>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                        <div style={{ background: '#e6f7ff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <Text style={{ color: '#1890ff', fontSize: '12px' }}>2</Text>
+                                        </div>
+                                        <Text style={{ color: '#595959' }}>Ensure images have existing Ground Truth labels</Text>
+                                    </div>
+                                </Space>
                             </div>
                         </div>
                     }
@@ -82,127 +139,138 @@ const QualityView = ({ experiment }) => {
     if (loading) {
         return (
             <div style={{ padding: '24px' }}>
-                <Skeleton active paragraph={{ rows: 4 }} />
-                <Divider />
-                <Skeleton active paragraph={{ rows: 2 }} />
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>
-                <Empty
-                    image={<InfoCircleOutlined style={{ fontSize: '64px', color: '#ff4d4f' }} />}
-                    description={
-                        <div>
-                            <Text type="danger" strong>{error}</Text>
-                            <Paragraph style={{ marginTop: '8px' }}>
-                                Ensure the experiment has completed and annotations are present.
-                            </Paragraph>
-                        </div>
-                    }
-                />
-            </div>
-        );
-    }
-
-    const CustomMetric = ({ title, value, subtext, icon, color }) => (
-        <Card size="small" style={{ borderRadius: '12px', border: '1px solid #f0f0f0', height: '100%', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <div style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    background: `${color}15`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: color,
-                    fontSize: '1rem'
-                }}>
-                    {icon}
+                <Row gutter={[16, 16]}>
+                    {[1, 2, 3].map(i => (
+                        <Col span={8} key={i}>
+                            <Skeleton.Button active block style={{ height: '150px', borderRadius: '16px' }} />
+                        </Col>
+                    ))}
+                </Row>
+                <div style={{ marginTop: '32px' }}>
+                    <Skeleton active paragraph={{ rows: 6 }} />
                 </div>
-                <Text strong style={{ color: '#8c8c8c', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{title}</Text>
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                <Title level={2} style={{ margin: 0, fontWeight: 700, color: '#262626' }}>{value}</Title>
-                <Text style={{ color: '#bfbfbf', fontSize: '1rem' }}>%</Text>
-            </div>
-            <div style={{ marginTop: '8px' }}>
-                <Progress percent={parseFloat(value)} size="small" strokeColor={color} trailColor="#f5f7fa" showInfo={false} strokeWidth={6} />
-            </div>
-            <Text style={{ color: '#8c8c8c', fontSize: '0.75rem', marginTop: '8px', display: 'block' }}>{subtext}</Text>
-        </Card>
-    );
+        );
+    }
 
     return (
         <div style={{ padding: '16px' }}>
-            {/* Primary Metrics Row */}
+            {/* Primary KPI Row - Modern Luxury Style */}
             <Row gutter={[16, 16]}>
                 <Col xs={24} md={8}>
-                    <CustomMetric
-                        title="Precision Accuracy"
+                    <LuxuryMetricCard
+                        title="PRECISION"
                         value={metrics?.precision || 0}
-                        subtext="Detections correctly identified"
+                        suffix="%"
                         icon={<AimOutlined />}
-                        color="#1890ff"
+                        gradient="linear-gradient(135deg, #1890ff 0%, #001529 120%)"
+                        insight={metrics?.precision > 70 ? "🎯 High identification accuracy" : "🔭 Potential for False Positives"}
                     />
                 </Col>
                 <Col xs={24} md={8}>
-                    <CustomMetric
-                        title="Model Recall"
+                    <LuxuryMetricCard
+                        title="RECALL"
                         value={metrics?.recall || 0}
-                        subtext="Actual objects captured by AI"
-                        icon={<LineChartOutlined />}
-                        color="#722ed1"
+                        suffix="%"
+                        icon={<RadarChartOutlined />}
+                        gradient="linear-gradient(135deg, #722ed1 0%, #001529 120%)"
+                        insight={metrics?.recall > 70 ? "⚡ Good object capture" : "🔍 Missing too many objects"}
                     />
                 </Col>
                 <Col xs={24} md={8}>
-                    <CustomMetric
-                        title="F1 Performance"
+                    <LuxuryMetricCard
+                        title="F1 SCORE"
                         value={metrics?.f1 || 0}
-                        subtext="Overall balance of P & R"
+                        suffix="%"
                         icon={<SafetyCertificateOutlined />}
-                        color="#52c41a"
+                        gradient="linear-gradient(135deg, #52c41a 0%, #001529 120%)"
+                        insight="Balanced Performance Index"
                     />
                 </Col>
             </Row>
 
             <div style={{ marginTop: '32px' }}>
-                <Title level={5} style={{ marginBottom: '16px', color: '#262626', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '3px', height: '16px', background: '#1890ff', borderRadius: '4px' }} />
-                    Diagnostic Metrics
+                <Title level={5} style={{ marginBottom: '16px', color: '#262626', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <SearchOutlined style={{ color: '#1890ff' }} />
+                    <span style={{ textTransform: 'uppercase', letterSpacing: '1px', fontSize: '13px', fontWeight: 700 }}>Deep Diagnostics</span>
                 </Title>
 
-                <Row gutter={[16, 16]}>
-                    <Col xs={24} md={14}>
-                        <Card size="small" title={<span style={{ fontSize: '0.85rem', color: '#595959' }}>DETECTION ERROR BREAKDOWN</span>} style={{ borderRadius: '12px', border: '1px solid #f0f0f0' }}>
-                            <Row gutter={16}>
-                                <Col span={12} style={{ textAlign: 'center', borderRight: '1px solid #f0f0f0' }}>
-                                    <Paragraph style={{ margin: 0, color: '#8c8c8c', fontSize: '0.75rem' }}>FALSE POSITIVES</Paragraph>
-                                    <Title level={2} style={{ margin: '8px 0', color: '#ff4d4f', fontWeight: 700 }}>{metrics?.false_positives || 0}</Title>
-                                    <Tag bordered={false} color="error" style={{ fontSize: '10px', borderRadius: '4px' }}>HALLUCINATIONS</Tag>
+                <Row gutter={[12, 12]} style={{ alignItems: 'stretch', width: '100%', margin: 0 }}>
+                    <Col xs={24} md={12} style={{ display: 'flex', padding: '6px' }}>
+                        <Card
+                            className="glass-diagnostic-card"
+                            title={
+                                <Space size="small">
+                                    <ExclamationCircleOutlined style={{ color: '#ff4d4f', fontSize: '14px' }} />
+                                    <span style={{ fontSize: '11px', color: '#8c8c8c', letterSpacing: '1px', fontWeight: 600 }}>ERROR VECTOR ANALYSIS</span>
+                                </Space>
+                            }
+                            headStyle={{ borderBottom: '1px solid #f0f0f0', minHeight: '44px', padding: '0 16px' }}
+                            bodyStyle={{ padding: '24px', flex: 1, display: 'flex' }}
+                            style={{ width: '100%' }}
+                        >
+                            <Row gutter={16} style={{ width: '100%', margin: 0 }}>
+                                <Col span={12} style={{ textAlign: 'center', borderRight: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', padding: '0 8px' }}>
+                                    <div className="glass-inset-container" style={{ padding: '20px' }}>
+                                        <Text style={{ color: '#8c8c8c', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.8px', display: 'block', marginBottom: '8px', fontWeight: 600 }}>False Positives</Text>
+                                        <Title level={2} style={{ margin: '0', color: '#ff4d4f', fontWeight: 800, lineHeight: 1 }}>
+                                            <AnimatedNumber value={metrics?.false_positives || 0} decimal={0} />
+                                        </Title>
+                                        <div style={{ marginTop: '16px' }}>
+                                            <Tag color="#ff4d4f10" bordered={false} style={{ borderRadius: '4px', fontSize: '10px', fontWeight: 700, padding: '2px 10px', color: '#cf1322' }}>HALLUCINATIONS</Tag>
+                                        </div>
+                                    </div>
                                 </Col>
-                                <Col span={12} style={{ textAlign: 'center' }}>
-                                    <Paragraph style={{ margin: 0, color: '#8c8c8c', fontSize: '0.75rem' }}>MISSED OBJECTS</Paragraph>
-                                    <Title level={2} style={{ margin: '8px 0', color: '#faad14', fontWeight: 700 }}>{metrics?.missed_objects || 0}</Title>
-                                    <Tag bordered={false} color="warning" style={{ fontSize: '10px', borderRadius: '4px' }}>FALSE NEGATIVES</Tag>
+                                <Col span={12} style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', padding: '0 8px' }}>
+                                    <div className="glass-inset-container" style={{ padding: '20px' }}>
+                                        <Text style={{ color: '#8c8c8c', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.8px', display: 'block', marginBottom: '8px', fontWeight: 600 }}>Missed Objects</Text>
+                                        <Title level={2} style={{ margin: '0', color: '#faad14', fontWeight: 800, lineHeight: 1 }}>
+                                            <AnimatedNumber value={metrics?.missed_objects || 0} decimal={0} />
+                                        </Title>
+                                        <div style={{ marginTop: '16px' }}>
+                                            <Tag color="#fffbe6" bordered={false} style={{ borderRadius: '4px', fontSize: '10px', fontWeight: 700, padding: '2px 10px', color: '#d48806' }}>FALSE NEGATIVES</Tag>
+                                        </div>
+                                    </div>
                                 </Col>
                             </Row>
                         </Card>
                     </Col>
 
-                    <Col xs={24} md={10}>
-                        <Card size="small" title={<span style={{ fontSize: '0.85rem', color: '#595959' }}>GEOMETRIC ACCURACY</span>} style={{ borderRadius: '12px', border: '1px solid #f0f0f0', height: '100%' }}>
-                            <div style={{ padding: '8px 0' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                    <Text style={{ color: '#595959', fontSize: '0.85rem' }}>Average IoU</Text>
-                                    <Text strong style={{ color: '#13c2c2' }}>{metrics?.avg_iou || 0}</Text>
+                    <Col xs={24} md={12} style={{ display: 'flex', padding: '6px' }}>
+                        <Card
+                            className="glass-diagnostic-card"
+                            title={
+                                <Space size="small">
+                                    <RadarChartOutlined style={{ color: '#13c2c2', fontSize: '14px' }} />
+                                    <span style={{ fontSize: '11px', color: '#8c8c8c', letterSpacing: '1px', fontWeight: 600 }}>GEOMETRIC ACCURACY</span>
+                                </Space>
+                            }
+                            headStyle={{ borderBottom: '1px solid #f0f0f0', minHeight: '44px', padding: '0 16px' }}
+                            bodyStyle={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
+                            style={{ width: '100%' }}
+                        >
+                            <div className="luxury-scan-container" style={{ width: '100%', padding: '24px' }}>
+                                <div className="luxury-scan-line" />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '16px', alignItems: 'baseline' }}>
+                                    <Text strong style={{ color: '#00474f', fontSize: '1.1rem' }}>Average IoU</Text>
+                                    <div style={{ textAlign: 'right', flex: 1 }}>
+                                        <Text className="status-value-mono" style={{ color: '#13c2c2', fontSize: '1.4rem', fontWeight: 800 }}>
+                                            {(metrics?.avg_iou || 0).toFixed(2)}
+                                        </Text>
+                                    </div>
                                 </div>
-                                <Progress percent={(metrics?.avg_iou || 0) * 100} size="small" strokeColor="#13c2c2" showInfo={false} strokeWidth={8} />
-                                <Paragraph style={{ fontSize: '11px', color: '#8c8c8c', marginTop: '12px', lineHeight: '1.4' }}>
-                                    Mean overlap accuracy between predictions and ground truth. High values indicate precise bounding boxes.
+                                <div style={{ width: '100%' }}>
+                                    <Progress
+                                        percent={(metrics?.avg_iou || 0) * 100}
+                                        strokeColor="#13c2c2"
+                                        showInfo={false}
+                                        strokeWidth={12}
+                                        strokeLinecap="round"
+                                        style={{ width: '100%', display: 'block' }}
+                                    />
+                                </div>
+                                <Paragraph style={{ fontSize: '11px', color: '#595959', marginTop: '20px', lineHeight: '1.5', italic: true, marginBottom: 0 }}>
+                                    The "Laser Scan" confirms the mathematical overlap between AI boxes and human ground truth.
                                 </Paragraph>
                             </div>
                         </Card>
