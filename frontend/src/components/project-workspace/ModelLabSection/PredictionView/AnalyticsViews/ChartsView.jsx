@@ -104,7 +104,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         // --- 3. Human Verification Mapping & Triple-Match ---
         const vMap = {};
         const humanDiscoveries = [];
-        const verifiedJunk = [];
+        const verifiedAlarms = [];
         const humanMissing = [];
 
         verifications.forEach(v => {
@@ -198,21 +198,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 }
             });
 
-            // DENOMINATOR LOGIC: Calculate total GT objects that pass Class/Size filters
-            // Total GT = All matched objects (rawTP) + All unmatched objects (rawFN)
-            const allGTObjects = [...rawTP, ...rawFN];
-            const filteredGTUniverse = allGTObjects.filter(item => {
-                const rawCls = item.class || item.class_name || 'Unknown';
-                const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
-                const sz = getSizeGrp(item.bbox);
-
-                const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
-                const matchesSize = sizeSlice === 'all' || sizeSlice === sz;
-                const matchesTraining = trainingClasses && trainingClasses.length > 0 ? trainingClasses.includes(cls) : true;
-
-                return matchesClass && matchesSize && matchesTraining;
-            });
-            totalGT = filteredGTUniverse.length; // Update the outer variable
+            // DENOMINATOR LOGIC: totalGT will be calculated below as the sum of (tp + ma + fn)
+            // to ensure a perfectly closed math system where percentages sum to 100%.
 
             rawFP.forEach(d => {
                 const conf = (d.confidence || 0) * 100;
@@ -239,8 +226,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         humanDiscoveries.push(item);
                         tpList.push({ ...item, type: 'True Positive', source: 'human' });
                     } else {
-                        if (status === 'fail') verifiedJunk.push(item);
-                        fpList.push({ ...item, type: 'False Positive', reason: status === 'fail' ? 'Verified Junk' : 'No Match' });
+                        if (status === 'fail') verifiedAlarms.push(item);
+                        fpList.push({ ...item, type: 'False Positive', reason: status === 'fail' ? 'Verified Alarm' : 'No Match' });
                     }
                 }
             });
@@ -260,26 +247,35 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
                     const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
 
-                    if (matchesClass && conf >= confRange[0] && conf <= confRange[1]) {
-                        // Find Global Index
-                        const originalArray = experiment.predictions[imgName] || [];
-                        const gIdx = originalArray.findIndex(orig =>
-                            orig.bbox && d.bbox &&
-                            orig.bbox[0] === d.bbox[0] && orig.bbox[1] === d.bbox[1] &&
-                            orig.bbox[2] === d.bbox[2] && orig.bbox[3] === d.bbox[3]
-                        );
+                    if (matchesClass) {
+                        if (conf >= confRange[0] && conf <= confRange[1]) {
+                            // Find Global Index
+                            const originalArray = experiment.predictions[imgName] || [];
+                            const gIdx = originalArray.findIndex(orig =>
+                                orig.bbox && d.bbox &&
+                                orig.bbox[0] === d.bbox[0] && orig.bbox[1] === d.bbox[1] &&
+                                orig.bbox[2] === d.bbox[2] && orig.bbox[3] === d.bbox[3]
+                            );
 
-                        const key = `${fileName}|${d.bbox.join(',')}`;
-                        const status = vMap[key];
-                        const item = { ...d, class: cls, imgName: fileName, globalIdx: gIdx !== -1 ? gIdx + 1 : null };
+                            const key = `${fileName}|${d.bbox.join(',')}`;
+                            const status = vMap[key];
+                            const item = { ...d, class: cls, imgName: fileName, globalIdx: gIdx !== -1 ? gIdx + 1 : null };
 
-                        if (status === 'fail') {
-                            verifiedJunk.push(item);
-                            fpList.push({ ...item, type: 'False Positive', reason: 'Verified Junk' });
-                        } else {
-                            // Assumed Correct (or Pass)
-                            if (status === 'pass') humanDiscoveries.push(item);
-                            tpList.push({ ...item, type: 'True Positive' });
+                            if (status === 'fail') {
+                                verifiedAlarms.push(item);
+                                fpList.push({ ...item, type: 'False Positive', reason: 'Verified Alarm' });
+                            } else {
+                                // Assumed Correct (or Pass)
+                                if (status === 'pass') humanDiscoveries.push(item);
+                                tpList.push({ ...item, type: 'True Positive' });
+                            }
+                        } else if (conf >= 10) {
+                            // Baseline Suppression: This is a real object found at 10% conf, but hidden by current slider.
+                            // It counts towards "Missed Ground Truth" to keep the denominator static.
+                            const key = `${fileName}|${d.bbox.join(',')}`;
+                            if (vMap[key] !== 'fail') {
+                                fnList.push({ ...d, class: cls, type: 'Missed (Low Confidence)' });
+                            }
                         }
                     }
                 });
@@ -288,30 +284,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             // Missed objects in upload mode are solely from human manual marks
             fnList = [...humanMissing];
 
-            // Static Total GT for Uploads = (AI Detections at 10% conf - FAIL) + (Human missed objects)
-            // This ensures the denominator doesn't move when the user slides the confidence slider
-            let staticAICount = 0;
-            Object.entries(experiment.predictions).forEach(([imgKey, dets]) => {
-                if (!Array.isArray(dets)) return;
-                const vFile = getFileName(imgKey);
-
-                dets.forEach(d => {
-                    const conf = (d.confidence || 0) * 100;
-                    const rawCls = d.class || d.class_name || 'Unknown';
-                    const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
-                    const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
-
-                    if (matchesClass && conf >= 10) { // Baseline: 10% confidence
-                        const key = `${vFile}|${d.bbox?.join(',')}`;
-                        if (vMap[key] !== 'fail') {
-                            staticAICount++;
-                        }
-                    }
-                });
-            });
-
-            totalGT = staticAICount + fnList.length;
-            aiGTRatio = totalGT > 0 ? ((tpList.length + fpList.length) / totalGT).toFixed(2) : '0.00';
+            // totalGT will be calculated as (tp + ma + fn) below for consistency.
         }
 
         // --- 4. Apply Filters (The Heart of the UI) ---
@@ -333,7 +306,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         const filteredFP = fpList.filter(i => filterItem(i));
         const filteredFN = isUploadMode
             ? fnList.filter(i => filterItem(i, true))
-            : [...fnList.filter(i => filterItem(i, true)), ...humanMissing];
+            : [...fnList.filter(i => filterItem(i, true)), ...humanMissing.filter(i => filterItem(i, true))];
 
         // Separating True False Positives from Misaligned ones
         const purelyFP = filteredFP.filter(i => i.type === 'False Positive');
@@ -343,6 +316,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         const fnReal = filteredFN.filter(i => i.type !== 'Missed (Low Confidence)');
         const fnFiltered = filteredFN.filter(i => i.type === 'Missed (Low Confidence)');
 
+        const filteredDiscoveries = humanDiscoveries.filter(i => filterItem(i));
+        const filteredAlarms = verifiedAlarms.filter(i => filterItem(i));
+
 
         // --- 5. Metrics & Distributions ---
         const tp = filteredTP.length;
@@ -350,13 +326,15 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         const ma = misaligned.length;
         const fn = filteredFN.length;
 
+        // THE "CLOSED SYSTEM" FIX: 
+        // Total Reality = Things found correctly + Things found sloppily + Things completely missed.
+        totalGT = tp + ma + fn;
+
         const globalMetrics = calcStats(tp, fp, fn);
 
-        // Ratio Calculation: Numerator is ALL AI detections (TP+FP+MA) / Denominator is ALL GT objects
+        // Ratio Calculation: Total Detections vs Total Reality
         const totalDetections = tp + fp + ma;
-        if (!isUploadMode) {
-            aiGTRatio = totalGT > 0 ? (totalDetections / totalGT).toFixed(2) : '0.00';
-        }
+        aiGTRatio = totalGT > 0 ? (totalDetections / totalGT).toFixed(2) : '0.00';
 
         const precision = globalMetrics.pRaw;
         const recall = globalMetrics.rRaw;
@@ -422,13 +400,13 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         const accuracyScore = gStats.f1Raw / 100;
         const autonomyPenalty = (humanDiscoveries.length + humanMissing.length) / Math.max(totalGT, 1);
         const autonomyScore = Math.max(0, 1 - autonomyPenalty);
-        const sloppinessPenalty = misaligned.length / Math.max(totalGT, 1);
-        const sloppinessScore = Math.max(0, 1 - sloppinessPenalty);
+        const alignmentPenalty = misaligned.length / Math.max(totalGT, 1);
+        const alignmentScore = Math.max(0, 1 - alignmentPenalty);
 
         const healthScore = Math.min(100, Math.max(0, (
             (accuracyScore * 0.7) +
             (autonomyScore * 0.2) +
-            (sloppinessScore * 0.1)
+            (alignmentScore * 0.1)
         ) * 100));
 
         // Available Classes Collection
@@ -442,9 +420,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         return {
             kpis: {
                 tp, fp, fn, ma, aiGTRatio, totalGT,
-                discoveries: humanDiscoveries.length,
-                junk: verifiedJunk.length,
-                humanMissing: humanMissing.length,
+                discoveries: filteredDiscoveries.length,
+                verifiedAlarms: filteredAlarms.length,
+                humanMissing: humanMissing.filter(i => filterItem(i, true)).length,
                 fnReal: fnReal.length,
                 fnFiltered: fnFiltered.length,
                 precision: globalMetrics.p,
@@ -455,9 +433,16 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 fpItems: purelyFP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 maItems: misaligned.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 fnItems: filteredFN.map(i => ({ ...i, imgName: i.image || i.imgName || i.image_name })),
-                missingItems: humanMissing.map(i => ({ ...i, type: 'Human Missing', imgName: (i.image || i.imgName || i.image_name || '').split('/').pop() })),
+                discoveryItems: filteredDiscoveries.map(i => ({ ...i, imgName: i.image || i.imgName })),
+                alarmItems: filteredAlarms.map(i => ({ ...i, imgName: i.image || i.imgName })),
+                missingItems: humanMissing.filter(i => filterItem(i, true)).map(i => ({ ...i, type: 'Human Missing', imgName: (i.image || i.imgName || i.image_name || '').split('/').pop() })),
                 isUploadMode,
-                healthScore: healthScore.toFixed(1)
+                healthScore: healthScore.toFixed(1),
+                outcomeData: [
+                    { name: 'Successful Matches', value: tp, color: '#52c41a', key: 'tp' },
+                    { name: 'Misaligned Objects', value: ma, color: '#fa8c16', key: 'ma' },
+                    { name: 'Undetected (Missed)', value: fn, color: '#faad14', key: 'fn' }
+                ].filter(i => isUploadMode ? i.key !== 'ma' : true)
             },
             classChart: classTableData,
             curveData,
@@ -468,7 +453,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
     if (!processedData) return <Empty />;
 
     const { kpis, classChart, curveData, availableClasses } = processedData;
-    const { tp, fp, ma, fn, totalGT, discoveries, junk, humanMissing } = kpis;
+    const { tp, fp, ma, fn, totalGT, discoveries, verifiedAlarms, humanMissing } = kpis;
 
     return (
         <div style={{ padding: '24px', background: '#fff' }}>
@@ -600,7 +585,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 {/* --- Main Section --- */}
                 <Col xs={24} lg={18}>
                     {/* --- NEW: Expert Reviews Impact Card --- */}
-                    {(discoveries > 0 || junk > 0 || humanMissing > 0) && (
+                    {(discoveries > 0 || verifiedAlarms > 0 || humanMissing > 0) && (
                         <Card size="small" style={{ marginBottom: 24, borderRadius: 8, border: '1px solid #e6f7ff', background: '#f0f9ff' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Space size="middle">
@@ -628,12 +613,12 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                         style={{ textAlign: 'center', cursor: 'pointer' }}
                                         onClick={() => setErrorModal({
                                             visible: true,
-                                            title: 'Confirmed Junk (Human-Verified FP)',
-                                            items: kpis.junkItems
+                                            title: 'Verified False Alarms (Human-Confirmed FP)',
+                                            items: kpis.alarmItems
                                         })}
                                     >
-                                        <Text strong style={{ fontSize: 18, color: '#ff4d4f', display: 'block' }}>{junk}</Text>
-                                        <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Confirmed Junk (❌ FAIL)</Text>
+                                        <Text strong style={{ fontSize: 18, color: '#ff4d4f', display: 'block' }}>{verifiedAlarms}</Text>
+                                        <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>False Alarms (❌ FAIL)</Text>
                                     </div>
                                     <div
                                         style={{ textAlign: 'center', cursor: 'pointer' }}
@@ -651,7 +636,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             <Divider style={{ margin: '12px 0' }} />
                             <Text style={{ fontSize: 13 }}>
                                 <BulbOutlined style={{ color: '#faad14', marginRight: 8 }} />
-                                <strong>Context:</strong> Human reviews found <b>{discoveries}</b> discoveries, confirmed <b>{junk}</b> junk detections, and identified <b>{humanMissing}</b> missing objects that the AI completely overlooked.
+                                <strong>Context:</strong> Human reviews found <b>{discoveries}</b> discoveries, verified <b>{verifiedAlarms}</b> false alarms, and identified <b>{humanMissing}</b> missing objects that the AI completely overlooked.
                             </Text>
                         </Card>
                     )}
@@ -751,7 +736,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                 })}
                             >
                                 <Tooltip title={kpis.isUploadMode
-                                    ? "Confirmed Junk: Boxes you explicitly clicked [FAIL] on."
+                                    ? "Verified False Alarms: Boxes you explicitly clicked [FAIL] on."
                                     : "Incorrect Alarms: Cases where the AI reported an object, but nothing exists at that location."}>
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>False Positives</Text>
                                 </Tooltip>
@@ -809,6 +794,64 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                         </Tooltip>
                                     )}
                                 </div>
+                            </Card>
+                        </Col>
+                    </Row>
+
+                    <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
+                        <Col span={24}>
+                            <Card size="small" style={{ border: '1px solid #f0f0f0' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                    <Tooltip title="Findings vs. Misses: A high-level view of what happened to all objects that exist in your data. Green = AI found them, Yellow = AI found them but box is sloppy, Orange = AI missed them.">
+                                        <Text strong style={{ fontSize: 13, textTransform: 'uppercase', cursor: 'help' }}>
+                                            <BarChartOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+                                            Graph 2: AI Findings vs. Misses (Outcome Recap)
+                                        </Text>
+                                    </Tooltip>
+                                    <Tag color="blue">Total Truth: {totalGT} Objects</Tag>
+                                </div>
+
+                                <div style={{ height: 60, width: '100%', display: 'flex', borderRadius: 4, overflow: 'hidden', backgroundColor: '#f5f5f5' }}>
+                                    {kpis.outcomeData.map((seg, idx) => {
+                                        const pct = totalGT > 0 ? (seg.value / totalGT) * 100 : 0;
+                                        if (pct === 0) return null;
+                                        return (
+                                            <Tooltip key={idx} title={`${seg.name}: ${seg.value} (${pct.toFixed(1)}%)`}>
+                                                <div style={{ width: `${pct}%`, backgroundColor: seg.color, height: '100%', transition: 'all 0.3s ease' }} />
+                                            </Tooltip>
+                                        )
+                                    })}
+                                </div>
+
+                                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: '24px' }}>
+                                    {kpis.outcomeData.map((seg, idx) => {
+                                        const pct = totalGT > 0 ? (seg.value / totalGT) * 100 : 0;
+                                        return (
+                                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: seg.color }} />
+                                                <Text style={{ fontSize: 11 }}>{seg.name}: <b>{seg.value}</b> ({pct.toFixed(0)}%)</Text>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+
+                                <Divider style={{ margin: '12px 0', borderStyle: 'dashed' }} />
+                                <Text type="secondary" style={{ fontSize: 12, display: 'block', textAlign: 'center' }}>
+                                    {(() => {
+                                        const fnPct = totalGT > 0 ? (kpis.fn / totalGT) * 100 : 0;
+                                        const maPct = totalGT > 0 ? (kpis.ma / totalGT) * 100 : 0;
+                                        const tpPct = totalGT > 0 ? (kpis.tp / totalGT) * 100 : 0;
+                                        const fpRatio = kpis.tp > 0 ? (kpis.fp / kpis.tp) : 0;
+
+                                        if (totalGT === 0) return <span>ℹ️ <b>No Ground Truth Detected:</b> Add manual boxes or upload a label file to begin performance analysis.</span>;
+                                        if (fnPct > 80) return <span>🚨 <b>Total Coverage Failure:</b> Your model is misses <b>{fnPct.toFixed(0)}%</b> of reality. It is functionally "Blind." Ensure the labels are correct or increase training diversity.</span>;
+                                        if (maPct > 20) return <span>📏 <b>Alignment Precision Crisis:</b> {maPct.toFixed(0)}% of findings are <b>Misaligned</b>. The model "Locates" features correctly but the boxes have <b>poor alignment</b>. Tune your anchor boxes or IoU settings.</span>;
+                                        if (fnPct > 35) return <span>⚠️ <b>Major Recall Gap:</b> {fnPct.toFixed(0)}% of objects are undetected. This indicates a <b>Coverage Crisis</b>. The model sees the world but misses nearly half the details.</span>;
+                                        if (tpPct > 85 && maPct < 5) return <span>🏆 <b>Elite Performance:</b> Exceptional alignment! Over {tpPct.toFixed(0)}% of reality matches perfectly. This model is ready for <b>High-Stakes Automation</b>.</span>;
+
+                                        return <span>✅ <b>Reliable Industrial Baseline:</b> The model's findings align strongly with Ground Truth. The current configuration demonstrates <b>Operational Stability</b>.</span>;
+                                    })()}
+                                </Text>
                             </Card>
                         </Col>
                     </Row>
@@ -919,12 +962,12 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Col>
                     </Row>
                 </Col>
-            </Row >
+            </Row>
 
             {/* Error Detail Modal */}
-            < Modal
+            <Modal
                 title={
-                    < Space >
+                    <Space>
                         <WarningOutlined style={{
                             color: errorModal.title.includes('True') ? '#52c41a' :
                                 errorModal.title.includes('False') ? '#ff4d4f' :
@@ -932,7 +975,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         }} />
                         {errorModal.title}
                         <Tag color={errorModal.title.includes('True') ? 'green' : 'default'}>{errorModal.items?.length || 0} Items</Tag>
-                    </Space >
+                    </Space>
                 }
                 visible={errorModal.visible}
                 onCancel={() => setErrorModal({ ...errorModal, visible: false })}
@@ -997,8 +1040,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         <Empty description="No errors found in this selection" />
                     )
                 }
-            </Modal >
-        </div >
+            </Modal>
+        </div>
     );
 };
 
