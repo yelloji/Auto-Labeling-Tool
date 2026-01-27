@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
     Row, Col, Card, Space, Typography, Slider, Select,
-    Tag, Tooltip, Empty, Descriptions, Divider, Modal, List, Button, Table
+    Tag, Tooltip, Empty, Descriptions, Divider, Modal, List, Button, Table, Badge
 } from 'antd';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
@@ -134,9 +134,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 );
 
                 if (matchedAI) {
-                    // Only AI detections can have 'pass'/'fail' impact in the rawTP/FP loops
+                    // CRITICAL: Key must use AI's bbox so we can find it later in prediction loops
                     if (v.status === 'pass' || v.status === 'fail') {
-                        vMap[`${vFile}|${v.bbox.join(',')}`] = v.status;
+                        vMap[`${vFile}|${matchedAI.bbox.join(',')}`] = v.status;
                     }
                 } else if (v.status !== 'fail') {
                     // No AI match + Not 'fail' status = User manually marked a missing object
@@ -149,6 +149,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         let fpList = [];
         let fnList = [];
         let totalGT = 0;
+        let aiGTRatio = '0.00';
 
         const calcStats = (tp, fp, fn) => {
             const p = (tp + fp) > 0 ? (tp / (tp + fp)) * 100 : 0;
@@ -157,8 +158,10 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             return { p: p.toFixed(1), r: r.toFixed(1), f1: f1.toFixed(1), pRaw: p, rRaw: r, f1Raw: f1 };
         };
 
-        if (qualityStats && qualityStats.has_ground_truth) {
-            // ELITE MODE: Use Backend matched lists
+        const isUploadMode = !qualityStats?.has_ground_truth;
+
+        if (!isUploadMode) {
+            // ELITE MODE: Use Backend matched lists (Split / Experiment mode)
             const rawTP = qualityStats.detailed_true_positives || [];
             const rawFP = qualityStats.detailed_false_positives || [];
             const rawFN = qualityStats.detailed_missed_objects || [];
@@ -245,52 +248,70 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             // Combine backend reported missed objects with our confidence-suppressed ones
             fnList = [...fnList, ...rawFN];
         } else {
-            // FALLBACK: Old manual matching (only for uploads or if backend fails)
-            // (Keeping this for safety, but with projectLabels awareness)
-            const verifyMap = {};
-            verifications.forEach(v => { if (!verifyMap[v.image_name]) verifyMap[v.image_name] = []; verifyMap[v.image_name].push(v); });
-
-            const getIoU = (boxA, boxB) => {
-                const xA = Math.max(boxA[0], boxB[0]); const yA = Math.max(boxA[1], boxB[1]);
-                const xB = Math.min(boxA[2], boxB[2]); const yB = Math.min(boxA[3], boxB[3]);
-                const inter = Math.max(0, xB - xA) * Math.max(0, yB - yA);
-                if (inter === 0) return 0;
-                const areaA = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1]);
-                const areaB = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1]);
-                return inter / (areaA + areaB - inter);
-            };
-
-            const matchedGtIds = new Set();
+            // EXCEPTION-BASED LOGIC for Uploads (Raw Data Audit)
+            // We assume all AI detections are TP unless marked as FAIL or identified as Misaligned
             Object.entries(experiment.predictions).forEach(([imgName, dets]) => {
                 if (!Array.isArray(dets)) return;
-                const fileName = imgName.split('/').pop();
-                const imgGts = verifyMap[imgName] || [];
+                const fileName = getFileName(imgName);
 
                 dets.forEach(d => {
-                    let bestMatch = null;
-                    let maxIoU = 0.5;
-                    imgGts.forEach(gt => {
-                        const iou = getIoU(d.bbox, gt.bbox);
-                        if (iou > maxIoU && gt.class_name === d.class) { maxIoU = iou; bestMatch = gt; }
-                    });
+                    const conf = (d.confidence || 0) * 100;
+                    const rawCls = d.class || d.class_name || 'Unknown';
+                    const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
+                    const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
 
-                    if (bestMatch && !matchedGtIds.has(bestMatch.id)) {
-                        tpList.push({ ...d, imgName: fileName, type: 'True Positive' });
-                        matchedGtIds.add(bestMatch.id);
-                    } else {
-                        fpList.push({ ...d, imgName: fileName, type: 'False Positive', reason: 'No Match' });
+                    if (matchesClass && conf >= confRange[0] && conf <= confRange[1]) {
+                        // Find Global Index
+                        const originalArray = experiment.predictions[imgName] || [];
+                        const gIdx = originalArray.findIndex(orig =>
+                            orig.bbox && d.bbox &&
+                            orig.bbox[0] === d.bbox[0] && orig.bbox[1] === d.bbox[1] &&
+                            orig.bbox[2] === d.bbox[2] && orig.bbox[3] === d.bbox[3]
+                        );
+
+                        const key = `${fileName}|${d.bbox.join(',')}`;
+                        const status = vMap[key];
+                        const item = { ...d, class: cls, imgName: fileName, globalIdx: gIdx !== -1 ? gIdx + 1 : null };
+
+                        if (status === 'fail') {
+                            verifiedJunk.push(item);
+                            fpList.push({ ...item, type: 'False Positive', reason: 'Verified Junk' });
+                        } else {
+                            // Assumed Correct (or Pass)
+                            if (status === 'pass') humanDiscoveries.push(item);
+                            tpList.push({ ...item, type: 'True Positive' });
+                        }
                     }
                 });
             });
-            // Manual FN calculation is limited here
-            fnList = [];
 
-            // Fallback GT count
-            totalGT = verifications.filter(v => {
-                const cls = (v.class_name || 'Unknown').replace(/^Class\s+/i, '');
-                const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
-                return matchesClass;
-            }).length;
+            // Missed objects in upload mode are solely from human manual marks
+            fnList = [...humanMissing];
+
+            // Static Total GT for Uploads = (AI Detections at 10% conf - FAIL) + (Human missed objects)
+            // This ensures the denominator doesn't move when the user slides the confidence slider
+            let staticAICount = 0;
+            Object.entries(experiment.predictions).forEach(([imgKey, dets]) => {
+                if (!Array.isArray(dets)) return;
+                const vFile = getFileName(imgKey);
+
+                dets.forEach(d => {
+                    const conf = (d.confidence || 0) * 100;
+                    const rawCls = d.class || d.class_name || 'Unknown';
+                    const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
+                    const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
+
+                    if (matchesClass && conf >= 10) { // Baseline: 10% confidence
+                        const key = `${vFile}|${d.bbox?.join(',')}`;
+                        if (vMap[key] !== 'fail') {
+                            staticAICount++;
+                        }
+                    }
+                });
+            });
+
+            totalGT = staticAICount + fnList.length;
+            aiGTRatio = totalGT > 0 ? ((tpList.length + fpList.length) / totalGT).toFixed(2) : '0.00';
         }
 
         // --- 4. Apply Filters (The Heart of the UI) ---
@@ -310,7 +331,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
         const filteredTP = tpList.filter(i => filterItem(i));
         const filteredFP = fpList.filter(i => filterItem(i));
-        const filteredFN = [...fnList.filter(i => filterItem(i, true)), ...humanMissing];
+        const filteredFN = isUploadMode
+            ? fnList.filter(i => filterItem(i, true))
+            : [...fnList.filter(i => filterItem(i, true)), ...humanMissing];
 
         // Separating True False Positives from Misaligned ones
         const purelyFP = filteredFP.filter(i => i.type === 'False Positive');
@@ -331,7 +354,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
         // Ratio Calculation: Numerator is ALL AI detections (TP+FP+MA) / Denominator is ALL GT objects
         const totalDetections = tp + fp + ma;
-        const aiGTRatio = totalGT > 0 ? (totalDetections / totalGT).toFixed(2) : '0.00';
+        if (!isUploadMode) {
+            aiGTRatio = totalGT > 0 ? (totalDetections / totalGT).toFixed(2) : '0.00';
+        }
 
         const precision = globalMetrics.pRaw;
         const recall = globalMetrics.rRaw;
@@ -392,6 +417,20 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             });
         }
 
+        // --- 6. AI Detection Health Score ---
+        const gStats = calcStats(filteredTP.length, purelyFP.length, filteredFN.length);
+        const accuracyScore = gStats.f1Raw / 100;
+        const autonomyPenalty = (humanDiscoveries.length + humanMissing.length) / Math.max(totalGT, 1);
+        const autonomyScore = Math.max(0, 1 - autonomyPenalty);
+        const sloppinessPenalty = misaligned.length / Math.max(totalGT, 1);
+        const sloppinessScore = Math.max(0, 1 - sloppinessPenalty);
+
+        const healthScore = Math.min(100, Math.max(0, (
+            (accuracyScore * 0.7) +
+            (autonomyScore * 0.2) +
+            (sloppinessScore * 0.1)
+        ) * 100));
+
         // Available Classes Collection
         const availableClasses = new Set();
         [...tpList, ...fpList, ...fnList].forEach(i => {
@@ -405,6 +444,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 tp, fp, fn, ma, aiGTRatio, totalGT,
                 discoveries: humanDiscoveries.length,
                 junk: verifiedJunk.length,
+                humanMissing: humanMissing.length,
                 fnReal: fnReal.length,
                 fnFiltered: fnFiltered.length,
                 precision: globalMetrics.p,
@@ -415,10 +455,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 fpItems: purelyFP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 maItems: misaligned.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 fnItems: filteredFN.map(i => ({ ...i, imgName: i.image || i.imgName || i.image_name })),
-                humanMissing: humanMissing.length,
-                discoveryItems: humanDiscoveries.map(i => ({ ...i, type: 'True Positive', imgName: i.image || i.imgName })),
-                junkItems: verifiedJunk.map(i => ({ ...i, type: 'False Positive', imgName: i.image || i.imgName })),
-                missingItems: humanMissing.map(i => ({ ...i, type: 'Human Missing', imgName: (i.image || i.imgName || i.image_name || '').split('/').pop() }))
+                missingItems: humanMissing.map(i => ({ ...i, type: 'Human Missing', imgName: (i.image || i.imgName || i.image_name || '').split('/').pop() })),
+                isUploadMode,
+                healthScore: healthScore.toFixed(1)
             },
             classChart: classTableData,
             curveData,
@@ -485,23 +524,26 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             />
                         </div>
 
-                        <Divider style={{ margin: '12px 0' }} />
-
-                        <div style={{ marginBottom: 16 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Tooltip title="Defines the standard for 'Good Alignment'. Raising this moves poor quality boxes from 'True Positives' into 'Accuracy Errors' live.">
-                                    <Text style={{ fontSize: 13, fontWeight: 600, cursor: 'help' }}>Overlap (IoU) Threshold</Text>
-                                </Tooltip>
-                                <Tag color="orange" style={{ margin: 0 }}>{(iouThreshold / 100).toFixed(2)}+</Tag>
-                            </div>
-                            <Slider
-                                min={10}
-                                max={90}
-                                value={iouThreshold}
-                                onChange={setIouThreshold}
-                                tipFormatter={v => (v / 100).toFixed(2)}
-                            />
-                        </div>
+                        {!kpis.isUploadMode && (
+                            <>
+                                <Divider style={{ margin: '12px 0' }} />
+                                <div style={{ marginBottom: 16 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Tooltip title="Defines the standard for 'Good Alignment'. Raising this moves poor quality boxes from 'True Positives' into 'Accuracy Errors' live.">
+                                            <Text style={{ fontSize: 13, fontWeight: 600, cursor: 'help' }}>Overlap (IoU) Threshold</Text>
+                                        </Tooltip>
+                                        <Tag color="orange" style={{ margin: 0 }}>{(iouThreshold / 100).toFixed(2)}+</Tag>
+                                    </div>
+                                    <Slider
+                                        min={10}
+                                        max={90}
+                                        value={iouThreshold}
+                                        onChange={setIouThreshold}
+                                        tipFormatter={v => (v / 100).toFixed(2)}
+                                    />
+                                </div>
+                            </>
+                        )}
 
                         <Divider style={{ margin: '12px 0' }} />
 
@@ -637,17 +679,40 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     {/* 5 KPI Cards - Deep Isolation Logic (Fixed Order) */}
                     <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
                         <Col flex="1">
+                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #e6f7ff', background: '#f0f9ff' }}>
+                                <Tooltip title="AI Trust Index: A balanced score of accuracy, human autonomy, and precision. Green = Autonomous, Yellow = Needs Audit, Red = High Risk.">
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>AI Detection Health</Text>
+                                </Tooltip>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                    <Text strong style={{
+                                        fontSize: 20,
+                                        color: kpis.healthScore >= 80 ? '#52c41a' : (kpis.healthScore >= 60 ? '#faad14' : '#ff4d4f')
+                                    }}>
+                                        {kpis.healthScore}%
+                                    </Text>
+                                    <Badge
+                                        status={kpis.healthScore >= 80 ? 'success' : (kpis.healthScore >= 60 ? 'warning' : 'error')}
+                                        text={<Text style={{ fontSize: 8 }}>{kpis.healthScore >= 80 ? 'STABLE' : (kpis.healthScore >= 60 ? 'REVIEW' : 'RISK')}</Text>}
+                                    />
+                                </div>
+                            </Card>
+                        </Col>
+                        <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0', background: '#f9f9f9' }}>
-                                <Tooltip title="Density Score: Compares total AI detections to actual objects. Ideally 1.0. If > 1.0, the AI is 'over-reporting' and seeing objects that don't exist.">
+                                <Tooltip title={kpis.isUploadMode
+                                    ? "Proportionality: Compares total AI detections to your manual audit. Ideally 1.0. If > 1.0, the AI is hyper-active."
+                                    : "Density Score: Compares total AI detections to actual ground truth. Ideally 1.0."}>
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Detection Ratio</Text>
                                 </Tooltip>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                     <Text strong style={{ fontSize: 18, color: '#000' }}>
-                                        {isSplit ? `${kpis.aiGTRatio}x` : 'N/A'}
+                                        {kpis.aiGTRatio}x
                                     </Text>
-                                    <Tooltip title={`AI found ${tp + fp + ma} objects while there are only ${totalGT} actual objects in reality.`}>
+                                    <Tooltip title={kpis.isUploadMode
+                                        ? `AI found ${tp + fp} objects while the 'Human-Verified Truth' is ${totalGT} objects.`
+                                        : `AI found ${tp + fp + ma} objects while there are only ${totalGT} actual objects in reality.`}>
                                         <Text type="secondary" style={{ fontSize: 9, cursor: 'help' }}>
-                                            {isSplit ? `${tp + fp + ma} AI / ${totalGT} GT` : ''}
+                                            {kpis.isUploadMode ? `${tp + fp} AI / ${totalGT} Truth` : `${tp + fp + ma} AI / ${totalGT} GT`}
                                         </Text>
                                     </Tooltip>
                                 </div>
@@ -664,11 +729,13 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     items: kpis.tpItems
                                 })}
                             >
-                                <Tooltip title="Correct Results: AI successfully found the right label with high confidence and precision. These are your reliable data points.">
+                                <Tooltip title={kpis.isUploadMode
+                                    ? "Confirmed Good: AI boxes you agreed with (implicitly or explicitly)."
+                                    : "Correct Results: AI successfully found the right label with high confidence and precision."}>
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>True Positives</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 20, color: '#52c41a' }}>
-                                    {isSplit ? kpis.tp : 'N/A'}
+                                    {kpis.tp}
                                 </Text>
                             </Card>
                         </Col>
@@ -683,33 +750,37 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     items: kpis.fpItems
                                 })}
                             >
-                                <Tooltip title="Incorrect Alarms: Cases where the AI reported an object, but nothing exists at that location. Raising 'Confidence' reduces these.">
+                                <Tooltip title={kpis.isUploadMode
+                                    ? "Confirmed Junk: Boxes you explicitly clicked [FAIL] on."
+                                    : "Incorrect Alarms: Cases where the AI reported an object, but nothing exists at that location."}>
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>False Positives</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 20, color: '#ff4d4f' }}>
-                                    {isSplit ? kpis.fp : 'N/A'}
+                                    {kpis.fp}
                                 </Text>
                             </Card>
                         </Col>
-                        <Col flex="1">
-                            <Card
-                                size="small"
-                                style={{ textAlign: 'center', border: '1px solid #fff7e6', cursor: 'pointer', background: '#fff7e6' }}
-                                hoverable
-                                onClick={() => setErrorModal({
-                                    visible: true,
-                                    title: 'Misaligned Objects',
-                                    items: kpis.maItems
-                                })}
-                            >
-                                <Tooltip title="Accuracy Errors: The AI found the right object but placed the box inaccurately. Adjust the 'IoU' slider to set your precision standard.">
-                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Misaligned Objects</Text>
-                                </Tooltip>
-                                <Text strong style={{ fontSize: 20, color: '#fa8c16' }}>
-                                    {isSplit ? kpis.ma : 'N/A'}
-                                </Text>
-                            </Card>
-                        </Col>
+                        {!kpis.isUploadMode && (
+                            <Col flex="1">
+                                <Card
+                                    size="small"
+                                    style={{ textAlign: 'center', border: '1px solid #fff7e6', cursor: 'pointer', background: '#fff7e6' }}
+                                    hoverable
+                                    onClick={() => setErrorModal({
+                                        visible: true,
+                                        title: 'Misaligned Objects',
+                                        items: kpis.maItems
+                                    })}
+                                >
+                                    <Tooltip title="Accuracy Errors: The AI found the right object but placed the box inaccurately. Adjust the 'IoU' slider to set your precision standard.">
+                                        <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Misaligned Objects</Text>
+                                    </Tooltip>
+                                    <Text strong style={{ fontSize: 20, color: '#fa8c16' }}>
+                                        {kpis.ma}
+                                    </Text>
+                                </Card>
+                            </Col>
+                        )}
                         <Col flex="1">
                             <Card
                                 size="small"
@@ -717,22 +788,26 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                 hoverable
                                 onClick={() => setErrorModal({
                                     visible: true,
-                                    title: 'Missed Ground Truth Objects',
+                                    title: kpis.isUploadMode ? 'Manual Objects (AI Missed)' : 'Missed Ground Truth Objects',
                                     items: kpis.fnItems
                                 })}
                             >
-                                <Tooltip title="Unfound Objects: Actual objects the AI missed. 'Real' were never detected. 'Filtered' are hidden due to your current Confidence setting.">
+                                <Tooltip title={kpis.isUploadMode
+                                    ? "Blind Spots: Objects you had to draw manually because the AI ignored them."
+                                    : "Unfound Objects: Actual objects the AI missed."}>
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Missed Objects</Text>
                                 </Tooltip>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                     <Text strong style={{ fontSize: 20, color: '#faad14' }}>
-                                        {isSplit ? kpis.fn : 'N/A'}
+                                        {kpis.fn}
                                     </Text>
-                                    <Tooltip title={`'Real' (${kpis.fnReal}) were missed by the model. 'Filtered' (${kpis.fnFiltered}) were found but suppressed by your confidence settings.`}>
-                                        <Text type="secondary" style={{ fontSize: 9, cursor: 'help' }}>
-                                            {isSplit ? `${kpis.fnReal} Real / ${kpis.fnFiltered} Filtered` : ''}
-                                        </Text>
-                                    </Tooltip>
+                                    {(!kpis.isUploadMode) && (
+                                        <Tooltip title={`'Real' (${kpis.fnReal}) were missed by the model. 'Filtered' (${kpis.fnFiltered}) were found but suppressed by your confidence settings.`}>
+                                            <Text type="secondary" style={{ fontSize: 9, cursor: 'help' }}>
+                                                {`${kpis.fnReal} Real / ${kpis.fnFiltered} Filtered`}
+                                            </Text>
+                                        </Tooltip>
+                                    )}
                                 </div>
                             </Card>
                         </Col>
@@ -741,31 +816,35 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Tooltip title="Quality Score: Percentage of AI detections that were correct. High score means the model produces clean, reliable results.">
+                                <Tooltip title={kpis.isUploadMode
+                                    ? "Quality Audit: Percentage of AI detections you agreed with. Shows how 'clean' the model is on new images."
+                                    : "Quality Score: Percentage of AI detections that were correct."}>
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Precision</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 18, color: '#1890ff' }}>
-                                    {isSplit ? `${kpis.precision}%` : 'N/A'}
+                                    {`${kpis.precision}%`}
                                 </Text>
                             </Card>
                         </Col>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Tooltip title="Completion Score: Percentage of actual objects successfully found. High score means the model is not missing things.">
+                                <Tooltip title={kpis.isUploadMode
+                                    ? "Coverage Audit: Percentage of real objects successfully found. Shows how 'blind' the model is to new defects."
+                                    : "Completion Score: Percentage of actual objects successfully found."}>
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Recall</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 18, color: '#722ed1' }}>
-                                    {isSplit ? `${kpis.recall}%` : 'N/A'}
+                                    {`${kpis.recall}%`}
                                 </Text>
                             </Card>
                         </Col>
                         <Col flex="1">
                             <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Tooltip title="Stability Score: A weighted balance of Quality and Completion. Use this single metric to track overall model health.">
+                                <Tooltip title="Stability Score: A weighted balance of Quality and Coverage. Use this to track the overall model performance on this dataset.">
                                     <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>F1 Score</Text>
                                 </Tooltip>
                                 <Text strong style={{ fontSize: 18, color: '#13c2c2' }}>
-                                    {isSplit ? `${kpis.f1}%` : 'N/A'}
+                                    {`${kpis.f1}%`}
                                 </Text>
                             </Card>
                         </Col>
