@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
     Row, Col, Card, Space, Typography, Slider, Select,
-    Tag, Tooltip, Empty, Descriptions, Divider, Modal, List, Button
+    Tag, Tooltip, Empty, Descriptions, Divider, Modal, List, Button, Table
 } from 'antd';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-    ResponsiveContainer, LineChart, Line, Cell
+    ResponsiveContainer, LineChart, Line, Cell, Legend, ReferenceLine, Label
 } from 'recharts';
 import {
     FilterOutlined,
@@ -14,12 +14,16 @@ import {
     DatabaseOutlined,
     BarChartOutlined,
     LineChartOutlined,
-    WarningOutlined
+    WarningOutlined,
+    BulbOutlined,
+    SafetyCertificateOutlined,
+    ArrowUpOutlined,
+    OrderedListOutlined
 } from '@ant-design/icons';
 
 import { projectsAPI } from '../../../../../services/api';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 /**
  * ChartsView Component - Simple White Edition
@@ -53,9 +57,21 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         }
     }, [experiment?.id, isSplit]);
 
+    const getFileName = (path) => path ? path.split(/[\/\\]/).pop() : '';
+
     // --- 📐 Data Processing ---
     const processedData = useMemo(() => {
         if (!experiment?.predictions) return null;
+
+        // --- 0. Parse Metadata for Hashing & Normalize Keys ---
+        let rawMeta = experiment.input_images || {};
+        if (typeof rawMeta === 'string') {
+            try { rawMeta = JSON.parse(rawMeta); } catch (e) { rawMeta = {}; }
+        }
+        const hashLookup = {};
+        Object.entries(rawMeta).forEach(([path, hash]) => {
+            hashLookup[getFileName(path)] = hash;
+        });
 
         // --- 1. Confidence Thresholds ---
         const [minConf, maxConf] = [confRange[0] / 100, confRange[1] / 100];
@@ -85,10 +101,61 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             return 'large';
         };
 
+        // --- 3. Human Verification Mapping & Triple-Match ---
+        const vMap = {};
+        const humanDiscoveries = [];
+        const verifiedJunk = [];
+        const humanMissing = [];
+
+        verifications.forEach(v => {
+            const vFile = getFileName(v.image_name);
+            const vHash = v.image_hash_md5 || v.imageHashMd5;
+            const targetHash = hashLookup[vFile];
+
+            // Triple Match: ExpID (or name) + Name + Hash
+            const isExpMatch = String(v.experiment_id) === String(experiment.id) ||
+                (experiment.name && String(v.experiment_id) === String(experiment.name));
+
+            const isIdentityMatch = isExpMatch && vFile && vHash === targetHash;
+
+            if (isIdentityMatch) {
+                const cls = (v.class_name || 'Unknown').replace(/^Class\s+/i, '');
+                const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
+                if (!matchesClass) return;
+
+                // Find matching AI detection in THIS experiment
+                const predKey = Object.keys(experiment.predictions).find(k => getFileName(k) === vFile);
+                const imgDets = experiment.predictions[predKey] || [];
+
+                const matchedAI = imgDets.find(d =>
+                    d.bbox && v.bbox &&
+                    Math.abs(d.bbox[0] - v.bbox[0]) < 0.1 && Math.abs(d.bbox[1] - v.bbox[1]) < 0.1 &&
+                    Math.abs(d.bbox[2] - v.bbox[2]) < 0.1 && Math.abs(d.bbox[3] - v.bbox[3]) < 0.1
+                );
+
+                if (matchedAI) {
+                    // Only AI detections can have 'pass'/'fail' impact in the rawTP/FP loops
+                    if (v.status === 'pass' || v.status === 'fail') {
+                        vMap[`${vFile}|${v.bbox.join(',')}`] = v.status;
+                    }
+                } else if (v.status !== 'fail') {
+                    // No AI match + Not 'fail' status = User manually marked a missing object
+                    humanMissing.push({ ...v, type: 'Human Missing', class: cls });
+                }
+            }
+        });
+
         let tpList = [];
         let fpList = [];
         let fnList = [];
-        let totalGT = 0; // Initialize early to prevent ReferenceError
+        let totalGT = 0;
+
+        const calcStats = (tp, fp, fn) => {
+            const p = (tp + fp) > 0 ? (tp / (tp + fp)) * 100 : 0;
+            const r = (tp + fn) > 0 ? (tp / (tp + fn)) * 100 : 0;
+            const f1 = (p + r) > 0 ? (2 * p * r) / (p + r) : 0;
+            return { p: p.toFixed(1), r: r.toFixed(1), f1: f1.toFixed(1), pRaw: p, rRaw: r, f1Raw: f1 };
+        };
 
         if (qualityStats && qualityStats.has_ground_truth) {
             // ELITE MODE: Use Backend matched lists
@@ -151,14 +218,27 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
 
                 if (matchesClass && conf >= confRange[0] && conf <= confRange[1]) {
-                    // Find Global Index in original predictions array
+                    // Find Global Index
                     const originalArray = experiment.predictions[d.image || d.imgName] || [];
                     const gIdx = originalArray.findIndex(orig =>
                         orig.bbox && d.bbox &&
                         orig.bbox[0] === d.bbox[0] && orig.bbox[1] === d.bbox[1] &&
                         orig.bbox[2] === d.bbox[2] && orig.bbox[3] === d.bbox[3]
                     );
-                    fpList.push({ ...d, type: 'False Positive', reason: 'No Match', globalIdx: gIdx !== -1 ? gIdx + 1 : null });
+
+                    const vFile = getFileName(d.image || d.imgName);
+                    const key = `${vFile}|${d.bbox.join(',')}`;
+                    const status = vMap[key];
+                    const item = { ...d, class: cls, globalIdx: gIdx !== -1 ? gIdx + 1 : null };
+
+                    if (status === 'pass') {
+                        // HUMAN IMPACT: User says this "False Positive" is actually correct!
+                        humanDiscoveries.push(item);
+                        tpList.push({ ...item, type: 'True Positive', source: 'human' });
+                    } else {
+                        if (status === 'fail') verifiedJunk.push(item);
+                        fpList.push({ ...item, type: 'False Positive', reason: status === 'fail' ? 'Verified Junk' : 'No Match' });
+                    }
                 }
             });
 
@@ -230,7 +310,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
         const filteredTP = tpList.filter(i => filterItem(i));
         const filteredFP = fpList.filter(i => filterItem(i));
-        const filteredFN = fnList.filter(i => filterItem(i, true));
+        const filteredFN = [...fnList.filter(i => filterItem(i, true)), ...humanMissing];
 
         // Separating True False Positives from Misaligned ones
         const purelyFP = filteredFP.filter(i => i.type === 'False Positive');
@@ -247,13 +327,15 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         const ma = misaligned.length;
         const fn = filteredFN.length;
 
+        const globalMetrics = calcStats(tp, fp, fn);
+
         // Ratio Calculation: Numerator is ALL AI detections (TP+FP+MA) / Denominator is ALL GT objects
         const totalDetections = tp + fp + ma;
         const aiGTRatio = totalGT > 0 ? (totalDetections / totalGT).toFixed(2) : '0.00';
 
-        const precision = (tp + fp + ma) > 0 ? (tp / (tp + fp + ma)) * 100 : 0;
-        const recall = (tp + fn) > 0 ? (tp / (tp + fn)) * 100 : 0;
-        const f1 = (precision + recall) > 0 ? (2 * (precision * recall) / (precision + recall)) : 0;
+        const precision = globalMetrics.pRaw;
+        const recall = globalMetrics.rRaw;
+        const f1 = globalMetrics.f1Raw;
 
         const sizeDistrib = { tiny: 0, small: 0, medium: 0, large: 0 };
         // Distributions should show trends for ALL predictions (matched and unmatched)
@@ -270,25 +352,44 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
         // --- 6. Charts Data ---
         const classStats = {};
-        [...filteredTP, ...filteredFP].forEach(d => {
-            const rawCls = d.class || d.class_name;
-            const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
-            if (!classStats[cls]) classStats[cls] = { name: cls, total: 0, pass: 0, fail: 0 };
-            classStats[cls].total++;
-            if (d.type === 'True Positive') classStats[cls].pass++; else classStats[cls].fail++;
+        filteredTP.forEach(d => {
+            const cls = (d.class || d.class_name || 'Unknown').replace(/^Class\s+/i, '');
+            if (!classStats[cls]) classStats[cls] = { name: cls, tp: 0, fp: 0, fn: 0 };
+            classStats[cls].tp++;
+        });
+        filteredFP.forEach(d => {
+            const cls = (d.class || d.class_name || 'Unknown').replace(/^Class\s+/i, '');
+            if (!classStats[cls]) classStats[cls] = { name: cls, tp: 0, fp: 0, fn: 0 };
+            classStats[cls].fp++;
+        });
+        filteredFN.forEach(d => {
+            const cls = (d.class || d.class_name || 'Unknown').replace(/^Class\s+/i, '');
+            if (!classStats[cls]) classStats[cls] = { name: cls, tp: 0, fp: 0, fn: 0 };
+            classStats[cls].fn++;
         });
 
-        const stressCurve = [];
-        for (let t = 0.1; t <= 0.95; t += 0.05) {
-            let tPass = 0, tTotal = 0;
-            [...tpList, ...fpList].forEach(c => {
-                const conf = c.confidence || c.conf || 0;
+        const classTableData = Object.values(classStats).map(stat => {
+            const m = calcStats(stat.tp, stat.fp, stat.fn);
+            return { ...stat, precision: parseFloat(m.p), recall: parseFloat(m.r), f1: parseFloat(m.f1) };
+        }).sort((a, b) => b.f1 - a.f1);
+
+        const curveData = [];
+        for (let t = 0; t <= 1.0; t += 0.05) {
+            let tTP = 0, tFP = 0;
+            [...tpList, ...fpList].forEach(d => {
+                const conf = d.confidence || d.conf || 0;
                 if (conf >= t) {
-                    tTotal++;
-                    if (c.type === 'True Positive') tPass++;
+                    if (d.type === 'True Positive') tTP++; else tFP++;
                 }
             });
-            stressCurve.push({ threshold: t.toFixed(2), yield: tTotal > 0 ? ((tPass / tTotal) * 100).toFixed(1) : 0 });
+            const tFN = Math.max(0, totalGT - tTP);
+            const m = calcStats(tTP, tFP, tFN);
+            curveData.push({
+                threshold: parseFloat(t.toFixed(2)),
+                precision: parseFloat(m.p),
+                recall: parseFloat(m.r),
+                f1: parseFloat(m.f1)
+            });
         }
 
         // Available Classes Collection
@@ -302,27 +403,30 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         return {
             kpis: {
                 tp, fp, fn, ma, aiGTRatio, totalGT,
+                discoveries: humanDiscoveries.length,
+                junk: verifiedJunk.length,
                 fnReal: fnReal.length,
                 fnFiltered: fnFiltered.length,
-                precision: precision.toFixed(1),
-                recall: recall.toFixed(1),
-                f1: f1.toFixed(1),
+                precision: globalMetrics.p,
+                recall: globalMetrics.r,
+                f1: globalMetrics.f1,
                 sizeDistrib,
                 tpItems: filteredTP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 fpItems: purelyFP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 maItems: misaligned.map(i => ({ ...i, imgName: i.image || i.imgName })),
-                fnItems: filteredFN.map(i => ({ ...i, imgName: i.image || i.imgName }))
+                fnItems: filteredFN.map(i => ({ ...i, imgName: i.image || i.imgName || i.image_name })),
+                humanMissing: humanMissing.length
             },
-            classChart: Object.values(classStats),
-            stressCurve,
+            classChart: classTableData,
+            curveData,
             availableClasses: Array.from(availableClasses).filter(c => trainingClasses.length > 0 ? trainingClasses.includes(c) : true)
         };
     }, [experiment, verifications, qualityStats, confRange, iouThreshold, sizeSlice, selectedClasses, trainingClasses]);
 
     if (!processedData) return <Empty />;
 
-    const { kpis, classChart, stressCurve, availableClasses } = processedData;
-    const { tp, fp, ma, fn, totalGT } = kpis;
+    const { kpis, classChart, curveData, availableClasses } = processedData;
+    const { tp, fp, ma, fn, totalGT, discoveries, junk, humanMissing } = kpis;
 
     return (
         <div style={{ padding: '24px', background: '#fff' }}>
@@ -450,6 +554,42 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                 {/* --- Main Section --- */}
                 <Col xs={24} lg={18}>
+                    {/* --- NEW: Expert Reviews Impact Card --- */}
+                    {(discoveries > 0 || junk > 0 || humanMissing > 0) && (
+                        <Card size="small" style={{ marginBottom: 24, borderRadius: 8, border: '1px solid #e6f7ff', background: '#f0f9ff' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Space size="middle">
+                                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#1890ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <SafetyCertificateOutlined style={{ color: '#fff', fontSize: 20 }} />
+                                    </div>
+                                    <div>
+                                        <Title level={5} style={{ margin: 0 }}>Expert Verification Narrative</Title>
+                                        <Text type="secondary" style={{ fontSize: 12 }}>Human-in-the-loop corrections are actively improving these metrics.</Text>
+                                    </div>
+                                </Space>
+                                <Space split={<Divider type="vertical" />}>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <Text strong style={{ fontSize: 18, color: '#52c41a', display: 'block' }}>{discoveries}</Text>
+                                        <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Discoveries (✅ PASS)</Text>
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <Text strong style={{ fontSize: 18, color: '#ff4d4f', display: 'block' }}>{junk}</Text>
+                                        <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Confirmed Junk (❌ FAIL)</Text>
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <Text strong style={{ fontSize: 18, color: '#faad14', display: 'block' }}>{humanMissing}</Text>
+                                        <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Human Misses (🚩 ADDED)</Text>
+                                    </div>
+                                </Space>
+                            </div>
+                            <Divider style={{ margin: '12px 0' }} />
+                            <Text style={{ fontSize: 13 }}>
+                                <BulbOutlined style={{ color: '#faad14', marginRight: 8 }} />
+                                <strong>Context:</strong> Human reviews found <b>{discoveries}</b> discoveries, confirmed <b>{junk}</b> junk detections, and identified <b>{humanMissing}</b> missing objects that the AI completely overlooked.
+                            </Text>
+                        </Card>
+                    )}
+
                     {/* Dynamic Analytical Header */}
                     <div style={{ marginBottom: 20, padding: '0 8px' }}>
                         <Text strong style={{ fontSize: 16, color: '#1890ff', display: 'block', marginBottom: 4 }}>
@@ -608,43 +748,70 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     </Row>
 
                     <Row gutter={[16, 16]}>
-                        <Col span={12}>
-                            <Card title={
-                                <Tooltip title="Visualizes performance per class. 'Pass' is the ratio of True Positives to the total detections of that class.">
-                                    <Space style={{ cursor: 'help' }}><BarChartOutlined /> Class Matrix</Space>
-                                </Tooltip>
-                            } size="small">
-                                <div style={{ height: 250 }}>
-                                    <ResponsiveContainer>
-                                        <BarChart data={classChart} layout="vertical">
-                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                            <XAxis type="number" hide />
-                                            <YAxis dataKey="name" type="category" width={80} />
-                                            <RechartsTooltip />
-                                            <Bar dataKey="pass" fill="#52c41a" stackId="a" />
-                                            <Bar dataKey="total" fill="#f0f0f0" stackId="a" />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
+                        <Col xs={24} md={12}>
+                            <Card
+                                title={<Space><OrderedListOutlined />Performance Leaderboard (By Class)</Space>}
+                                bodyStyle={{ height: 400, overflow: 'auto' }}
+                            >
+                                <Table
+                                    dataSource={classChart}
+                                    pagination={false}
+                                    size="small"
+                                    rowKey="name"
+                                    columns={[
+                                        { title: 'Class', dataIndex: 'name', key: 'name', fixed: 'left' },
+                                        {
+                                            title: 'F1-Score',
+                                            dataIndex: 'f1',
+                                            key: 'f1',
+                                            sorter: (a, b) => a.f1 - b.f1,
+                                            render: (v) => (
+                                                <Space>
+                                                    <div style={{ width: 100, height: 8, background: '#f5f5f5', borderRadius: 4, overflow: 'hidden' }}>
+                                                        <div style={{ height: '100%', width: `${v}%`, background: v > 70 ? '#52c41a' : v > 40 ? '#faad14' : '#ff4d4f' }} />
+                                                    </div>
+                                                    <Text strong>{v}%</Text>
+                                                </Space>
+                                            )
+                                        },
+                                        { title: 'P', dataIndex: 'precision', key: 'precision', render: v => `${v}%` },
+                                        { title: 'R', dataIndex: 'recall', key: 'recall', render: v => `${v}%` }
+                                    ]}
+                                />
                             </Card>
                         </Col>
-                        <Col span={12}>
-                            <Card title={
-                                <Tooltip title="Shows how 'Yield' (model health) changes as you raise confidence. Steep drops mean the model is unconfident.">
-                                    <Space style={{ cursor: 'help' }}><LineChartOutlined /> Stress Curve</Space>
-                                </Tooltip>
-                            } size="small">
-                                <div style={{ height: 250 }}>
-                                    <ResponsiveContainer>
-                                        <LineChart data={stressCurve}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="threshold" />
-                                            <YAxis />
-                                            <RechartsTooltip />
-                                            <Line type="monotone" dataKey="yield" stroke="#1890ff" strokeWidth={2} dot={false} />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
+
+                        <Col xs={24} md={12}>
+                            <Card
+                                title={<Space><LineChartOutlined />P-R-F1 Balance Curve</Space>}
+                                bodyStyle={{ height: 400 }}
+                            >
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={curveData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                        <XAxis
+                                            dataKey="threshold"
+                                            label={{ value: 'Confidence Threshold', position: 'bottom', offset: 0 }}
+                                            tick={{ fontSize: 10 }}
+                                        />
+                                        <YAxis
+                                            domain={[0, 100]}
+                                            label={{ value: 'Score (%)', angle: -90, position: 'insideLeft' }}
+                                            tick={{ fontSize: 10 }}
+                                        />
+                                        <RechartsTooltip />
+                                        <Legend verticalAlign="top" height={36} />
+
+                                        {/* Dynamic Reference Line linked to Sidebar Slider */}
+                                        <ReferenceLine x={confRange[0] / 100} stroke="#1890ff" strokeDasharray="5 5">
+                                            <Label value="Filter" position="insideTopLeft" fill="#1890ff" fontSize={10} />
+                                        </ReferenceLine>
+
+                                        <Line type="monotone" dataKey="precision" stroke="#1890ff" strokeWidth={2} dot={false} name="Precision" />
+                                        <Line type="monotone" dataKey="recall" stroke="#52c41a" strokeWidth={2} dot={false} name="Recall" />
+                                        <Line type="monotone" dataKey="f1" stroke="#722ed1" strokeWidth={3} dot={false} name="F1-Score" />
+                                    </LineChart>
+                                </ResponsiveContainer>
                             </Card>
                         </Col>
                     </Row>

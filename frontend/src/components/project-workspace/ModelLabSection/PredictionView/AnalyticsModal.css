@@ -7,16 +7,17 @@
 }
 
 .analytics-modal .ant-modal-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-bottom: none;
+    background: #ffffff;
+    border-bottom: 1px solid #f0f0f0;
 }
 
 .analytics-modal .ant-modal-title {
-    color: white;
+    color: #262626;
+    font-weight: 700;
 }
 
 .analytics-modal .ant-modal-close-x {
-    color: white;
+    color: #8c8c8c;
 }
 
 /* ========== TABS STYLING ========== */
@@ -48,8 +49,8 @@
 }
 
 .analytics-tabs .ant-tabs-tab-active {
-    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-    border-radius: 8px 8px 0 0;
+    background: #ffffff;
+    border-bottom: 2px solid #1890ff;
 }
 
 /* ========== TAB CONTENT ========== */
@@ -425,7 +426,7 @@
     border: 1px solid rgba(255, 255, 255, 0.5) !important;
     border-radius: 16px !important;
     box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05) !important;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition: all 4s cubic-bezier(0.4, 0, 0.2, 1) !important;
     height: 100%;
     /* Important for balance */
     display: flex;

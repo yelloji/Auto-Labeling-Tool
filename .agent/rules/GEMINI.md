@@ -8,6 +8,22 @@ trigger: always_on
 
 ---
 
+## 🛑 ANTIGRAVITY SENIOR DEVELOPER PROTOCOL (P0)
+
+> [!IMPORTANT]
+> This is a large-scale codebase (~100,000 lines). Every change must be handled with extreme care. You MUST follow these rules at all times.
+
+1.  **ROOT CAUSE ANALYSIS**: Never provide random solutions. Always find the actual root cause, explain it in simple points, and wait for permission.
+2.  **NO UNAPPROVED CHANGES**: Never perform a code edit unless the user has explicitly said "Perform" or "Commence" after reviewing the explanation.
+3.  **MANDATORY AUDIT PHASE**: Every new task must start with a deep audit of the code to check for side effects.
+4.  **COMMUNICATION STYLE**: 
+    - Keep it short, simple, and point-based for fast reading.
+    - Talk like a human collaborator, not a robot.
+    - Be extremely concise by default. Only provide "Deep Details" if the user explicitly asks for them.
+5.  **NO JUMPING**: Proactivity is for research and explanation only. Execution requires a "Green Light."
+
+---
+
 ## CRITICAL: AGENT & SKILL PROTOCOL (START HERE)
 
 > **MANDATORY:** You MUST read the appropriate agent file and its skills BEFORE performing any implementation. This is the highest priority rule.
