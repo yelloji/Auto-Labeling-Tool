@@ -415,7 +415,10 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 fpItems: purelyFP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 maItems: misaligned.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 fnItems: filteredFN.map(i => ({ ...i, imgName: i.image || i.imgName || i.image_name })),
-                humanMissing: humanMissing.length
+                humanMissing: humanMissing.length,
+                discoveryItems: humanDiscoveries.map(i => ({ ...i, type: 'True Positive', imgName: i.image || i.imgName })),
+                junkItems: verifiedJunk.map(i => ({ ...i, type: 'False Positive', imgName: i.image || i.imgName })),
+                missingItems: humanMissing.map(i => ({ ...i, type: 'Human Missing', imgName: (i.image || i.imgName || i.image_name || '').split('/').pop() }))
             },
             classChart: classTableData,
             curveData,
@@ -568,15 +571,36 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     </div>
                                 </Space>
                                 <Space split={<Divider type="vertical" />}>
-                                    <div style={{ textAlign: 'center' }}>
+                                    <div
+                                        style={{ textAlign: 'center', cursor: 'pointer' }}
+                                        onClick={() => setErrorModal({
+                                            visible: true,
+                                            title: 'Human Discoveries (Confirmed TP)',
+                                            items: kpis.discoveryItems
+                                        })}
+                                    >
                                         <Text strong style={{ fontSize: 18, color: '#52c41a', display: 'block' }}>{discoveries}</Text>
                                         <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Discoveries (✅ PASS)</Text>
                                     </div>
-                                    <div style={{ textAlign: 'center' }}>
+                                    <div
+                                        style={{ textAlign: 'center', cursor: 'pointer' }}
+                                        onClick={() => setErrorModal({
+                                            visible: true,
+                                            title: 'Confirmed Junk (Human-Verified FP)',
+                                            items: kpis.junkItems
+                                        })}
+                                    >
                                         <Text strong style={{ fontSize: 18, color: '#ff4d4f', display: 'block' }}>{junk}</Text>
                                         <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Confirmed Junk (❌ FAIL)</Text>
                                     </div>
-                                    <div style={{ textAlign: 'center' }}>
+                                    <div
+                                        style={{ textAlign: 'center', cursor: 'pointer' }}
+                                        onClick={() => setErrorModal({
+                                            visible: true,
+                                            title: 'Human-Identified Misses (Manual Boxes)',
+                                            items: kpis.missingItems
+                                        })}
+                                    >
                                         <Text strong style={{ fontSize: 18, color: '#faad14', display: 'block' }}>{humanMissing}</Text>
                                         <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Human Misses (🚩 ADDED)</Text>
                                     </div>
