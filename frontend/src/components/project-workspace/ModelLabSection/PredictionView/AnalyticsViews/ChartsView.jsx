@@ -5,7 +5,8 @@ import {
 } from 'antd';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-    ResponsiveContainer, LineChart, Line, Cell, Legend, ReferenceLine, Label
+    ResponsiveContainer, LineChart, Line, Cell, Legend, ReferenceLine, Label,
+    PieChart, Pie
 } from 'recharts';
 import {
     FilterOutlined,
@@ -18,7 +19,8 @@ import {
     BulbOutlined,
     SafetyCertificateOutlined,
     ArrowUpOutlined,
-    OrderedListOutlined
+    OrderedListOutlined,
+    PlusSquareOutlined
 } from '@ant-design/icons';
 
 import { projectsAPI } from '../../../../../services/api';
@@ -105,6 +107,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         const vMap = {};
         const humanDiscoveries = [];
         const verifiedAlarms = [];
+        const humanConfirmations = [];
         const humanMissing = [];
 
         verifications.forEach(v => {
@@ -186,7 +189,13 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                     if (conf >= confRange[0] && conf <= confRange[1]) {
                         if (iou >= iouThreshold) {
-                            tpList.push({ ...d, type: 'True Positive', globalIdx: gIdx !== -1 ? gIdx + 1 : null });
+                            const vFile = getFileName(d.image || d.imgName);
+                            const key = `${vFile}|${d.bbox.join(',')}`;
+                            const status = vMap[key];
+                            const item = { ...d, type: 'True Positive', globalIdx: gIdx !== -1 ? gIdx + 1 : null };
+
+                            if (status === 'pass') humanConfirmations.push(item);
+                            tpList.push(item);
                         } else {
                             // It matched GT, but is misaligned!
                             fpList.push({ ...d, type: 'Misaligned', reason: 'Low IoU', globalIdx: gIdx !== -1 ? gIdx + 1 : null });
@@ -266,7 +275,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                 fpList.push({ ...item, type: 'False Positive', reason: 'Verified Alarm' });
                             } else {
                                 // Assumed Correct (or Pass)
-                                if (status === 'pass') humanDiscoveries.push(item);
+                                if (status === 'pass') humanConfirmations.push(item);
                                 tpList.push({ ...item, type: 'True Positive' });
                             }
                         } else if (conf >= 10) {
@@ -318,6 +327,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
         const filteredDiscoveries = humanDiscoveries.filter(i => filterItem(i));
         const filteredAlarms = verifiedAlarms.filter(i => filterItem(i));
+        const filteredConfirmations = humanConfirmations.filter(i => filterItem(i));
 
 
         // --- 5. Metrics & Distributions ---
@@ -422,6 +432,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 tp, fp, fn, ma, aiGTRatio, totalGT,
                 discoveries: filteredDiscoveries.length,
                 verifiedAlarms: filteredAlarms.length,
+                confirmations: filteredConfirmations.length,
                 humanMissing: humanMissing.filter(i => filterItem(i, true)).length,
                 fnReal: fnReal.length,
                 fnFiltered: fnFiltered.length,
@@ -435,6 +446,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 fnItems: filteredFN.map(i => ({ ...i, imgName: i.image || i.imgName || i.image_name })),
                 discoveryItems: filteredDiscoveries.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 alarmItems: filteredAlarms.map(i => ({ ...i, imgName: i.image || i.imgName })),
+                confirmationItems: filteredConfirmations.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 missingItems: humanMissing.filter(i => filterItem(i, true)).map(i => ({ ...i, type: 'Human Missing', imgName: (i.image || i.imgName || i.image_name || '').split('/').pop() })),
                 isUploadMode,
                 healthScore: healthScore.toFixed(1),
@@ -442,7 +454,13 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     { name: 'Successful Matches', value: tp, color: '#52c41a', key: 'tp' },
                     { name: 'Misaligned Objects', value: ma, color: '#fa8c16', key: 'ma' },
                     { name: 'Undetected (Missed)', value: fn, color: '#faad14', key: 'fn' }
-                ].filter(i => isUploadMode ? i.key !== 'ma' : true)
+                ].filter(i => isUploadMode ? i.key !== 'ma' : true),
+                roiData: [
+                    { name: 'Confirmations', value: filteredConfirmations.length, color: '#1890ff', key: 'conf' },
+                    { name: 'Discoveries', value: filteredDiscoveries.length, color: '#52c41a', key: 'disc' },
+                    { name: 'False Alarms', value: filteredAlarms.length, color: '#ff4d4f', key: 'alarm' },
+                    { name: 'Human Misses', value: humanMissing.filter(i => filterItem(i, true)).length, color: '#faad14', key: 'miss' }
+                ].filter(i => i.value > 0)
             },
             classChart: classTableData,
             curveData,
@@ -585,61 +603,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 {/* --- Main Section --- */}
                 <Col xs={24} lg={18}>
                     {/* --- NEW: Expert Reviews Impact Card --- */}
-                    {(discoveries > 0 || verifiedAlarms > 0 || humanMissing > 0) && (
-                        <Card size="small" style={{ marginBottom: 24, borderRadius: 8, border: '1px solid #e6f7ff', background: '#f0f9ff' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Space size="middle">
-                                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#1890ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <SafetyCertificateOutlined style={{ color: '#fff', fontSize: 20 }} />
-                                    </div>
-                                    <div>
-                                        <Title level={5} style={{ margin: 0 }}>Expert Verification Narrative</Title>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>Human-in-the-loop corrections are actively improving these metrics.</Text>
-                                    </div>
-                                </Space>
-                                <Space split={<Divider type="vertical" />}>
-                                    <div
-                                        style={{ textAlign: 'center', cursor: 'pointer' }}
-                                        onClick={() => setErrorModal({
-                                            visible: true,
-                                            title: 'Human Discoveries (Confirmed TP)',
-                                            items: kpis.discoveryItems
-                                        })}
-                                    >
-                                        <Text strong style={{ fontSize: 18, color: '#52c41a', display: 'block' }}>{discoveries}</Text>
-                                        <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Discoveries (✅ PASS)</Text>
-                                    </div>
-                                    <div
-                                        style={{ textAlign: 'center', cursor: 'pointer' }}
-                                        onClick={() => setErrorModal({
-                                            visible: true,
-                                            title: 'Verified False Alarms (Human-Confirmed FP)',
-                                            items: kpis.alarmItems
-                                        })}
-                                    >
-                                        <Text strong style={{ fontSize: 18, color: '#ff4d4f', display: 'block' }}>{verifiedAlarms}</Text>
-                                        <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>False Alarms (❌ FAIL)</Text>
-                                    </div>
-                                    <div
-                                        style={{ textAlign: 'center', cursor: 'pointer' }}
-                                        onClick={() => setErrorModal({
-                                            visible: true,
-                                            title: 'Human-Identified Misses (Manual Boxes)',
-                                            items: kpis.missingItems
-                                        })}
-                                    >
-                                        <Text strong style={{ fontSize: 18, color: '#faad14', display: 'block' }}>{humanMissing}</Text>
-                                        <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Human Misses (🚩 ADDED)</Text>
-                                    </div>
-                                </Space>
-                            </div>
-                            <Divider style={{ margin: '12px 0' }} />
-                            <Text style={{ fontSize: 13 }}>
-                                <BulbOutlined style={{ color: '#faad14', marginRight: 8 }} />
-                                <strong>Context:</strong> Human reviews found <b>{discoveries}</b> discoveries, verified <b>{verifiedAlarms}</b> false alarms, and identified <b>{humanMissing}</b> missing objects that the AI completely overlooked.
-                            </Text>
-                        </Card>
-                    )}
+
 
                     {/* Dynamic Analytical Header */}
                     <div style={{ marginBottom: 20, padding: '0 8px' }}>
@@ -855,6 +819,122 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             </Card>
                         </Col>
                     </Row>
+
+                    {(discoveries > 0 || verifiedAlarms > 0 || humanMissing > 0 || kpis.confirmations > 0) && (
+                        <Card size="small" style={{ marginBottom: 24, borderRadius: 8, border: '1px solid #e6f7ff', background: '#f0f9ff' }}>
+                            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+                                {/* Left Side: Mini Donut ROI */}
+                                <div style={{ width: 100, textAlign: 'center' }}>
+                                    <div style={{ height: 100, position: 'relative' }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={kpis.roiData}
+                                                    innerRadius={30}
+                                                    outerRadius={45}
+                                                    paddingAngle={2}
+                                                    dataKey="value"
+                                                    stroke="none"
+                                                >
+                                                    {kpis.roiData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                                    ))}
+                                                </Pie>
+                                                <RechartsTooltip />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                                            <Text strong style={{ fontSize: 16, display: 'block' }}>
+                                                {kpis.roiData.reduce((acc, curr) => acc + curr.value, 0)}
+                                            </Text>
+                                            <Text type="secondary" style={{ fontSize: 8 }}>SAVED</Text>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Right Side: Dynamic Narrative & Metrics */}
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <div>
+                                            <Title level={5} style={{ margin: 0 }}>Expert Verification Narrative</Title>
+                                            <Text type="secondary" style={{ fontSize: 11 }}>Human-in-the-loop corrections are actively improving the model "Mark."</Text>
+                                        </div>
+                                        <Space split={<Divider type="vertical" />}>
+                                            <div
+                                                style={{ textAlign: 'center', cursor: 'pointer' }}
+                                                onClick={() => setErrorModal({
+                                                    visible: true,
+                                                    title: 'AI Confirmations (Validated Findings)',
+                                                    items: kpis.confirmationItems
+                                                })}
+                                            >
+                                                <Text strong style={{ fontSize: 18, color: '#1890ff', display: 'block' }}>{kpis.confirmations}</Text>
+                                                <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Confirmations</Text>
+                                            </div>
+                                            <div
+                                                style={{ textAlign: 'center', cursor: 'pointer' }}
+                                                onClick={() => setErrorModal({
+                                                    visible: true,
+                                                    title: 'Human Discoveries (Confirmed TP)',
+                                                    items: kpis.discoveryItems
+                                                })}
+                                            >
+                                                <Text strong style={{ fontSize: 18, color: '#52c41a', display: 'block' }}>{discoveries}</Text>
+                                                <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Discoveries</Text>
+                                            </div>
+                                            <div
+                                                style={{ textAlign: 'center', cursor: 'pointer' }}
+                                                onClick={() => setErrorModal({
+                                                    visible: true,
+                                                    title: 'Verified False Alarms (Cleanup)',
+                                                    items: kpis.alarmItems
+                                                })}
+                                            >
+                                                <Text strong style={{ fontSize: 18, color: '#ff4d4f', display: 'block' }}>{verifiedAlarms}</Text>
+                                                <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>False Alarms</Text>
+                                            </div>
+                                            <div
+                                                style={{ textAlign: 'center', cursor: 'pointer' }}
+                                                onClick={() => setErrorModal({
+                                                    visible: true,
+                                                    title: 'Human Misses (Manual Boxes)',
+                                                    items: kpis.missingItems
+                                                })}
+                                            >
+                                                <Text strong style={{ fontSize: 18, color: '#faad14', display: 'block' }}>{humanMissing}</Text>
+                                                <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Human Misses</Text>
+                                            </div>
+                                        </Space>
+                                    </div>
+                                    <Divider style={{ margin: '8px 0' }} />
+                                    <List
+                                        size="small"
+                                        split={false}
+                                        dataSource={[
+                                            { icon: <CloudSyncOutlined style={{ color: '#1890ff' }} />, text: `Validated ${kpis.confirmations} AI finding${kpis.confirmations === 1 ? '' : 's'} as correct.` },
+                                            { icon: <BulbOutlined style={{ color: '#52c41a' }} />, text: `AI successfully found ${discoveries} real target${discoveries === 1 ? '' : 's'} missed in the initial training labels.` },
+                                            { icon: <WarningOutlined style={{ color: '#ff4d4f' }} />, text: `Verified ${verifiedAlarms} AI finding${verifiedAlarms === 1 ? '' : 's'} as false alarm${verifiedAlarms === 1 ? '' : 's'}.` },
+                                            { icon: <PlusSquareOutlined style={{ color: '#faad14' }} />, text: `Identified ${humanMissing} target${humanMissing === 1 ? '' : 's'} missed by both training labels and AI findings.` }
+                                        ].filter(item => {
+                                            if (item.text.includes('Validated')) return kpis.confirmations > 0;
+                                            if (item.text.includes('successfully found')) return discoveries > 0;
+                                            if (item.text.includes('false alarm')) return verifiedAlarms > 0;
+                                            if (item.text.includes('Identified')) return humanMissing > 0;
+                                            return false;
+                                        })}
+                                        renderItem={item => (
+                                            <List.Item style={{ padding: '2px 0' }}>
+                                                <Space>
+                                                    {item.icon}
+                                                    <Text style={{ fontSize: 12 }}>{item.text}</Text>
+                                                </Space>
+                                            </List.Item>
+                                        )}
+                                    />
+                                </div>
+                            </div>
+                        </Card>
+                    )}
 
                     <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
                         <Col flex="1">
