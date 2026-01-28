@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
     Row, Col, Card, Space, Typography, Slider, Select,
-    Tag, Tooltip, Empty, Descriptions, Divider, Modal, List, Button, Table, Badge
+    Tag, Tooltip, Empty, Descriptions, Divider, Modal, List, Button, Table, Badge, Segmented
 } from 'antd';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-    ResponsiveContainer, LineChart, Line, Cell, Legend, ReferenceLine, Label,
+    ResponsiveContainer, LineChart, Line, AreaChart, Area, ComposedChart, Cell, Legend, ReferenceLine, Label, ReferenceArea,
     PieChart, Pie
 } from 'recharts';
 import {
@@ -20,7 +20,8 @@ import {
     SafetyCertificateOutlined,
     ArrowUpOutlined,
     OrderedListOutlined,
-    PlusSquareOutlined
+    PlusSquareOutlined,
+    SearchOutlined
 } from '@ant-design/icons';
 
 import { projectsAPI } from '../../../../../services/api';
@@ -37,6 +38,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
     const [iouThreshold, setIouThreshold] = useState(30); // New: Dynamic IOU (30 = 0.3)
     const [sizeSlice, setSizeSlice] = useState('all');
     const [selectedClasses, setSelectedClasses] = useState([]); // Empty = All
+    const [stressStrategy, setStressStrategy] = useState('balanced'); // safe | balanced | aggressive
 
     const [qualityStats, setQualityStats] = useState(null);
     const [loadingQuality, setLoadingQuality] = useState(false);
@@ -151,6 +153,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         let tpList = [];
         let fpList = [];
         let fnList = [];
+        let simPoolTP = []; // GLOBAL POOL: Ignores confidence filter
+        let simPoolFP = []; // GLOBAL POOL: Ignores confidence filter
         let totalGT = 0;
         let aiGTRatio = '0.00';
 
@@ -179,7 +183,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
 
                 if (matchesClass) {
-                    // Find Global Index in original predictions array
+                    // Find Global Index
                     const originalArray = experiment.predictions[d.image || d.imgName] || [];
                     const gIdx = originalArray.findIndex(orig =>
                         orig.bbox && d.bbox &&
@@ -187,21 +191,26 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         orig.bbox[2] === d.bbox[2] && orig.bbox[3] === d.bbox[3]
                     );
 
+                    const item = { ...d, type: 'True Positive', globalIdx: gIdx !== -1 ? gIdx + 1 : null };
+
+                    // Add to Simulation Pool (Unfiltered by confidence)
+                    if (iou >= iouThreshold) {
+                        simPoolTP.push(item);
+                    } else {
+                        simPoolFP.push({ ...item, type: 'Misaligned', reason: 'Low IoU' });
+                    }
+
                     if (conf >= confRange[0] && conf <= confRange[1]) {
                         if (iou >= iouThreshold) {
                             const vFile = getFileName(d.image || d.imgName);
                             const key = `${vFile}|${d.bbox.join(',')}`;
                             const status = vMap[key];
-                            const item = { ...d, type: 'True Positive', globalIdx: gIdx !== -1 ? gIdx + 1 : null };
-
                             if (status === 'pass') humanConfirmations.push(item);
                             tpList.push(item);
                         } else {
-                            // It matched GT, but is misaligned!
                             fpList.push({ ...d, type: 'Misaligned', reason: 'Low IoU', globalIdx: gIdx !== -1 ? gIdx + 1 : null });
                         }
                     } else {
-                        // DYNAMIC FN: Suppressed by confidence slider = Missing Ground Truth
                         fnList.push({ ...d, type: 'Missed (Low Confidence)', globalIdx: gIdx !== -1 ? gIdx + 1 : null });
                     }
                 }
@@ -216,7 +225,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
                 const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
 
-                if (matchesClass && conf >= confRange[0] && conf <= confRange[1]) {
+                if (matchesClass) {
                     // Find Global Index
                     const originalArray = experiment.predictions[d.image || d.imgName] || [];
                     const gIdx = originalArray.findIndex(orig =>
@@ -230,13 +239,21 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     const status = vMap[key];
                     const item = { ...d, class: cls, globalIdx: gIdx !== -1 ? gIdx + 1 : null };
 
+                    // Add to Simulation Pool (Regardless of filter)
                     if (status === 'pass') {
-                        // HUMAN IMPACT: User says this "False Positive" is actually correct!
-                        humanDiscoveries.push(item);
-                        tpList.push({ ...item, type: 'True Positive', source: 'human' });
+                        simPoolTP.push({ ...item, type: 'True Positive', source: 'human' });
                     } else {
-                        if (status === 'fail') verifiedAlarms.push(item);
-                        fpList.push({ ...item, type: 'False Positive', reason: status === 'fail' ? 'Verified Alarm' : 'No Match' });
+                        simPoolFP.push({ ...item, type: 'False Positive', reason: 'No Match' });
+                    }
+
+                    if (conf >= confRange[0] && conf <= confRange[1]) {
+                        if (status === 'pass') {
+                            humanDiscoveries.push(item);
+                            tpList.push({ ...item, type: 'True Positive', source: 'human' });
+                        } else {
+                            if (status === 'fail') verifiedAlarms.push(item);
+                            fpList.push({ ...item, type: 'False Positive', reason: status === 'fail' ? 'Verified Alarm' : 'No Match' });
+                        }
                     }
                 }
             });
@@ -257,32 +274,35 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     const matchesClass = selectedClasses.length === 0 || selectedClasses.includes(cls);
 
                     if (matchesClass) {
+                        const originalArray = experiment.predictions[imgName] || [];
+                        const gIdx = originalArray.findIndex(orig =>
+                            orig.bbox && d.bbox &&
+                            orig.bbox[0] === d.bbox[0] && orig.bbox[1] === d.bbox[1] &&
+                            orig.bbox[2] === d.bbox[2] && orig.bbox[3] === d.bbox[3]
+                        );
+
+                        const key = `${fileName}|${d.bbox.join(',')}`;
+                        const status = vMap[key];
+                        const item = { ...d, class: cls, imgName: fileName, globalIdx: gIdx !== -1 ? gIdx + 1 : null };
+
+                        // --- Add to Simulation Pool (Regardless of UI filters) ---
+                        if (status === 'fail') {
+                            simPoolFP.push({ ...item, type: 'False Positive', reason: 'Verified Alarm' });
+                        } else {
+                            simPoolTP.push({ ...item, type: 'True Positive' });
+                        }
+
+                        // --- UI Filtering Logic ---
                         if (conf >= confRange[0] && conf <= confRange[1]) {
-                            // Find Global Index
-                            const originalArray = experiment.predictions[imgName] || [];
-                            const gIdx = originalArray.findIndex(orig =>
-                                orig.bbox && d.bbox &&
-                                orig.bbox[0] === d.bbox[0] && orig.bbox[1] === d.bbox[1] &&
-                                orig.bbox[2] === d.bbox[2] && orig.bbox[3] === d.bbox[3]
-                            );
-
-                            const key = `${fileName}|${d.bbox.join(',')}`;
-                            const status = vMap[key];
-                            const item = { ...d, class: cls, imgName: fileName, globalIdx: gIdx !== -1 ? gIdx + 1 : null };
-
                             if (status === 'fail') {
                                 verifiedAlarms.push(item);
                                 fpList.push({ ...item, type: 'False Positive', reason: 'Verified Alarm' });
                             } else {
-                                // Assumed Correct (or Pass)
                                 if (status === 'pass') humanConfirmations.push(item);
                                 tpList.push({ ...item, type: 'True Positive' });
                             }
                         } else if (conf >= 10) {
-                            // Baseline Suppression: This is a real object found at 10% conf, but hidden by current slider.
-                            // It counts towards "Missed Ground Truth" to keep the denominator static.
-                            const key = `${fileName}|${d.bbox.join(',')}`;
-                            if (vMap[key] !== 'fail') {
+                            if (status !== 'fail') {
                                 fnList.push({ ...d, class: cls, type: 'Missed (Low Confidence)' });
                             }
                         }
@@ -386,24 +406,169 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             return { ...stat, precision: parseFloat(m.p), recall: parseFloat(m.r), f1: parseFloat(m.f1) };
         }).sort((a, b) => b.f1 - a.f1);
 
-        const curveData = [];
-        for (let t = 0; t <= 1.0; t += 0.05) {
-            let tTP = 0, tFP = 0;
-            [...tpList, ...fpList].forEach(d => {
-                const conf = d.confidence || d.conf || 0;
-                if (conf >= t) {
-                    if (d.type === 'True Positive') tTP++; else tFP++;
+        // --- 7. INDUSTRIAL PERFORMANCE ENGINE (FINAL SPEC v1.0) ---
+        // Constants from grqaph-finla.md
+        const CONF_STEP = 0.05;
+        const MIN_AUTOMATION = 0.15;
+        const W_TP = 2, W_FP = 1, W_FN = 10;
+
+        const pRows = [];
+        const CONF_LIST = [];
+        for (let t = CONF_STEP; t <= 0.951; t += CONF_STEP) CONF_LIST.push(parseFloat(t.toFixed(2)));
+
+        // Greedy-like Simulation using pre-matched backend data
+        const totalGTCount = simPoolTP.length + fnList.length;
+
+        CONF_LIST.forEach(t => {
+            const tTPs = simPoolTP.filter(d => (d.confidence || d.conf || 0) >= t);
+            const tFPs = simPoolFP.filter(d => (d.confidence || d.conf || 0) >= t);
+
+            const tpCount = tTPs.length;
+            const fpCount = tFPs.length;
+            const fnCount = Math.max(0, totalGTCount - tpCount);
+
+            const automation = totalGTCount > 0 ? (tpCount / totalGTCount) : 0;
+            const score = (W_TP * tpCount) - (W_FP * fpCount) - (W_FN * fnCount);
+            const tpIoUs = tTPs.map(d => d.matched_iou || 0).filter(v => v > 0);
+
+            pRows.push({ t, tp: tpCount, fp: fpCount, fn: fnCount, automation, score, tpIoUs });
+        });
+
+        // 7.1 Silent zones (automation < 15%)
+        const silentZones = [];
+        let currentZone = null;
+        pRows.forEach(r => {
+            if (r.automation < MIN_AUTOMATION) {
+                if (!currentZone) currentZone = { from: r.t, to: r.t };
+                else currentZone.to = r.t;
+            } else {
+                if (currentZone) { silentZones.push(currentZone); currentZone = null; }
+            }
+        });
+        if (currentZone) silentZones.push(currentZone);
+
+        // 7.2 Model Ceiling (Industrial Stablility Rule)
+        const validRows = pRows.filter(r => r.automation >= MIN_AUTOMATION);
+        let modelCeiling = { t: null, drop: 0, rule: 'fallback' };
+        if (validRows.length >= 2) {
+            const aMax = Math.max(...validRows.map(r => r.automation));
+            const dropTrigger = Math.max(0.10, 0.25 * aMax);
+
+            let firstMaterialDrop = null;
+            let maxDrop = { t: null, val: -1 };
+
+            for (let i = 0; i < validRows.length - 1; i++) {
+                const drop = validRows[i].automation - validRows[i + 1].automation;
+
+                // Track max drop for fallback
+                if (drop > maxDrop.val) {
+                    maxDrop = { t: validRows[i + 1].t, val: drop };
                 }
-            });
-            const tFN = Math.max(0, totalGT - tTP);
-            const m = calcStats(tTP, tFP, tFN);
-            curveData.push({
-                threshold: parseFloat(t.toFixed(2)),
-                precision: parseFloat(m.p),
-                recall: parseFloat(m.r),
-                f1: parseFloat(m.f1)
-            });
+
+                // Stage B: Find EARLIEST material collapse
+                if (!firstMaterialDrop && drop >= dropTrigger) {
+                    firstMaterialDrop = { t: validRows[i + 1].t, val: drop };
+                }
+            }
+
+            if (firstMaterialDrop) {
+                modelCeiling = { t: firstMaterialDrop.t, drop: firstMaterialDrop.val, rule: 'material' };
+            } else {
+                modelCeiling = { t: maxDrop.t, drop: maxDrop.val, rule: 'fallback' };
+            }
         }
+
+        // 7.3 Mode Logic (Expert System v2)
+        let productionChosen = null;
+        if (validRows.length > 0) {
+            productionChosen = validRows.reduce((prev, curr) => (curr.score >= prev.score) ? curr : prev);
+        }
+
+        let retrainTargets = null;
+        if (validRows.length > 0) {
+            const preWall = modelCeiling.t !== null ? validRows.filter(r => r.t <= modelCeiling.t) : validRows;
+            const targetRow = preWall.reduce((prev, curr) => (curr.score >= prev.score) ? curr : prev);
+            const p75 = (arr) => {
+                if (!arr || arr.length === 0) return 0;
+                const sorted = [...arr].sort((a, b) => a - b);
+                const pos = (sorted.length - 1) * 0.75;
+                const base = Math.floor(pos);
+                if (sorted[base + 1] !== undefined) return sorted[base] + (pos - base) * (sorted[base + 1] - sorted[base]);
+                return sorted[base];
+            };
+            retrainTargets = { confidence: targetRow.t, iou: p75(targetRow.tpIoUs), row: targetRow };
+        }
+
+        const generateBriefing = (mode) => {
+            if (validRows.length === 0) {
+                // FAILURE ANALYSIS (Industrial Honest)
+                const bullets = [
+                    "Hard rule: below 15% Automation is REJECTED ⚠️ (Silent Model).",
+                    "No deployable threshold found: automation never reaches 15% at any confidence.",
+                    "This is a Silent Model: the system cannot deliver operational utility.",
+                    "Next action: retraining required (increase recall/coverage)."
+                ];
+                const minConfRow = pRows.find(r => r.t === CONF_STEP);
+                if (minConfRow) {
+                    if (minConfRow.tp === 0) bullets.push("Model is blind: produces no correct matches even at minimum confidence.");
+                    else bullets.push("Model is weak: produces some matches but far below the utility floor.");
+                }
+                return bullets;
+            }
+
+            const bullets = ["Hard rule: below 15% Automation is REJECTED ⚠️ (Silent Model)."];
+            if (mode === 'production' && productionChosen) {
+                const c = productionChosen;
+                const ceilingT = modelCeiling.t !== null ? (modelCeiling.t * 100).toFixed(0) : 'N/A';
+                bullets.push(`MODEL CEILING 🛑 at ~${ceilingT}%: TP collapses beyond this point.`);
+                bullets.push(`Production setting: ${(c.t * 100).toFixed(0)}% confidence.`);
+                bullets.push(`At ${(c.t * 100).toFixed(0)}%: TP=${c.tp}, FP=${c.fp}, FN=${c.fn} → Automation=${(c.automation * 100).toFixed(0)}%.`);
+
+                // Neighbor Deltas
+                const tLow = parseFloat((c.t - CONF_STEP).toFixed(2));
+                const tHigh = parseFloat((c.t + CONF_STEP).toFixed(2));
+                const rLow = pRows.find(r => r.t === tLow);
+                const rHigh = pRows.find(r => r.t === tHigh);
+
+                if (rLow) {
+                    const dtp_down = rLow.tp - c.tp;
+                    const dfp_down = rLow.fp - c.fp;
+                    if (dfp_down > dtp_down) {
+                        bullets.push(`Why not lower (${(tLow * 100).toFixed(0)}%): FP rises faster than TP (more false alarms than value).`);
+                    } else {
+                        bullets.push(`Why not lower (${(tLow * 100).toFixed(0)}%): only small TP gain with higher FP cost.`);
+                    }
+                }
+                if (rHigh) {
+                    bullets.push(`Why not higher (${(tHigh * 100).toFixed(0)}%): FN increases and Automation drops (more missed defects).`);
+                }
+
+            } else if (retrainTargets) {
+                const rt = retrainTargets;
+                if (modelCeiling.t !== null) {
+                    bullets.push(`MODEL CEILING 🛑 at ~${(modelCeiling.t * 100).toFixed(0)}% (Automation drop ${(modelCeiling.drop * 100).toFixed(0)}%).`);
+                }
+                bullets.push(`TargetConfidence (pre-wall): ${(rt.confidence * 100).toFixed(0)}% (best usable region before collapse).`);
+                bullets.push(`At ${(rt.confidence * 100).toFixed(0)}%: TP=${rt.row.tp}, FP=${rt.row.fp}, FN=${rt.row.fn} → Automation=${(rt.row.automation * 100).toFixed(0)}%.`);
+
+                if (rt.iou > 0) bullets.push(`TargetIoU: ${rt.iou.toFixed(2)} (box quality goal for next training).`);
+                else bullets.push("TargetIoU: not available (not enough matched TP IoUs).");
+
+                if (rt.row.fn / totalGTCount > 0.50) {
+                    bullets.push("Diagnosis: Recall/Coverage limit (many missed defects).");
+                } else {
+                    bullets.push("Diagnosis: Improve confidence strength to push ceiling right.");
+                }
+            }
+            return bullets;
+        };
+
+        const engineState = {
+            gt_total: totalGTCount, rows: pRows, silent_zones: silentZones,
+            model_ceiling: modelCeiling, production: productionChosen, retrain: retrainTargets,
+            briefing: { production: generateBriefing('production'), retrain: generateBriefing('retrain') },
+            status: validRows.length > 0 ? 'ok' : 'no_recommendation'
+        };
 
         // --- 6. AI Detection Health Score ---
         const gStats = calcStats(filteredTP.length, purelyFP.length, filteredFN.length);
@@ -429,7 +594,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
         return {
             kpis: {
-                tp, fp, fn, ma, aiGTRatio, totalGT,
+                tp, fp, fn, ma, aiGTRatio, totalGT: totalGTCount,
                 discoveries: filteredDiscoveries.length,
                 verifiedAlarms: filteredAlarms.length,
                 confirmations: filteredConfirmations.length,
@@ -440,6 +605,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 recall: globalMetrics.r,
                 f1: globalMetrics.f1,
                 sizeDistrib,
+                engineState, // NEW: Industrial Engine State
                 tpItems: filteredTP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 fpItems: purelyFP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 maItems: misaligned.map(i => ({ ...i, imgName: i.image || i.imgName })),
@@ -463,10 +629,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 ].filter(i => i.value > 0)
             },
             classChart: classTableData,
-            curveData,
             availableClasses: Array.from(availableClasses).filter(c => trainingClasses.length > 0 ? trainingClasses.includes(c) : true)
         };
-    }, [experiment, verifications, qualityStats, confRange, iouThreshold, sizeSlice, selectedClasses, trainingClasses]);
+    }, [experiment, verifications, qualityStats, selectedClasses, trainingClasses, sizeSlice, confRange, iouThreshold, stressStrategy]);
 
     if (!processedData) return <Empty />;
 
@@ -935,6 +1100,135 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             </div>
                         </Card>
                     )}
+
+                    <Card size="small" style={{ marginBottom: 24, borderRadius: 8, border: '1px solid #f0f0f0', background: '#fff' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <div>
+                                <Title level={5} style={{ margin: 0 }}>Decision Explanation</Title>
+                                <Text type="secondary" style={{ fontSize: 11 }}>IoU Match: 0.30 • Min Automation: 15% • Step: 0.05</Text>
+                            </div>
+                            <Space align="center" size="large">
+                                {kpis.engineState?.status === 'ok' && (
+                                    <div style={{ textAlign: 'right' }}>
+                                        <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>
+                                            {stressStrategy === 'retrain' ? 'Target Confidence' : 'Production Target'}
+                                        </Text>
+                                        <Tag color="blue" icon={<SearchOutlined />} style={{ fontSize: 13, padding: '2px 8px' }}>
+                                            {stressStrategy === 'retrain'
+                                                ? `${(kpis.engineState.retrain?.confidence * 100).toFixed(0)}% Confidence`
+                                                : `${(kpis.engineState.production?.t * 100).toFixed(0)}% Confidence`}
+                                        </Tag>
+                                    </div>
+                                )}
+                                <Segmented
+                                    value={stressStrategy === 'safe' || stressStrategy === 'balanced' ? 'production' : (stressStrategy === 'aggressive' ? 'retrain' : stressStrategy)}
+                                    onChange={(v) => setStressStrategy(v)}
+                                    options={[
+                                        { label: 'Production', value: 'production', icon: <SearchOutlined /> },
+                                        { label: 'Retrain', value: 'retrain', icon: <ArrowUpOutlined /> },
+                                    ]}
+                                />
+                            </Space>
+                        </div>
+
+                        <Row gutter={24}>
+                            <Col span={16}>
+                                <div style={{ height: 380 }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart
+                                            data={kpis.engineState?.rows || []}
+                                            margin={{ top: 60, right: 10, left: 10, bottom: 10 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                            <XAxis
+                                                dataKey="t"
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fontSize: 10 }}
+                                                interval={1}
+                                                label={{ value: 'Confidence Threshold', position: 'insideBottom', offset: -5, fontSize: 10 }}
+                                            />
+                                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                                            <RechartsTooltip
+                                                contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                                formatter={(value, name) => [value, String(name).toUpperCase()]}
+                                            />
+                                            <Legend verticalAlign="bottom" align="center" height={36} iconType="circle" wrapperStyle={{ paddingTop: 20 }} />
+
+                                            <Bar dataKey="tp" stackId="a" fill="#52c41a" name="Correct (TP)" radius={[0, 0, 0, 0]} />
+                                            <Bar dataKey="fp" stackId="a" fill="#fa8c16" name="Mistakes (FP)" radius={[0, 0, 0, 0]} />
+                                            <Bar dataKey="fn" stackId="a" fill="#ff4d4f" name="Missed (FN)" radius={[2, 2, 0, 0]} />
+
+                                            {kpis.engineState?.silent_zones?.map((zone, idx) => (
+                                                <ReferenceArea
+                                                    key={idx}
+                                                    x1={zone.from}
+                                                    x2={zone.to}
+                                                    fill="#f0f0f0"
+                                                    fillOpacity={0.6}
+                                                    label={{ value: 'REJECTED', position: 'insideTop', fill: '#8c8c8c', fontSize: 9, fontWeight: 'bold' }}
+                                                />
+                                            ))}
+
+                                            {kpis.engineState?.model_ceiling?.t !== null && kpis.engineState?.model_ceiling?.t !== undefined && (
+                                                <ReferenceLine x={kpis.engineState.model_ceiling.t} stroke="#722ed1" strokeWidth={2} strokeDasharray="3 3">
+                                                    <Label value="MODEL CEILING 🛑" position="top" fill="#722ed1" fontSize={10} fontWeight="bold" offset={15} />
+                                                </ReferenceLine>
+                                            )}
+
+                                            {kpis.engineState?.status === 'ok' && (
+                                                <ReferenceLine
+                                                    x={stressStrategy === 'retrain' ? kpis.engineState.retrain.confidence : kpis.engineState.production?.t}
+                                                    stroke="#1890ff"
+                                                    strokeWidth={3}
+                                                >
+                                                    <Label
+                                                        value={stressStrategy === 'retrain' ? 'TARGET ⭐' : 'PRODUCTION ⭐'}
+                                                        position="top"
+                                                        fill="#1890ff"
+                                                        fontSize={10}
+                                                        fontWeight="bold"
+                                                        offset={35}
+                                                    />
+                                                </ReferenceLine>
+                                            )}
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </Col>
+                            <Col span={8}>
+                                <Title level={5} style={{ fontSize: 14, marginBottom: 16, display: 'flex', alignItems: 'center', color: '#1890ff' }}>
+                                    <BulbOutlined style={{ marginRight: 8 }} />
+                                    Deterministic Analysis
+                                </Title>
+                                <List
+                                    size="small"
+                                    dataSource={stressStrategy === 'retrain' ? kpis.engineState?.briefing?.retrain : kpis.engineState?.briefing?.production}
+                                    renderItem={item => {
+                                        const isReject = item.includes('REJECTED');
+                                        const isCeiling = item.includes('MODEL CEILING');
+                                        const isDiag = item.includes('Diagnosis:');
+                                        const isWhy = item.includes('Why not');
+
+                                        return (
+                                            <List.Item style={{
+                                                padding: '8px 12px',
+                                                border: 'none',
+                                                marginBottom: 6,
+                                                borderRadius: 6,
+                                                background: isReject ? '#fff1f0' : (isCeiling ? '#f9f0ff' : (isDiag ? '#e6f7ff' : (isWhy ? '#fff7e6' : 'transparent'))),
+                                                fontSize: 12
+                                            }}>
+                                                <span style={{ fontWeight: (isReject || isCeiling || isDiag) ? 600 : 400 }}>
+                                                    {item}
+                                                </span>
+                                            </List.Item>
+                                        );
+                                    }}
+                                />
+                            </Col>
+                        </Row>
+                    </Card>
 
                     <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
                         <Col flex="1">
