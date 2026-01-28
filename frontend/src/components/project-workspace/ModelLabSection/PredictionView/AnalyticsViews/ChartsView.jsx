@@ -21,6 +21,7 @@ import {
     ArrowUpOutlined,
     OrderedListOutlined,
     PlusSquareOutlined,
+    FullscreenOutlined,
     SearchOutlined
 } from '@ant-design/icons';
 
@@ -259,7 +260,13 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             });
 
             // Combine backend reported missed objects with our confidence-suppressed ones
-            fnList = [...fnList, ...rawFN];
+            // CRITICAL: Filter rawFN by selected class to ensure baseline counts are accurate.
+            const filteredRawFN = rawFN.filter(d => {
+                const rawCls = d.class || d.class_name || 'Unknown';
+                const cls = typeof rawCls === 'string' ? rawCls.replace(/^Class\s+/i, '') : rawCls;
+                return selectedClasses.length === 0 || selectedClasses.includes(cls);
+            });
+            fnList = [...fnList, ...filteredRawFN];
         } else {
             // EXCEPTION-BASED LOGIC for Uploads (Raw Data Audit)
             // We assume all AI detections are TP unless marked as FAIL or identified as Misaligned
@@ -405,6 +412,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             const m = calcStats(stat.tp, stat.fp, stat.fn);
             return { ...stat, precision: parseFloat(m.p), recall: parseFloat(m.r), f1: parseFloat(m.f1) };
         }).sort((a, b) => b.f1 - a.f1);
+
 
         // --- 7. INDUSTRIAL PERFORMANCE ENGINE (FINAL SPEC v1.0) ---
         // Constants from grqaph-finla.md
@@ -560,6 +568,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     bullets.push("Diagnosis: Improve confidence strength to push ceiling right.");
                 }
             }
+
+
             return bullets;
         };
 
@@ -594,7 +604,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
         return {
             kpis: {
-                tp, fp, fn, ma, aiGTRatio, totalGT: totalGTCount,
+                tp, fp, fn, ma, aiGTRatio, totalGT,
                 discoveries: filteredDiscoveries.length,
                 verifiedAlarms: filteredAlarms.length,
                 confirmations: filteredConfirmations.length,
