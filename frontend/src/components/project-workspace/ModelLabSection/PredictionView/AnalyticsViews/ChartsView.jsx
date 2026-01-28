@@ -928,6 +928,43 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     </Row>
 
                     <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
+                        <Col flex="1">
+                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #e6f7ff', background: '#f0f9ff' }}>
+                                <Tooltip title={kpis.isUploadMode
+                                    ? "Quality Audit: Percentage of AI detections you agreed with. Shows how 'clean' the model is on new images."
+                                    : "Quality Score: Percentage of AI detections that were correct."}>
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Precision</Text>
+                                </Tooltip>
+                                <Text strong style={{ fontSize: 18, color: '#1890ff' }}>
+                                    {`${kpis.precision}%`}
+                                </Text>
+                            </Card>
+                        </Col>
+                        <Col flex="1">
+                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #f9f0ff', background: '#f9f0ff' }}>
+                                <Tooltip title={kpis.isUploadMode
+                                    ? "Coverage Audit: Percentage of real objects successfully found. Shows how 'blind' the model is to new defects."
+                                    : "Completion Score: Percentage of actual objects successfully found."}>
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Recall</Text>
+                                </Tooltip>
+                                <Text strong style={{ fontSize: 18, color: '#722ed1' }}>
+                                    {`${kpis.recall}%`}
+                                </Text>
+                            </Card>
+                        </Col>
+                        <Col flex="1">
+                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #e6fffb', background: '#e6fffb' }}>
+                                <Tooltip title="Stability Score: A weighted balance of Quality and Coverage. Use this to track the overall model performance on this dataset.">
+                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>F1 Score</Text>
+                                </Tooltip>
+                                <Text strong style={{ fontSize: 18, color: '#13c2c2' }}>
+                                    {`${kpis.f1}%`}
+                                </Text>
+                            </Card>
+                        </Col>
+                    </Row>
+
+                    <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
                         <Col span={24}>
                             <Card size="small" style={{ border: '1px solid #f0f0f0' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -1230,42 +1267,6 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Row>
                     </Card>
 
-                    <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
-                        <Col flex="1">
-                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Tooltip title={kpis.isUploadMode
-                                    ? "Quality Audit: Percentage of AI detections you agreed with. Shows how 'clean' the model is on new images."
-                                    : "Quality Score: Percentage of AI detections that were correct."}>
-                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Precision</Text>
-                                </Tooltip>
-                                <Text strong style={{ fontSize: 18, color: '#1890ff' }}>
-                                    {`${kpis.precision}%`}
-                                </Text>
-                            </Card>
-                        </Col>
-                        <Col flex="1">
-                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Tooltip title={kpis.isUploadMode
-                                    ? "Coverage Audit: Percentage of real objects successfully found. Shows how 'blind' the model is to new defects."
-                                    : "Completion Score: Percentage of actual objects successfully found."}>
-                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Recall</Text>
-                                </Tooltip>
-                                <Text strong style={{ fontSize: 18, color: '#722ed1' }}>
-                                    {`${kpis.recall}%`}
-                                </Text>
-                            </Card>
-                        </Col>
-                        <Col flex="1">
-                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0' }}>
-                                <Tooltip title="Stability Score: A weighted balance of Quality and Coverage. Use this to track the overall model performance on this dataset.">
-                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>F1 Score</Text>
-                                </Tooltip>
-                                <Text strong style={{ fontSize: 18, color: '#13c2c2' }}>
-                                    {`${kpis.f1}%`}
-                                </Text>
-                            </Card>
-                        </Col>
-                    </Row>
 
                     <Row gutter={[16, 16]}>
                         <Col xs={24} md={12}>
