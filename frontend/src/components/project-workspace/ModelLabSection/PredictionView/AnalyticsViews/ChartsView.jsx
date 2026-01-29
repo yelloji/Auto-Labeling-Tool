@@ -37,6 +37,7 @@ const { Text, Title } = Typography;
 const ChartsView = ({ experiment, verifications = [], projectLabels = [], trainingClasses = [] }) => {
     const [confRange, setConfRange] = useState([10, 100]);
     const [iouThreshold, setIouThreshold] = useState(30); // New: Dynamic IOU (30 = 0.3)
+    const [graph4Class, setGraph4Class] = useState('all');
     const [sizeSlice, setSizeSlice] = useState('all');
     const [selectedClasses, setSelectedClasses] = useState([]); // Empty = All
     const [stressStrategy, setStressStrategy] = useState('balanced'); // safe | balanced | aggressive
@@ -580,7 +581,29 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             status: validRows.length > 0 ? 'ok' : 'no_recommendation'
         };
 
-        // --- 6. AI Detection Health Score ---
+        // --- 7.3 SCALED STRESS FINGERPRINT (NEW GRAPH 4) ---
+        // Run parallel simulations for each size group (Tiny, Small, Medium, Large)
+        const sizePoolTP = graph4Class === 'all' ? simPoolTP : simPoolTP.filter(d => (d.class || d.class_name || '').replace(/^Class\s+/i, '') === graph4Class);
+        const sizePoolFP = graph4Class === 'all' ? simPoolFP : simPoolFP.filter(d => (d.class || d.class_name || '').replace(/^Class\s+/i, '') === graph4Class);
+        const sizePoolFN = graph4Class === 'all' ? fnList : fnList.filter(d => (d.class || d.class_name || '').replace(/^Class\s+/i, '') === graph4Class);
+
+        const sizeStressData = CONF_LIST.map(t => {
+            const row = { t };
+            ['tiny', 'small', 'medium', 'large'].forEach(sz => {
+                const szTPs = sizePoolTP.filter(d => getSizeGrp(d.bbox) === sz && (d.confidence || d.conf || 0) >= t);
+                const szGT = sizePoolTP.filter(d => getSizeGrp(d.bbox) === sz).length +
+                    sizePoolFN.filter(d => getSizeGrp(d.bbox) === sz).length;
+
+                row[`${sz}_yield`] = szGT > 0 ? parseFloat(((szTPs.length / szGT) * 100).toFixed(1)) : 0;
+
+                // Calculate Average IoU for this size at this threshold
+                const ious = szTPs.map(d => d.matched_iou || 0).filter(v => v > 0);
+                row[`${sz}_iou`] = ious.length > 0 ? parseFloat(((ious.reduce((a, b) => a + b, 0) / ious.length) * 100).toFixed(1)) : 0;
+            });
+            return row;
+        });
+
+        // --- 8. AI Detection Health Score ---
         const gStats = calcStats(filteredTP.length, purelyFP.length, filteredFN.length);
         const accuracyScore = gStats.f1Raw / 100;
         const autonomyPenalty = (humanDiscoveries.length + humanMissing.length) / Math.max(totalGT, 1);
@@ -626,6 +649,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 missingItems: humanMissing.filter(i => filterItem(i, true)).map(i => ({ ...i, type: 'Human Missing', imgName: (i.image || i.imgName || i.image_name || '').split('/').pop() })),
                 isUploadMode,
                 healthScore: healthScore.toFixed(1),
+                sizeStressData,
                 outcomeData: [
                     { name: 'Successful Matches', value: tp, color: '#52c41a', key: 'tp' },
                     { name: 'Misaligned Objects', value: ma, color: '#fa8c16', key: 'ma' },
@@ -641,7 +665,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             classChart: classTableData,
             availableClasses: Array.from(availableClasses).filter(c => trainingClasses.length > 0 ? trainingClasses.includes(c) : true)
         };
-    }, [experiment, verifications, qualityStats, selectedClasses, trainingClasses, sizeSlice, confRange, iouThreshold, stressStrategy]);
+    }, [experiment, verifications, qualityStats, selectedClasses, trainingClasses, sizeSlice, confRange, iouThreshold, stressStrategy, graph4Class]);
 
     if (!processedData) return <Empty />;
 
@@ -1343,6 +1367,110 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                         <Line type="monotone" dataKey="f1" stroke="#722ed1" strokeWidth={3} dot={false} name="F1-Score" />
                                     </LineChart>
                                 </ResponsiveContainer>
+                            </Card>
+                        </Col>
+                    </Row>
+
+                    <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
+                        <Col span={24}>
+                            <Card
+                                size="small"
+                                title={
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Space>
+                                            <LineChartOutlined style={{ color: '#faad14' }} />
+                                            <Text strong style={{ fontSize: 13, textTransform: 'uppercase' }}>
+                                                Graph 4: Scale Performance Fingerprint (Parallel Stress Test)
+                                            </Text>
+                                        </Space>
+                                        <div onClick={(e) => e.stopPropagation()}>
+                                            <Select
+                                                size="small"
+                                                style={{ width: 140 }}
+                                                value={graph4Class}
+                                                onChange={setGraph4Class}
+                                                bordered={false}
+                                                dropdownMatchSelectWidth={false}
+                                            >
+                                                <Select.Option value="all">Global Average</Select.Option>
+                                                {availableClasses.map(c => (
+                                                    <Select.Option key={c} value={c}>{c}</Select.Option>
+                                                ))}
+                                            </Select>
+                                        </div>
+                                    </div>
+                                }
+                                style={{ borderRadius: 8, border: '1px solid #f0f0f0' }}
+                            >
+                                <div style={{ height: 300, width: '100%' }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={kpis.sizeStressData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                            <XAxis
+                                                dataKey="t"
+                                                type="number"
+                                                domain={[0, 1]}
+                                                tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
+                                                label={{ value: 'Confidence Threshold', position: 'insideBottom', offset: -5, fontSize: 10 }}
+                                                fontSize={10}
+                                            />
+                                            <YAxis
+                                                tickFormatter={(v) => `${v}%`}
+                                                label={{ value: 'Yield (Automation %)', angle: -90, position: 'insideLeft', fontSize: 10 }}
+                                                fontSize={10}
+                                            />
+                                            <RechartsTooltip
+                                                content={({ active, payload, label }) => {
+                                                    if (active && payload && payload.length) {
+                                                        const confPct = (label * 100).toFixed(0);
+                                                        return (
+                                                            <div style={{ background: '#fff', padding: '12px', border: '1px solid #f0f0f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                                                                <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Confidence: {confPct}%</Text>
+                                                                <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto', gap: '8px 16px' }}>
+                                                                    <Text type="secondary" style={{ fontSize: 10 }}></Text>
+                                                                    <Text type="secondary" style={{ fontSize: 10 }}>YIELD</Text>
+                                                                    <Text type="secondary" style={{ fontSize: 10 }}>IoU</Text>
+                                                                    {payload.map((entry, idx) => {
+                                                                        const sz = entry.dataKey.split('_')[0];
+                                                                        const iouValue = entry.payload[`${sz}_iou`] || 0;
+                                                                        return (
+                                                                            <React.Fragment key={idx}>
+                                                                                <Text strong style={{ fontSize: 11, color: entry.color }}>{entry.name.split(' ')[0]}:</Text>
+                                                                                <Text style={{ fontSize: 11 }}>{entry.value}%</Text>
+                                                                                <Text style={{ fontSize: 11, color: iouValue > 70 ? '#52c41a' : (iouValue > 40 ? '#faad14' : '#ff4d4f') }}>{iouValue}%</Text>
+                                                                            </React.Fragment>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                }}
+                                            />
+                                            <Legend verticalAlign="top" height={36} iconType="circle" />
+
+                                            <Area type="monotone" dataKey="tiny_yield" name="Tiny Objects" stroke="#ff4d4f" fill="#ff4d4f" fillOpacity={0.1} strokeWidth={2} />
+                                            <Area type="monotone" dataKey="small_yield" name="Small Objects" stroke="#faad14" fill="#faad14" fillOpacity={0.1} strokeWidth={2} />
+                                            <Area type="monotone" dataKey="medium_yield" name="Medium Objects" stroke="#1890ff" fill="#1890ff" fillOpacity={0.1} strokeWidth={2} />
+                                            <Area type="monotone" dataKey="large_yield" name="Large Objects" stroke="#52c41a" fill="#52c41a" fillOpacity={0.1} strokeWidth={2} />
+
+                                            <ReferenceLine x={confRange[0] / 100} stroke="#8c8c8c" strokeDasharray="3 3">
+                                                <Label value="Active Filter" position="top" fontSize={8} />
+                                            </ReferenceLine>
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div style={{ marginTop: 16, padding: '12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
+                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                        <BulbOutlined style={{ marginRight: 8, color: '#faad14' }} />
+                                        <b>Expert Diagnostic:</b> This "Fingerprint" shows how different object scales respond to confidence pressure.
+                                        {graph4Class === 'all'
+                                            ? " You are viewing the global dataset signature."
+                                            : ` You are isolating the scale behavior for "${graph4Class}".`}
+                                        If the <b>Tiny</b> line drops significantly faster than others, consider increasing resolution or zoom.
+                                    </Text>
+                                </div>
                             </Card>
                         </Col>
                     </Row>
