@@ -895,9 +895,11 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                     <div style={{ marginBottom: 24, padding: '0 8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 8 }}>
                             <div style={{ width: 4, height: 18, background: '#00f2ff', borderRadius: 2 }} />
-                            <Text strong style={{ fontSize: 18, color: '#fff', textTransform: 'uppercase', letterSpacing: '2px', fontFamily: 'Inter, sans-serif' }}>
-                                Analytical Performance HUD
-                            </Text>
+                            <Tooltip title="Unified center for model performance metrics and strategic reliability audits.">
+                                <Text strong style={{ fontSize: 18, color: '#fff', textTransform: 'uppercase', letterSpacing: '2px', fontFamily: 'Inter, sans-serif', cursor: 'help' }}>
+                                    Operational Intelligence Nexus
+                                </Text>
+                            </Tooltip>
                         </div>
                         <Text style={{ fontSize: 13, display: 'block', color: '#8c8c8c', lineHeight: '1.6', maxWidth: '800px' }}>
                             Perform deep-dive telemetry analysis of model performance. Use the <Text code style={{ background: '#1c1c1c', color: '#00f2ff', border: 'none' }}>SYSTEM_CONSOLE</Text> on the left
@@ -1042,7 +1044,11 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <BarChartOutlined style={{ color: '#00f2ff' }} />
-                                    <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px' }}>AI FINDINGS VS. MISSES (OUTCOME RECAP)</Text>
+                                    <Tooltip title="Compare AI findings against misses. Action: Use sidebar CHANNEL and SCALE filters to see if misses are clustered in specific object types or sizes.">
+                                        <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px', cursor: 'help' }}>
+                                            PERFORMANCE IMPACT: FINDINGS VS MISSES
+                                        </Text>
+                                    </Tooltip>
                                 </div>
                                 <Tag className="hud-tag-neon" style={{ margin: 0 }}>TOTAL_TRUTH: {totalGT} OBJECTS</Tag>
                             </div>
@@ -1114,7 +1120,11 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             title={
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <FundOutlined style={{ color: '#00f2ff' }} />
-                                    <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px' }}>EXPERT VERIFICATION TELEMETRY (ROI LOG)</Text>
+                                    <Tooltip title="Measures the value of manual verification. Insight: Filter by Category and Size in the sidebar to see which data segments demand the most human oversight.">
+                                        <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px', cursor: 'help' }}>
+                                            EXPERT REVIEW & IMPACT ANALYSIS
+                                        </Text>
+                                    </Tooltip>
                                 </div>
                             }
                             style={{ marginBottom: 24 }}
@@ -1199,7 +1209,11 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <CloudSyncOutlined style={{ color: '#00f2ff' }} />
-                                    <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px' }}>AI ENGINE_STRESS_TEST (DETERMINISTIC_FEEDBACK)</Text>
+                                    <Tooltip title="Evaluates model stability across confidence bands. Action: Move the Confidence slider to find the 'safety zone' where the model remains most reliable.">
+                                        <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px', cursor: 'help' }}>
+                                            OPERATIONAL INTEGRITY & RELIABILITY AUDIT
+                                        </Text>
+                                    </Tooltip>
                                 </div>
                                 <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                     {kpis.engineState?.status === 'ok' && (
@@ -1342,7 +1356,11 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <LineChartOutlined style={{ color: '#00f2ff' }} />
-                                            <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px' }}>SCALE_PERFORMANCE_FINGERPRINT (STRESS_HUD)</Text>
+                                            <Tooltip title="Identify size-based weaknesses. Insight: Use the local Channel filter and sidebar Class filter to detect category-specific scale issues.">
+                                                <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px', cursor: 'help' }}>
+                                                    ACCURACY BY OBJECT SIZE
+                                                </Text>
+                                            </Tooltip>
                                         </div>
                                         <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                             <Space size={4}>
@@ -1487,7 +1505,11 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <FullscreenOutlined style={{ color: '#00f2ff' }} />
-                                            <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px' }}>SPATIAL_FAILURE_TELEMETRY (DISTORTION_HUD)</Text>
+                                            <Tooltip title="Pinpoint regional failures in your image frame. Insight: Combine Class and Size filters to see if blindspots are hardware-related or object-specific.">
+                                                <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px', cursor: 'help' }}>
+                                                    VISUAL BLINDSPOT & SPATIAL BIAS DIAGNOSTIC
+                                                </Text>
+                                            </Tooltip>
                                         </div>
                                         <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                                             <Tooltip title="Isolate spatial failures by specific object classes.">
