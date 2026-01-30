@@ -603,6 +603,40 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             return row;
         });
 
+        // --- 7.4 SPATIAL FAILURE MAPPING (NEW GRAPH 5) ---
+        // 1. Find the bounds of the coordinate system (normalizing pixels to 0-1)
+        let maxX = 1, maxY = 1;
+        [...simPoolTP, ...simPoolFP, ...fnList].forEach(d => {
+            if (d.bbox) {
+                maxX = Math.max(maxX, d.bbox[2]);
+                maxY = Math.max(maxY, d.bbox[3]);
+            }
+        });
+
+        const spatialGrid = Array(9).fill(0).map(() => ({ fp: 0, fn: 0, total: 0 }));
+        const spatialErrors = [...purelyFP, ...filteredFN];
+
+        spatialErrors.forEach(d => {
+            if (d.bbox) {
+                const cx = (d.bbox[0] + d.bbox[2]) / 2;
+                const cy = (d.bbox[1] + d.bbox[3]) / 2;
+                const col = Math.min(2, Math.floor((cx / maxX) * 3));
+                const row = Math.min(2, Math.floor((cy / maxY) * 3));
+                const idx = row * 3 + col;
+                if (idx >= 0 && idx < 9) {
+                    if (d.type === 'False Positive' || d.reason === 'No Match') spatialGrid[idx].fp++;
+                    else spatialGrid[idx].fn++;
+                    spatialGrid[idx].total++;
+                }
+            }
+        });
+
+        const totalErrors = spatialErrors.length || 1;
+        const spatialData = spatialGrid.map(tile => ({
+            ...tile,
+            density: parseFloat(((tile.total / totalErrors) * 100).toFixed(1))
+        }));
+
         // --- 8. AI Detection Health Score ---
         const gStats = calcStats(filteredTP.length, purelyFP.length, filteredFN.length);
         const accuracyScore = gStats.f1Raw / 100;
@@ -650,6 +684,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 isUploadMode,
                 healthScore: healthScore.toFixed(1),
                 sizeStressData,
+                spatialData,
                 outcomeData: [
                     { name: 'Successful Matches', value: tp, color: '#52c41a', key: 'tp' },
                     { name: 'Misaligned Objects', value: ma, color: '#fa8c16', key: 'ma' },
@@ -1301,76 +1336,6 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Row>
                     </Card>
 
-
-                    <Row gutter={[16, 16]}>
-                        <Col xs={24} md={12}>
-                            <Card
-                                title={<Space><OrderedListOutlined />Performance Leaderboard (By Class)</Space>}
-                                bodyStyle={{ height: 400, overflow: 'auto' }}
-                            >
-                                <Table
-                                    dataSource={classChart}
-                                    pagination={false}
-                                    size="small"
-                                    rowKey="name"
-                                    columns={[
-                                        { title: 'Class', dataIndex: 'name', key: 'name', fixed: 'left' },
-                                        {
-                                            title: 'F1-Score',
-                                            dataIndex: 'f1',
-                                            key: 'f1',
-                                            sorter: (a, b) => a.f1 - b.f1,
-                                            render: (v) => (
-                                                <Space>
-                                                    <div style={{ width: 100, height: 8, background: '#f5f5f5', borderRadius: 4, overflow: 'hidden' }}>
-                                                        <div style={{ height: '100%', width: `${v}%`, background: v > 70 ? '#52c41a' : v > 40 ? '#faad14' : '#ff4d4f' }} />
-                                                    </div>
-                                                    <Text strong>{v}%</Text>
-                                                </Space>
-                                            )
-                                        },
-                                        { title: 'P', dataIndex: 'precision', key: 'precision', render: v => `${v}%` },
-                                        { title: 'R', dataIndex: 'recall', key: 'recall', render: v => `${v}%` }
-                                    ]}
-                                />
-                            </Card>
-                        </Col>
-
-                        <Col xs={24} md={12}>
-                            <Card
-                                title={<Space><LineChartOutlined />P-R-F1 Balance Curve</Space>}
-                                bodyStyle={{ height: 400 }}
-                            >
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={curveData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                                        <XAxis
-                                            dataKey="threshold"
-                                            label={{ value: 'Confidence Threshold', position: 'bottom', offset: 0 }}
-                                            tick={{ fontSize: 10 }}
-                                        />
-                                        <YAxis
-                                            domain={[0, 100]}
-                                            label={{ value: 'Score (%)', angle: -90, position: 'insideLeft' }}
-                                            tick={{ fontSize: 10 }}
-                                        />
-                                        <RechartsTooltip />
-                                        <Legend verticalAlign="top" height={36} />
-
-                                        {/* Dynamic Reference Line linked to Sidebar Slider */}
-                                        <ReferenceLine x={confRange[0] / 100} stroke="#1890ff" strokeDasharray="5 5">
-                                            <Label value="Filter" position="insideTopLeft" fill="#1890ff" fontSize={10} />
-                                        </ReferenceLine>
-
-                                        <Line type="monotone" dataKey="precision" stroke="#1890ff" strokeWidth={2} dot={false} name="Precision" />
-                                        <Line type="monotone" dataKey="recall" stroke="#52c41a" strokeWidth={2} dot={false} name="Recall" />
-                                        <Line type="monotone" dataKey="f1" stroke="#722ed1" strokeWidth={3} dot={false} name="F1-Score" />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </Card>
-                        </Col>
-                    </Row>
-
                     <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
                         <Col span={24}>
                             <Card
@@ -1471,6 +1436,98 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                         If the <b>Tiny</b> line drops significantly faster than others, consider increasing resolution or zoom.
                                     </Text>
                                 </div>
+                            </Card>
+                        </Col>
+                    </Row>
+
+                    <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
+                        <Col span={24}>
+                            <Card
+                                size="small"
+                                title={
+                                    <Space>
+                                        <FullscreenOutlined style={{ color: '#eb2f96' }} />
+                                        <Text strong style={{ fontSize: 13, textTransform: 'uppercase' }}>
+                                            Graph 5: Spatial Failure Map (Environment Distortion Audit)
+                                        </Text>
+                                    </Space>
+                                }
+                                style={{ borderRadius: 8, border: '1px solid #f0f0f0' }}
+                            >
+                                <Row gutter={24} align="middle">
+                                    <Col xs={24} md={10}>
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(3, 1fr)',
+                                            gap: '4px',
+                                            aspectRatio: '1',
+                                            background: '#f5f5f5',
+                                            padding: '4px',
+                                            borderRadius: '4px'
+                                        }}>
+                                            {kpis.spatialData.map((tile, i) => (
+                                                <div key={i} style={{
+                                                    background: tile.density > 40 ? '#ff4d4f' : (tile.density > 20 ? '#faad14' : '#fff'),
+                                                    opacity: Math.max(0.1, tile.density / 100 + 0.1),
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    borderRadius: '2px',
+                                                    border: '1px solid #f0f0f0',
+                                                    transition: 'all 0.3s'
+                                                }}>
+                                                    <Text strong style={{ fontSize: 14, color: tile.density > 20 ? '#fff' : '#000' }}>{tile.density}%</Text>
+                                                    <Text style={{ fontSize: 8, color: tile.density > 20 ? '#fff' : '#8c8c8c' }}>{tile.total} Errors</Text>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </Col>
+                                    <Col xs={24} md={14}>
+                                        <div style={{ padding: '0 12px' }}>
+                                            <Title level={5} style={{ fontSize: 14, marginBottom: 16 }}>Spatial Diagnosis Engine</Title>
+                                            <Space direction="vertical" style={{ width: '100%' }}>
+                                                {(() => {
+                                                    const d = kpis.spatialData;
+                                                    const cornerDensity = d[0].density + d[2].density + d[6].density + d[8].density;
+                                                    const leftDensity = d[0].density + d[3].density + d[6].density;
+                                                    const rightDensity = d[2].density + d[5].density + d[8].density;
+                                                    const topDensity = d[0].density + d[1].density + d[2].density;
+                                                    const bottomDensity = d[6].density + d[7].density + d[8].density;
+
+                                                    const alerts = [];
+                                                    if (cornerDensity > 60) alerts.push({ type: 'warning', msg: "Lens Distortion / Vignette: Errors are clustering heavily in corners. Consider checking for lens blur or dark edges." });
+                                                    if (leftDensity > 60) alerts.push({ type: 'info', msg: "Lighting Imbalance (Left): Failure bias detected on the left side of the frame." });
+                                                    if (rightDensity > 60) alerts.push({ type: 'info', msg: "Lighting Imbalance (Right): Failure bias detected on the right side of the frame." });
+                                                    if (topDensity > 60) alerts.push({ type: 'info', msg: "High-Angle Glare: Errors clustering at the top. Possible ceiling light interference." });
+                                                    if (d[4].density > 40) alerts.push({ type: 'warning', msg: "Focus Blindspot: Model is failing in the dead-center. Check for lens smudges or over-exposure in the focal point." });
+
+                                                    if (alerts.length === 0) return <Badge status="success" text="Environment Logic: No spatial bias detected. Errors are distributed normally." style={{ fontSize: 12 }} />;
+
+                                                    return alerts.map((a, idx) => (
+                                                        <div key={idx} style={{
+                                                            padding: '10px',
+                                                            background: a.type === 'warning' ? '#fff1f0' : '#e6f7ff',
+                                                            borderLeft: `3px solid ${a.type === 'warning' ? '#ff4d4f' : '#1890ff'}`,
+                                                            borderRadius: '0 4px 4px 0',
+                                                            marginBottom: '8px'
+                                                        }}>
+                                                            <Text style={{ fontSize: 12 }}>
+                                                                <WarningOutlined style={{ marginRight: 8, color: a.type === 'warning' ? '#ff4d4f' : '#1890ff' }} />
+                                                                {a.msg}
+                                                            </Text>
+                                                        </div>
+                                                    ));
+                                                })()}
+                                            </Space>
+                                            <Divider style={{ margin: '16px 0' }} />
+                                            <Text type="secondary" style={{ fontSize: 11 }}>
+                                                <BulbOutlined style={{ marginRight: 8, color: '#faad14' }} />
+                                                This map aggregates all filtered <b>FPs</b> and <b>Missed Objects</b>. It helps determine if you need to fix the model's brain or the camera's position.
+                                            </Text>
+                                        </div>
+                                    </Col>
+                                </Row>
                             </Card>
                         </Col>
                     </Row>
