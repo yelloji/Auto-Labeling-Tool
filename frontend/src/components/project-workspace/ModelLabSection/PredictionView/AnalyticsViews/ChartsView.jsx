@@ -41,6 +41,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
     const [sizeSlice, setSizeSlice] = useState('all');
     const [selectedClasses, setSelectedClasses] = useState([]); // Empty = All
     const [stressStrategy, setStressStrategy] = useState('balanced'); // safe | balanced | aggressive
+    const [spatialClass, setSpatialClass] = useState('all');
+    const [spatialSize, setSpatialSize] = useState('all');
 
     const [qualityStats, setQualityStats] = useState(null);
     const [loadingQuality, setLoadingQuality] = useState(false);
@@ -603,7 +605,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             return row;
         });
 
-        // --- 7.4 SPATIAL FAILURE MAPPING (NEW GRAPH 5) ---
+        // --- 7.4 SPATIAL FAILURE MAPPING (PRO MAX UPGRADE) ---
         // 1. Find the bounds of the coordinate system (normalizing pixels to 0-1)
         let maxX = 1, maxY = 1;
         [...simPoolTP, ...simPoolFP, ...fnList].forEach(d => {
@@ -614,7 +616,15 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         });
 
         const spatialGrid = Array(9).fill(0).map(() => ({ fp: 0, fn: 0, total: 0 }));
-        const spatialErrors = [...purelyFP, ...filteredFN];
+
+        // Sub-filter by LOCAL Graph 5 controls
+        const spatialErrors = [...purelyFP, ...filteredFN].filter(d => {
+            const cls = d.class || d.class_name;
+            const pureCls = typeof cls === 'string' ? cls.replace(/^Class\s+/i, '') : cls;
+            const matchesClass = spatialClass === 'all' || pureCls === spatialClass;
+            const matchesSize = spatialSize === 'all' || getSizeGrp(d.bbox, q25, q50, q75) === spatialSize;
+            return matchesClass && matchesSize;
+        });
 
         spatialErrors.forEach(d => {
             if (d.bbox) {
@@ -672,7 +682,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 recall: globalMetrics.r,
                 f1: globalMetrics.f1,
                 sizeDistrib,
-                engineState, // NEW: Industrial Engine State
+                engineState,
                 tpItems: filteredTP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 fpItems: purelyFP.map(i => ({ ...i, imgName: i.image || i.imgName })),
                 maItems: misaligned.map(i => ({ ...i, imgName: i.image || i.imgName })),
@@ -685,6 +695,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 healthScore: healthScore.toFixed(1),
                 sizeStressData,
                 spatialData,
+                spatialTotal: spatialErrors.length,
+                spatialTotalRaw: purelyFP.length + filteredFN.length,
                 outcomeData: [
                     { name: 'Successful Matches', value: tp, color: '#52c41a', key: 'tp' },
                     { name: 'Misaligned Objects', value: ma, color: '#fa8c16', key: 'ma' },
@@ -700,7 +712,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             classChart: classTableData,
             availableClasses: Array.from(availableClasses).filter(c => trainingClasses.length > 0 ? trainingClasses.includes(c) : true)
         };
-    }, [experiment, verifications, qualityStats, selectedClasses, trainingClasses, sizeSlice, confRange, iouThreshold, stressStrategy, graph4Class]);
+    }, [experiment, verifications, qualityStats, selectedClasses, trainingClasses, sizeSlice, confRange, iouThreshold, stressStrategy, graph4Class, spatialClass, spatialSize]);
 
     if (!processedData) return <Empty />;
 
@@ -1442,50 +1454,139 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                     <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
                         <Col span={24}>
+                            <style>{`
+                                .hud-select .ant-select-selection-item { color: #00f2ff !important; font-weight: bold; }
+                                .hud-tile { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+                                .hud-tile:hover { 
+                                    border-color: #00f2ff !important; 
+                                    background: rgba(0, 242, 255, 0.1) !important;
+                                    box-shadow: inset 0 0 15px rgba(0, 242, 255, 0.2);
+                                }
+                                .hud-tile:hover::after {
+                                    content: '';
+                                    position: absolute;
+                                    top: 10%; left: 10%; right: 10%; bottom: 10%;
+                                    border: 1px dashed rgba(0, 242, 255, 0.3);
+                                    pointer-events: none;
+                                }
+                            `}</style>
                             <Card
                                 size="small"
+                                headStyle={{
+                                    background: '#141414',
+                                    borderBottom: '1px solid #303030',
+                                    borderRadius: '8px 8px 0 0',
+                                    padding: '0 16px'
+                                }}
+                                bodyStyle={{
+                                    background: '#0a0a0a',
+                                    padding: '16px',
+                                    borderRadius: '0 0 8px 8px',
+                                    color: '#fff'
+                                }}
                                 title={
-                                    <Space>
-                                        <FullscreenOutlined style={{ color: '#eb2f96' }} />
-                                        <Text strong style={{ fontSize: 13, textTransform: 'uppercase' }}>
-                                            Graph 5: Spatial Failure Map (Environment Distortion Audit)
-                                        </Text>
-                                    </Space>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                        <Space>
+                                            <FullscreenOutlined style={{ color: '#00f2ff' }} />
+                                            <Text strong style={{ fontSize: 13, color: '#fff', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                Graph 5: Spatial Distortion Telemetry (PRO HUD)
+                                            </Text>
+                                        </Space>
+                                        <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                                            <Space size={4}>
+                                                <Text style={{ fontSize: 10, color: '#555', fontWeight: 700 }}>CLASS:</Text>
+                                                <Select
+                                                    size="small"
+                                                    className="hud-select"
+                                                    style={{ width: 140, background: '#141414', borderRadius: 4, border: '1px solid #333' }}
+                                                    value={spatialClass}
+                                                    onChange={setSpatialClass}
+                                                    dropdownMatchSelectWidth={false}
+                                                >
+                                                    <Select.Option value="all">ANY_CLASS</Select.Option>
+                                                    {availableClasses.map(c => <Select.Option key={c} value={c}>{c.toUpperCase()}</Select.Option>)}
+                                                </Select>
+                                            </Space>
+                                            <Space size={4}>
+                                                <Text style={{ fontSize: 10, color: '#555', fontWeight: 700 }}>SCALE:</Text>
+                                                <Segmented
+                                                    size="small"
+                                                    value={spatialSize}
+                                                    onChange={setSpatialSize}
+                                                    options={[
+                                                        { label: 'ALL', value: 'all' },
+                                                        { label: 'T', value: 'tiny' },
+                                                        { label: 'S', value: 'small' },
+                                                        { label: 'M', value: 'medium' },
+                                                        { label: 'L', value: 'large' }
+                                                    ]}
+                                                    style={{ background: '#1c1c1c', border: '1px solid #333', color: '#888' }}
+                                                />
+                                            </Space>
+                                        </div>
+                                    </div>
                                 }
-                                style={{ borderRadius: 8, border: '1px solid #f0f0f0' }}
+                                style={{ borderRadius: 8, border: '1px solid #303030', overflow: 'hidden' }}
                             >
-                                <Row gutter={24} align="middle">
+                                <Row gutter={24}>
                                     <Col xs={24} md={10}>
-                                        <div style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: 'repeat(3, 1fr)',
-                                            gap: '4px',
-                                            aspectRatio: '1',
-                                            background: '#f5f5f5',
-                                            padding: '4px',
-                                            borderRadius: '4px'
-                                        }}>
-                                            {kpis.spatialData.map((tile, i) => (
-                                                <div key={i} style={{
-                                                    background: tile.density > 40 ? '#ff4d4f' : (tile.density > 20 ? '#faad14' : '#fff'),
-                                                    opacity: Math.max(0.1, tile.density / 100 + 0.1),
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    borderRadius: '2px',
-                                                    border: '1px solid #f0f0f0',
-                                                    transition: 'all 0.3s'
-                                                }}>
-                                                    <Text strong style={{ fontSize: 14, color: tile.density > 20 ? '#fff' : '#000' }}>{tile.density}%</Text>
-                                                    <Text style={{ fontSize: 8, color: tile.density > 20 ? '#fff' : '#8c8c8c' }}>{tile.total} Errors</Text>
-                                                </div>
-                                            ))}
+                                        <div style={{ position: 'relative' }}>
+                                            <div style={{
+                                                display: 'grid',
+                                                gridTemplateColumns: 'repeat(3, 1fr)',
+                                                gap: '2px',
+                                                aspectRatio: '1',
+                                                background: '#1c1c1c',
+                                                padding: '2px',
+                                                border: '1px solid #333',
+                                                backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 19px, rgba(255,255,255,0.03) 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, rgba(255,255,255,0.03) 20px)'
+                                            }}>
+                                                {kpis.spatialData.map((tile, i) => {
+                                                    const row = Math.floor(i / 3);
+                                                    const col = i % 3;
+                                                    const label = `${String.fromCharCode(65 + row)}${col + 1}`;
+                                                    return (
+                                                        <div key={i} className="hud-tile" style={{
+                                                            background: tile.density > 40 ? 'rgba(255, 77, 79, 0.4)' : (tile.density > 15 ? 'rgba(250, 173, 20, 0.3)' : 'rgba(255,255,255,0.02)'),
+                                                            display: 'flex',
+                                                            flexDirection: 'column',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            border: '1px solid #333',
+                                                            cursor: 'crosshair',
+                                                            position: 'relative',
+                                                            transition: 'all 0.2s'
+                                                        }}>
+                                                            <Text style={{ position: 'absolute', top: 4, left: 6, fontSize: 8, color: '#555', fontFamily: 'monospace' }}>[{label}]</Text>
+                                                            <Text strong style={{ fontSize: 18, color: tile.density > 30 ? '#ff4d4f' : '#fff', fontFamily: 'monospace' }}>{tile.density}%</Text>
+                                                            <div style={{ marginTop: 2, textAlign: 'center' }}>
+                                                                <Text style={{ fontSize: 9, color: '#8c8c8c', display: 'block' }}>{tile.total} SAMPLES</Text>
+                                                                {tile.total > 0 && (
+                                                                    <Text style={{ fontSize: 8, color: '#595959' }}>
+                                                                        <span style={{ color: '#ff4d4f' }}>{tile.fp}P</span> / <span style={{ color: '#faad14' }}>{tile.fn}N</span>
+                                                                    </Text>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <Badge status="processing" color="#00f2ff" text={<Text style={{ fontSize: 10, color: '#aaa' }}>FOCUS_ACTIVE</Text>} />
+                                                <Text style={{ fontSize: 10, color: '#555', fontFamily: 'monospace' }}>
+                                                    SAMPLES: {kpis.spatialTotal} / {kpis.spatialTotalRaw}
+                                                </Text>
+                                            </div>
                                         </div>
                                     </Col>
                                     <Col xs={24} md={14}>
                                         <div style={{ padding: '0 12px' }}>
-                                            <Title level={5} style={{ fontSize: 14, marginBottom: 16 }}>Spatial Diagnosis Engine</Title>
+                                            <div style={{ marginBottom: 20 }}>
+                                                <Text style={{ color: '#00f2ff', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                    Expert Diagnosis Log:
+                                                </Text>
+                                            </div>
+
                                             <Space direction="vertical" style={{ width: '100%' }}>
                                                 {(() => {
                                                     const d = kpis.spatialData;
@@ -1493,38 +1594,48 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                                     const leftDensity = d[0].density + d[3].density + d[6].density;
                                                     const rightDensity = d[2].density + d[5].density + d[8].density;
                                                     const topDensity = d[0].density + d[1].density + d[2].density;
-                                                    const bottomDensity = d[6].density + d[7].density + d[8].density;
 
                                                     const alerts = [];
-                                                    if (cornerDensity > 60) alerts.push({ type: 'warning', msg: "Lens Distortion / Vignette: Errors are clustering heavily in corners. Consider checking for lens blur or dark edges." });
-                                                    if (leftDensity > 60) alerts.push({ type: 'info', msg: "Lighting Imbalance (Left): Failure bias detected on the left side of the frame." });
-                                                    if (rightDensity > 60) alerts.push({ type: 'info', msg: "Lighting Imbalance (Right): Failure bias detected on the right side of the frame." });
-                                                    if (topDensity > 60) alerts.push({ type: 'info', msg: "High-Angle Glare: Errors clustering at the top. Possible ceiling light interference." });
-                                                    if (d[4].density > 40) alerts.push({ type: 'warning', msg: "Focus Blindspot: Model is failing in the dead-center. Check for lens smudges or over-exposure in the focal point." });
+                                                    if (kpis.spatialTotal === 0) {
+                                                        return <div style={{ padding: '20px', border: '1px dashed #333', textAlign: 'center', color: '#555' }}>NO FAILURE DATA FOR CURRENT SUB-FILTER</div>;
+                                                    }
 
-                                                    if (alerts.length === 0) return <Badge status="success" text="Environment Logic: No spatial bias detected. Errors are distributed normally." style={{ fontSize: 12 }} />;
+                                                    if (cornerDensity > 60) alerts.push({ type: 'warning', msg: "OPTICAL DISTORTION DETECTED: Failures are heavy in extremities. Check for lens vignette or edge-blur." });
+                                                    if (leftDensity > 60 || rightDensity > 60) alerts.push({ type: 'info', msg: "UNEVEN ILLUMINATION: Directional failure bias detected. Check for side-glow or shadows." });
+                                                    if (topDensity > 60) alerts.push({ type: 'info', msg: "CEILING_LIGHT_INTERFERENCE: Clustering in upper quadrants detected." });
+                                                    if (d[4].density > 40) alerts.push({ type: 'warning', msg: "FOCAL_BLINDSPOT: Significant center failure. Check for sensor smudges or overexposure in focal point." });
+
+                                                    // FP vs FN Bias Diagnosis
+                                                    const avgFP = d.reduce((acc, t) => acc + t.fp, 0);
+                                                    const avgFN = d.reduce((acc, t) => acc + t.fn, 0);
+                                                    if (avgFP > avgFN * 2) alerts.push({ type: 'urgent', msg: "TELEMETRY_ALERT: High False Positive bias. Model is 'Over-Predicting' in this filter." });
+                                                    if (avgFN > avgFP * 2) alerts.push({ type: 'urgent', msg: "TELEMETRY_ALERT: High Missed Object bias. Model is 'Under-Predicting' in this filter." });
+
+                                                    if (alerts.length === 0) return <Badge status="success" text={<span style={{ color: '#52c41a', fontSize: 12 }}>ENVIRONMENT_OPTIMAL: Failures are distributed normally with no spatial bias.</span>} />;
 
                                                     return alerts.map((a, idx) => (
                                                         <div key={idx} style={{
-                                                            padding: '10px',
-                                                            background: a.type === 'warning' ? '#fff1f0' : '#e6f7ff',
-                                                            borderLeft: `3px solid ${a.type === 'warning' ? '#ff4d4f' : '#1890ff'}`,
-                                                            borderRadius: '0 4px 4px 0',
-                                                            marginBottom: '8px'
+                                                            padding: '12px',
+                                                            background: a.type === 'warning' || a.type === 'urgent' ? 'rgba(255, 77, 79, 0.05)' : 'rgba(0, 242, 255, 0.05)',
+                                                            borderLeft: `2px solid ${a.type === 'warning' || a.type === 'urgent' ? '#ff4d4f' : '#00f2ff'}`,
+                                                            marginBottom: '8px',
+                                                            fontFamily: 'monospace'
                                                         }}>
-                                                            <Text style={{ fontSize: 12 }}>
-                                                                <WarningOutlined style={{ marginRight: 8, color: a.type === 'warning' ? '#ff4d4f' : '#1890ff' }} />
+                                                            <Text style={{ fontSize: 12, color: a.type === 'warning' || a.type === 'urgent' ? '#ffb3b3' : '#b3f5ff' }}>
+                                                                <WarningOutlined style={{ marginRight: 8, color: a.type === 'warning' || a.type === 'urgent' ? '#ff4d4f' : '#00f2ff' }} />
                                                                 {a.msg}
                                                             </Text>
                                                         </div>
                                                     ));
                                                 })()}
                                             </Space>
-                                            <Divider style={{ margin: '16px 0' }} />
-                                            <Text type="secondary" style={{ fontSize: 11 }}>
-                                                <BulbOutlined style={{ marginRight: 8, color: '#faad14' }} />
-                                                This map aggregates all filtered <b>FPs</b> and <b>Missed Objects</b>. It helps determine if you need to fix the model's brain or the camera's position.
-                                            </Text>
+
+                                            <div style={{ marginTop: 24, padding: '12px', border: '1px solid #1c1c1c', borderRadius: 4 }}>
+                                                <Text type="secondary" style={{ fontSize: 11, color: '#555' }}>
+                                                    <BulbOutlined style={{ marginRight: 8, color: '#faad14' }} />
+                                                    <b>Usage:</b> Toggle local Class/Size to identify "Blindspots." Clicking quadrants will soon filter your live image stream.
+                                                </Text>
+                                            </div>
                                         </div>
                                     </Col>
                                 </Row>
