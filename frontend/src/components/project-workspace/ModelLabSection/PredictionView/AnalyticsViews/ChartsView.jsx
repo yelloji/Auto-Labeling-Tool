@@ -22,7 +22,8 @@ import {
     OrderedListOutlined,
     PlusSquareOutlined,
     FullscreenOutlined,
-    SearchOutlined
+    SearchOutlined,
+    FundOutlined
 } from '@ant-design/icons';
 
 import { projectsAPI } from '../../../../../services/api';
@@ -720,51 +721,86 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
     const { tp, fp, ma, fn, totalGT, discoveries, verifiedAlarms, humanMissing } = kpis;
 
     return (
-        <div style={{ padding: '24px', background: '#fff' }}>
+        <div style={{ padding: '24px', background: '#050505', minHeight: '100vh', color: '#fff' }}>
+            <style>{`
+                /* Global HUD Overrides */
+                .hud-card { 
+                    background: rgba(20, 20, 20, 0.8) !important; 
+                    border: 1px solid #303030 !important; 
+                    border-radius: 4px !important;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+                }
+                .hud-card .ant-card-head { border-bottom: 1px solid #303030 !important; background: #141414 !important; }
+                .hud-card .ant-card-head-title { color: #00f2ff !important; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 1px; font-size: 12px; }
+                
+                .hud-sidebar-label { color: #aaa !important; font-size: 10px !important; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px !important; display: block; font-weight: 700; }
+                
+                /* Select & Slider HUD Styling */
+                .hud-select .ant-select-selector { 
+                    background: #141414 !important; 
+                    border: 1px solid #333 !important; 
+                    color: #fff !important;
+                    border-radius: 4px !important;
+                }
+                .hud-select .ant-select-selection-placeholder { color: #555 !important; }
+                .hud-select.ant-select-focused .ant-select-selector { border-color: #00f2ff !important; box-shadow: 0 0 5px rgba(0, 242, 255, 0.2) !important; }
+                
+                .hud-slider .ant-slider-track { background-color: #00f2ff !important; }
+                .hud-slider .ant-slider-handle { border-color: #00f2ff !important; background-color: #141414 !important; }
+                .hud-slider .ant-slider-rail { background-color: #222 !important; }
+                
+                .hud-tag-neon { 
+                    background: rgba(0, 242, 255, 0.1) !important; 
+                    border: 1px solid #00f2ff !important; 
+                    color: #00f2ff !important; 
+                    font-family: 'JetBrains Mono', monospace;
+                    font-weight: bold;
+                }
+            `}</style>
             <Row gutter={[24, 24]}>
-                {/* --- Sidebar (Refined per User Specs) --- */}
+                {/* --- Sidebar (PRO HUD CONSOLE) --- */}
                 <Col xs={24} lg={6}>
-                    <Card size="small" style={{ marginBottom: 16, border: '1px solid #f0f0f0' }}>
-                        <div style={{ marginBottom: 16 }}>
-                            <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Active Dataset</Text>
+                    <Card size="small" className="hud-card" style={{ marginBottom: 16 }}>
+                        <div style={{ padding: '8px 4px' }}>
+                            <Text className="hud-sidebar-label">Active Channel</Text>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 4 }}>
-                                {isSplit ? <CloudSyncOutlined style={{ color: '#1890ff' }} /> : <DatabaseOutlined style={{ color: '#faad14' }} />}
-                                <Text strong style={{ fontSize: 14 }}>{isSplit ? 'Split: ' + experiment.dataset_path?.split('/').pop()?.toUpperCase() : 'Manual Upload'}</Text>
+                                {isSplit ? <CloudSyncOutlined style={{ color: '#00f2ff' }} /> : <DatabaseOutlined style={{ color: '#faad14' }} />}
+                                <Text strong style={{ fontSize: 13, color: '#fff' }}>{isSplit ? 'SPLIT: ' + experiment.dataset_path?.split('/').pop()?.toUpperCase() : 'MANUAL_UPLOAD'}</Text>
                             </div>
                         </div>
 
-                        <Divider style={{ margin: '12px 0' }} />
+                        <Divider style={{ margin: '16px 0', borderTopColor: '#222' }} />
 
-                        <div style={{ marginBottom: 16 }}>
-                            <Tooltip title="Select specific object classes to analyze. Metrics will aggregate all selected classes together.">
-                                <Text style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 8 }}>Class Filter (Isolate)</Text>
+                        <div style={{ marginBottom: 20 }}>
+                            <Tooltip title="Select specific object classes to analyze.">
+                                <Text className="hud-sidebar-label">Class Filter [Isolate]</Text>
                             </Tooltip>
                             <Select
                                 mode="multiple"
+                                className="hud-select"
                                 style={{ width: '100%' }}
-                                placeholder="All Classes"
+                                placeholder="ALL_CLASSES_ACTIVE"
                                 value={selectedClasses}
                                 onChange={setSelectedClasses}
                                 allowClear
                                 maxTagCount="responsive"
                             >
                                 {availableClasses.map(c => (
-                                    <Select.Option key={c} value={c}>{c}</Select.Option>
+                                    <Select.Option key={c} value={c}>{c.toUpperCase()}</Select.Option>
                                 ))}
                             </Select>
                         </div>
 
-                        <Divider style={{ margin: '12px 0' }} />
+                        <Divider style={{ margin: '16px 0', borderTopColor: '#222' }} />
 
-                        <div style={{ marginBottom: 16 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Tooltip title="Filters out detections the AI is unsure about. Setting this higher reduces Incorrect Alarms but may cause the AI to miss some objects.">
-                                    <Text style={{ fontSize: 13, fontWeight: 600, cursor: 'help' }}>Confidence Filter</Text>
-                                </Tooltip>
-                                <Tag color="blue" style={{ margin: 0 }}>{(confRange[0] / 100).toFixed(2)} - {(confRange[1] / 100).toFixed(2)}</Tag>
+                        <div style={{ marginBottom: 20 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <Text className="hud-sidebar-label">Confidence Threshold</Text>
+                                <Tag className="hud-tag-neon" style={{ margin: 0 }}>{(confRange[0] / 100).toFixed(2)} - {(confRange[1] / 100).toFixed(2)}</Tag>
                             </div>
                             <Slider
                                 range
+                                className="hud-slider"
                                 min={0}
                                 max={100}
                                 value={confRange}
@@ -775,15 +811,15 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                         {!kpis.isUploadMode && (
                             <>
-                                <Divider style={{ margin: '12px 0' }} />
-                                <div style={{ marginBottom: 16 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <Tooltip title="Defines the standard for 'Good Alignment'. Raising this moves poor quality boxes from 'True Positives' into 'Accuracy Errors' live.">
-                                            <Text style={{ fontSize: 13, fontWeight: 600, cursor: 'help' }}>Overlap (IoU) Threshold</Text>
-                                        </Tooltip>
-                                        <Tag color="orange" style={{ margin: 0 }}>{(iouThreshold / 100).toFixed(2)}+</Tag>
+                                <Divider style={{ margin: '16px 0', borderTopColor: '#222' }} />
+                                <div style={{ marginBottom: 20 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                        <Text className="hud-sidebar-label">Alignment [IoU] Threshold</Text>
+                                        <Tag className="hud-tag-neon" style={{ margin: 0, borderColor: '#faad14', color: '#faad14', background: 'rgba(250, 173, 20, 0.1)' }}>{(iouThreshold / 100).toFixed(2)}+</Tag>
                                     </div>
                                     <Slider
+                                        className="hud-slider"
+                                        style={{ accentColor: '#faad14' }}
                                         min={10}
                                         max={90}
                                         value={iouThreshold}
@@ -794,20 +830,18 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             </>
                         )}
 
-                        <Divider style={{ margin: '12px 0' }} />
+                        <Divider style={{ margin: '16px 0', borderTopColor: '#222' }} />
 
                         <div>
-                            <Tooltip title="Isolate model bias by size. Use this to see if your model fails specifically on 'Tiny' objects.">
-                                <Text style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 12, cursor: 'help' }}>Size Distribution Filter</Text>
-                            </Tooltip>
-                            <div style={{ height: 180 }}>
+                            <Text className="hud-sidebar-label">Scale Distribution [Global]</Text>
+                            <div style={{ height: 160, marginTop: 12 }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart
                                         data={[
-                                            { name: 'Tiny', value: kpis.sizeDistrib?.tiny || 0, key: 'tiny' },
-                                            { name: 'Small', value: kpis.sizeDistrib?.small || 0, key: 'small' },
-                                            { name: 'Medium', value: kpis.sizeDistrib?.medium || 0, key: 'medium' },
-                                            { name: 'Large', value: kpis.sizeDistrib?.large || 0, key: 'large' }
+                                            { name: 'T', value: kpis.sizeDistrib?.tiny || 0, key: 'tiny' },
+                                            { name: 'S', value: kpis.sizeDistrib?.small || 0, key: 'small' },
+                                            { name: 'M', value: kpis.sizeDistrib?.medium || 0, key: 'medium' },
+                                            { name: 'L', value: kpis.sizeDistrib?.large || 0, key: 'large' }
                                         ]}
                                         onClick={(data) => {
                                             if (data && data.activePayload && data.activePayload.length > 0) {
@@ -816,16 +850,20 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                             }
                                         }}
                                     >
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} style={{ fontSize: 9 }} />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#444', fontSize: 10, fontWeight: 'bold' }} />
                                         <YAxis hide domain={[0, 'auto']} />
-                                        <RechartsTooltip cursor={{ fill: '#f0f7ff' }} />
-                                        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                        <RechartsTooltip
+                                            contentStyle={{ background: '#1c1c1c', border: '1px solid #333', borderRadius: 4 }}
+                                            itemStyle={{ color: '#00f2ff', fontSize: 10 }}
+                                            cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                        />
+                                        <Bar dataKey="value" radius={[2, 2, 0, 0]}>
                                             {
                                                 ['tiny', 'small', 'medium', 'large'].map((entry, index) => (
                                                     <Cell
                                                         key={`cell-${index}`}
-                                                        fill={(sizeSlice === entry || sizeSlice === 'all') ? '#1890ff' : '#d9d9d9'}
-                                                        style={{ cursor: 'pointer' }}
+                                                        fill={(sizeSlice === entry || sizeSlice === 'all') ? '#00f2ff' : '#262626'}
+                                                        style={{ cursor: 'pointer', transition: 'all 0.3s' }}
                                                     />
                                                 ))
                                             }
@@ -833,180 +871,131 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
-                            <div style={{ textAlign: 'center', marginTop: 8 }}>
+                            <div style={{ textAlign: 'center', marginTop: 12 }}>
                                 <Tag
-                                    color={sizeSlice === 'all' ? 'blue' : 'default'}
+                                    className="hud-tag-neon"
+                                    style={{
+                                        cursor: 'pointer',
+                                        opacity: sizeSlice === 'all' ? 0.3 : 1,
+                                        fontSize: 9,
+                                        padding: '0 12px'
+                                    }}
                                     onClick={() => setSizeSlice('all')}
-                                    style={{ cursor: 'pointer' }}
                                 >
-                                    Clear Size Filter
+                                    RESET_SCALE_SCAN
                                 </Tag>
                             </div>
                         </div>
                     </Card>
                 </Col>
 
-                {/* --- Main Section --- */}
+                {/* --- Main Section (MISSION_CONTROL) --- */}
                 <Col xs={24} lg={18}>
-                    {/* --- NEW: Expert Reviews Impact Card --- */}
-
-
                     {/* Dynamic Analytical Header */}
-                    <div style={{ marginBottom: 20, padding: '0 8px' }}>
-                        <Text strong style={{ fontSize: 16, color: '#1890ff', display: 'block', marginBottom: 4 }}>
-                            Analytical Insights & Guidance
+                    <div style={{ marginBottom: 24, padding: '0 8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 8 }}>
+                            <div style={{ width: 4, height: 18, background: '#00f2ff', borderRadius: 2 }} />
+                            <Text strong style={{ fontSize: 18, color: '#fff', textTransform: 'uppercase', letterSpacing: '2px', fontFamily: 'Inter, sans-serif' }}>
+                                Analytical Performance HUD
+                            </Text>
+                        </div>
+                        <Text style={{ fontSize: 13, display: 'block', color: '#8c8c8c', lineHeight: '1.6', maxWidth: '800px' }}>
+                            Perform deep-dive telemetry analysis of model performance. Use the <Text code style={{ background: '#1c1c1c', color: '#00f2ff', border: 'none' }}>SYSTEM_CONSOLE</Text> on the left
+                            to isolate specific blindspots across classes and object scales.
                         </Text>
-                        <Text type="secondary" style={{ fontSize: 13, display: 'block' }}>
-                            Configure the filters in the sidebar to perform a deep-dive analysis of your model's performance.
-                            The values below update instantly based on your selection, allowing you to gain deep insights into
-                            how the model performs on specific images, classes, or box sizes.
-                        </Text>
-                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Tag color={(confRange[0] === 10 && confRange[1] === 100 && iouThreshold === 30 && sizeSlice === 'all' && selectedClasses.length === 0) ? "default" : "processing"} icon={<FilterOutlined />}>
+                        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Tag
+                                className="hud-tag-neon"
+                                icon={<FilterOutlined />}
+                                style={{ borderRadius: 20, padding: '2px 16px' }}
+                            >
                                 {(confRange[0] === 10 && confRange[1] === 100 && iouThreshold === 30 && sizeSlice === 'all' && selectedClasses.length === 0)
-                                    ? "Showing: Global Model Performance (Default)"
-                                    : "Showing: Filtered Model Insights (Custom)"
+                                    ? "STATUS: GLOBAL_NOMINAL"
+                                    : "STATUS: SUB_TELEMETRY_LIVE"
                                 }
                             </Tag>
                         </div>
                     </div>
 
-                    {/* 5 KPI Cards - Deep Isolation Logic (Fixed Order) */}
-                    <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
-                        <Col flex="1">
-                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #e6f7ff', background: '#f0f9ff' }}>
-                                <Tooltip title="AI Trust Index: A balanced score of accuracy, human autonomy, and precision. Green = Autonomous, Yellow = Needs Audit, Red = High Risk.">
-                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>AI Detection Health</Text>
+                    {/* MISSION_CONTROL_KPI_PANEL (UNIFIED READOUTS) */}
+                    <Card size="small" className="hud-card" bodyStyle={{ padding: '0 12px' }} style={{ marginBottom: 16 }}>
+                        <Row align="middle" gutter={0}>
+                            {/* 1. HEALTH */}
+                            <Col flex="1" style={{ borderRight: '1px solid #222', padding: '12px 16px', textAlign: 'center' }}>
+                                <Tooltip title="Overall quality of predictions based on TP, FP, and FN.">
+                                    <Text className="hud-sidebar-label" style={{ marginBottom: 4 }}>Quality Score</Text>
                                 </Tooltip>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                    <Text strong style={{
-                                        fontSize: 20,
-                                        color: kpis.healthScore >= 80 ? '#52c41a' : (kpis.healthScore >= 60 ? '#faad14' : '#ff4d4f')
-                                    }}>
-                                        {kpis.healthScore}%
+                                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '4px' }}>
+                                    <Text strong style={{ fontSize: 22, color: kpis.healthScore >= 80 ? '#52c41a' : (kpis.healthScore >= 60 ? '#faad14' : '#ff4d4f'), fontFamily: 'JetBrains Mono' }}>
+                                        {kpis.healthScore}
                                     </Text>
-                                    <Badge
-                                        status={kpis.healthScore >= 80 ? 'success' : (kpis.healthScore >= 60 ? 'warning' : 'error')}
-                                        text={<Text style={{ fontSize: 8 }}>{kpis.healthScore >= 80 ? 'STABLE' : (kpis.healthScore >= 60 ? 'REVIEW' : 'RISK')}</Text>}
-                                    />
+                                    <Text style={{ fontSize: 10, color: '#aaa' }}>%</Text>
                                 </div>
-                            </Card>
-                        </Col>
-                        <Col flex="1">
-                            <Card size="small" style={{ textAlign: 'center', border: '1px solid #f0f0f0', background: '#f9f9f9' }}>
-                                <Tooltip title={kpis.isUploadMode
-                                    ? "Proportionality: Compares total AI detections to your manual audit. Ideally 1.0. If > 1.0, the AI is hyper-active."
-                                    : "Density Score: Compares total AI detections to actual ground truth. Ideally 1.0."}>
-                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Detection Ratio</Text>
-                                </Tooltip>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                    <Text strong style={{ fontSize: 18, color: '#000' }}>
-                                        {kpis.aiGTRatio}x
-                                    </Text>
-                                    <Tooltip title={kpis.isUploadMode
-                                        ? `AI found ${tp + fp} objects while the 'Human-Verified Truth' is ${totalGT} objects.`
-                                        : `AI found ${tp + fp + ma} objects while there are only ${totalGT} actual objects in reality.`}>
-                                        <Text type="secondary" style={{ fontSize: 9, cursor: 'help' }}>
-                                            {kpis.isUploadMode ? `${tp + fp} AI / ${totalGT} Truth` : `${tp + fp + ma} AI / ${totalGT} GT`}
-                                        </Text>
-                                    </Tooltip>
-                                </div>
-                            </Card>
-                        </Col>
-                        <Col flex="1">
-                            <Card
-                                size="small"
-                                style={{ textAlign: 'center', border: '1px solid #f6ffed', background: '#f6ffed', cursor: 'pointer' }}
-                                hoverable
-                                onClick={() => setErrorModal({
-                                    visible: true,
-                                    title: 'True Positive Detections',
-                                    items: kpis.tpItems
-                                })}
-                            >
-                                <Tooltip title={kpis.isUploadMode
-                                    ? "Confirmed Good: AI boxes you agreed with (implicitly or explicitly)."
-                                    : "Correct Results: AI successfully found the right label with high confidence and precision."}>
-                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>True Positives</Text>
-                                </Tooltip>
-                                <Text strong style={{ fontSize: 20, color: '#52c41a' }}>
-                                    {kpis.tp}
-                                </Text>
-                            </Card>
-                        </Col>
-                        <Col flex="1">
-                            <Card
-                                size="small"
-                                style={{ textAlign: 'center', border: '1px solid #fff1f0', cursor: 'pointer', background: '#fff1f0' }}
-                                hoverable
-                                onClick={() => setErrorModal({
-                                    visible: true,
-                                    title: 'False Positive Detections',
-                                    items: kpis.fpItems
-                                })}
-                            >
-                                <Tooltip title={kpis.isUploadMode
-                                    ? "Verified False Alarms: Boxes you explicitly clicked [FAIL] on."
-                                    : "Incorrect Alarms: Cases where the AI reported an object, but nothing exists at that location."}>
-                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>False Positives</Text>
-                                </Tooltip>
-                                <Text strong style={{ fontSize: 20, color: '#ff4d4f' }}>
-                                    {kpis.fp}
-                                </Text>
-                            </Card>
-                        </Col>
-                        {!kpis.isUploadMode && (
-                            <Col flex="1">
-                                <Card
-                                    size="small"
-                                    style={{ textAlign: 'center', border: '1px solid #fff7e6', cursor: 'pointer', background: '#fff7e6' }}
-                                    hoverable
-                                    onClick={() => setErrorModal({
-                                        visible: true,
-                                        title: 'Misaligned Objects',
-                                        items: kpis.maItems
-                                    })}
-                                >
-                                    <Tooltip title="Accuracy Errors: The AI found the right object but placed the box inaccurately. Adjust the 'IoU' slider to set your precision standard.">
-                                        <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Misaligned Objects</Text>
-                                    </Tooltip>
-                                    <Text strong style={{ fontSize: 20, color: '#fa8c16' }}>
-                                        {kpis.ma}
-                                    </Text>
-                                </Card>
+                                <Badge
+                                    status={kpis.healthScore >= 80 ? 'success' : (kpis.healthScore >= 60 ? 'warning' : 'error')}
+                                    text={<Text style={{ fontSize: 8, color: '#888' }}>{kpis.healthScore >= 80 ? 'NOMINAL' : (kpis.healthScore >= 60 ? 'CAUTION' : 'CRITICAL')}</Text>}
+                                />
                             </Col>
-                        )}
-                        <Col flex="1">
-                            <Card
-                                size="small"
-                                style={{ textAlign: 'center', border: '1px solid #fffbe6', cursor: 'pointer', background: '#fffbe6' }}
-                                hoverable
-                                onClick={() => setErrorModal({
-                                    visible: true,
-                                    title: kpis.isUploadMode ? 'Manual Objects (AI Missed)' : 'Missed Ground Truth Objects',
-                                    items: kpis.fnItems
-                                })}
-                            >
-                                <Tooltip title={kpis.isUploadMode
-                                    ? "Blind Spots: Objects you had to draw manually because the AI ignored them."
-                                    : "Unfound Objects: Actual objects the AI missed."}>
-                                    <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase', cursor: 'help' }}>Missed Objects</Text>
+
+                            {/* 2. RATIO */}
+                            <Col flex="1" style={{ borderRight: '1px solid #222', padding: '12px 16px', textAlign: 'center' }}>
+                                <Tooltip title="Ratio of AI detections vs Reference objects. Ideal is 1.0.">
+                                    <Text className="hud-sidebar-label" style={{ marginBottom: 4 }}>Detection Ratio</Text>
                                 </Tooltip>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                    <Text strong style={{ fontSize: 20, color: '#faad14' }}>
-                                        {kpis.fn}
-                                    </Text>
-                                    {(!kpis.isUploadMode) && (
-                                        <Tooltip title={`'Real' (${kpis.fnReal}) were missed by the model. 'Filtered' (${kpis.fnFiltered}) were found but suppressed by your confidence settings.`}>
-                                            <Text type="secondary" style={{ fontSize: 9, cursor: 'help' }}>
-                                                {`${kpis.fnReal} Real / ${kpis.fnFiltered} Filtered`}
-                                            </Text>
-                                        </Tooltip>
-                                    )}
-                                </div>
-                            </Card>
-                        </Col>
-                    </Row>
+                                <Text strong style={{ fontSize: 20, color: '#fff', fontFamily: 'JetBrains Mono' }}>{kpis.aiGTRatio}x</Text>
+                                <div style={{ fontSize: 9, color: '#888' }}>{kpis.isUploadMode ? `${tp + fp} AI / ${totalGT} TRUTH` : `${tp + fp + ma} AI / ${totalGT} GT`}</div>
+                            </Col>
+
+                            {/* 3. TRUE POSITIVES (SUCCESS) */}
+                            <Col flex="1" style={{ borderRight: '1px solid #222', padding: '12px 16px', textAlign: 'center', cursor: 'pointer', transition: 'background 0.3s' }}
+                                className="hud-readout-hover"
+                                onClick={() => setErrorModal({ visible: true, title: 'TRUE_POSITIVE_TELEMETRY', items: kpis.tpItems })}>
+                                <Tooltip title="Correct AI detections (successful matches). Click to view details.">
+                                    <Text className="hud-sidebar-label" style={{ marginBottom: 4, color: '#52c41a' }}>True Positives</Text>
+                                </Tooltip>
+                                <Text strong style={{ fontSize: 22, color: '#52c41a', fontFamily: 'JetBrains Mono' }}>{kpis.tp}</Text>
+                                <div style={{ fontSize: 8, color: '#52c41a', opacity: 0.6 }}>CONFIRMED_GOOD</div>
+                            </Col>
+
+                            {/* 4. FALSE POSITIVES (ERRORS) */}
+                            <Col flex="1" style={{ borderRight: '1px solid #222', padding: '12px 16px', textAlign: 'center', cursor: 'pointer' }}
+                                className="hud-readout-hover"
+                                onClick={() => setErrorModal({ visible: true, title: 'FALSE_POSITIVE_TELEMETRY', items: kpis.fpItems })}>
+                                <Tooltip title="Incorrect AI detections (objects identified where none exist). Click to view details.">
+                                    <Text className="hud-sidebar-label" style={{ marginBottom: 4, color: '#ff4d4f' }}>False Positives</Text>
+                                </Tooltip>
+                                <Text strong style={{ fontSize: 22, color: '#ff4d4f', fontFamily: 'JetBrains Mono' }}>{kpis.fp}</Text>
+                                <div style={{ fontSize: 8, color: '#ff4d4f', opacity: 0.6 }}>INCORRECT_FINDS</div>
+                            </Col>
+
+                            {/* 5. MISALIGNED (IF APPLICABLE) */}
+                            {!kpis.isUploadMode && (
+                                <Col flex="1" style={{ borderRight: '1px solid #222', padding: '12px 16px', textAlign: 'center', cursor: 'pointer' }}
+                                    className="hud-readout-hover"
+                                    onClick={() => setErrorModal({ visible: true, title: 'ACCURACY_DEVIATION', items: kpis.maItems })}>
+                                    <Tooltip title="AI Detections correctly localized but with inaccurate bounding box coordinates. Click to view details.">
+                                        <Text className="hud-sidebar-label" style={{ marginBottom: 4, color: '#fa8c16' }}>Misaligned</Text>
+                                    </Tooltip>
+                                    <Text strong style={{ fontSize: 22, color: '#fa8c16', fontFamily: 'JetBrains Mono' }}>{kpis.ma}</Text>
+                                    <div style={{ fontSize: 8, color: '#fa8c16', opacity: 0.6 }}>MISALIGNED_BOX</div>
+                                </Col>
+                            )}
+
+                            {/* 6. MISSED (BLINDSPOTS) */}
+                            <Col flex="1" style={{ padding: '12px 16px', textAlign: 'center', cursor: 'pointer' }}
+                                className="hud-readout-hover"
+                                onClick={() => setErrorModal({ visible: true, title: 'BLINDSPOT_TELEMETRY', items: kpis.fnItems })}>
+                                <Tooltip title="Objects that the AI failed to detect entirely. Click to view details.">
+                                    <Text className="hud-sidebar-label" style={{ marginBottom: 4, color: '#faad14' }}>Missed Objects</Text>
+                                </Tooltip>
+                                <Text strong style={{ fontSize: 22, color: '#faad14', fontFamily: 'JetBrains Mono' }}>{kpis.fn}</Text>
+                                <div style={{ fontSize: 8, color: '#faad14', opacity: 0.6 }}>UNFOUND_GT</div>
+                            </Col>
+                        </Row>
+                        <style>{`
+                            .hud-readout-hover:hover { background: rgba(255,255,255,0.03); }
+                        `}</style>
+                    </Card>
 
                     <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
                         <Col flex="1">
@@ -1045,77 +1034,102 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Col>
                     </Row>
 
-                    <Row gutter={[8, 8]} style={{ marginBottom: 24 }}>
-                        <Col span={24}>
-                            <Card size="small" style={{ border: '1px solid #f0f0f0' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                    <Tooltip title="Findings vs. Misses: A high-level view of what happened to all objects that exist in your data. Green = AI found them, Yellow = AI found them but box is sloppy, Orange = AI missed them.">
-                                        <Text strong style={{ fontSize: 13, textTransform: 'uppercase', cursor: 'help' }}>
-                                            <BarChartOutlined style={{ marginRight: 8, color: '#1890ff' }} />
-                                            Graph 2: AI Findings vs. Misses (Outcome Recap)
-                                        </Text>
+                    {/* GRAPH 2: AI FINDINGS VS. MISSES (PRO_RECAP) */}
+                    <Card
+                        size="small"
+                        className="hud-card"
+                        title={
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <BarChartOutlined style={{ color: '#00f2ff' }} />
+                                    <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px' }}>AI FINDINGS VS. MISSES (OUTCOME RECAP)</Text>
+                                </div>
+                                <Tag className="hud-tag-neon" style={{ margin: 0 }}>TOTAL_TRUTH: {totalGT} OBJECTS</Tag>
+                            </div>
+                        }
+                        style={{ marginBottom: 24 }}
+                    >
+                        <div style={{ padding: '8px 0' }}>
+                            <div style={{ display: 'flex', height: 40, border: '1px solid #333', borderRadius: 4, overflow: 'hidden', background: '#141414' }}>
+                                {kpis.outcomeData.map((seg, idx) => (
+                                    <Tooltip key={idx} title={`${seg.name}: ${seg.value}`}>
+                                        <div style={{
+                                            width: `${totalGT > 0 ? (seg.value / totalGT) * 100 : 0}%`,
+                                            background: seg.color,
+                                            opacity: 0.85,
+                                            height: '100%',
+                                            transition: 'flex 0.5s ease'
+                                        }} />
                                     </Tooltip>
-                                    <Tag color="blue">Total Truth: {totalGT} Objects</Tag>
-                                </div>
+                                ))}
+                            </div>
 
-                                <div style={{ height: 60, width: '100%', display: 'flex', borderRadius: 4, overflow: 'hidden', backgroundColor: '#f5f5f5' }}>
-                                    {kpis.outcomeData.map((seg, idx) => {
-                                        const pct = totalGT > 0 ? (seg.value / totalGT) * 100 : 0;
-                                        if (pct === 0) return null;
-                                        return (
-                                            <Tooltip key={idx} title={`${seg.name}: ${seg.value} (${pct.toFixed(1)}%)`}>
-                                                <div style={{ width: `${pct}%`, backgroundColor: seg.color, height: '100%', transition: 'all 0.3s ease' }} />
-                                            </Tooltip>
-                                        )
-                                    })}
-                                </div>
+                            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '24px' }}>
+                                {kpis.outcomeData.map((seg, idx) => {
+                                    const pct = totalGT > 0 ? (seg.value / totalGT) * 100 : 0;
+                                    return (
+                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <div style={{ width: 8, height: 8, border: `2px solid ${seg.color}`, borderRadius: '50%' }} />
+                                            <Text style={{ fontSize: 10, color: '#aaa', fontFamily: 'JetBrains Mono' }}>
+                                                {seg.name}: <span style={{ color: '#fff', fontWeight: 'bold' }}>{seg.value}</span> ({pct.toFixed(0)}%)
+                                            </Text>
+                                        </div>
+                                    )
+                                })}
+                            </div>
 
-                                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: '24px' }}>
-                                    {kpis.outcomeData.map((seg, idx) => {
-                                        const pct = totalGT > 0 ? (seg.value / totalGT) * 100 : 0;
-                                        return (
-                                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: seg.color }} />
-                                                <Text style={{ fontSize: 11 }}>{seg.name}: <b>{seg.value}</b> ({pct.toFixed(0)}%)</Text>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
+                            <Divider style={{ margin: '16px 0', borderTopColor: '#222' }} />
 
-                                <Divider style={{ margin: '12px 0', borderStyle: 'dashed' }} />
-                                <Text type="secondary" style={{ fontSize: 12, display: 'block', textAlign: 'center' }}>
+                            <div style={{
+                                padding: '12px',
+                                background: '#0a0a0a',
+                                borderLeft: '3px solid #00f2ff',
+                                borderRadius: '0 4px 4px 0',
+                                fontFamily: 'monospace'
+                            }}>
+                                <Text style={{ fontSize: 11, color: '#aaa', lineHeight: '1.6' }}>
                                     {(() => {
                                         const fnPct = totalGT > 0 ? (kpis.fn / totalGT) * 100 : 0;
                                         const maPct = totalGT > 0 ? (kpis.ma / totalGT) * 100 : 0;
                                         const tpPct = totalGT > 0 ? (kpis.tp / totalGT) * 100 : 0;
-                                        const fpRatio = kpis.tp > 0 ? (kpis.fp / kpis.tp) : 0;
 
-                                        if (totalGT === 0) return <span>ℹ️ <b>No Ground Truth Detected:</b> Add manual boxes or upload a label file to begin performance analysis.</span>;
-                                        if (fnPct > 80) return <span>🚨 <b>Total Coverage Failure:</b> Your model is misses <b>{fnPct.toFixed(0)}%</b> of reality. It is functionally "Blind." Ensure the labels are correct or increase training diversity.</span>;
-                                        if (maPct > 20) return <span>📏 <b>Alignment Precision Crisis:</b> {maPct.toFixed(0)}% of findings are <b>Misaligned</b>. The model "Locates" features correctly but the boxes have <b>poor alignment</b>. Tune your anchor boxes or IoU settings.</span>;
-                                        if (fnPct > 35) return <span>⚠️ <b>Major Recall Gap:</b> {fnPct.toFixed(0)}% of objects are undetected. This indicates a <b>Coverage Crisis</b>. The model sees the world but misses nearly half the details.</span>;
-                                        if (tpPct > 85 && maPct < 5) return <span>🏆 <b>Elite Performance:</b> Exceptional alignment! Over {tpPct.toFixed(0)}% of reality matches perfectly. This model is ready for <b>High-Stakes Automation</b>.</span>;
+                                        if (totalGT === 0) return <span>[STATUS: INCOMPLETE] NO_GT_SAMPLES_DETECTED. Analyze label configuration.</span>;
+                                        if (fnPct > 80) return <span style={{ color: '#ff4d4f' }}>[STATUS: CRITICAL] TOTAL_COVERAGE_FAILURE: Model is functionally BLIND. Check training data.</span>;
+                                        if (maPct > 20) return <span style={{ color: '#fa8c16' }}>[STATUS: WARNING] ALIGNMENT_DRIFT: {maPct.toFixed(0)}% accuracy deviation. Tune anchor resolution.</span>;
+                                        if (tpPct > 85 && maPct < 5) return <span style={{ color: '#52c41a' }}>[STATUS: OPTIMAL] ELITE_PERFORMANCE: High alignment stability achieved. Fully Autonomous capable.</span>;
 
-                                        return <span>✅ <b>Reliable Industrial Baseline:</b> The model's findings align strongly with Ground Truth. The current configuration demonstrates <b>Operational Stability</b>.</span>;
+                                        return <span style={{ color: '#00f2ff' }}>[STATUS: NOMINAL] RELIABLE_TELEMETRY: Operation shows high alignment stability with current baseline.</span>;
                                     })()}
                                 </Text>
-                            </Card>
-                        </Col>
-                    </Row>
+                            </div>
+                        </div>
+                    </Card>
 
+                    {/* GRAPH 3: ROI & VERIFICATION (TELEMETRY LOG) */}
                     {(discoveries > 0 || verifiedAlarms > 0 || humanMissing > 0 || kpis.confirmations > 0) && (
-                        <Card size="small" style={{ marginBottom: 24, borderRadius: 8, border: '1px solid #e6f7ff', background: '#f0f9ff' }}>
-                            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
-                                {/* Left Side: Mini Donut ROI */}
-                                <div style={{ width: 100, textAlign: 'center' }}>
+                        <Card
+                            size="small"
+                            className="hud-card"
+                            headStyle={{ background: '#1c1c1c' }}
+                            title={
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <FundOutlined style={{ color: '#00f2ff' }} />
+                                    <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px' }}>EXPERT VERIFICATION TELEMETRY (ROI LOG)</Text>
+                                </div>
+                            }
+                            style={{ marginBottom: 24 }}
+                        >
+                            <div style={{ display: 'flex', gap: '32px', alignItems: 'center', padding: '12px 8px' }}>
+                                {/* Left Side: HUD Donut */}
+                                <div style={{ width: 120, textAlign: 'center' }}>
                                     <div style={{ height: 100, position: 'relative' }}>
                                         <ResponsiveContainer width="100%" height="100%">
                                             <PieChart>
                                                 <Pie
                                                     data={kpis.roiData}
-                                                    innerRadius={30}
+                                                    innerRadius={32}
                                                     outerRadius={45}
-                                                    paddingAngle={2}
+                                                    paddingAngle={4}
                                                     dataKey="value"
                                                     stroke="none"
                                                 >
@@ -1123,93 +1137,51 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                                     ))}
                                                 </Pie>
-                                                <RechartsTooltip />
                                             </PieChart>
                                         </ResponsiveContainer>
                                         <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                                            <Text strong style={{ fontSize: 16, display: 'block' }}>
+                                            <Text strong style={{ fontSize: 18, color: '#fff', display: 'block', fontFamily: 'JetBrains Mono' }}>
                                                 {kpis.roiData.reduce((acc, curr) => acc + curr.value, 0)}
                                             </Text>
-                                            <Text type="secondary" style={{ fontSize: 8 }}>SAVED</Text>
+                                            <Text style={{ fontSize: 7, color: '#aaa', letterSpacing: '1px' }}>SAMPLES</Text>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Right Side: Dynamic Narrative & Metrics */}
+                                {/* Right Side: Telemetry Readouts */}
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                        <div>
-                                            <Title level={5} style={{ margin: 0 }}>Expert Verification Narrative</Title>
-                                            <Text type="secondary" style={{ fontSize: 11 }}>Human-in-the-loop corrections are actively improving the model "Mark."</Text>
-                                        </div>
-                                        <Space split={<Divider type="vertical" />}>
-                                            <div
-                                                style={{ textAlign: 'center', cursor: 'pointer' }}
-                                                onClick={() => setErrorModal({
-                                                    visible: true,
-                                                    title: 'AI Confirmations (Validated Findings)',
-                                                    items: kpis.confirmationItems
-                                                })}
-                                            >
-                                                <Text strong style={{ fontSize: 18, color: '#1890ff', display: 'block' }}>{kpis.confirmations}</Text>
-                                                <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Confirmations</Text>
-                                            </div>
-                                            <div
-                                                style={{ textAlign: 'center', cursor: 'pointer' }}
-                                                onClick={() => setErrorModal({
-                                                    visible: true,
-                                                    title: 'Human Discoveries (Confirmed TP)',
-                                                    items: kpis.discoveryItems
-                                                })}
-                                            >
-                                                <Text strong style={{ fontSize: 18, color: '#52c41a', display: 'block' }}>{discoveries}</Text>
-                                                <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Discoveries</Text>
-                                            </div>
-                                            <div
-                                                style={{ textAlign: 'center', cursor: 'pointer' }}
-                                                onClick={() => setErrorModal({
-                                                    visible: true,
-                                                    title: 'Verified False Alarms (Cleanup)',
-                                                    items: kpis.alarmItems
-                                                })}
-                                            >
-                                                <Text strong style={{ fontSize: 18, color: '#ff4d4f', display: 'block' }}>{verifiedAlarms}</Text>
-                                                <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>False Alarms</Text>
-                                            </div>
-                                            <div
-                                                style={{ textAlign: 'center', cursor: 'pointer' }}
-                                                onClick={() => setErrorModal({
-                                                    visible: true,
-                                                    title: 'Human Misses (Manual Boxes)',
-                                                    items: kpis.missingItems
-                                                })}
-                                            >
-                                                <Text strong style={{ fontSize: 18, color: '#faad14', display: 'block' }}>{humanMissing}</Text>
-                                                <Text type="secondary" style={{ fontSize: 10, textTransform: 'uppercase' }}>Human Misses</Text>
-                                            </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 }}>
+                                        <Text type="secondary" style={{ fontSize: 10, color: '#aaa', textTransform: 'uppercase', letterSpacing: '1px' }}>Telemetry Stream: Model "Mark"</Text>
+                                        <Space split={<Divider type="vertical" style={{ borderColor: '#333' }} />} size={0}>
+                                            {[
+                                                { label: 'CONF', val: kpis.confirmations, color: '#1890ff', title: 'Confirmations' },
+                                                { label: 'DISC', val: discoveries, color: '#52c41a', title: 'Discoveries' },
+                                                { label: 'ALRM', val: verifiedAlarms, color: '#ff4d4f', title: 'Alarms' },
+                                                { label: 'MISS', val: humanMissing, color: '#faad14', title: 'Misses' }
+                                            ].map((stat, i) => (
+                                                <div key={i} style={{ padding: '0 12px', textAlign: 'center', cursor: 'pointer' }}
+                                                    onClick={() => setErrorModal({ visible: true, title: stat.title.toUpperCase(), items: stat.label === 'CONF' ? kpis.confirmationItems : (stat.label === 'DISC' ? kpis.discoveryItems : (stat.label === 'ALRM' ? kpis.alarmItems : kpis.missingItems)) })}>
+                                                    <Text strong style={{ fontSize: 14, color: stat.color, display: 'block', fontFamily: 'JetBrains Mono' }}>{stat.val}</Text>
+                                                    <Text style={{ fontSize: 8, color: '#aaa' }}>{stat.label}</Text>
+                                                </div>
+                                            ))}
                                         </Space>
                                     </div>
-                                    <Divider style={{ margin: '8px 0' }} />
+                                    <Divider style={{ margin: '0 0 12px 0', borderTopColor: '#222' }} />
                                     <List
                                         size="small"
                                         split={false}
                                         dataSource={[
-                                            { icon: <CloudSyncOutlined style={{ color: '#1890ff' }} />, text: `Validated ${kpis.confirmations} AI finding${kpis.confirmations === 1 ? '' : 's'} as correct.` },
-                                            { icon: <BulbOutlined style={{ color: '#52c41a' }} />, text: `AI successfully found ${discoveries} real target${discoveries === 1 ? '' : 's'} missed in the initial training labels.` },
-                                            { icon: <WarningOutlined style={{ color: '#ff4d4f' }} />, text: `Verified ${verifiedAlarms} AI finding${verifiedAlarms === 1 ? '' : 's'} as false alarm${verifiedAlarms === 1 ? '' : 's'}.` },
-                                            { icon: <PlusSquareOutlined style={{ color: '#faad14' }} />, text: `Identified ${humanMissing} target${humanMissing === 1 ? '' : 's'} missed by both training labels and AI findings.` }
-                                        ].filter(item => {
-                                            if (item.text.includes('Validated')) return kpis.confirmations > 0;
-                                            if (item.text.includes('successfully found')) return discoveries > 0;
-                                            if (item.text.includes('false alarm')) return verifiedAlarms > 0;
-                                            if (item.text.includes('Identified')) return humanMissing > 0;
-                                            return false;
-                                        })}
+                                            { icon: <CloudSyncOutlined style={{ color: '#1890ff', fontSize: 11 }} />, text: `VALIDATED_${kpis.confirmations}_AI_NODES: CONFIRMED_GOOD.` },
+                                            { icon: <BulbOutlined style={{ color: '#52c41a', fontSize: 11 }} />, text: `DETECTED_${discoveries}_HIDDEN_TARGETS: ROBUST_LEARNING.` },
+                                            { icon: <WarningOutlined style={{ color: '#ff4d4f', fontSize: 11 }} />, text: `CLEANUP_${verifiedAlarms}_FALSE_ALARMS: SYSTEM_PURGE.` },
+                                            { icon: <PlusSquareOutlined style={{ color: '#faad14', fontSize: 11 }} />, text: `IDENTIFIED_${humanMissing}_SYSTEM_GAPS: BLINDSPOT_AWARENESS.` }
+                                        ].filter((item, i) => [kpis.confirmations, discoveries, verifiedAlarms, humanMissing][i] > 0)}
                                         renderItem={item => (
-                                            <List.Item style={{ padding: '2px 0' }}>
-                                                <Space>
+                                            <List.Item style={{ padding: '2px 0', border: 'none' }}>
+                                                <Space size={8}>
                                                     {item.icon}
-                                                    <Text style={{ fontSize: 12 }}>{item.text}</Text>
+                                                    <Text style={{ fontSize: 11, color: '#aaa', fontFamily: 'monospace' }}>{item.text}</Text>
                                                 </Space>
                                             </List.Item>
                                         )}
@@ -1219,94 +1191,103 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                         </Card>
                     )}
 
-                    <Card size="small" style={{ marginBottom: 24, borderRadius: 8, border: '1px solid #f0f0f0', background: '#fff' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                            <div>
-                                <Title level={5} style={{ margin: 0 }}>Decision Explanation</Title>
-                                <Text type="secondary" style={{ fontSize: 11 }}>IoU Match: 0.30 • Min Automation: 15% • Step: 0.05</Text>
+                    {/* MISSION_STRESS_TEST: DETERMINISTIC_ENGINE_HUD */}
+                    <Card
+                        size="small"
+                        className="hud-card"
+                        title={
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <CloudSyncOutlined style={{ color: '#00f2ff' }} />
+                                    <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px' }}>AI ENGINE_STRESS_TEST (DETERMINISTIC_FEEDBACK)</Text>
+                                </div>
+                                <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    {kpis.engineState?.status === 'ok' && (
+                                        <div>
+                                            <Tag className="hud-tag-neon" style={{ margin: 0 }}>
+                                                {stressStrategy === 'retrain'
+                                                    ? `TARGET: ${(kpis.engineState.retrain.confidence * 100).toFixed(0)}%_CONF`
+                                                    : `PROD: ${(kpis.engineState.production?.t * 100).toFixed(0)}%_CONF`}
+                                            </Tag>
+                                        </div>
+                                    )}
+                                    <Tooltip title="Switch between Production baseline and Training datasets.">
+                                        <Segmented
+                                            size="small"
+                                            className="hud-segmented"
+                                            value={stressStrategy === 'safe' || stressStrategy === 'balanced' ? 'production' : (stressStrategy === 'aggressive' ? 'retrain' : stressStrategy)}
+                                            onChange={(v) => setStressStrategy(v)}
+                                            options={[
+                                                { label: 'Production', value: 'production', icon: <SearchOutlined /> },
+                                                { label: 'Training', value: 'retrain', icon: <ArrowUpOutlined /> },
+                                            ]}
+                                            style={{ background: '#1c1c1c', border: '1px solid #333' }}
+                                        />
+                                    </Tooltip>
+                                </div>
                             </div>
-                            <Space align="center" size="large">
-                                {kpis.engineState?.status === 'ok' && (
-                                    <div style={{ textAlign: 'right' }}>
-                                        <Text type="secondary" style={{ fontSize: 9, display: 'block', textTransform: 'uppercase' }}>
-                                            {stressStrategy === 'retrain' ? 'Target Confidence' : 'Production Target'}
-                                        </Text>
-                                        <Tag color="blue" icon={<SearchOutlined />} style={{ fontSize: 13, padding: '2px 8px' }}>
-                                            {stressStrategy === 'retrain'
-                                                ? `${(kpis.engineState.retrain?.confidence * 100).toFixed(0)}% Confidence`
-                                                : `${(kpis.engineState.production?.t * 100).toFixed(0)}% Confidence`}
-                                        </Tag>
-                                    </div>
-                                )}
-                                <Segmented
-                                    value={stressStrategy === 'safe' || stressStrategy === 'balanced' ? 'production' : (stressStrategy === 'aggressive' ? 'retrain' : stressStrategy)}
-                                    onChange={(v) => setStressStrategy(v)}
-                                    options={[
-                                        { label: 'Production', value: 'production', icon: <SearchOutlined /> },
-                                        { label: 'Retrain', value: 'retrain', icon: <ArrowUpOutlined /> },
-                                    ]}
-                                />
-                            </Space>
-                        </div>
-
+                        }
+                        style={{ marginBottom: 24 }}
+                    >
                         <Row gutter={24}>
                             <Col span={16}>
-                                <div style={{ height: 380 }}>
+                                <div style={{ height: 350 }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart
                                             data={kpis.engineState?.rows || []}
-                                            margin={{ top: 60, right: 10, left: 10, bottom: 10 }}
+                                            margin={{ top: 40, right: 10, left: 10, bottom: 10 }}
                                         >
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                            <CartesianGrid strokeDasharray="1 4" vertical={false} stroke="#333" />
                                             <XAxis
                                                 dataKey="t"
                                                 axisLine={false}
                                                 tickLine={false}
-                                                tick={{ fontSize: 10 }}
+                                                tick={{ fill: '#888', fontSize: 10, fontFamily: 'JetBrains Mono' }}
                                                 interval={1}
-                                                label={{ value: 'Confidence Threshold', position: 'insideBottom', offset: -5, fontSize: 10 }}
                                             />
-                                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
                                             <RechartsTooltip
-                                                contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                                contentStyle={{ background: '#141414', border: '1px solid #333', borderRadius: 4 }}
+                                                itemStyle={{ fontSize: 11 }}
+                                                cursor={{ fill: 'rgba(255,255,255,0.03)' }}
                                                 formatter={(value, name) => [value, String(name).toUpperCase()]}
                                             />
-                                            <Legend verticalAlign="bottom" align="center" height={36} iconType="circle" wrapperStyle={{ paddingTop: 20 }} />
+                                            <Legend verticalAlign="bottom" align="center" height={36} iconType="rect" wrapperStyle={{ paddingTop: 20, fontSize: 10, color: '#8c8c8c' }} />
 
-                                            <Bar dataKey="tp" stackId="a" fill="#52c41a" name="Correct (TP)" radius={[0, 0, 0, 0]} />
-                                            <Bar dataKey="fp" stackId="a" fill="#fa8c16" name="Mistakes (FP)" radius={[0, 0, 0, 0]} />
-                                            <Bar dataKey="fn" stackId="a" fill="#ff4d4f" name="Missed (FN)" radius={[2, 2, 0, 0]} />
+                                            <Bar dataKey="tp" stackId="a" fill="#52c41a" name="True Positives" radius={[0, 0, 0, 0]} opacity={0.6} />
+                                            <Bar dataKey="fp" stackId="a" fill="#fa8c16" name="False Positives" radius={[0, 0, 0, 0]} opacity={0.6} />
+                                            <Bar dataKey="fn" stackId="a" fill="#ff4d4f" name="Missed Objects" radius={[1, 1, 0, 0]} opacity={0.6} />
 
                                             {kpis.engineState?.silent_zones?.map((zone, idx) => (
                                                 <ReferenceArea
                                                     key={idx}
                                                     x1={zone.from}
                                                     x2={zone.to}
-                                                    fill="#f0f0f0"
-                                                    fillOpacity={0.6}
-                                                    label={{ value: 'REJECTED', position: 'insideTop', fill: '#8c8c8c', fontSize: 9, fontWeight: 'bold' }}
+                                                    fill="#1c1c1c"
+                                                    fillOpacity={0.8}
+                                                    label={{ value: 'Rejected Zone', position: 'insideTop', fill: '#888', fontSize: 8, fontWeight: 'bold' }}
                                                 />
                                             ))}
 
                                             {kpis.engineState?.model_ceiling?.t !== null && kpis.engineState?.model_ceiling?.t !== undefined && (
-                                                <ReferenceLine x={kpis.engineState.model_ceiling.t} stroke="#722ed1" strokeWidth={2} strokeDasharray="3 3">
-                                                    <Label value="MODEL CEILING 🛑" position="top" fill="#722ed1" fontSize={10} fontWeight="bold" offset={15} />
+                                                <ReferenceLine x={kpis.engineState.model_ceiling.t} stroke="#722ed1" strokeWidth={1} strokeDasharray="4 4">
+                                                    <Label value="Model Ceiling" position="top" fill="#722ed1" fontSize={8} fontWeight="bold" offset={10} />
                                                 </ReferenceLine>
                                             )}
 
                                             {kpis.engineState?.status === 'ok' && (
                                                 <ReferenceLine
                                                     x={stressStrategy === 'retrain' ? kpis.engineState.retrain.confidence : kpis.engineState.production?.t}
-                                                    stroke="#1890ff"
-                                                    strokeWidth={3}
+                                                    stroke="#00f2ff"
+                                                    strokeWidth={2}
                                                 >
                                                     <Label
-                                                        value={stressStrategy === 'retrain' ? 'TARGET ⭐' : 'PRODUCTION ⭐'}
+                                                        value={stressStrategy === 'retrain' ? 'Target Confidence' : 'Production Baseline'}
                                                         position="top"
-                                                        fill="#1890ff"
-                                                        fontSize={10}
+                                                        fill="#00f2ff"
+                                                        fontSize={9}
                                                         fontWeight="bold"
-                                                        offset={35}
+                                                        offset={25}
                                                     />
                                                 </ReferenceLine>
                                             )}
@@ -1315,106 +1296,137 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                 </div>
                             </Col>
                             <Col span={8}>
-                                <Title level={5} style={{ fontSize: 14, marginBottom: 16, display: 'flex', alignItems: 'center', color: '#1890ff' }}>
-                                    <BulbOutlined style={{ marginRight: 8 }} />
-                                    Deterministic Analysis
-                                </Title>
-                                <List
-                                    size="small"
-                                    dataSource={stressStrategy === 'retrain' ? kpis.engineState?.briefing?.retrain : kpis.engineState?.briefing?.production}
-                                    renderItem={item => {
-                                        const isReject = item.includes('REJECTED');
-                                        const isCeiling = item.includes('MODEL CEILING');
-                                        const isDiag = item.includes('Diagnosis:');
-                                        const isWhy = item.includes('Why not');
+                                <div style={{ borderLeft: '1px solid #222', paddingLeft: 20, height: '100%' }}>
+                                    <Text className="hud-sidebar-label" style={{ color: '#00f2ff' }}>Engine Briefing [Deterministic]</Text>
+                                    <List
+                                        size="small"
+                                        style={{ marginTop: 12 }}
+                                        dataSource={stressStrategy === 'retrain' ? kpis.engineState?.briefing?.retrain : kpis.engineState?.briefing?.production}
+                                        renderItem={item => {
+                                            const isReject = item.includes('REJECTED');
+                                            const isCeiling = item.includes('MODEL CEILING');
+                                            const isDiag = item.includes('Diagnosis:');
 
-                                        return (
-                                            <List.Item style={{
-                                                padding: '8px 12px',
-                                                border: 'none',
-                                                marginBottom: 6,
-                                                borderRadius: 6,
-                                                background: isReject ? '#fff1f0' : (isCeiling ? '#f9f0ff' : (isDiag ? '#e6f7ff' : (isWhy ? '#fff7e6' : 'transparent'))),
-                                                fontSize: 12
-                                            }}>
-                                                <span style={{ fontWeight: (isReject || isCeiling || isDiag) ? 600 : 400 }}>
-                                                    {item}
-                                                </span>
-                                            </List.Item>
-                                        );
-                                    }}
-                                />
+                                            return (
+                                                <List.Item style={{
+                                                    padding: '6px 10px',
+                                                    border: 'none',
+                                                    marginBottom: 8,
+                                                    borderRadius: 2,
+                                                    background: isReject ? 'rgba(255, 77, 79, 0.05)' : (isCeiling ? 'rgba(114, 46, 209, 0.05)' : (isDiag ? 'rgba(0, 242, 255, 0.05)' : '#0d0d0d')),
+                                                    borderLeft: `2px solid ${isReject ? '#ff4d4f' : (isCeiling ? '#722ed1' : (isDiag ? '#00f2ff' : '#222'))}`
+                                                }}>
+                                                    <Text style={{
+                                                        fontSize: 11,
+                                                        color: '#aaa',
+                                                        fontFamily: 'monospace'
+                                                    }}>
+                                                        {item.toUpperCase()}
+                                                    </Text>
+                                                </List.Item>
+                                            );
+                                        }}
+                                    />
+                                </div>
                             </Col>
                         </Row>
                     </Card>
 
                     <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
                         <Col span={24}>
+                            {/* GRAPH 4: SCALE_PERFORMANCE_FINGERPRINT (STRESS_HUD) */}
                             <Card
                                 size="small"
+                                className="hud-card"
                                 title={
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <Space>
-                                            <LineChartOutlined style={{ color: '#faad14' }} />
-                                            <Text strong style={{ fontSize: 13, textTransform: 'uppercase' }}>
-                                                Graph 4: Scale Performance Fingerprint (Parallel Stress Test)
-                                            </Text>
-                                        </Space>
-                                        <div onClick={(e) => e.stopPropagation()}>
-                                            <Select
-                                                size="small"
-                                                style={{ width: 140 }}
-                                                value={graph4Class}
-                                                onChange={setGraph4Class}
-                                                bordered={false}
-                                                dropdownMatchSelectWidth={false}
-                                            >
-                                                <Select.Option value="all">Global Average</Select.Option>
-                                                {availableClasses.map(c => (
-                                                    <Select.Option key={c} value={c}>{c}</Select.Option>
-                                                ))}
-                                            </Select>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <LineChartOutlined style={{ color: '#00f2ff' }} />
+                                            <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px' }}>SCALE_PERFORMANCE_FINGERPRINT (STRESS_HUD)</Text>
+                                        </div>
+                                        <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <Space size={4}>
+                                                <Text className="hud-sidebar-label" style={{ margin: 0 }}>CHANNEL:</Text>
+                                                <Tooltip title="Filter scale performance by specific object classes.">
+                                                    <Select
+                                                        size="small"
+                                                        className="hud-select"
+                                                        style={{ width: 160 }}
+                                                        value={graph4Class}
+                                                        onChange={setGraph4Class}
+                                                        bordered={false}
+                                                        dropdownMatchSelectWidth={false}
+                                                    >
+                                                        <Select.Option value="all">GLOBAL_AVERAGE</Select.Option>
+                                                        {availableClasses.map(c => (
+                                                            <Select.Option key={c} value={c}>{c.toUpperCase()}</Select.Option>
+                                                        ))}
+                                                    </Select>
+                                                </Tooltip>
+                                            </Space>
                                         </div>
                                     </div>
                                 }
-                                style={{ borderRadius: 8, border: '1px solid #f0f0f0' }}
                             >
-                                <div style={{ height: 300, width: '100%' }}>
+                                <div style={{ height: 320, width: '100%', padding: '12px 0' }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={kpis.sizeStressData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                            <defs>
+                                                <linearGradient id="yieldTiny" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#ff4d4f" stopOpacity={0.1} />
+                                                    <stop offset="95%" stopColor="#ff4d4f" stopOpacity={0} />
+                                                </linearGradient>
+                                                <linearGradient id="yieldSmall" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#faad14" stopOpacity={0.1} />
+                                                    <stop offset="95%" stopColor="#faad14" stopOpacity={0} />
+                                                </linearGradient>
+                                                <linearGradient id="yieldMed" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#00f2ff" stopOpacity={0.1} />
+                                                    <stop offset="95%" stopColor="#00f2ff" stopOpacity={0} />
+                                                </linearGradient>
+                                                <linearGradient id="yieldLarge" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#52c41a" stopOpacity={0.1} />
+                                                    <stop offset="95%" stopColor="#52c41a" stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="1 5" vertical={true} stroke="#222" />
                                             <XAxis
                                                 dataKey="t"
                                                 type="number"
                                                 domain={[0, 1]}
                                                 tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-                                                label={{ value: 'Confidence Threshold', position: 'insideBottom', offset: -5, fontSize: 10 }}
-                                                fontSize={10}
+                                                tick={{ fill: '#888', fontSize: 9, fontFamily: 'monospace' }}
+                                                axisLine={false}
+                                                tickLine={false}
                                             />
                                             <YAxis
                                                 tickFormatter={(v) => `${v}%`}
-                                                label={{ value: 'Yield (Automation %)', angle: -90, position: 'insideLeft', fontSize: 10 }}
-                                                fontSize={10}
+                                                tick={{ fill: '#888', fontSize: 9, fontFamily: 'monospace' }}
+                                                axisLine={false}
+                                                tickLine={false}
                                             />
                                             <RechartsTooltip
                                                 content={({ active, payload, label }) => {
                                                     if (active && payload && payload.length) {
-                                                        const confPct = (label * 100).toFixed(0);
                                                         return (
-                                                            <div style={{ background: '#fff', padding: '12px', border: '1px solid #f0f0f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                                                                <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Confidence: {confPct}%</Text>
+                                                            <div style={{ background: 'rgba(20, 20, 20, 0.95)', padding: '12px', border: '1px solid #333', borderRadius: 4, backdropFilter: 'blur(8px)' }}>
+                                                                <Text strong style={{ fontSize: 10, color: '#00f2ff', display: 'block', marginBottom: 12, borderBottom: '1px solid #222', paddingBottom: 4 }}>
+                                                                    Telemetry Scan: {(label * 100).toFixed(0)}% Confidence
+                                                                </Text>
                                                                 <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto', gap: '8px 16px' }}>
-                                                                    <Text type="secondary" style={{ fontSize: 10 }}></Text>
-                                                                    <Text type="secondary" style={{ fontSize: 10 }}>YIELD</Text>
-                                                                    <Text type="secondary" style={{ fontSize: 10 }}>IoU</Text>
+                                                                    <Text style={{ fontSize: 9, color: '#888' }}>CATEGORY</Text>
+                                                                    <Text style={{ fontSize: 9, color: '#888' }}>YIELD</Text>
+                                                                    <Text style={{ fontSize: 9, color: '#888' }}>ACCURACY</Text>
                                                                     {payload.map((entry, idx) => {
                                                                         const sz = entry.dataKey.split('_')[0];
                                                                         const iouValue = entry.payload[`${sz}_iou`] || 0;
                                                                         return (
                                                                             <React.Fragment key={idx}>
-                                                                                <Text strong style={{ fontSize: 11, color: entry.color }}>{entry.name.split(' ')[0]}:</Text>
-                                                                                <Text style={{ fontSize: 11 }}>{entry.value}%</Text>
-                                                                                <Text style={{ fontSize: 11, color: iouValue > 70 ? '#52c41a' : (iouValue > 40 ? '#faad14' : '#ff4d4f') }}>{iouValue}%</Text>
+                                                                                <Text strong style={{ fontSize: 10, color: entry.color, fontFamily: 'monospace' }}>
+                                                                                    {sz === 'tiny' ? 'Tiny ' : (sz === 'small' ? 'Small ' : (sz === 'medium' ? 'Medium ' : 'Large '))}:
+                                                                                </Text>
+                                                                                <Text style={{ fontSize: 10, color: '#fff', fontFamily: 'monospace' }}>{entry.value}%</Text>
+                                                                                <Text style={{ fontSize: 10, color: iouValue > 70 ? '#52c41a' : (iouValue > 40 ? '#faad14' : '#ff4d4f'), fontFamily: 'monospace' }}>{iouValue}%</Text>
                                                                             </React.Fragment>
                                                                         );
                                                                     })}
@@ -1425,27 +1437,24 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                                     return null;
                                                 }}
                                             />
-                                            <Legend verticalAlign="top" height={36} iconType="circle" />
+                                            <Legend verticalAlign="top" height={36} iconType="rect" wrapperStyle={{ fontSize: 10, paddingBottom: 20 }} />
 
-                                            <Area type="monotone" dataKey="tiny_yield" name="Tiny Objects" stroke="#ff4d4f" fill="#ff4d4f" fillOpacity={0.1} strokeWidth={2} />
-                                            <Area type="monotone" dataKey="small_yield" name="Small Objects" stroke="#faad14" fill="#faad14" fillOpacity={0.1} strokeWidth={2} />
-                                            <Area type="monotone" dataKey="medium_yield" name="Medium Objects" stroke="#1890ff" fill="#1890ff" fillOpacity={0.1} strokeWidth={2} />
-                                            <Area type="monotone" dataKey="large_yield" name="Large Objects" stroke="#52c41a" fill="#52c41a" fillOpacity={0.1} strokeWidth={2} />
+                                            <Area type="monotone" dataKey="tiny_yield" name="Tiny Units" stroke="#ff4d4f" fill="url(#yieldTiny)" strokeWidth={2} />
+                                            <Area type="monotone" dataKey="small_yield" name="Small Units" stroke="#faad14" fill="url(#yieldSmall)" strokeWidth={2} />
+                                            <Area type="monotone" dataKey="medium_yield" name="Medium Units" stroke="#00f2ff" fill="url(#yieldMed)" strokeWidth={2} />
+                                            <Area type="monotone" dataKey="large_yield" name="Large Units" stroke="#52c41a" fill="url(#yieldLarge)" strokeWidth={2} />
 
-                                            <ReferenceLine x={confRange[0] / 100} stroke="#8c8c8c" strokeDasharray="3 3">
-                                                <Label value="Active Filter" position="top" fontSize={8} />
+                                            <ReferenceLine x={confRange[0] / 100} stroke="#444" strokeDasharray="3 3">
+                                                <Label value="Current Filter" position="top" fill="#888" fontSize={8} fontFamily="monospace" />
                                             </ReferenceLine>
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
-                                <div style={{ marginTop: 16, padding: '12px', background: '#fafafa', borderRadius: 4, border: '1px solid #f0f0f0' }}>
-                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                <div style={{ marginTop: 20, padding: '12px', background: '#0a0a0a', border: '1px solid #1c1c1c', borderRadius: 2 }}>
+                                    <Text style={{ fontSize: 11, color: '#aaa', fontFamily: 'monospace' }}>
                                         <BulbOutlined style={{ marginRight: 8, color: '#faad14' }} />
-                                        <b>Expert Diagnostic:</b> This "Fingerprint" shows how different object scales respond to confidence pressure.
-                                        {graph4Class === 'all'
-                                            ? " You are viewing the global dataset signature."
-                                            : ` You are isolating the scale behavior for "${graph4Class}".`}
-                                        If the <b>Tiny</b> line drops significantly faster than others, consider increasing resolution or zoom.
+                                        <b>DIAGNOSTIC:</b> SCALE_RESPONSE_SIGNATURE FOR <b>{graph4Class.toUpperCase()}</b>.
+                                        IF LOW_SCALE (T/S) DROPS PREMATURELY, CONSIDER RESOLUTION_BOOST.
                                     </Text>
                                 </div>
                             </Card>
@@ -1457,8 +1466,8 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             <style>{`
                                 .hud-select .ant-select-selection-item { color: #00f2ff !important; font-weight: bold; }
                                 .hud-tile { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-                                .hud-tile:hover { 
-                                    border-color: #00f2ff !important; 
+                                .hud-tile:hover {
+                                    border-color: #00f2ff !important;
                                     background: rgba(0, 242, 255, 0.1) !important;
                                     box-shadow: inset 0 0 15px rgba(0, 242, 255, 0.2);
                                 }
@@ -1470,76 +1479,69 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                     pointer-events: none;
                                 }
                             `}</style>
+                            {/* GRAPH 5: SPATIAL_FAILURE_TELEMETRY (DISTORTION_HUD) */}
                             <Card
                                 size="small"
-                                headStyle={{
-                                    background: '#141414',
-                                    borderBottom: '1px solid #303030',
-                                    borderRadius: '8px 8px 0 0',
-                                    padding: '0 16px'
-                                }}
-                                bodyStyle={{
-                                    background: '#0a0a0a',
-                                    padding: '16px',
-                                    borderRadius: '0 0 8px 8px',
-                                    color: '#fff'
-                                }}
+                                className="hud-card"
                                 title={
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                        <Space>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <FullscreenOutlined style={{ color: '#00f2ff' }} />
-                                            <Text strong style={{ fontSize: 13, color: '#fff', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                                Graph 5: Spatial Distortion Telemetry (PRO HUD)
-                                            </Text>
-                                        </Space>
-                                        <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                                            <Space size={4}>
-                                                <Text style={{ fontSize: 10, color: '#555', fontWeight: 700 }}>CLASS:</Text>
-                                                <Select
-                                                    size="small"
-                                                    className="hud-select"
-                                                    style={{ width: 140, background: '#141414', borderRadius: 4, border: '1px solid #333' }}
-                                                    value={spatialClass}
-                                                    onChange={setSpatialClass}
-                                                    dropdownMatchSelectWidth={false}
-                                                >
-                                                    <Select.Option value="all">ANY_CLASS</Select.Option>
-                                                    {availableClasses.map(c => <Select.Option key={c} value={c}>{c.toUpperCase()}</Select.Option>)}
-                                                </Select>
-                                            </Space>
-                                            <Space size={4}>
-                                                <Text style={{ fontSize: 10, color: '#555', fontWeight: 700 }}>SCALE:</Text>
-                                                <Segmented
-                                                    size="small"
-                                                    value={spatialSize}
-                                                    onChange={setSpatialSize}
-                                                    options={[
-                                                        { label: 'ALL', value: 'all' },
-                                                        { label: 'T', value: 'tiny' },
-                                                        { label: 'S', value: 'small' },
-                                                        { label: 'M', value: 'medium' },
-                                                        { label: 'L', value: 'large' }
-                                                    ]}
-                                                    style={{ background: '#1c1c1c', border: '1px solid #333', color: '#888' }}
-                                                />
-                                            </Space>
+                                            <Text strong style={{ color: '#fff', fontSize: 11, letterSpacing: '1px' }}>SPATIAL_FAILURE_TELEMETRY (DISTORTION_HUD)</Text>
+                                        </div>
+                                        <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                                            <Tooltip title="Isolate spatial failures by specific object classes.">
+                                                <Space size={4}>
+                                                    <Text className="hud-sidebar-label" style={{ margin: 0 }}>CHANNEL:</Text>
+                                                    <Select
+                                                        size="small"
+                                                        className="hud-select"
+                                                        style={{ width: 140 }}
+                                                        value={spatialClass}
+                                                        onChange={setSpatialClass}
+                                                        dropdownMatchSelectWidth={false}
+                                                    >
+                                                        <Select.Option value="all">Any Class</Select.Option>
+                                                        {availableClasses.map(c => <Select.Option key={c} value={c}>{c.toUpperCase()}</Select.Option>)}
+                                                    </Select>
+                                                </Space>
+                                            </Tooltip>
+                                            <Tooltip title="Analyze failures based on object size categories.">
+                                                <Space size={4}>
+                                                    <Text className="hud-sidebar-label" style={{ margin: 0 }}>SCALE:</Text>
+                                                    <Segmented
+                                                        size="small"
+                                                        className="hud-segmented"
+                                                        value={spatialSize}
+                                                        onChange={setSpatialSize}
+                                                        options={[
+                                                            { label: 'All', value: 'all' },
+                                                            { label: 'Tiny', value: 'tiny' },
+                                                            { label: 'Small', value: 'small' },
+                                                            { label: 'Medium', value: 'medium' },
+                                                            { label: 'Large', value: 'large' }
+                                                        ]}
+                                                        style={{ background: '#1c1c1c', border: '1px solid #333' }}
+                                                    />
+                                                </Space>
+                                            </Tooltip>
                                         </div>
                                     </div>
                                 }
-                                style={{ borderRadius: 8, border: '1px solid #303030', overflow: 'hidden' }}
                             >
                                 <Row gutter={24}>
                                     <Col xs={24} md={10}>
-                                        <div style={{ position: 'relative' }}>
+                                        <div style={{ position: 'relative', padding: '12px' }}>
                                             <div style={{
                                                 display: 'grid',
                                                 gridTemplateColumns: 'repeat(3, 1fr)',
-                                                gap: '2px',
+                                                gap: '4px',
                                                 aspectRatio: '1',
-                                                background: '#1c1c1c',
-                                                padding: '2px',
-                                                border: '1px solid #333',
-                                                backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 19px, rgba(255,255,255,0.03) 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, rgba(255,255,255,0.03) 20px)'
+                                                background: '#0d0d0d',
+                                                padding: '4px',
+                                                border: '1px solid #222',
+                                                backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)',
+                                                backgroundSize: '20px 20px'
                                             }}>
                                                 {kpis.spatialData.map((tile, i) => {
                                                     const row = Math.floor(i / 3);
@@ -1547,45 +1549,36 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                                     const label = `${String.fromCharCode(65 + row)}${col + 1}`;
                                                     return (
                                                         <div key={i} className="hud-tile" style={{
-                                                            background: tile.density > 40 ? 'rgba(255, 77, 79, 0.4)' : (tile.density > 15 ? 'rgba(250, 173, 20, 0.3)' : 'rgba(255,255,255,0.02)'),
+                                                            background: tile.density > 40 ? 'rgba(255, 77, 79, 0.25)' : (tile.density > 15 ? 'rgba(250, 173, 20, 0.15)' : 'rgba(255,255,255,0.02)'),
                                                             display: 'flex',
                                                             flexDirection: 'column',
                                                             alignItems: 'center',
                                                             justifyContent: 'center',
-                                                            border: '1px solid #333',
+                                                            border: '1px solid #222',
                                                             cursor: 'crosshair',
                                                             position: 'relative',
                                                             transition: 'all 0.2s'
                                                         }}>
-                                                            <Text style={{ position: 'absolute', top: 4, left: 6, fontSize: 8, color: '#555', fontFamily: 'monospace' }}>[{label}]</Text>
-                                                            <Text strong style={{ fontSize: 18, color: tile.density > 30 ? '#ff4d4f' : '#fff', fontFamily: 'monospace' }}>{tile.density}%</Text>
+                                                            <Text style={{ position: 'absolute', top: 4, left: 6, fontSize: 8, color: '#aaa', fontFamily: 'monospace' }}>[{label}]</Text>
+                                                            <Text strong style={{ fontSize: 18, color: tile.density > 30 ? '#ff4d4f' : '#fff', fontFamily: 'JetBrains Mono' }}>{tile.density}<span style={{ fontSize: 9, opacity: 0.5 }}>%</span></Text>
                                                             <div style={{ marginTop: 2, textAlign: 'center' }}>
-                                                                <Text style={{ fontSize: 9, color: '#8c8c8c', display: 'block' }}>{tile.total} SAMPLES</Text>
-                                                                {tile.total > 0 && (
-                                                                    <Text style={{ fontSize: 8, color: '#595959' }}>
-                                                                        <span style={{ color: '#ff4d4f' }}>{tile.fp}P</span> / <span style={{ color: '#faad14' }}>{tile.fn}N</span>
-                                                                    </Text>
-                                                                )}
+                                                                <Text style={{ fontSize: 8, color: '#888', fontFamily: 'monospace' }}>{tile.total} UNITS</Text>
                                                             </div>
                                                         </div>
                                                     );
                                                 })}
                                             </div>
-                                            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <Badge status="processing" color="#00f2ff" text={<Text style={{ fontSize: 10, color: '#aaa' }}>FOCUS_ACTIVE</Text>} />
-                                                <Text style={{ fontSize: 10, color: '#555', fontFamily: 'monospace' }}>
+                                            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <Badge status="processing" color="#00f2ff" text={<Text style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>SPATIAL_SYNC_ACTIVE</Text>} />
+                                                <Text style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>
                                                     SAMPLES: {kpis.spatialTotal} / {kpis.spatialTotalRaw}
                                                 </Text>
                                             </div>
                                         </div>
                                     </Col>
                                     <Col xs={24} md={14}>
-                                        <div style={{ padding: '0 12px' }}>
-                                            <div style={{ marginBottom: 20 }}>
-                                                <Text style={{ color: '#00f2ff', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                                    Expert Diagnosis Log:
-                                                </Text>
-                                            </div>
+                                        <div style={{ borderLeft: '1px solid #222', paddingLeft: 24, paddingRight: 12, height: '100%' }}>
+                                            <Text className="hud-sidebar-label" style={{ color: '#00f2ff', marginBottom: 16, display: 'block' }}>Environmental Calibration Log</Text>
 
                                             <Space direction="vertical" style={{ width: '100%' }}>
                                                 {(() => {
@@ -1597,43 +1590,45 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                                                     const alerts = [];
                                                     if (kpis.spatialTotal === 0) {
-                                                        return <div style={{ padding: '20px', border: '1px dashed #333', textAlign: 'center', color: '#555' }}>NO FAILURE DATA FOR CURRENT SUB-FILTER</div>;
+                                                        return <div style={{ padding: '24px', border: '1px dashed #333', textAlign: 'center', color: '#888', fontFamily: 'monospace', fontSize: 11 }}>[EMPTY_SCAN_BUFFER] NO_TELEMETRY_RECORDED</div>;
                                                     }
 
-                                                    if (cornerDensity > 60) alerts.push({ type: 'warning', msg: "OPTICAL DISTORTION DETECTED: Failures are heavy in extremities. Check for lens vignette or edge-blur." });
-                                                    if (leftDensity > 60 || rightDensity > 60) alerts.push({ type: 'info', msg: "UNEVEN ILLUMINATION: Directional failure bias detected. Check for side-glow or shadows." });
-                                                    if (topDensity > 60) alerts.push({ type: 'info', msg: "CEILING_LIGHT_INTERFERENCE: Clustering in upper quadrants detected." });
-                                                    if (d[4].density > 40) alerts.push({ type: 'warning', msg: "FOCAL_BLINDSPOT: Significant center failure. Check for sensor smudges or overexposure in focal point." });
+                                                    if (cornerDensity > 60) alerts.push({ type: 'warning', msg: "OPTICAL_DISTORTION: Cluster detected in EXTREMITIES. Lens aberration suspected." });
+                                                    if (leftDensity > 60 || rightDensity > 60) alerts.push({ type: 'info', msg: "UNEVEN_ILLUMINATION: Failure bias detected on HORIZONTAL_AXIS. Check side-glow." });
+                                                    if (topDensity > 60) alerts.push({ type: 'info', msg: "OVERHEAD_INTERFERENCE: Clustering in UPPER_QUADRANTS. Check ceiling sources." });
+                                                    if (d[4].density > 40) alerts.push({ type: 'warning', msg: "FOCAL_BLINDSPOT: Primary sensor focus occlusion or overexposure detected." });
 
-                                                    // FP vs FN Bias Diagnosis
                                                     const avgFP = d.reduce((acc, t) => acc + t.fp, 0);
                                                     const avgFN = d.reduce((acc, t) => acc + t.fn, 0);
-                                                    if (avgFP > avgFN * 2) alerts.push({ type: 'urgent', msg: "TELEMETRY_ALERT: High False Positive bias. Model is 'Over-Predicting' in this filter." });
-                                                    if (avgFN > avgFP * 2) alerts.push({ type: 'urgent', msg: "TELEMETRY_ALERT: High Missed Object bias. Model is 'Under-Predicting' in this filter." });
+                                                    if (avgFP > avgFN * 2) alerts.push({ type: 'urgent', msg: "Over-prediction bias: False positives dominate this filter. Aggressive sensitivity warning." });
+                                                    if (avgFN > avgFP * 2) alerts.push({ type: 'urgent', msg: "Under-prediction bias: Missed objects dominate this filter. Recall crisis warning." });
 
-                                                    if (alerts.length === 0) return <Badge status="success" text={<span style={{ color: '#52c41a', fontSize: 12 }}>ENVIRONMENT_OPTIMAL: Failures are distributed normally with no spatial bias.</span>} />;
+                                                    if (alerts.length === 0) return (
+                                                        <div style={{ padding: '12px', background: 'rgba(82, 196, 26, 0.05)', borderLeft: '2px solid #52c41a', fontFamily: 'monospace' }}>
+                                                            <Text style={{ fontSize: 11, color: '#52c41a' }}>[STATUS: OPTIMAL] Environmental Calibration Stable. No bias detected.</Text>
+                                                        </div>
+                                                    );
 
                                                     return alerts.map((a, idx) => (
                                                         <div key={idx} style={{
-                                                            padding: '12px',
+                                                            padding: '10px 14px',
                                                             background: a.type === 'warning' || a.type === 'urgent' ? 'rgba(255, 77, 79, 0.05)' : 'rgba(0, 242, 255, 0.05)',
                                                             borderLeft: `2px solid ${a.type === 'warning' || a.type === 'urgent' ? '#ff4d4f' : '#00f2ff'}`,
-                                                            marginBottom: '8px',
+                                                            marginBottom: '4px',
                                                             fontFamily: 'monospace'
                                                         }}>
-                                                            <Text style={{ fontSize: 12, color: a.type === 'warning' || a.type === 'urgent' ? '#ffb3b3' : '#b3f5ff' }}>
-                                                                <WarningOutlined style={{ marginRight: 8, color: a.type === 'warning' || a.type === 'urgent' ? '#ff4d4f' : '#00f2ff' }} />
-                                                                {a.msg}
+                                                            <Text style={{ fontSize: 11, color: a.type === 'warning' || a.type === 'urgent' ? '#ff4d4f' : '#00f2ff' }}>
+                                                                [{a.type.toUpperCase()}] {a.msg}
                                                             </Text>
                                                         </div>
                                                     ));
                                                 })()}
                                             </Space>
 
-                                            <div style={{ marginTop: 24, padding: '12px', border: '1px solid #1c1c1c', borderRadius: 4 }}>
-                                                <Text type="secondary" style={{ fontSize: 11, color: '#555' }}>
+                                            <div style={{ marginTop: 24, padding: '12px', background: '#0d0d0d', border: '1px solid #222', borderRadius: 2 }}>
+                                                <Text style={{ fontSize: 10, color: '#aaa', fontFamily: 'monospace' }}>
                                                     <BulbOutlined style={{ marginRight: 8, color: '#faad14' }} />
-                                                    <b>Usage:</b> Toggle local Class/Size to identify "Blindspots." Clicking quadrants will soon filter your live image stream.
+                                                    <b>USER_GUIDE:</b> CROSS-REFERENCE QUADS TO ISOLATE BLINDSPOTS. CLICK TO FILTER_STREAM_LIVE.
                                                 </Text>
                                             </div>
                                         </div>
@@ -1645,82 +1640,90 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 </Col>
             </Row>
 
-            {/* Error Detail Modal */}
+            {/* TELEMETRY_SUB_SYSTEM_LOG: ERROR_DETAIL_MODAL */}
             <Modal
                 title={
-                    <Space>
-                        <WarningOutlined style={{
-                            color: errorModal.title.includes('True') ? '#52c41a' :
-                                errorModal.title.includes('False') ? '#ff4d4f' :
-                                    errorModal.title.includes('Misaligned') ? '#d46b08' : '#faad14'
-                        }} />
-                        {errorModal.title}
-                        <Tag color={errorModal.title.includes('True') ? 'green' : 'default'}>{errorModal.items?.length || 0} Items</Tag>
-                    </Space>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: 4, height: 16, background: '#00f2ff', borderRadius: 2 }} />
+                        <Text strong style={{ color: '#fff', fontSize: 13, textTransform: 'uppercase', letterSpacing: '1px', fontFamily: 'Inter' }}>
+                            {errorModal.title.toUpperCase()}: SUB_SYSTEM_LOG
+                        </Text>
+                        <Tag className="hud-tag-neon" style={{ margin: 0, fontSize: 10 }}>{errorModal.items?.length || 0} UNITS</Tag>
+                    </div>
                 }
-                visible={errorModal.visible}
+                open={errorModal.visible}
                 onCancel={() => setErrorModal({ ...errorModal, visible: false })}
-                footer={
-                    [
-                        <Button key="close" onClick={() => setErrorModal({ ...errorModal, visible: false })}>
-                            Close
-                        </Button>
-                    ]}
-                width={600}
-                bodyStyle={{ maxHeight: '60vh', overflowY: 'auto' }}
+                footer={[
+                    <Button
+                        key="close"
+                        onClick={() => setErrorModal({ ...errorModal, visible: false })}
+                        style={{ background: '#1c1c1c', border: '1px solid #333', color: '#fff', borderRadius: 2, fontSize: 11, fontFamily: 'monospace' }}
+                    >
+                        TERMINATE_SESSION
+                    </Button>
+                ]}
+                width={700}
+                style={{ top: 40 }}
+                styles={{
+                    mask: { backdropFilter: 'blur(4px)', background: 'rgba(0,0,0,0.6)' },
+                    content: { background: '#0a0a0a', border: '1px solid #333', borderRadius: 4, padding: 0 },
+                    header: { background: '#141414', borderBottom: '1px solid #222', padding: '16px 24px', borderRadius: '4px 4px 0 0' },
+                    body: { padding: '16px 24px', maxHeight: '70vh', overflowY: 'auto', background: '#0a0a0a' }
+                }}
             >
-                {
-                    errorModal.items && errorModal.items.length > 0 ? (
-                        <List
-                            itemLayout="horizontal"
-                            dataSource={errorModal.items}
-                            renderItem={item => (
-                                <List.Item>
-                                    <List.Item.Meta
-                                        avatar={
-                                            <div style={{
-                                                width: 32, height: 32, borderRadius: 4,
-                                                background: item.type === 'True Positive' ? '#52c41a20' :
-                                                    item.type === 'False Positive' ? '#ff4d4f20' : '#faad1420',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                color: item.type === 'True Positive' ? '#52c41a' :
-                                                    item.type === 'False Positive' ? '#ff4d4f' : '#faad14',
-                                                fontWeight: 'bold', fontSize: '10px'
-                                            }}>
-                                                {item.type === 'True Positive' ? 'TP' :
-                                                    item.type === 'False Positive' ? 'FP' :
-                                                        item.type === 'Missed (Low Confidence)' ? 'FL' : 'FN'}
-                                            </div>
-                                        }
-                                        title={
-                                            <Space>
-                                                {item.globalIdx && (
-                                                    <Tag color={item.type === 'True Positive' ? "green" : "default"} style={{ fontWeight: 'bold' }}>
-                                                        #{item.globalIdx}
-                                                    </Tag>
-                                                )}
-                                                <Text strong>{item.imgName}</Text>
-                                            </Space>
-                                        }
-                                        description={
-                                            <Space>
-                                                <Tag>{item.class || item.class_name}</Tag>
-                                                {item.conf && <Text type="secondary">Conf: {(item.conf * 100).toFixed(1)}%</Text>}
-                                            </Space>
-                                        }
-                                    />
-                                    {item.bbox && (
-                                        <Tag color="default">
-                                            Box: [{item.bbox.map(x => Math.round(x)).join(', ')}]
-                                        </Tag>
-                                    )}
-                                </List.Item>
-                            )}
-                        />
-                    ) : (
-                        <Empty description="No errors found in this selection" />
-                    )
-                }
+                {errorModal.items && errorModal.items.length > 0 ? (
+                    <List
+                        itemLayout="horizontal"
+                        dataSource={errorModal.items}
+                        renderItem={item => (
+                            <List.Item style={{ borderBottom: '1px solid #1c1c1c', padding: '12px 8px' }}>
+                                <List.Item.Meta
+                                    avatar={
+                                        <div style={{
+                                            width: 40, height: 40, borderRadius: 4,
+                                            background: (item.type || '').includes('True') ? 'rgba(82, 196, 26, 0.1)' :
+                                                ((item.type || '').includes('False') ? 'rgba(255, 77, 79, 0.1)' : 'rgba(250, 173, 20, 0.1)'),
+                                            border: `1px solid ${(item.type || '').includes('True') ? '#52c41a' : ((item.type || '').includes('False') ? '#ff4d4f' : '#faad14')}`,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            color: (item.type || '').includes('True') ? '#52c41a' : ((item.type || '').includes('False') ? '#ff4d4f' : '#faad14'),
+                                            fontWeight: 'bold', fontSize: 12, fontFamily: 'JetBrains Mono'
+                                        }}>
+                                            {(item.type || '').includes('True') ? 'TP' : ((item.type || '').includes('False') ? 'FP' : 'FN')}
+                                        </div>
+                                    }
+                                    title={
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Text style={{ color: '#00f2ff', fontSize: 10, fontFamily: 'monospace' }}>[{item.globalIdx || 'SRC'}]</Text>
+                                            <Text strong style={{ color: '#fff', fontSize: 12, fontFamily: 'JetBrains Mono' }}>{(item.imgName || '').toUpperCase()}</Text>
+                                        </div>
+                                    }
+                                    description={
+                                        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <Tag style={{ background: '#141414', color: '#aaa', border: '1px solid #333', fontSize: 10, margin: 0, fontFamily: 'monospace' }}>
+                                                CLASS: {String(item.class || item.class_name || 'UNKNOWN').toUpperCase()}
+                                            </Tag>
+                                            {item.conf && (
+                                                <Text style={{ fontSize: 11, color: '#aaa', fontFamily: 'monospace' }}>
+                                                    CONF: <span style={{ color: '#00f2ff' }}>{(item.conf * 100).toFixed(1)}%</span>
+                                                </Text>
+                                            )}
+                                            {item.bbox && (
+                                                <Text style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>
+                                                    BOX: [{item.bbox.map(x => Math.round(x)).join(', ')}]
+                                                </Text>
+                                            )}
+                                        </div>
+                                    }
+                                />
+                            </List.Item>
+                        )}
+                    />
+                ) : (
+                    <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description={<Text style={{ color: '#555', fontFamily: 'monospace' }}>NO_TELEMETRY_ITEMS_DETECTED</Text>}
+                    />
+                )}
             </Modal>
         </div>
     );
