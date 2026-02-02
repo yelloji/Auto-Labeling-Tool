@@ -1,33 +1,40 @@
-import React, { useMemo, useState } from 'react';
-import { Typography, Card, Row, Col, Space, Tag, Divider, Button, Tooltip, Select } from 'antd';
+import React, { useMemo } from 'react';
+import { Typography, Card, Row, Col, Table, Tag, Button, Divider, Space } from 'antd';
 import {
     DownloadOutlined,
-    SafetyCertificateOutlined,
-    RocketOutlined,
-    HistoryOutlined,
-    DeploymentUnitOutlined
+    DatabaseOutlined,
+    ExperimentOutlined,
+    AimOutlined,
+    CheckCircleOutlined
 } from '@ant-design/icons';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 /**
  * ReportView Component
  * 
- * High-fidelity executive report synthesizing Training, Validation, and Prediction.
- * Page 1: Executive Intelligence & Model Lineage
+ * Clean, organized Training Report with:
+ * - Dataset Details
+ * - Training Metrics (Box + Mask for Segmentation)
+ * - Class-wise Performance
+ * - All with simple English explanations
  */
 const ReportView = ({ experiment, training, verifications = [] }) => {
-    // Single-page scrollable architecture (No state needed for page toggling)
 
-    // --- 1. DATA SYNTHESIS & MATH ENGINE (GPT-5.2 Intelligence Core) ---
-    const dataReport = useMemo(() => {
-        if (!training || !experiment) return null;
+    // --- DATA EXTRACTION ---
+    const reportData = useMemo(() => {
+        if (!training) return null;
 
-        // 1.1 Parse Heritage (Training DNA) - Deep Extraction
+        // Parse metrics
         let metrics = {};
-        try { metrics = typeof training.metrics === 'string' ? JSON.parse(training.metrics) : (training.metrics || {}); } catch (e) { }
+        try {
+            metrics = typeof training.metrics === 'string'
+                ? JSON.parse(training.metrics)
+                : (training.metrics || {});
+        } catch (e) { }
 
-        const dna = {};
+        // Parse config snapshot
+        let config = {};
         try {
             if (typeof training.training_config_snapshot === 'string') {
                 const lines = training.training_config_snapshot.split('\n');
@@ -36,494 +43,290 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                     if (colonIndex > 0) {
                         const key = line.substring(0, colonIndex).trim();
                         const value = line.substring(colonIndex + 1).trim();
-                        if (key && value !== 'null') dna[key] = value;
+                        if (key && value !== 'null') config[key] = value;
                     }
                 });
-            } else { Object.assign(dna, training.training_config_snapshot || {}); }
+            } else {
+                config = training.training_config_snapshot || {};
+            }
         } catch (e) { }
 
-        const isSeg = training.taskType === 'segmentation';
-        const pKey = isSeg ? 'mask_p' : 'box_p';
-        const rKey = isSeg ? 'mask_r' : 'box_r';
-        const map50Key = isSeg ? 'mask_map50' : 'box_map50';
-
         const validation = metrics.validation || {};
-        const lineage = {
-            dna,
-            validation,
-            name: training.name,
-            task: isSeg ? 'Instance Segmentation' : 'Object Detection',
-            created: new Date(training.date).toLocaleDateString(),
-            datasetName: training.dataset_summary_json?.name || "Standard Industry split",
-            metricKeys: { p: pKey, r: rKey, m50: map50Key }
-        };
+        const classes = metrics.classes || [];
+        const isSeg = training.taskType === 'segmentation';
 
-        // 1.2 Verification Pipeline (Spatial & Semantic)
-        const vMap = {};
-        const classFails = {}; // Class-wise failure tracking
-        const getFileName = (path) => path ? path.split(/[/\\]/).pop() : '';
-        const spatialGrid = Array(3).fill(0).map(() => Array(3).fill(0));
-        const spatialFails = Array(3).fill(0).map(() => Array(3).fill(0));
-
-        const simPoolTP = [];
-        const simPoolFP = [];
-        const simPoolFN = verifications.filter(v => v.status === 'manual' &&
-            (String(v.experiment_id) === String(experiment.id) || (experiment.name && String(v.experiment_id) === String(experiment.name)))
-        );
-
-        verifications.forEach(v => {
-            const vFile = getFileName(v.image_name);
-            const isExpMatch = String(v.experiment_id) === String(experiment.id) ||
-                (experiment.name && String(v.experiment_id) === String(experiment.name));
-            if (isExpMatch && vFile) {
-                const imgDets = experiment.predictions[Object.keys(experiment.predictions).find(k => getFileName(k) === vFile)] || [];
-                const matchedAI = imgDets.find(d =>
-                    d.bbox && v.bbox &&
-                    Math.abs(d.bbox[0] - v.bbox[0]) < 0.1 && Math.abs(d.bbox[1] - v.bbox[1]) < 0.1
-                );
-                if (matchedAI && (v.status === 'pass' || v.status === 'fail')) {
-                    const key = `${vFile}|${matchedAI.bbox.join(',')}`;
-                    vMap[key] = v.status;
-
-                    if (v.status === 'fail') {
-                        classFails[v.label] = (classFails[v.label] || 0) + 1;
-                    }
-
-                    // Spatial Mapping
-                    const cx = (matchedAI.bbox[0] + matchedAI.bbox[2]) / 2;
-                    const cy = (matchedAI.bbox[1] + matchedAI.bbox[3]) / 2; // Fixed from earlier cx/cy logic
-                    const gx = Math.min(2, Math.floor(cx * 3));
-                    const gy = Math.min(2, Math.floor(cy * 3));
-                    spatialGrid[gy][gx]++;
-                    if (v.status === 'fail') spatialFails[gy][gx]++;
-                }
-            }
-        });
-
-        Object.entries(experiment.predictions).forEach(([imgName, dets]) => {
-            const fileName = getFileName(imgName);
-            dets.forEach(d => {
-                const status = vMap[`${fileName}|${d.bbox.join(',')}`];
-                if (status === 'fail') simPoolFP.push(d);
-                else simPoolTP.push(d);
-            });
-        });
-
-        // 1.3 Scaling Audit (Industrial Sizes)
-        const allAreas = [];
-        Object.values(experiment.predictions).forEach(dets => {
-            dets.forEach(d => {
-                const area = (d.bbox[2] - d.bbox[0]) * (d.bbox[3] - d.bbox[1]);
-                allAreas.push(area);
-            });
-        });
-        allAreas.sort((a, b) => a - b);
-        const q25 = allAreas[Math.floor(allAreas.length * 0.25)] || 0;
-        const q50 = allAreas[Math.floor(allAreas.length * 0.50)] || 0;
-        const q75 = allAreas[Math.floor(allAreas.length * 0.75)] || 0;
-
-        // 1.4 The 10-Page Logic Core (Mathematical Absolute Truth)
-        const CONF_LIST = Array.from({ length: 19 }, (_, i) => parseFloat(((i + 1) * 0.05).toFixed(2)));
-        const totalGTCount = simPoolTP.length + simPoolFN.length || 1;
-
-        const pRows = CONF_LIST.map(t => {
-            const tp = simPoolTP.filter(d => (d.confidence || 0) >= t).length;
-            const fp = simPoolFP.filter(d => (d.confidence || 0) >= t).length;
-            const automation = tp / totalGTCount;
-            const score = (2 * tp) - (1 * fp) - (10 * (totalGTCount - tp));
-            return { t, tp, fp, automation, score };
-        });
-
-        const MIN_AUTOMATION = 0.50; // GPT-5.2 Minimum Threshold for Production
-        const validRows = pRows.filter(r => r.automation >= MIN_AUTOMATION);
-        const prod = validRows.length > 0 ? validRows.reduce((prev, curr) => (curr.score >= prev.score) ? curr : prev) : { t: 0.50, automation: (simPoolTP.length / totalGTCount) };
-
-        // Ceiling Logic: Where the math breaks
-        let ceiling = 0.95;
-        if (pRows.length >= 2) {
-            for (let i = 0; i < pRows.length - 1; i++) {
-                if (pRows[i].automation - pRows[i + 1].automation >= 0.10) {
-                    ceiling = pRows[i + 1].t;
-                    break;
-                }
-            }
-        }
-
-        const totalImages = experiment.image_count || Object.keys(experiment.predictions).length || 1;
-        const avgLatency = experiment.duration_sec ? (experiment.duration_sec / totalImages).toFixed(2) : "0.00";
-
-        const roi = {
-            confirmations: simPoolTP.length,
-            falseAlarms: simPoolFP.length,
-            discoveries: simPoolFN.length,
-            fitness: (((prod.automation * 0.6) + (0.8 * 0.3) + (1.0 * 0.1)) * 100).toFixed(0)
-        };
+        // Calculate F1
+        const calcF1 = (p, r) => (p && r) ? (2 * p * r) / (p + r) : 0;
 
         return {
-            lineage,
-            engine: { production: prod, ceiling, automationFloor: MIN_AUTOMATION },
-            stats: experiment.analytics_summary || {},
-            latency: avgLatency,
-            spatial: { grid: spatialGrid, fails: spatialFails },
-            scaling: { q25, q50, q75 },
-            roi,
-            classFails
+            // Basic Info
+            name: training.name,
+            taskType: isSeg ? 'Instance Segmentation' : 'Object Detection',
+            status: training.status,
+            date: new Date(training.date).toLocaleDateString(),
+            isSeg,
+
+            // Dataset Details
+            dataset: {
+                trainingImages: validation.images || 0,
+                totalInstances: validation.instances || 0,
+                imageSize: config.imgsz || 640,
+                epochs: training.epochs || config.epochs || 0,
+                classCount: classes.length || 0,
+                classNames: classes.map(c => c.class).join(', ') || 'N/A'
+            },
+
+            // Box Metrics
+            box: {
+                precision: validation.box_p || 0,
+                recall: validation.box_r || 0,
+                f1: calcF1(validation.box_p, validation.box_r),
+                map50: validation.box_map50 || 0,
+                map5095: validation.box_map50_95 || 0
+            },
+
+            // Mask Metrics (only for segmentation)
+            mask: isSeg ? {
+                precision: validation.mask_p || 0,
+                recall: validation.mask_r || 0,
+                f1: calcF1(validation.mask_p, validation.mask_r),
+                map50: validation.mask_map50 || 0,
+                map5095: validation.mask_map50_95 || 0
+            } : null,
+
+            // Class-wise data
+            classes: classes.map((cls, idx) => ({
+                key: idx,
+                class: cls.class,
+                box_p: cls.box_p,
+                box_r: cls.box_r,
+                box_f1: calcF1(cls.box_p, cls.box_r),
+                box_map50: cls.box_map50,
+                mask_p: isSeg ? cls.mask_p : null,
+                mask_r: isSeg ? cls.mask_r : null,
+                mask_f1: isSeg ? calcF1(cls.mask_p, cls.mask_r) : null
+            })),
+
+            // Config for display
+            config: {
+                batch: config.batch || 16,
+                lr0: config.lr0 || '0.01',
+                optimizer: config.optimizer || 'Auto'
+            }
         };
-    }, [experiment, training, verifications]);
+    }, [training]);
 
-    if (!dataReport) return null;
-    const { lineage, engine, stats, latency, roi, spatial, scaling, classFails } = dataReport;
-    const { metricKeys } = lineage;
-
-    // --- SECTION RENDERER HUB ---
-    const renderSection01 = () => (
-        <Row gutter={[24, 24]}>
-            <Col xs={24} lg={16}>
-                <Card className="glass-diagnostic-card report-narrative-section dossier-paper" style={{ minHeight: '520px' }}>
-                    <div className="section-narrative">
-                        <Space align="center" style={{ marginBottom: '1.5rem' }}>
-                            <div className="stat-icon-circle accent-blue" style={{ width: 44, height: 44 }}>
-                                <SafetyCertificateOutlined style={{ color: '#1890ff', fontSize: 22 }} />
-                            </div>
-                            <Title level={4} className="dossier-section-title">01 // Executive Strategic Verdict</Title>
-                        </Space>
-
-                        <Paragraph className="ceo-text refined-typography">
-                            The performance audit for model **{lineage.name}** reveals a
-                            {roi.fitness >= 70 ? " stable and resilient" : " highly volatile"} transition into field operations.
-                            Current field telemetry indicates an automation yield of **{(engine.production.automation * 100).toFixed(1)}%**,
-                            against a laboratory precision peak of **{(lineage.validation[metricKeys.p] * 100).toFixed(1)}%**.
-                        </Paragraph>
-
-                        <div className="narrative-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginTop: '2rem' }}>
-                            <div className="narrative-block">
-                                <Text strong className="block-label" style={{ display: 'block', marginBottom: '8px' }}>Tactical Reliability</Text>
-                                <Paragraph className="block-text">
-                                    The model achieves its peak industrial score at a confidence threshold of **{(engine.production.t * 100).toFixed(0)}%**.
-                                    Operating outside this bound introduces non-linear risk to the downstream validation pipeline.
-                                </Paragraph>
-                            </div>
-                            <div className="narrative-block">
-                                <Text strong className="block-label" style={{ display: 'block', marginBottom: '8px' }}>Deployment Status</Text>
-                                <Tag color={roi.fitness >= 60 ? "green" : roi.fitness >= 30 ? "orange" : "red"} style={{ borderRadius: '4px', fontWeight: 600 }}>
-                                    {roi.fitness >= 60 ? "PRODUCTION READY" : roi.fitness >= 30 ? "PILOT REQUIRED" : "RE-TRAIN MANDATORY"}
-                                </Tag>
-                            </div>
-                        </div>
-
-                        <Divider style={{ margin: '2rem 3px' }} />
-
-                        <div className="strategic-verdict-box" style={{ background: '#f8f9fa', padding: '1.5rem', borderRadius: '8px', borderLeft: '4px solid #1890ff' }}>
-                            <Space align="start">
-                                <RocketOutlined style={{ fontSize: '24px', color: '#1890ff', marginTop: '4px' }} />
-                                <div>
-                                    <Text strong style={{ fontSize: '16px', color: '#1d1d1f' }}>EXECUTIVE VERDICT</Text>
-                                    <Paragraph style={{ margin: 0, fontSize: '15px', color: '#434343', lineHeight: '1.6' }}>
-                                        {roi.fitness >= 60
-                                            ? `Model achieves a high-fidelity fitness rating of ${roi.fitness}%. It is approved for scaled industrial maneuvers with the recommended gate protocols.`
-                                            : `Current fitness rating of ${roi.fitness}% is below the industrial baseline (60%). Deployment is currently suspended until the Heritage-Reality Gap documented in Section 04 is addressed.`}
-                                    </Paragraph>
-                                </div>
-                            </Space>
-                        </div>
-                    </div>
-                </Card>
-            </Col>
-
-            <Col xs={24} lg={8}>
-                <Card size="small" className="lineage-dna-card dossier-paper" title={
-                    <Space><DeploymentUnitOutlined style={{ color: '#1890ff' }} /> <Text strong>Top-Level Analytics</Text></Space>
-                }>
-                    <div className="status-grid-mini" style={{ padding: '0.5rem' }}>
-                        <div className="status-grid-tile">
-                            <Text type="secondary" className="tile-label" style={{ fontSize: '11px' }}>FIELD FITNESS</Text>
-                            <Title level={2} style={{ margin: 0, color: '#1890ff' }}>{roi.fitness}%</Title>
-                        </div>
-                        <div className="status-grid-tile" style={{ marginTop: '1.5rem' }}>
-                            <Text type="secondary" className="tile-label" style={{ fontSize: '11px' }}>LAB MAP50</Text>
-                            <Text strong style={{ fontSize: '20px' }}>{(lineage.validation[metricKeys.m50] * 100).toFixed(1)}%</Text>
-                        </div>
-                        <div className="status-grid-tile" style={{ marginTop: '1.5rem' }}>
-                            <Text type="secondary" className="tile-label" style={{ fontSize: '11px' }}>FIELD AUTOMATION</Text>
-                            <Text strong style={{ fontSize: '20px' }}>{(engine.production.automation * 100).toFixed(1)}%</Text>
-                        </div>
-                    </div>
-                </Card>
-            </Col>
-        </Row>
-    );
-
-    const renderSection02 = () => (
-        <Row gutter={[24, 24]}>
-            <Col span={24}>
-                <Card className="glass-diagnostic-card report-narrative-section dossier-paper" style={{ minHeight: '400px' }}>
-                    <div className="section-narrative">
-                        <Space align="center" style={{ marginBottom: '2rem' }}>
-                            <div className="stat-icon-circle accent-orange" style={{ width: 44, height: 44 }}>
-                                <HistoryOutlined style={{ color: '#fa8c16', fontSize: 22 }} />
-                            </div>
-                            <Title level={4} className="dossier-section-title">02 // Genetic Origins (Training DNA)</Title>
-                        </Space>
-
-                        <Paragraph className="refined-typography">
-                            The architectural foundation of this model was established during the **{lineage.created}** training cycle.
-                            The Genetic DNA reveals a configuration optimized for {lineage.task === 'Instance Segmentation' ? "pixel-perfect delineation" : "high-speed object localization"}.
-                        </Paragraph>
-
-                        <div className="dna-grid-detailed" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginTop: '2rem' }}>
-                            <div className="dna-tile" style={{ padding: '1rem', border: '1px solid #f0f0f0', borderRadius: '4px' }}>
-                                <Text type="secondary" style={{ fontSize: '11px', display: 'block' }}>BASE RESOLUTION</Text>
-                                <Text strong style={{ fontSize: '18px' }}>{lineage.dna.imgsz || 640}px</Text>
-                            </div>
-                            <div className="dna-tile" style={{ padding: '1rem', border: '1px solid #f0f0f0', borderRadius: '4px' }}>
-                                <Text type="secondary" style={{ fontSize: '11px', display: 'block' }}>BATCH DENSITY</Text>
-                                <Text strong style={{ fontSize: '18px' }}>{lineage.dna.batch || 16}</Text>
-                            </div>
-                            <div className="dna-tile" style={{ padding: '1rem', border: '1px solid #f0f0f0', borderRadius: '4px' }}>
-                                <Text type="secondary" style={{ fontSize: '11px', display: 'block' }}>LEARNING RATE</Text>
-                                <Text strong className="mono-value" style={{ fontSize: '18px' }}>{lineage.dna.lr0 || '0.01'}</Text>
-                            </div>
-                            <div className="dna-tile" style={{ padding: '1rem', border: '1px solid #f0f0f0', borderRadius: '4px' }}>
-                                <Text type="secondary" style={{ fontSize: '11px', display: 'block' }}>OPTIMIZER</Text>
-                                <Text strong style={{ fontSize: '18px' }}>{lineage.dna.optimizer || 'Auto'}</Text>
-                            </div>
-                        </div>
-
-                        <Paragraph style={{ marginTop: '2rem', color: '#595959' }}>
-                            **Audit Insight**: A base resolution of {lineage.dna.imgsz || 640}px serves as the primary constraint for small-object sensitivity.
-                            Any environmental features smaller than 2% of this resolution will likely undergo feature-collapse during inference.
-                        </Paragraph>
-                    </div>
-                </Card>
-            </Col>
-        </Row>
-    );
-
-    const renderSection03 = () => (
-        <Row gutter={[24, 24]}>
-            <Col xs={24} lg={16}>
-                <Card className="glass-diagnostic-card report-narrative-section dossier-paper" style={{ minHeight: '400px' }}>
-                    <div className="section-narrative">
-                        <Space align="center" style={{ marginBottom: '2rem' }}>
-                            <div className="stat-icon-circle accent-green" style={{ width: 44, height: 44 }}>
-                                <SafetyCertificateOutlined style={{ color: '#52c41a', fontSize: 22 }} />
-                            </div>
-                            <Title level={4} className="dossier-section-title">03 // Laboratory Benchmarks (Peak Integrity)</Title>
-                        </Space>
-
-                        <Paragraph className="refined-typography">
-                            In a controlled laboratory environment with **{lineage.datasetName}**, the model demonstrated
-                            remarkable peak integrity. These benchmarks represent the "Theoretical Maximum" under perfect lighting
-                            and zero-occlusion scenarios.
-                        </Paragraph>
-
-                        <Row gutter={24} style={{ marginTop: '2rem' }}>
-                            <Col span={12}>
-                                <div className="benchmark-card" style={{ padding: '1.5rem', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: '4px' }}>
-                                    <Text strong style={{ fontSize: '12px', color: '#389e0d' }}>LAB PRECISION (PEAK)</Text>
-                                    <Title level={2} style={{ margin: '8px 0', color: '#135200' }}>{(lineage.validation[metricKeys.p] * 100).toFixed(1)}%</Title>
-                                    <Text type="secondary">Confidence Target: 0.5</Text>
-                                </div>
-                            </Col>
-                            <Col span={12}>
-                                <div className="benchmark-card" style={{ padding: '1.5rem', background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: '4px' }}>
-                                    <Text strong style={{ fontSize: '12px', color: '#096dd9' }}>LAB RECALL (PEAK)</Text>
-                                    <Title level={2} style={{ margin: '8px 0', color: '#003a8c' }}>{(lineage.validation[metricKeys.r] * 100).toFixed(1)}%</Title>
-                                    <Text type="secondary">Signal Coverage Target</Text>
-                                </div>
-                            </Col>
-                        </Row>
-                        <Paragraph style={{ marginTop: '1.5rem', fontSize: '13px', color: '#8c8c8c' }}>
-                            *Note: These values are derived from validation metadata at epoch peak.*
-                        </Paragraph>
-                    </div>
-                </Card>
-            </Col>
-            <Col xs={24} lg={8}>
-                <Card size="small" className="dossier-paper" title="Benchmark Logbook" style={{ height: '100%' }}>
-                    <Paragraph style={{ fontSize: '13px', lineHeight: '1.6' }}>
-                        The delta between **Precision** and **Recall** suggests a strategy biased towards
-                        {lineage.validation[metricKeys.p] > lineage.validation[metricKeys.r] ? " conservative accuracy" : " maximum sensitivity"}.
-                        This inherent bias will amplify {lineage.validation[metricKeys.p] > lineage.validation[metricKeys.r] ? " False Negatives" : " False Positives"} in unconstrained field environments.
-                    </Paragraph>
-                </Card>
-            </Col>
-        </Row>
-    );
-
-    const renderSection04 = () => (
-        <Card className="glass-diagnostic-card dossier-paper" style={{ minHeight: '400px' }}>
-            <Title level={4}>04 // Industrial Entropy (Field Reality)</Title>
-            <Paragraph>Yield Analysis under environmental noise.</Paragraph>
-        </Card>
-    );
-
-    const renderSection05 = () => {
-        const vCount = spatial.grid.flat().reduce((a, b) => a + b, 0);
+    if (!reportData) {
         return (
-            <Card className="glass-diagnostic-card report-narrative-section dossier-paper">
-                <Space align="center" style={{ marginBottom: '2rem' }}>
-                    <div className="stat-icon-circle accent-orange" style={{ width: 44, height: 44 }}>
-                        <DeploymentUnitOutlined style={{ color: '#fa8c16', fontSize: 22 }} />
-                    </div>
-                    <Title level={4} className="dossier-section-title">05 // Environmental Stress Audit (Spatial Blindspots)</Title>
-                </Space>
-                <Row gutter={48}>
-                    <Col xs={24} md={12}>
-                        <div className="spatial-failure-visualizer" style={{ marginTop: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', width: '200px', height: '140px' }}>
-                            {spatial.grid.map((row, y) => row.map((count, x) => {
-                                const failRate = count > 0 ? (spatial.fails[y][x] / count) : 0;
-                                const bgColor = failRate > 0.3 ? '#fff1f0' : failRate > 0.1 ? '#fff7e6' : '#f6ffed';
-                                const borderColor = failRate > 0.3 ? '#ffa39e' : failRate > 0.1 ? '#ffd591' : '#b7eb8f';
-                                return (
-                                    <div key={`${x}-${y}`} style={{ background: bgColor, border: `1px solid ${borderColor}`, borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {failRate > 0.3 && <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#ff4d4f' }} />}
-                                    </div>
-                                );
-                            }))}
-                        </div>
-                    </Col>
-                    <Col xs={24} md={12}>
-                        <Paragraph style={{ fontSize: '14px', color: '#595959' }}>
-                            Spatial audit reveals that **{vCount > 0 ? "identified blindzones" : "peripheral regions"}** are the primary source of signal decay.
-                            Failure concentration at edge coordinates indicates optical distortion or dataset bias.
-                        </Paragraph>
-                    </Col>
-                </Row>
-            </Card>
+            <div style={{ padding: '2rem', textAlign: 'center' }}>
+                <Text type="secondary">Select a training to view the report</Text>
+            </div>
         );
-    };
+    }
 
-    const renderSection06 = () => (
-        <Card className="glass-diagnostic-card dossier-paper" style={{ minHeight: '400px' }}>
-            <Title level={4}>06 // Scaling & Geometry Diagnostic</Title>
-            <Row gutter={48}>
-                <Col span={12}>
-                    <div className="scale-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                        <Text type="secondary">Tiny (Lower Bound)</Text>
-                        <Text strong className="mono-value">{scaling.q25.toFixed(0)} px²</Text>
-                    </div>
-                    <div className="scale-row" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Text type="secondary">Median Scale</Text>
-                        <Text strong className="mono-value">{scaling.q50.toFixed(0)} px²</Text>
-                    </div>
-                </Col>
-                <Col span={12}>
-                    <Paragraph>Stability collapse triggered primarily by sub-pixel features.</Paragraph>
-                </Col>
-            </Row>
+    // --- HELPER: Format percentage ---
+    const toPercent = (val) => val ? `${(val * 100).toFixed(1)}%` : 'N/A';
+
+    // --- METRIC CARD COMPONENT ---
+    const MetricCard = ({ title, value, explanation, color = '#1890ff' }) => (
+        <Card size="small" className="metric-card-report" style={{ textAlign: 'center', height: '100%' }}>
+            <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '8px' }}>
+                {title}
+            </Text>
+            <Title level={2} style={{ margin: 0, color }}>{value}</Title>
+            <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
+                {explanation}
+            </Text>
         </Card>
     );
 
-    const renderSection07 = () => (
-        <Card className="glass-diagnostic-card dossier-paper" style={{ minHeight: '400px' }}>
-            <Title level={4}>07 // Reliability Gate Logic</Title>
-            <Paragraph>Recommended Deployment Gate: **{(engine.production.t * 100).toFixed(0)}%** confidence.</Paragraph>
-        </Card>
-    );
-
-    const renderSection08 = () => (
-        <Card className="glass-diagnostic-card dossier-paper" style={{ minHeight: '400px' }}>
-            <Title level={4}>08 // Human-in-the-Loop ROI Matrix</Title>
-            <Paragraph>Discoveries: {roi.discoveries} | False Alarms: {roi.falseAlarms}</Paragraph>
-        </Card>
-    );
-
-    const renderSection09 = () => (
-        <Card className="glass-diagnostic-card dossier-paper" style={{ minHeight: '400px' }}>
-            <Title level={4}>09 // Class Conflict & Fidelity Matrix</Title>
-            <Paragraph>Top confused class: {Object.keys(classFails).length > 0 ? Object.entries(classFails).sort((a, b) => b[1] - a[1])[0][0] : "None detected"}</Paragraph>
-        </Card>
-    );
-
-    const renderSection10 = () => (
-        <Card className="glass-diagnostic-card dossier-paper" style={{ minHeight: '400px' }}>
-            <Title level={4}>10 // Deployment Roadmap</Title>
-            <Paragraph>Tactical move: Deploy Gate at {(engine.production.t * 100).toFixed(0)}%.</Paragraph>
-        </Card>
-    );
-
-    const sections = [
-        { label: "01 // Strategic Verdict", value: 1, render: renderSection01 },
-        { label: "02 // Training DNA", value: 2, render: renderSection02 },
-        { label: "03 // Lab Benchmarks", value: 3, render: renderSection03 },
-        { label: "04 // Industrial Entropy", value: 4, render: renderSection04 },
-        { label: "05 // Spatial Stress", value: 5, render: renderSection05 },
-        { label: "06 // Scaling Logic", value: 6, render: renderSection06 },
-        { label: "07 // Gate Reliability", value: 7, render: renderSection07 },
-        { label: "08 // ROI Matrix", value: 8, render: renderSection08 },
-        { label: "09 // Class Fidelity", value: 9, render: renderSection09 },
-        { label: "10 // Tactical Roadmap", value: 10, render: renderSection10 }
+    // --- DATASET DETAILS TABLE ---
+    const datasetColumns = [
+        { title: 'Item', dataIndex: 'item', key: 'item', width: '30%' },
+        { title: 'Value', dataIndex: 'value', key: 'value', width: '25%', render: (v) => <Text strong>{v}</Text> },
+        { title: 'What it means', dataIndex: 'explanation', key: 'explanation' }
     ];
 
-    // --- 2. ANCHOR NAVIGATION LOGIC ---
-    const scrollToSection = (sectionValue) => {
-        const element = document.getElementById(`dossier-section-${sectionValue}`);
-        if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    };
+    const datasetRows = [
+        { key: 1, item: 'Training Epochs', value: reportData.dataset.epochs, explanation: `The AI studied the data ${reportData.dataset.epochs} times to learn.` },
+        { key: 2, item: 'Validation Images', value: reportData.dataset.trainingImages, explanation: 'Number of images used to test the AI after training.' },
+        { key: 3, item: 'Total Instances', value: reportData.dataset.totalInstances, explanation: 'Total number of labeled objects in the validation set.' },
+        { key: 4, item: 'Image Size', value: `${reportData.dataset.imageSize}px`, explanation: `All images were resized to ${reportData.dataset.imageSize}×${reportData.dataset.imageSize} pixels.` },
+        { key: 5, item: 'Classes', value: reportData.dataset.classCount, explanation: reportData.dataset.classNames }
+    ];
+
+    // --- CLASS-WISE TABLE ---
+    const classColumns = [
+        { title: 'Class', dataIndex: 'class', key: 'class', render: (v) => <Text strong>{v}</Text> },
+        { title: 'Box Precision', dataIndex: 'box_p', key: 'box_p', render: toPercent },
+        { title: 'Box Recall', dataIndex: 'box_r', key: 'box_r', render: toPercent },
+        { title: 'Box F1', dataIndex: 'box_f1', key: 'box_f1', render: toPercent },
+        { title: 'Box mAP@50', dataIndex: 'box_map50', key: 'box_map50', render: (v) => v?.toFixed(3) || 'N/A' }
+    ];
+
+    // Add mask columns for segmentation
+    if (reportData.isSeg) {
+        classColumns.push(
+            { title: 'Mask Precision', dataIndex: 'mask_p', key: 'mask_p', render: toPercent },
+            { title: 'Mask Recall', dataIndex: 'mask_r', key: 'mask_r', render: toPercent },
+            { title: 'Mask F1', dataIndex: 'mask_f1', key: 'mask_f1', render: toPercent }
+        );
+    }
 
     return (
-        <div className="analytics-tab-content report-dossier" style={{ animation: 'fadeIn 0.6s ease' }}>
-            {/* Dossier Header - Fixed for Screen, Hidden for Print */}
-            <div className="report-page-header sticky-report-header" style={{
-                marginBottom: '2rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                background: '#fafafa',
-                padding: '1rem 0',
-                borderBottom: '1px solid #f0f0f0'
-            }}>
+        <div className="report-view-container" style={{ padding: '24px', background: '#fff' }}>
+            {/* HEADER */}
+            <div className="report-header" style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                    <Title level={4} style={{ margin: 0, textTransform: 'uppercase', letterSpacing: '1px', color: '#1890ff' }}>
-                        Industrial Intelligence Dossier
-                    </Title>
-                    <Text type="secondary" style={{ fontSize: '12px' }}>
-                        IDENT: {lineage.name.toUpperCase()} • {lineage.task.toUpperCase()} • {new Date().toLocaleDateString()}
-                    </Text>
+                    <Title level={3} style={{ margin: 0 }}>{reportData.name}</Title>
+                    <Space style={{ marginTop: '8px' }}>
+                        <Tag color="blue">{reportData.taskType}</Tag>
+                        <Tag color={reportData.status === 'completed' ? 'green' : 'default'}>{reportData.status?.toUpperCase()}</Tag>
+                        <Text type="secondary">{reportData.date}</Text>
+                    </Space>
                 </div>
-                <Space direction="horizontal" align="center">
-                    <Select
-                        placeholder="Jump to Section..."
-                        style={{ width: 240 }}
-                        onChange={scrollToSection}
-                        options={sections}
-                        className="section-selector-dropdown"
-                    />
-                    <Button
-                        type="primary"
-                        onClick={() => window.print()}
-                        icon={<DownloadOutlined />}
-                    >Export Full Dossier</Button>
-                </Space>
+                <Button type="primary" icon={<DownloadOutlined />} onClick={() => window.print()}>
+                    Export Report
+                </Button>
             </div>
 
-            {/* Narrative Content - Unified Scrollable Architecture */}
-            <div className="report-main-content">
-                {sections.map(section => (
-                    <div
-                        key={section.value}
-                        id={`dossier-section-${section.value}`}
-                        className="dossier-section-wrapper"
-                        style={{ marginBottom: '4rem', scrollMarginTop: '100px' }}
-                    >
-                        {section.render()}
-                        {section.value < 10 && <Divider style={{ margin: '4rem 0' }} className="dossier-section-divider" />}
-                    </div>
-                ))}
-                {/* Simple Attribution Footer */}
-                <div className="report-footer-attribution" style={{
-                    marginTop: '4rem',
-                    padding: '2rem 0',
-                    textAlign: 'center',
-                    borderTop: '1px solid #f0f0f0'
-                }}>
-                    <Text type="secondary" style={{ fontSize: '11px', letterSpacing: '2px' }}>
-                        END OF INDUSTRIAL INTELLIGENCE DOSSIER • SECURE TRANSMISSION COMPLETE
+            <Divider />
+
+            {/* SECTION 1: DATASET DETAILS */}
+            <div className="report-section" style={{ marginBottom: '3rem' }}>
+                <Space align="center" style={{ marginBottom: '1rem' }}>
+                    <DatabaseOutlined style={{ fontSize: '20px', color: '#1890ff' }} />
+                    <Title level={4} style={{ margin: 0 }}>Dataset Details</Title>
+                </Space>
+                <Text type="secondary" style={{ display: 'block', marginBottom: '1rem' }}>
+                    Information about the data used to train and validate this model.
+                </Text>
+                <Table
+                    dataSource={datasetRows}
+                    columns={datasetColumns}
+                    pagination={false}
+                    size="small"
+                    bordered
+                />
+            </div>
+
+            {/* SECTION 2: BOX DETECTION METRICS */}
+            <div className="report-section" style={{ marginBottom: '3rem' }}>
+                <Space align="center" style={{ marginBottom: '1rem' }}>
+                    <AimOutlined style={{ fontSize: '20px', color: '#52c41a' }} />
+                    <Title level={4} style={{ margin: 0 }}>Box Detection Metrics</Title>
+                </Space>
+                <Text type="secondary" style={{ display: 'block', marginBottom: '1rem' }}>
+                    How well the AI draws boxes around objects. Higher values = better performance.
+                </Text>
+                <Row gutter={[16, 16]}>
+                    <Col xs={24} sm={12} md={6}>
+                        <MetricCard
+                            title="Precision"
+                            value={toPercent(reportData.box.precision)}
+                            explanation={`${Math.round(reportData.box.precision * 100)} out of 100 detections were correct.`}
+                            color="#52c41a"
+                        />
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                        <MetricCard
+                            title="Recall"
+                            value={toPercent(reportData.box.recall)}
+                            explanation={`The AI found ${Math.round(reportData.box.recall * 100)} out of 100 real objects.`}
+                            color="#1890ff"
+                        />
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                        <MetricCard
+                            title="F1 Score"
+                            value={toPercent(reportData.box.f1)}
+                            explanation="Balance between precision and recall."
+                            color="#722ed1"
+                        />
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                        <MetricCard
+                            title="mAP@50"
+                            value={reportData.box.map50?.toFixed(3) || 'N/A'}
+                            explanation="Average accuracy of box placement."
+                            color="#fa8c16"
+                        />
+                    </Col>
+                </Row>
+            </div>
+
+            {/* SECTION 3: MASK SEGMENTATION METRICS (Only for Segmentation) */}
+            {reportData.isSeg && reportData.mask && (
+                <div className="report-section" style={{ marginBottom: '3rem' }}>
+                    <Space align="center" style={{ marginBottom: '1rem' }}>
+                        <ExperimentOutlined style={{ fontSize: '20px', color: '#13c2c2' }} />
+                        <Title level={4} style={{ margin: 0 }}>Mask Segmentation Metrics</Title>
+                    </Space>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: '1rem' }}>
+                        How well the AI draws pixel-perfect masks around objects.
                     </Text>
+                    <Row gutter={[16, 16]}>
+                        <Col xs={24} sm={12} md={6}>
+                            <MetricCard
+                                title="Mask Precision"
+                                value={toPercent(reportData.mask.precision)}
+                                explanation={`${Math.round(reportData.mask.precision * 100)} out of 100 mask detections were correct.`}
+                                color="#13c2c2"
+                            />
+                        </Col>
+                        <Col xs={24} sm={12} md={6}>
+                            <MetricCard
+                                title="Mask Recall"
+                                value={toPercent(reportData.mask.recall)}
+                                explanation={`The AI segmented ${Math.round(reportData.mask.recall * 100)} out of 100 real objects.`}
+                                color="#1890ff"
+                            />
+                        </Col>
+                        <Col xs={24} sm={12} md={6}>
+                            <MetricCard
+                                title="Mask F1"
+                                value={toPercent(reportData.mask.f1)}
+                                explanation="Balance between mask precision and recall."
+                                color="#722ed1"
+                            />
+                        </Col>
+                        <Col xs={24} sm={12} md={6}>
+                            <MetricCard
+                                title="Mask mAP@50"
+                                value={reportData.mask.map50?.toFixed(3) || 'N/A'}
+                                explanation="Average accuracy of mask placement."
+                                color="#fa8c16"
+                            />
+                        </Col>
+                    </Row>
                 </div>
+            )}
+
+            {/* SECTION 4: CLASS-WISE PERFORMANCE */}
+            {reportData.classes.length > 0 && (
+                <div className="report-section" style={{ marginBottom: '3rem' }}>
+                    <Space align="center" style={{ marginBottom: '1rem' }}>
+                        <CheckCircleOutlined style={{ fontSize: '20px', color: '#722ed1' }} />
+                        <Title level={4} style={{ margin: 0 }}>Class-wise Performance</Title>
+                    </Space>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: '1rem' }}>
+                        How well the AI performs for each type of object it was trained to detect.
+                    </Text>
+                    <Table
+                        dataSource={reportData.classes}
+                        columns={classColumns}
+                        pagination={false}
+                        size="small"
+                        bordered
+                    />
+                </div>
+            )}
+
+            {/* FOOTER */}
+            <div className="report-footer" style={{ marginTop: '3rem', paddingTop: '1rem', borderTop: '1px solid #f0f0f0', textAlign: 'center' }}>
+                <Text type="secondary" style={{ fontSize: '11px' }}>
+                    Training Report • Generated {new Date().toLocaleString()}
+                </Text>
             </div>
         </div>
     );

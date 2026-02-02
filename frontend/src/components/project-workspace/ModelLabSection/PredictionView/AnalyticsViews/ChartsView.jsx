@@ -367,9 +367,10 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         const ma = misaligned.length;
         const fn = filteredFN.length;
 
-        // THE "CLOSED SYSTEM" FIX: 
-        // Total Reality = Things found correctly + Things found sloppily + Things completely missed.
-        totalGT = tp + ma + fn;
+        // FIX: Use backend total_gt for Split mode (constant, unfiltered)
+        // Fall back to calculated value for Upload mode (no backend GT)
+        const backendGT = qualityStats?.total_gt || 0;
+        totalGT = backendGT > 0 ? backendGT : (tp + ma + fn);
 
         const globalMetrics = calcStats(tp, fp, fn);
 

@@ -110,7 +110,7 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
                 width,
                 height,
                 label_mapping,
-                iou_threshold=0.3
+                iou_threshold=0.5
             )
             
             missed = comp_result.get("missed", [])
@@ -133,8 +133,9 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
             total_false_negatives += len(missed)
             total_false_positives += len(fp_indices)
             
-            # True Positives = Total Predictions - False Positives
-            img_tp_count = len(img_preds) - len(fp_indices)
+            # FIXED: True Positives = GT objects that were matched (not predictions - FP)
+            # This prevents TP > total_gt_objects which causes Recall > 100%
+            img_tp_count = len(annotations[img_key_full]) - len(missed)
             total_true_positives += img_tp_count
             
             # --- Collect Detailed Errors for Frontend ---

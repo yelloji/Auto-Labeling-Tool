@@ -103,7 +103,7 @@ def get_missed_detections(
     img_width: int,
     img_height: int,
     label_mapping: Dict[int, str],
-    iou_threshold: float = 0.3
+    iou_threshold: float = 0.5
 ) -> List[Dict]:
     """
     Find ground truth objects with no matching prediction.
@@ -132,46 +132,42 @@ def get_missed_detections(
             'class_id': ann['class_id']
         })
     
-    # Find missed detections and track prediction matches
-    missed = []
-    matched_prediction_indices = set()
+    # GREEDY BEST MATCHING ALGORITHM
+    # Each GT can only be matched by ONE prediction (best IoU)
+    # Each prediction can only match ONE GT
+    # This prevents multiple predictions from inflating TP count
     
-    for gt in ground_truth:
-        has_match = False
-        
-        for i, pred in enumerate(predictions):
-            # Match purely by Location (IoU) 
-            # If the model saw ANYTHING here (even with wrong label), it's not a "miss"
+    # Step 1: Build IoU matrix (all GT vs all predictions)
+    iou_matrix = []
+    for gt_idx, gt in enumerate(ground_truth):
+        for pred_idx, pred in enumerate(predictions):
             iou = calculate_iou(gt['bbox'], pred['bbox'])
             if iou >= iou_threshold:
-                has_match = True
-                matched_prediction_indices.add(i)
-                # Note: We don't break here if we want to track ALL matches, 
-                # but for "missed detection" we just need one.
-                # However, for FP we want to know if this prediction matched ANY GT.
-                # So we continue the inner loop to mark other predictions as matched too.
-        
-        if not has_match:
-            missed.append(gt)
-            
-    # False Positives are predictions that didn't match ANY ground truth
-    fp_indices = [i for i in range(len(predictions)) if i not in matched_prediction_indices]
+                iou_matrix.append((iou, gt_idx, pred_idx))
     
-    # Calculate IoUs for all matches to provide Geometric Accuracy
-    # We only care about the best match IoU for each GT (or average of all matches)
-    # For simplicity, we'll return a list of IoUs for everything that was above threshold
-    all_matched_ious = []
-    for gt in ground_truth:
-        best_iou = 0
-        for pred in predictions:
-            iou = calculate_iou(gt['bbox'], pred['bbox'])
-            if iou > best_iou:
-                best_iou = iou
-        if best_iou >= iou_threshold:
-            all_matched_ious.append(best_iou)
+    # Step 2: Sort by IoU (highest first) for greedy matching
+    iou_matrix.sort(key=lambda x: x[0], reverse=True)
+    
+    # Step 3: Greedy assignment - each GT and prediction can only be matched once
+    matched_gt_indices = set()
+    matched_prediction_indices = set()
+    matched_ious = []
+    
+    for iou, gt_idx, pred_idx in iou_matrix:
+        if gt_idx not in matched_gt_indices and pred_idx not in matched_prediction_indices:
+            # This is the best available match for this GT
+            matched_gt_indices.add(gt_idx)
+            matched_prediction_indices.add(pred_idx)
+            matched_ious.append(iou)
+    
+    # Step 4: Find missed GT objects (not matched by any prediction)
+    missed = [ground_truth[i] for i in range(len(ground_truth)) if i not in matched_gt_indices]
+    
+    # Step 5: Find FP predictions (not matched to any GT)
+    fp_indices = [i for i in range(len(predictions)) if i not in matched_prediction_indices]
 
     return {
         "missed": missed,
         "fp_indices": fp_indices,
-        "matched_ious": all_matched_ious
+        "matched_ious": matched_ious
     }
