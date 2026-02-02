@@ -36,8 +36,16 @@ const { Text, Title } = Typography;
  * focuses on Confidence Slicer fix and clean white design.
  */
 const ChartsView = ({ experiment, verifications = [], projectLabels = [], trainingClasses = [] }) => {
-    const [confRange, setConfRange] = useState([10, 100]);
-    const [iouThreshold, setIouThreshold] = useState(30); // New: Dynamic IOU (30 = 0.3)
+    // Use experiment's confidence as MIN (max is always 100)
+    const defaultMinConf = experiment?.confidence !== undefined
+        ? Math.round(experiment.confidence * 100)
+        : 10;
+    const defaultIOU = experiment?.iou_threshold !== undefined
+        ? Math.round(experiment.iou_threshold * 100)
+        : 30;
+
+    const [confRange, setConfRange] = useState([defaultMinConf, 100]); // Max always 100
+    const [iouThreshold, setIouThreshold] = useState(defaultIOU);
     const [graph4Class, setGraph4Class] = useState('all');
     const [sizeSlice, setSizeSlice] = useState('all');
     const [selectedClasses, setSelectedClasses] = useState([]); // Empty = All
@@ -52,6 +60,19 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
     const [errorModal, setErrorModal] = useState({ visible: false, title: '', items: [] });
 
     const isSplit = experiment?.dataset_source && experiment.dataset_source !== 'upload';
+
+    // --- 🔄 Sync sliders when experiment changes ---
+    useEffect(() => {
+        const newMinConf = experiment?.confidence !== undefined
+            ? Math.round(experiment.confidence * 100)
+            : 10;
+        const newIOU = experiment?.iou_threshold !== undefined
+            ? Math.round(experiment.iou_threshold * 100)
+            : 30;
+
+        setConfRange([newMinConf, 100]); // Max always 100
+        setIouThreshold(newIOU);
+    }, [experiment?.id, experiment?.confidence, experiment?.iou_threshold]);
 
     // --- 📡 Fetch Quality Stats for Split Datasets ---
     useEffect(() => {
