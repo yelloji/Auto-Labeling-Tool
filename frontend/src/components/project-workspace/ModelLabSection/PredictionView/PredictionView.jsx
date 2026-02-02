@@ -1773,6 +1773,7 @@ const PredictionView = ({ training }) => {
             < AnalyticsModal
                 visible={analyticsVisible}
                 onCancel={() => setAnalyticsVisible(false)}
+                training={training}
                 experiment={selectedExp}
                 verifications={verifications}
                 projectLabels={projectLabels}

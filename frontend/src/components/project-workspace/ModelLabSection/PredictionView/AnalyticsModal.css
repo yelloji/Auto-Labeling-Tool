@@ -502,8 +502,82 @@
     border-bottom: 2px solid #e6f0ff !important;
 }
 
-.status-value-mono {
-    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-    letter-spacing: -0.5px;
-    text-shadow: 0 0 10px rgba(19, 194, 194, 0.1);
+/* ========== STRATEGIC RESEARCH REPORT (HYBRID DOSSIER) ========== */
+
+.report-dossier {
+    background: #fafafa;
+    border-radius: 12px;
+    padding: 2rem !important;
+    color: #262626;
+    border: 1px solid #f0f0f0;
+    box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.02);
+}
+
+.report-narrative-section {
+    background: #ffffff !important;
+    border: 1px solid #e8e8e8 !important;
+    border-radius: 4px !important;
+    /* Document look */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+.ceo-text {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #434343;
+    line-height: 1.8;
+}
+
+.strategic-item {
+    transition: all 0.2s ease;
+    padding: 0.5rem;
+    border-radius: 6px;
+}
+
+.strategic-item:hover {
+    background: #f0f7ff;
+}
+
+/* Metric Insight Tiles */
+.insight-tile {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.insight-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+.lineage-dna-card {
+    border: 1px solid #f0f0f0 !important;
+    background: #ffffff !important;
+}
+
+.lineage-dna-card .ant-card-head {
+    background: #fdfdfd !important;
+    border-bottom: 1px solid #f0f0f0 !important;
+    min-height: 40px !important;
+}
+
+.dna-row span {
+    font-size: 13px;
+}
+
+/* Executive Verdict Styles */
+.strategic-takeaway {
+    border-left: 4px solid #1890ff;
+    position: relative;
+    overflow: hidden;
+}
+
+.strategic-takeaway::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, transparent 50%, rgba(24, 144, 255, 0.05) 100%);
 }

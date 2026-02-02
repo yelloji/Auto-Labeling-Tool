@@ -31,7 +31,7 @@ const { Title, Text, Paragraph } = Typography;
  * 
  * Premium analytics dashboard with 5 tabs
  */
-const AnalyticsModal = ({ visible, onCancel, experiment, verifications = [], projectLabels = [], trainingClasses = [] }) => {
+const AnalyticsModal = ({ visible, onCancel, training, experiment, verifications = [], projectLabels = [], trainingClasses = [] }) => {
     const [activeTab, setActiveTab] = useState('overview');
 
     // Calculate insights - with safety checks
@@ -419,7 +419,11 @@ const AnalyticsModal = ({ visible, onCancel, experiment, verifications = [], pro
                     }
                     key="report"
                 >
-                    <ReportView experiment={experiment} />
+                    <ReportView
+                        experiment={experiment}
+                        training={training}
+                        verifications={verifications}
+                    />
                 </Tabs.TabPane>
 
                 <Tabs.TabPane

@@ -694,13 +694,298 @@
         width: 15rem;
     }
 }
+
 /* Custom Premium Animations */
 @keyframes tooltipFadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes popupAppear {
-    from { opacity: 0; transform: translate(-50%, -95%) scale(0.95); }
-    to { opacity: 1; transform: translate(-50%, -105%) scale(1); }
+    from {
+        opacity: 0;
+        transform: translate(-50%, -95%) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, -105%) scale(1);
+    }
+}
+
+/* ============================================================
+   STRATEGIC INTELLIGENCE DOSSIER (GPT-5.2 AESTHETIC)
+   ============================================================ */
+
+.report-dossier {
+    padding: 1.5rem;
+    background: #fdfdfd;
+    /* High-quality paper white */
+    min-height: 100%;
+}
+
+.dossier-paper {
+    background: #ffffff !important;
+    border: 1px solid #e7eaed !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03) !important;
+    border-radius: 4px !important;
+    /* Industrial sharp edges */
+    position: relative;
+    overflow: hidden;
+}
+
+.dossier-paper::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, #1890ff, transparent);
+    opacity: 0.6;
+}
+
+.dossier-section-title {
+    font-family: 'Inter', -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+    font-weight: 700 !important;
+    color: #1d1d1f !important;
+    margin: 0 !important;
+}
+
+.refined-typography {
+    line-height: 1.8;
+    color: #434343;
+    font-size: 15px;
+}
+
+.mono-value {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    color: #1890ff;
+}
+
+/* Page 1: Heritage List */
+.dna-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dna-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #f0f0f0;
+}
+
+/* Page 2: Spatial Failure */
+.spatial-failure-visualizer {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    background: #fff;
+    padding: 8px;
+    border: 1px solid #f0f0f0;
+}
+
+/* Page 3: Roadmap Dots */
+.roadmap-path {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding-left: 32px;
+    position: relative;
+}
+
+.roadmap-path::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #f0f0f0;
+}
+
+.roadmap-step-premium {
+    position: relative;
+}
+
+.step-num {
+    position: absolute;
+    left: -32px;
+    width: 24px;
+    height: 24px;
+    background: #1890ff;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 1px #1890ff;
+    z-index: 2;
+}
+
+/* ROI Matrix */
+.roi-matrix-card {
+    padding: 1.5rem;
+    background: #f9fbff;
+    border: 1px solid #e6f7ff;
+    border-radius: 8px;
+}
+
+.roi-stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.accent-blue {
+    background: #e6f7ff;
+}
+
+.accent-orange {
+    background: #fff7e6;
+}
+
+.accent-green {
+    background: #f6ffed;
+}
+
+/* Dashboard Layout Overrides */
+.analytics-tab-content.report-dossier {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+/* ============================================================
+   REPORT HUD STICKY LOGIC
+   ============================================================ */
+.sticky-report-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* ============================================================
+   PRINT ENGINE (SIMPLIFIED INDUSTRIAL CLEAN-ROOM)
+   ============================================================ */
+@media print {
+
+    /* 1. Global Reset */
+    html,
+    body {
+        height: auto !important;
+        overflow: visible !important;
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* 2. Hide Screen-Only UI (The Background App) */
+    #root,
+    .ant-modal-mask,
+    .ant-modal-close,
+    .ant-modal-header,
+    .ant-tabs-nav,
+    .sticky-report-header,
+    .report-footer-attribution,
+    .dossier-section-divider,
+    .ant-btn {
+        display: none !important;
+    }
+
+    /* 3. Unlock Modal Containers (PORTAL AWARE) */
+    .ant-modal-root,
+    .ant-modal-wrap,
+    .ant-modal {
+        display: block !important;
+        position: static !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+        background: white !important;
+        box-shadow: none !important;
+    }
+
+    .ant-modal-content,
+    .ant-modal-body,
+    .analytics-tabs,
+    .ant-tabs-content-holder,
+    .ant-tabs-content {
+        display: block !important;
+        overflow: visible !important;
+        height: auto !important;
+        min-height: auto !important;
+        max-height: none !important;
+        position: static !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        background: white !important;
+    }
+
+    /* 4. Tab Pane Isolation (THE LEAK FIX) */
+    /* Only allow the ACTIVE tab to be visible in print */
+    .ant-tabs-tabpane:not(.ant-tabs-tabpane-active) {
+        display: none !important;
+    }
+
+    .ant-tabs-tabpane-active {
+        display: block !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+        opacity: 1 !important;
+    }
+
+    /* 5. Report Structure & Flow */
+    .report-dossier,
+    .report-main-content {
+        display: block !important;
+        width: 100% !important;
+        color: #000 !important;
+    }
+
+    .dossier-section-wrapper {
+        display: block !important;
+        margin-bottom: 3rem !important;
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+
+    .dossier-paper {
+        border: 1px solid #eee !important;
+        box-shadow: none !important;
+        margin-bottom: 2rem !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    /* Print Standards */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+
+/* Screen View Visibility Reset */
+@media screen {
+    .dossier-section-wrapper.is-hidden {
+        display: none !important;
+    }
 }
