@@ -101,6 +101,30 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
         };
     }, [experiment, qualityStats]);
 
+    // --- KPIs CALCULATION (Same as ChartsView) ---
+    const kpis = useMemo(() => {
+        if (!qualityStats?.has_ground_truth) return null;
+
+        // Use backend's detailed lists for TP/FP/FN counts
+        const tp = (qualityStats.detailed_true_positives || []).length;
+        const fp = (qualityStats.detailed_false_positives || []).length;
+        const fn = (qualityStats.detailed_missed_objects || []).length;
+
+        // Calculate precision, recall, F1 (same formula as ChartsView)
+        const p = (tp + fp) > 0 ? (tp / (tp + fp)) * 100 : 0;
+        const r = (tp + fn) > 0 ? (tp / (tp + fn)) * 100 : 0;
+        const f1 = (p + r) > 0 ? (2 * p * r) / (p + r) : 0;
+
+        return {
+            tp,
+            fp,
+            fn,
+            precision: p.toFixed(1),  // Already percentage string "32.6"
+            recall: r.toFixed(1),     // Already percentage string "56.4"
+            f1: f1.toFixed(1)         // Already percentage string "41.4"
+        };
+    }, [qualityStats]);
+
     // --- DATA EXTRACTION ---
     const reportData = useMemo(() => {
         if (!training) return null;
@@ -560,6 +584,121 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                 ) : (
                     <Card>
                         <Text type="secondary">No prediction data available for this experiment.</Text>
+                    </Card>
+                )}
+            </div>
+
+            {/* SECTION 02: REAL-WORLD PERFORMANCE */}
+            <div className="report-section" style={{ marginTop: '2rem', marginBottom: '2rem' }}>
+                <Title level={3} style={{ fontSize: '16px', fontWeight: 600, marginBottom: '1rem', color: '#1890ff' }}>
+                    <AimOutlined /> Section 02: Real-World Performance
+                </Title>
+
+                {predictionAnalytics && kpis ? (
+                    <>
+                        {/* Analysis Parameters */}
+                        <Card size="small" style={{ marginBottom: '1rem', background: '#f9f9f9', border: '1px solid #eee' }}>
+                            <Space split={<Divider type="vertical" />}>
+                                <Text>
+                                    <Text strong style={{ color: '#888', fontSize: '11px', textTransform: 'uppercase', marginRight: '8px' }}>Confidence:</Text>{' '}
+                                    <Tag color="blue" style={{ borderRadius: '4px', fontWeight: 'bold' }}>{experiment?.confidence?.toFixed(2) || 'N/A'}</Tag>
+                                </Text>
+                                <Text>
+                                    <Text strong style={{ color: '#888', fontSize: '11px', textTransform: 'uppercase', marginRight: '8px' }}>IOU Threshold:</Text>{' '}
+                                    <Tag color="green" style={{ borderRadius: '4px', fontWeight: 'bold' }}>{experiment?.iou_threshold?.toFixed(2) || 'N/A'}</Tag>
+                                </Text>
+                            </Space>
+                        </Card>
+
+                        {/* Performance Metrics - Row 1: TP, FP, FN */}
+                        <Row gutter={[16, 16]} style={{ marginBottom: '1rem' }}>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ textAlign: 'center', height: '100%', background: '#f6ffed', borderColor: '#b7eb8f' }}>
+                                    <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                        True Positives
+                                    </Text>
+                                    <Title level={2} style={{ margin: 0, color: '#52c41a', fontFamily: 'JetBrains Mono, monospace' }}>
+                                        {kpis.tp || 0}
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
+                                        Correct detections
+                                    </Text>
+                                </Card>
+                            </Col>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ textAlign: 'center', height: '100%', background: '#fff1f0', borderColor: '#ffa39e' }}>
+                                    <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                        False Positives
+                                    </Text>
+                                    <Title level={2} style={{ margin: 0, color: '#ff4d4f', fontFamily: 'JetBrains Mono, monospace' }}>
+                                        {kpis.fp || 0}
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
+                                        Incorrect finds
+                                    </Text>
+                                </Card>
+                            </Col>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ textAlign: 'center', height: '100%', background: '#fffbe6', borderColor: '#ffe58f' }}>
+                                    <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                        False Negatives
+                                    </Text>
+                                    <Title level={2} style={{ margin: 0, color: '#fa8c16', fontFamily: 'JetBrains Mono, monospace' }}>
+                                        {kpis.fn || 0}
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
+                                        Missed objects
+                                    </Text>
+                                </Card>
+                            </Col>
+                        </Row>
+
+                        {/* Performance Metrics - Row 2: Precision, Recall, F1 */}
+                        <Row gutter={[16, 16]}>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ textAlign: 'center', height: '100%', border: '1px solid #e6f7ff', background: '#f0f9ff' }}>
+                                    <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                        Precision
+                                    </Text>
+                                    <Title level={2} style={{ margin: 0, color: '#1890ff', fontFamily: 'JetBrains Mono, monospace' }}>
+                                        {kpis.precision ? `${kpis.precision}%` : 'N/A'}
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
+                                        TP / (TP + FP)
+                                    </Text>
+                                </Card>
+                            </Col>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ textAlign: 'center', height: '100%', border: '1px solid #f9f0ff', background: '#f9f0ff' }}>
+                                    <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                        Recall
+                                    </Text>
+                                    <Title level={2} style={{ margin: 0, color: '#722ed1', fontFamily: 'JetBrains Mono, monospace' }}>
+                                        {kpis.recall ? `${kpis.recall}%` : 'N/A'}
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
+                                        TP / (TP + FN)
+                                    </Text>
+                                </Card>
+                            </Col>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ textAlign: 'center', height: '100%', background: '#e6f7ff', borderColor: '#91d5ff' }}>
+                                    <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                        F1 Score
+                                    </Text>
+                                    <Title level={2} style={{ margin: 0, color: '#1890ff', fontFamily: 'JetBrains Mono, monospace' }}>
+                                        {kpis.f1 ? `${kpis.f1}%` : 'N/A'}
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
+                                        Overall accuracy
+                                    </Text>
+                                </Card>
+                            </Col>
+                        </Row>
+                    </>
+                ) : (
+                    <Card style={{ border: '1px dashed #ccc', textAlign: 'center', padding: '2rem' }}>
+                        <Text type="secondary">Quality metrics not available. Run on a split dataset for performance analysis.</Text>
                     </Card>
                 )}
             </div>
