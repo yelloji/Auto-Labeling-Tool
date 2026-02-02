@@ -419,11 +419,18 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
         }).sort((a, b) => b.f1 - a.f1);
 
 
-        // --- 7. INDUSTRIAL PERFORMANCE ENGINE (FINAL SPEC v1.0) ---
-        // Constants from grqaph-finla.md
-        const CONF_STEP = 0.05;
+        // --- 7. INDUSTRIAL PERFORMANCE ENGINE (FINAL SPEC v2.0) ---
+        // Changed: CONF_STEP from 0.05 to 0.01 for precise optimal point finding
+        const CONF_STEP = 0.01;  // 1% precision (was 5%)
         const MIN_AUTOMATION = 0.15;
-        const W_TP = 2, W_FP = 1, W_FN = 10;
+        const W_TP = 2, W_FP = 1, W_FN = 10;  // For TRAINING mode
+
+        // F1 calculation helper for PRODUCTION mode (balanced selection)
+        const calcF1 = (tp, fp, fn) => {
+            const precision = (tp + fp) > 0 ? tp / (tp + fp) : 0;
+            const recall = (tp + fn) > 0 ? tp / (tp + fn) : 0;
+            return (precision + recall) > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+        };
 
         const pRows = [];
         const CONF_LIST = [];
@@ -491,10 +498,17 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             }
         }
 
-        // 7.3 Mode Logic (Expert System v2)
+        // 7.3 Mode Logic (Expert System v3)
+        // PRODUCTION: Use F1 score for balanced TP/FP/FN selection
+        // TRAINING: Use weighted score (heavily penalizes FN to push model harder)
         let productionChosen = null;
         if (validRows.length > 0) {
-            productionChosen = validRows.reduce((prev, curr) => (curr.score >= prev.score) ? curr : prev);
+            // F1-based selection for PRODUCTION (balanced performance)
+            productionChosen = validRows.reduce((prev, curr) => {
+                const prevF1 = calcF1(prev.tp, prev.fp, prev.fn);
+                const currF1 = calcF1(curr.tp, curr.fp, curr.fn);
+                return currF1 >= prevF1 ? curr : prev;
+            });
         }
 
         let retrainTargets = null;
@@ -529,13 +543,15 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 return bullets;
             }
 
-            const bullets = ["Hard rule: below 15% Automation is REJECTED ⚠️ (Silent Model)."];
+            const bullets = [];
             if (mode === 'production' && productionChosen) {
                 const c = productionChosen;
                 const ceilingT = modelCeiling.t !== null ? (modelCeiling.t * 100).toFixed(0) : 'N/A';
                 bullets.push(`MODEL CEILING 🛑 at ~${ceilingT}%: TP collapses beyond this point.`);
-                bullets.push(`Production setting: ${(c.t * 100).toFixed(0)}% confidence.`);
-                bullets.push(`At ${(c.t * 100).toFixed(0)}%: TP=${c.tp}, FP=${c.fp}, FN=${c.fn} → Automation=${(c.automation * 100).toFixed(0)}%.`);
+                bullets.push(`OPTIMAL: ${(c.t * 100).toFixed(0)}% confidence (Best F1 Score)`);
+                const f1 = (calcF1(c.tp, c.fp, c.fn) * 100).toFixed(1);
+                bullets.push(`Results: ${c.tp} correct, ${c.fp} false alarms, ${c.fn} missed (F1=${f1}%)`);
+
 
                 // Neighbor Deltas
                 const tLow = parseFloat((c.t - CONF_STEP).toFixed(2));
@@ -578,8 +594,17 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             return bullets;
         };
 
+        // Filter rows to 5% intervals for cleaner chart display plus target/ceiling points
+        const displayRows = pRows.filter(r => {
+            const isFivePct = Math.round(r.t * 100) % 5 === 0;
+            const isProduction = productionChosen && Math.abs(r.t - productionChosen.t) < 0.001;
+            const isRetrain = retrainTargets && Math.abs(r.t - retrainTargets.confidence) < 0.001;
+            const isCeiling = modelCeiling.t && Math.abs(r.t - modelCeiling.t) < 0.001;
+            return isFivePct || isProduction || isRetrain || isCeiling;
+        }).sort((a, b) => a.t - b.t);
+
         const engineState = {
-            gt_total: totalGTCount, rows: pRows, silent_zones: silentZones,
+            gt_total: totalGTCount, rows: pRows, displayRows: displayRows, silent_zones: silentZones,
             model_ceiling: modelCeiling, production: productionChosen, retrain: retrainTargets,
             briefing: { production: generateBriefing('production'), retrain: generateBriefing('retrain') },
             status: validRows.length > 0 ? 'ok' : 'no_recommendation'
@@ -1249,7 +1274,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                 <div style={{ height: 350 }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart
-                                            data={kpis.engineState?.rows || []}
+                                            data={kpis.engineState?.displayRows || []}
                                             margin={{ top: 40, right: 10, left: 10, bottom: 10 }}
                                         >
                                             <CartesianGrid strokeDasharray="1 4" vertical={false} stroke="#333" />
@@ -1258,11 +1283,13 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                                 axisLine={false}
                                                 tickLine={false}
                                                 tick={{ fill: '#888', fontSize: 10, fontFamily: 'JetBrains Mono' }}
-                                                interval={1}
+                                                interval={(index, value) => Math.round(value * 100) % 10 === 0}
+                                                tickFormatter={(v) => v.toFixed(2)}
                                             />
                                             <YAxis axisLine={false} tickLine={false} tick={{ fill: '#888', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
                                             <RechartsTooltip
                                                 contentStyle={{ background: '#141414', border: '1px solid #333', borderRadius: 4 }}
+                                                labelStyle={{ color: '#aaa', fontWeight: 'bold', marginBottom: 4 }}
                                                 itemStyle={{ fontSize: 11 }}
                                                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
                                                 formatter={(value, name) => [value, String(name).toUpperCase()]}
