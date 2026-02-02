@@ -7,6 +7,7 @@ import {
     AimOutlined,
     CheckCircleOutlined
 } from '@ant-design/icons';
+import { projectsAPI } from '../../../../../services/api';
 
 const { Title, Text } = Typography;
 
@@ -20,6 +21,85 @@ const { Title, Text } = Typography;
  * - All with simple English explanations
  */
 const ReportView = ({ experiment, training, verifications = [] }) => {
+    const [qualityStats, setQualityStats] = React.useState(null);
+    const isSplit = experiment?.dataset_source && experiment.dataset_source !== 'upload';
+
+    // --- 📡 Fetch Quality Stats (Same as ChartsView) ---
+    React.useEffect(() => {
+        if (isSplit && experiment?.id) {
+            projectsAPI.getQualityStats(experiment.id)
+                .then(setQualityStats)
+                .catch(err => console.error("Quality fetch failed:", err));
+        }
+    }, [experiment?.id, isSplit]);
+
+
+    // --- USE ANALYTICS SUMMARY (Same as Overview Tab) ---
+    const predictionAnalytics = useMemo(() => {
+        if (!experiment?.analytics_summary) return null;
+
+        const summary = experiment.analytics_summary;
+        const {
+            total_detections = 0,
+            classes_detected = {},
+            confidence_distribution = {}
+        } = summary;
+
+        // Basic scope
+        const predictionImages = experiment.image_count || 0;
+        const gtCoverage = qualityStats?.total_gt || 0;
+
+        // Class distribution (same as Overview)
+        const classDistribArray = Object.entries(classes_detected).map(([className, count]) => ({
+            class: className,
+            count,
+            percentage: total_detections > 0 ? (count / total_detections * 100) : 0
+        })).sort((a, b) => b.count - a.count);
+
+        // Confidence ranges with per-class breakdown
+        const confRangesArray = Object.entries(confidence_distribution).map(([range, count]) => ({
+            range,
+            count,
+            percentage: total_detections > 0 ? (count / total_detections * 100) : 0,
+            byClass: {} // Will populate below
+        })).sort((a, b) => {
+            const aMin = parseFloat(a.range.split('-')[0]);
+            const bMin = parseFloat(b.range.split('-')[0]);
+            return aMin - bMin;
+        });
+
+        // Calculate per-class breakdown for each confidence range
+        if (experiment?.predictions) {
+            Object.values(experiment.predictions).forEach(dets => {
+                if (Array.isArray(dets)) {
+                    dets.forEach(d => {
+                        if (d.confidence !== undefined && d.class) {
+                            const conf = d.confidence;
+                            const className = d.class;
+
+                            // Find matching range
+                            confRangesArray.forEach(rangeObj => {
+                                const [min, max] = rangeObj.range.split('-').map(parseFloat);
+                                if ((conf >= min && conf < max) || (conf === 1.0 && max === 1.0)) {
+                                    rangeObj.byClass[className] = (rangeObj.byClass[className] || 0) + 1;
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        }
+
+        return {
+            scope: {
+                predictionImages,
+                totalDetections: total_detections,
+                gtCoverage,
+                classDistribution: classDistribArray,
+                confidenceRanges: confRangesArray
+            }
+        };
+    }, [experiment, qualityStats]);
 
     // --- DATA EXTRACTION ---
     const reportData = useMemo(() => {
@@ -192,6 +272,16 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
 
             <Divider />
 
+            {/* ========== TRAINING ANALYTICS DETAIL ========== */}
+            <div style={{ marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '2px solid #f0f0f0' }}>
+                <Title level={3} style={{ margin: 0, color: '#722ed1' }}>
+                    <ExperimentOutlined /> Training Analytics Detail
+                </Title>
+                <Text type="secondary" style={{ fontSize: '13px' }}>
+                    Comprehensive analysis of the training process and model performance
+                </Text>
+            </div>
+
             {/* SECTION 1: DATASET DETAILS */}
             <div className="report-section" style={{ marginBottom: '3rem' }}>
                 <Space align="center" style={{ marginBottom: '1rem' }}>
@@ -321,6 +411,158 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                     />
                 </div>
             )}
+
+            {/* ========== PREDICTION ANALYTICS DETAIL ========== */}
+            <div style={{ marginTop: '4rem', marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '2px solid #f0f0f0' }}>
+                <Title level={3} style={{ margin: 0, color: '#1890ff' }}>
+                    <AimOutlined /> Prediction Analytics Detail
+                </Title>
+                <Text type="secondary" style={{ fontSize: '13px' }}>
+                    Real-world performance analysis of model predictions on new data
+                </Text>
+            </div>
+
+
+            {/* SECTION 01: PREDICTION SCOPE */}
+            <div className="report-section" style={{ marginBottom: '3rem' }}>
+                <Space align="center" style={{ marginBottom: '1rem' }}>
+                    <DatabaseOutlined style={{ fontSize: '20px', color: '#1890ff' }} />
+                    <Title level={4} style={{ margin: 0 }}>Section 01: Prediction Analytics Scope</Title>
+                </Space>
+                <Text type="secondary" style={{ display: 'block', marginBottom: '1rem' }}>
+                    Coverage details for the current prediction experiment being analyzed.
+                </Text>
+
+                {predictionAnalytics ? (
+                    <>
+                        {/* Scope Metrics */}
+                        <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ textAlign: 'center', height: '100%' }}>
+                                    <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                        Images Processed
+                                    </Text>
+                                    <Title level={2} style={{ margin: 0, color: '#1890ff' }}>
+                                        {predictionAnalytics.scope.predictionImages}
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
+                                        Fresh images in this test run
+                                    </Text>
+                                </Card>
+                            </Col>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ textAlign: 'center', height: '100%' }}>
+                                    <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                        Total Detections
+                                    </Text>
+                                    <Title level={2} style={{ margin: 0, color: '#52c41a' }}>
+                                        {predictionAnalytics.scope.totalDetections}
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
+                                        Objects detected by the model
+                                    </Text>
+                                </Card>
+                            </Col>
+                            <Col xs={24} sm={8}>
+                                <Card size="small" style={{ textAlign: 'center', height: '100%' }}>
+                                    <Text type="secondary" style={{ fontSize: '11px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                        GT Coverage
+                                    </Text>
+                                    <Title level={2} style={{ margin: 0, color: '#722ed1' }}>
+                                        {predictionAnalytics.scope.gtCoverage}
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
+                                        Ground truth objects available
+                                    </Text>
+                                </Card>
+                            </Col>
+                        </Row>
+
+                        {/* Class Distribution Table */}
+                        <Card size="small" title="Class Distribution" style={{ marginBottom: '16px' }}>
+                            <Table
+                                dataSource={predictionAnalytics.scope.classDistribution}
+                                pagination={false}
+                                size="small"
+                                rowKey="class"
+                                columns={[
+                                    {
+                                        title: 'Class Name',
+                                        dataIndex: 'class',
+                                        key: 'class',
+                                        render: (text) => <Tag color="blue">{text}</Tag>
+                                    },
+                                    {
+                                        title: 'Detections',
+                                        dataIndex: 'count',
+                                        key: 'count',
+                                        align: 'center',
+                                        render: (count) => <Text strong>{count}</Text>
+                                    },
+                                    {
+                                        title: 'Distribution',
+                                        dataIndex: 'percentage',
+                                        key: 'percentage',
+                                        align: 'right',
+                                        render: (pct) => <Text type="secondary">{pct.toFixed(1)}%</Text>
+                                    }
+                                ]}
+                            />
+                        </Card>
+
+                        {/* Confidence Range Breakdown */}
+                        <Card size="small" title="Confidence Range Breakdown">
+                            <Table
+                                dataSource={predictionAnalytics.scope.confidenceRanges}
+                                pagination={false}
+                                size="small"
+                                rowKey="range"
+                                columns={[
+                                    {
+                                        title: 'Confidence Range',
+                                        dataIndex: 'range',
+                                        key: 'range',
+                                        render: (text) => <Tag>{text}</Tag>
+                                    },
+                                    {
+                                        title: 'Total Detections',
+                                        dataIndex: 'count',
+                                        key: 'count',
+                                        align: 'center',
+                                        render: (count) => <Text strong>{count}</Text>
+                                    },
+                                    {
+                                        title: 'Distribution',
+                                        dataIndex: 'percentage',
+                                        key: 'percentage',
+                                        align: 'center',
+                                        render: (pct) => <Text type="secondary">{pct.toFixed(1)}%</Text>
+                                    },
+                                    {
+                                        title: 'Per Class',
+                                        dataIndex: 'byClass',
+                                        key: 'byClass',
+                                        render: (byClass) => (
+                                            <Space size={4} wrap>
+                                                {Object.entries(byClass).map(([cls, cnt]) => (
+                                                    <Tag key={cls} color="blue" style={{ margin: 0 }}>
+                                                        {cls}: {cnt}
+                                                    </Tag>
+                                                ))}
+                                                {Object.keys(byClass).length === 0 && <Text type="secondary">None</Text>}
+                                            </Space>
+                                        )
+                                    }
+                                ]}
+                            />
+                        </Card>
+                    </>
+                ) : (
+                    <Card>
+                        <Text type="secondary">No prediction data available for this experiment.</Text>
+                    </Card>
+                )}
+            </div>
 
             {/* FOOTER */}
             <div className="report-footer" style={{ marginTop: '3rem', paddingTop: '1rem', borderTop: '1px solid #f0f0f0', textAlign: 'center' }}>
