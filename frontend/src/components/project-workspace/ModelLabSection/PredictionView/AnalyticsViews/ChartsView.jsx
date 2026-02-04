@@ -1815,42 +1815,164 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                             <Space direction="vertical" style={{ width: '100%' }}>
                                                 {(() => {
                                                     const d = kpis.spatialData;
-                                                    const cornerDensity = d[0].density + d[2].density + d[6].density + d[8].density;
-                                                    const leftDensity = d[0].density + d[3].density + d[6].density;
-                                                    const rightDensity = d[2].density + d[5].density + d[8].density;
-                                                    const topDensity = d[0].density + d[1].density + d[2].density;
 
-                                                    const alerts = [];
+                                                    // Empty state
                                                     if (kpis.spatialTotal === 0) {
                                                         return <div style={{ padding: '24px', border: '1px dashed #333', textAlign: 'center', color: '#888', fontFamily: 'monospace', fontSize: 11 }}>[EMPTY_SCAN_BUFFER] NO_TELEMETRY_RECORDED</div>;
                                                     }
 
-                                                    if (cornerDensity > 60) alerts.push({ type: 'warning', msg: "OPTICAL_DISTORTION: Cluster detected in EXTREMITIES. Lens aberration suspected." });
-                                                    if (leftDensity > 60 || rightDensity > 60) alerts.push({ type: 'info', msg: "UNEVEN_ILLUMINATION: Failure bias detected on HORIZONTAL_AXIS. Check side-glow." });
-                                                    if (topDensity > 60) alerts.push({ type: 'info', msg: "OVERHEAD_INTERFERENCE: Clustering in UPPER_QUADRANTS. Check ceiling sources." });
-                                                    if (d[4].density > 40) alerts.push({ type: 'warning', msg: "FOCAL_BLINDSPOT: Primary sensor focus occlusion or overexposure detected." });
+                                                    // Generate tile labels (A1, A2, etc.)
+                                                    const tiles = d.map((tile, i) => {
+                                                        const row = Math.floor(i / 3);
+                                                        const col = i % 3;
+                                                        const label = `${String.fromCharCode(65 + row)}${col + 1}`;
+                                                        const positionLabel =
+                                                            row === 0 ? (col === 0 ? 'top-left' : col === 1 ? 'top-center' : 'top-right') :
+                                                                row === 1 ? (col === 0 ? 'center-left' : col === 1 ? 'center' : 'center-right') :
+                                                                    (col === 0 ? 'bottom-left' : col === 1 ? 'bottom-center' : 'bottom-right');
+                                                        return { ...tile, label, position: positionLabel, index: i };
+                                                    });
 
-                                                    const avgFP = d.reduce((acc, t) => acc + t.fp, 0);
-                                                    const avgFN = d.reduce((acc, t) => acc + t.fn, 0);
-                                                    if (avgFP > avgFN * 2) alerts.push({ type: 'urgent', msg: "Over-prediction bias: False positives dominate this filter. Aggressive sensitivity warning." });
-                                                    if (avgFN > avgFP * 2) alerts.push({ type: 'urgent', msg: "Under-prediction bias: Missed objects dominate this filter. Recall crisis warning." });
+                                                    // Identify hotspots (>25% concentration)
+                                                    const hotspots = tiles.filter(t => t.density >= 25).sort((a, b) => b.density - a.density);
 
-                                                    if (alerts.length === 0) return (
-                                                        <div style={{ padding: '12px', background: 'rgba(82, 196, 26, 0.05)', borderLeft: '2px solid #52c41a', fontFamily: 'monospace' }}>
-                                                            <Text style={{ fontSize: 11, color: '#52c41a' }}>[STATUS: OPTIMAL] Environmental Calibration Stable. No bias detected.</Text>
-                                                        </div>
-                                                    );
+                                                    // Build narrative
+                                                    const insights = [];
 
-                                                    return alerts.map((a, idx) => (
+                                                    // 1. Filter Context
+                                                    const classText = spatialClass === 'all' ? 'ALL classes' : spatialClass.toUpperCase();
+                                                    const sizeText = spatialSize === 'all' ? 'ALL sizes' : spatialSize.toUpperCase() + ' objects';
+                                                    insights.push({
+                                                        type: 'info',
+                                                        msg: `Filter Context: ${classText}, ${sizeText}. Analyzing ${kpis.spatialTotal} error${kpis.spatialTotal > 1 ? 's' : ''}.`
+                                                    });
+
+                                                    // 2. Hotspot Analysis
+                                                    if (hotspots.length === 0) {
+                                                        // No significant concentration
+                                                        const maxTile = tiles.reduce((max, t) => t.density > max.density ? t : max, tiles[0]);
+                                                        if (maxTile.density < 15) {
+                                                            insights.push({
+                                                                type: 'success',
+                                                                msg: `Spatial Distribution: Balanced. No hotspot detected (max: ${maxTile.label} at ${maxTile.density}%). Errors are evenly distributed across the frame.`
+                                                            });
+                                                        } else {
+                                                            insights.push({
+                                                                type: 'info',
+                                                                msg: `Spatial Distribution: Moderate clustering at ${maxTile.label} (${maxTile.density}%), but below hotspot threshold (25%).`
+                                                            });
+                                                        }
+                                                    } else {
+                                                        // Hotspots detected
+                                                        hotspots.forEach((hs, idx) => {
+                                                            const fpPct = hs.total > 0 ? ((hs.fp / hs.total) * 100).toFixed(0) : 0;
+                                                            const fnPct = hs.total > 0 ? ((hs.fn / hs.total) * 100).toFixed(0) : 0;
+
+                                                            let interpretation = '';
+                                                            if (hs.fp > hs.fn * 2) {
+                                                                interpretation = 'Over-prediction: Model is too aggressive in this region';
+                                                            } else if (hs.fn > hs.fp * 2) {
+                                                                interpretation = 'Under-prediction: Model is MISSING objects in this region';
+                                                            } else {
+                                                                interpretation = 'Mixed errors: Both false positives and missed objects';
+                                                            }
+
+                                                            insights.push({
+                                                                type: idx === 0 ? 'warning' : 'info',
+                                                                msg: `Hotspot ${idx + 1}: ${hs.label} (${hs.position}) — ${hs.density}% of errors (${hs.total} units: ${hs.fp} FP, ${hs.fn} FN). ${interpretation}.`
+                                                            });
+                                                        });
+                                                    }
+
+                                                    // 3. Pattern Detection (Beyond simple hotspots)
+                                                    const cornerDensity = d[0].density + d[2].density + d[6].density + d[8].density;
+                                                    const leftDensity = d[0].density + d[3].density + d[6].density;
+                                                    const rightDensity = d[2].density + d[5].density + d[8].density;
+                                                    const topDensity = d[0].density + d[1].density + d[2].density;
+                                                    const bottomDensity = d[6].density + d[7].density + d[8].density;
+                                                    const centerDensity = d[4].density;
+
+                                                    if (cornerDensity > 50 && hotspots.length > 2) {
+                                                        insights.push({ type: 'urgent', msg: `Pattern Detected: CORNER BIAS (${cornerDensity.toFixed(0)}% in edges). Possible lens distortion or camera calibration issue.` });
+                                                    }
+                                                    if (leftDensity > 50 || rightDensity > 50) {
+                                                        const side = leftDensity > rightDensity ? 'LEFT' : 'RIGHT';
+                                                        const pct = Math.max(leftDensity, rightDensity).toFixed(0);
+                                                        insights.push({ type: 'urgent', msg: `Pattern Detected: ${side}-SIDE BIAS (${pct}%). Check lighting or camera angle for horizontal imbalance.` });
+                                                    }
+                                                    if (topDensity > 50 || bottomDensity > 50) {
+                                                        const vSide = topDensity > bottomDensity ? 'TOP' : 'BOTTOM';
+                                                        const pct = Math.max(topDensity, bottomDensity).toFixed(0);
+                                                        insights.push({ type: 'urgent', msg: `Pattern Detected: ${vSide} BIAS (${pct}%). Review vertical coverage or mounting height.` });
+                                                    }
+                                                    if (centerDensity > 40) {
+                                                        insights.push({ type: 'warning', msg: `Pattern Detected: CENTER FOCUS ISSUE (${centerDensity.toFixed(0)}% in B2). Possible overexposure or occlusion in primary field of view.` });
+                                                    }
+
+                                                    // 4. FP vs FN Global Ratio
+                                                    const totalFP = d.reduce((acc, t) => acc + t.fp, 0);
+                                                    const totalFN = d.reduce((acc, t) => acc + t.fn, 0);
+                                                    if (totalFP > totalFN * 2) {
+                                                        insights.push({ type: 'urgent', msg: `Error Distribution: False Positives dominate (${totalFP} FP vs ${totalFN} FN). Model is over-sensitive for this filter.` });
+                                                    } else if (totalFN > totalFP * 2) {
+                                                        insights.push({ type: 'urgent', msg: `Error Distribution: Missed Objects dominate (${totalFN} FN vs ${totalFP} FP). Model is missing ${sizeText}.` });
+                                                    }
+
+                                                    // 5. Actionable Recommendations
+                                                    const actions = [];
+                                                    if (hotspots.length > 0) {
+                                                        const primary = hotspots[0];
+                                                        if (primary.fn > primary.fp * 1.5) {
+                                                            actions.push(`Add more ${sizeText} training examples from ${primary.position} region`);
+                                                        } else if (primary.fp > primary.fn * 1.5) {
+                                                            actions.push(`Review and filter false positives in ${primary.position} area`);
+                                                        }
+
+                                                        if (spatialSize !== 'all') {
+                                                            actions.push(`Compare with 'ALL sizes' filter to isolate if bias is size-specific or environmental`);
+                                                        }
+                                                        if (spatialClass !== 'all') {
+                                                            actions.push(`Compare with 'ANY CLASS' filter to determine if bias is class-specific`);
+                                                        }
+                                                    }
+
+                                                    if (cornerDensity > 50) {
+                                                        actions.push('Camera calibration recommended (lens correction)');
+                                                    }
+                                                    if (leftDensity > 50 || rightDensity > 50) {
+                                                        actions.push('Check horizontal lighting balance');
+                                                    }
+
+                                                    if (actions.length > 0) {
+                                                        insights.push({ type: 'action', msg: `Actions: ${actions.map((a, i) => `(${i + 1}) ${a}`).join('. ')}.` });
+                                                    }
+
+                                                    // Render insights
+                                                    return insights.map((insight, idx) => (
                                                         <div key={idx} style={{
                                                             padding: '10px 14px',
-                                                            background: a.type === 'warning' || a.type === 'urgent' ? 'rgba(255, 77, 79, 0.05)' : 'rgba(0, 242, 255, 0.05)',
-                                                            borderLeft: `2px solid ${a.type === 'warning' || a.type === 'urgent' ? '#ff4d4f' : '#00f2ff'}`,
+                                                            background:
+                                                                insight.type === 'urgent' || insight.type === 'warning' ? 'rgba(255, 77, 79, 0.05)' :
+                                                                    insight.type === 'success' ? 'rgba(82, 196, 26, 0.05)' :
+                                                                        insight.type === 'action' ? 'rgba(250, 173, 20, 0.05)' :
+                                                                            'rgba(0, 242, 255, 0.05)',
+                                                            borderLeft: `2px solid ${insight.type === 'urgent' || insight.type === 'warning' ? '#ff4d4f' :
+                                                                    insight.type === 'success' ? '#52c41a' :
+                                                                        insight.type === 'action' ? '#faad14' :
+                                                                            '#00f2ff'
+                                                                }`,
                                                             marginBottom: '4px',
                                                             fontFamily: 'monospace'
                                                         }}>
-                                                            <Text style={{ fontSize: 11, color: a.type === 'warning' || a.type === 'urgent' ? '#ff4d4f' : '#00f2ff' }}>
-                                                                [{a.type.toUpperCase()}] {a.msg}
+                                                            <Text style={{
+                                                                fontSize: 11,
+                                                                color:
+                                                                    insight.type === 'urgent' || insight.type === 'warning' ? '#ff4d4f' :
+                                                                        insight.type === 'success' ? '#52c41a' :
+                                                                            insight.type === 'action' ? '#faad14' :
+                                                                                '#00f2ff'
+                                                            }}>
+                                                                [{insight.type.toUpperCase()}] {insight.msg}
                                                             </Text>
                                                         </div>
                                                     ));
