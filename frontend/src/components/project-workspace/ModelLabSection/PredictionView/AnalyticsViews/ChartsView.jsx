@@ -649,9 +649,168 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 // Calculate Average IoU for this size at this threshold
                 const ious = szTPs.map(d => d.matched_iou || 0).filter(v => v > 0);
                 row[`${sz}_iou`] = ious.length > 0 ? parseFloat(((ious.reduce((a, b) => a + b, 0) / ious.length) * 100).toFixed(1)) : 0;
+
+                // Store GT count for diagnostics
+                row[`${sz}_gt`] = szGT;
             });
             return row;
         });
+
+        // --- SCALE DIAGNOSTIC NARRATIVE (Evidence-Based, Fixed Analysis) ---
+        const generateScaleDiagnostic = () => {
+            const sizes = ['tiny', 'small', 'medium', 'large'];
+            const sizeLabels = { tiny: 'Tiny', small: 'Small', medium: 'Medium', large: 'Large' };
+            const className = graph4Class === 'all' ? 'All Classes' : graph4Class.toUpperCase();
+
+            // Get key analysis points from engineState
+            const prodT = productionChosen?.t || 0.46;
+            const ceilingT = modelCeiling?.t || 0.75;
+            const lowT = 0.10; // Baseline at lowest meaningful threshold
+
+            // Find rows at these fixed thresholds
+            const findRow = (t) => sizeStressData.find(r => Math.abs(r.t - t) < 0.03) || sizeStressData[0];
+            const prodRow = findRow(prodT);
+            const ceilingRow = findRow(ceilingT);
+            const lowRow = findRow(lowT);
+
+            // Analyze each size category
+            const analysis = sizes.map(sz => {
+                const gtCount = prodRow[`${sz}_gt`] || 0;
+                const atProd = prodRow[`${sz}_yield`] || 0;
+                const atCeiling = ceilingRow[`${sz}_yield`] || 0;
+                const atLow = lowRow[`${sz}_yield`] || 0;
+
+                // Determine the "signature" of this size
+                let signature = 'no_data';
+                if (gtCount === 0) {
+                    signature = 'no_data';
+                } else if (atLow < 30) {
+                    signature = 'structural_blind'; // Weak even at lowest threshold = structural issue
+                } else if (atProd >= 80) {
+                    signature = 'stable_strong'; // Strong at production
+                } else if (atProd >= 50 && atProd < 80) {
+                    signature = 'moderate'; // Moderate at production
+                } else if (atProd < 50 && atLow >= 60) {
+                    signature = 'confidence_sensitive'; // Good at low conf, drops at prod
+                } else {
+                    signature = 'weak';
+                }
+
+                // Check ceiling drop
+                const ceilingDropPct = atProd > 0 ? ((atProd - atCeiling) / atProd) * 100 : 0;
+
+                return {
+                    size: sz,
+                    label: sizeLabels[sz],
+                    gt: gtCount,
+                    atProd,
+                    atCeiling,
+                    atLow,
+                    signature,
+                    ceilingDrop: ceilingDropPct
+                };
+            });
+
+            const withData = analysis.filter(s => s.gt > 0);
+            const noData = analysis.filter(s => s.gt === 0);
+
+            // --- BUILD THE NARRATIVE ---
+            let lines = [];
+
+            // 1. Data Scope
+            if (noData.length === 4) {
+                lines.push({ type: 'warning', text: `${className}: No size data available for analysis.` });
+            } else if (noData.length > 0) {
+                const missing = noData.map(s => s.label).join(', ');
+                const present = withData.map(s => s.label).join(', ');
+                lines.push({ type: 'info', text: `Scale Profile: ${present} objects present. ${missing} = no data (cannot evaluate).` });
+            } else {
+                lines.push({ type: 'info', text: `Scale Profile: All size categories represented.` });
+            }
+
+            // 2. Performance at Production Threshold
+            if (withData.length > 0) {
+                const strong = withData.filter(s => s.atProd >= 80);
+                const moderate = withData.filter(s => s.atProd >= 50 && s.atProd < 80);
+                const weak = withData.filter(s => s.atProd > 0 && s.atProd < 50);
+                const blind = withData.filter(s => s.atProd === 0 && s.gt > 0);
+
+                if (strong.length > 0) {
+                    const txt = strong.map(s => `${s.label} (${s.atProd}%)`).join(', ');
+                    lines.push({ type: 'success', text: `At Production (${(prodT * 100).toFixed(0)}%): ${txt} — reliable.` });
+                }
+                if (moderate.length > 0) {
+                    const txt = moderate.map(s => `${s.label} (${s.atProd}%)`).join(', ');
+                    lines.push({ type: 'info', text: `Moderate: ${txt} — functional but room for improvement.` });
+                }
+                if (weak.length > 0) {
+                    const txt = weak.map(s => `${s.label} (${s.atProd}%)`).join(', ');
+                    lines.push({ type: 'warning', text: `Weak at Production: ${txt} — may miss detections.` });
+                }
+                if (blind.length > 0) {
+                    const txt = blind.map(s => s.label).join(', ');
+                    lines.push({ type: 'error', text: `Blind Spot: ${txt} — 0% detection despite ${blind.reduce((a, s) => a + s.gt, 0)} objects in data.` });
+                }
+            }
+
+            // 3. Structural Issues (weak even at low confidence)
+            const structural = withData.filter(s => s.signature === 'structural_blind');
+            if (structural.length > 0) {
+                const txt = structural.map(s => s.label).join(', ');
+                lines.push({ type: 'error', text: `Structural Limitation: ${txt} — weak across ALL thresholds. Not a confidence issue; requires training data improvement.` });
+            }
+
+            // 4. Ceiling Impact
+            const bigDrop = withData.filter(s => s.ceilingDrop > 50 && s.atProd >= 50);
+            if (bigDrop.length > 0 && modelCeiling?.t) {
+                const txt = bigDrop.map(s => `${s.label} drops ${s.ceilingDrop.toFixed(0)}%`).join(', ');
+                lines.push({ type: 'warning', text: `At Ceiling (${(ceilingT * 100).toFixed(0)}%): ${txt}. Do not exceed this threshold.` });
+            }
+
+            // 5. Actionable Recommendations (Context-Specific)
+            const actions = [];
+
+            // Small objects weak at production → resolution boost
+            const tinyWeak = withData.find(s => s.size === 'tiny' && s.atProd < 50 && s.gt > 0);
+            const smallWeak = withData.find(s => s.size === 'small' && s.atProd < 50 && s.gt > 0);
+            if (tinyWeak || smallWeak) {
+                const weakSmalls = [tinyWeak, smallWeak].filter(Boolean).map(s => s.label);
+                actions.push(`${weakSmalls.join('/')}: Consider higher resolution training images.`);
+            }
+
+            // Large/Medium structural issues → need more training examples
+            const largeStructural = withData.find(s => (s.size === 'large' || s.size === 'medium') && s.signature === 'structural_blind');
+            if (largeStructural) {
+                actions.push(`${largeStructural.label}: Add more ${largeStructural.label.toLowerCase()} object examples to training data.`);
+            }
+
+            // Confidence-sensitive sizes → lower threshold
+            const confidenceSensitive = withData.filter(s => s.signature === 'confidence_sensitive');
+            if (confidenceSensitive.length > 0) {
+                actions.push(`${confidenceSensitive.map(s => s.label).join('/')}: May benefit from lower confidence threshold.`);
+            }
+
+            if (actions.length > 0) {
+                lines.push({ type: 'action', text: `Actions: ${actions.join(' ')}` });
+            }
+
+            // Combine into readable text
+            const narrativeText = lines.map(l => l.text).join(' ');
+
+            return {
+                className,
+                analysis,
+                withData,
+                noData,
+                prodT,
+                ceilingT,
+                lines,
+                narrativeText
+            };
+        };
+
+
+        const scaleDiagnostic = generateScaleDiagnostic();
 
         // --- 7.4 SPATIAL FAILURE MAPPING (PRO MAX UPGRADE) ---
         // 1. Find the bounds of the coordinate system (normalizing pixels to 0-1)
@@ -742,6 +901,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                 isUploadMode,
                 healthScore: healthScore.toFixed(1),
                 sizeStressData,
+                scaleDiagnostic,
                 spatialData,
                 spatialTotal: spatialErrors.length,
                 spatialTotalRaw: purelyFP.length + filteredFN.length,
@@ -1522,8 +1682,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                 <div style={{ marginTop: 20, padding: '12px', background: '#0a0a0a', border: '1px solid #1c1c1c', borderRadius: 2 }}>
                                     <Text style={{ fontSize: 11, color: '#aaa', fontFamily: 'monospace' }}>
                                         <BulbOutlined style={{ marginRight: 8, color: '#faad14' }} />
-                                        <b>DIAGNOSTIC:</b> SCALE_RESPONSE_SIGNATURE FOR <b>{graph4Class.toUpperCase()}</b>.
-                                        IF LOW_SCALE (T/S) DROPS PREMATURELY, CONSIDER RESOLUTION_BOOST.
+                                        <b>DIAGNOSTIC:</b> {kpis?.scaleDiagnostic?.narrativeText || `Analyzing ${graph4Class.toUpperCase()}...`}
                                     </Text>
                                 </div>
                             </Card>
