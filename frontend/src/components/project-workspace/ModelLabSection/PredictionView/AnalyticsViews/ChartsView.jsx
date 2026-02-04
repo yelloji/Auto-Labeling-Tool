@@ -1437,7 +1437,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                             >
                                 <div style={{ height: 320, width: '100%', padding: '12px 0' }}>
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={kpis.sizeStressData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                        <AreaChart data={kpis.sizeStressData} margin={{ top: 10, right: 30, left: 0, bottom: 25 }}>
                                             <defs>
                                                 <linearGradient id="yieldTiny" x1="0" y1="0" x2="0" y2="1">
                                                     <stop offset="5%" stopColor="#ff4d4f" stopOpacity={0.1} />
@@ -1465,12 +1465,14 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                                 tick={{ fill: '#888', fontSize: 9, fontFamily: 'monospace' }}
                                                 axisLine={false}
                                                 tickLine={false}
+                                                label={{ value: 'Confidence Threshold', position: 'insideBottom', offset: -5, fill: '#666', fontSize: 10, fontFamily: 'monospace' }}
                                             />
                                             <YAxis
                                                 tickFormatter={(v) => `${v}%`}
                                                 tick={{ fill: '#888', fontSize: 9, fontFamily: 'monospace' }}
                                                 axisLine={false}
                                                 tickLine={false}
+                                                label={{ value: 'Detection Rate', angle: -90, position: 'insideLeft', fill: '#666', fontSize: 10, fontFamily: 'monospace' }}
                                             />
                                             <RechartsTooltip
                                                 content={({ active, payload, label }) => {
@@ -1481,9 +1483,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                                                     Telemetry Scan: {(label * 100).toFixed(0)}% Confidence
                                                                 </Text>
                                                                 <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto', gap: '8px 16px' }}>
-                                                                    <Text style={{ fontSize: 9, color: '#888' }}>CATEGORY</Text>
-                                                                    <Text style={{ fontSize: 9, color: '#888' }}>YIELD</Text>
-                                                                    <Text style={{ fontSize: 9, color: '#888' }}>ACCURACY</Text>
+                                                                    <Text style={{ fontSize: 9, color: '#888' }}>SIZE</Text>
+                                                                    <Text style={{ fontSize: 9, color: '#888' }}>FOUND %</Text>
+                                                                    <Text style={{ fontSize: 9, color: '#888' }}>AVG IOU</Text>
                                                                     {payload.map((entry, idx) => {
                                                                         const sz = entry.dataKey.split('_')[0];
                                                                         const iouValue = entry.payload[`${sz}_iou`] || 0;
