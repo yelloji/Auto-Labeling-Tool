@@ -10,7 +10,8 @@ import {
     WarningOutlined,
     CloudSyncOutlined,
     LoadingOutlined,
-    FileTextOutlined
+    FileTextOutlined,
+    BulbOutlined
 } from '@ant-design/icons';
 import { projectsAPI } from '../../../../../services/api';
 
@@ -280,8 +281,8 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
         const f1 = (p + r) > 0 ? (2 * p * r) / (p + r) : 0;
 
 
-        // --- 1. SCALE DIAGNOSTICS LOGIC ---
-        // Calculate Quartiles from all prediction areas (Mocking behavior if raw predictions unavailable)
+        // --- 1. OPTIMIZATION & CEILING LOGIC (CORE DATA) ---
+        // Calculate Quartiles for naming size groups
         let allAreas = [];
         if (experiment?.predictions) {
             Object.values(experiment.predictions).forEach(dets => {
@@ -307,94 +308,150 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
             return 'large';
         };
 
-        // Calculate Scale Stress Data (Simulated across thresholds 0.1 - 0.9)
-        const CONF_LIST = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+        // Sweep Confidence range (REQUIRED for both Threshold Optimization and sizeStressData)
+        const CONF_LIST = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.46, 0.5, 0.55, 0.56, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95];
         const sizeStressData = CONF_LIST.map(t => {
             const row = { t };
             ['tiny', 'small', 'medium', 'large'].forEach(sz => {
                 const szTPs = tpList.filter(d => getSizeGrp(d.bbox) === sz && (d.confidence || 0) >= t);
                 const szGT = tpList.filter(d => getSizeGrp(d.bbox) === sz).length +
-                    fnList.filter(d => getSizeGrp(d.bbox) === sz).length; // GT is constant (TP+FN at baseline)
-
+                    fnList.filter(d => getSizeGrp(d.bbox) === sz).length;
                 row[`${sz}_yield`] = szGT > 0 ? parseFloat(((szTPs.length / szGT) * 100).toFixed(1)) : 0;
                 row[`${sz}_gt`] = szGT;
             });
             return row;
         });
 
-        // Generate Narrative
+        // Identify Best F1 (Target)
+        let bestF1 = 0;
+        let bestT = experiment.confidence || 0.45; // Default fallback
+
+        CONF_LIST.forEach(t => {
+            const simTP = tpList.filter(d => (d.confidence || 0) >= t).length;
+            const simFP = fpList.filter(d => (d.confidence || 0) >= t).length;
+            const simFN = fnList.length + (tpList.length - simTP);
+
+            const sP = (simTP + simFP) > 0 ? simTP / (simTP + simFP) : 0;
+            const sR = (simTP + simFN) > 0 ? simTP / (simTP + simFN) : 0;
+            const sF1 = (sP + sR) > 0 ? (2 * sP * sR) / (sP + sR) : 0;
+
+            if (sF1 > bestF1) {
+                bestF1 = sF1;
+                bestT = t;
+            }
+        });
+
+        // Identify Model Ceiling (Structural drop)
+        let ceilingT = 0.9;
+        for (let i = 0; i < sizeStressData.length - 1; i++) {
+            const curr = sizeStressData[i];
+            const next = sizeStressData[i + 1];
+            const currTP = ['tiny', 'small', 'medium', 'large'].reduce((sum, sz) => sum + (tpList.filter(d => getSizeGrp(d.bbox) === sz && (d.confidence || 0) >= curr.t).length), 0);
+            const nextTP = ['tiny', 'small', 'medium', 'large'].reduce((sum, sz) => sum + (tpList.filter(d => getSizeGrp(d.bbox) === sz && (d.confidence || 0) >= next.t).length), 0);
+            if ((currTP - nextTP) > (tpList.length * 0.15)) {
+                ceilingT = next.t;
+                break;
+            }
+        }
+
+        const prodT = bestT; // Use the optimized target as the production basis
+
+        // --- 2. SCALE DIAGNOSTICS LOGIC ---
         const sizes = ['tiny', 'small', 'medium', 'large'];
         const sizeLabels = { tiny: 'Tiny', small: 'Small', medium: 'Medium', large: 'Large' };
 
-        // Find rows at key thresholds
-        const prodT = experiment.confidence || 0.45;
-        const findRow = (t) => sizeStressData.find(r => Math.abs(r.t - t) < 0.06) || sizeStressData[Math.floor(sizeStressData.length / 2)];
-
-        const prodRow = findRow(prodT);
+        // Get unique classes
+        const allPossibleClasses = new Set();
+        [...tpList, ...fnList].forEach(d => allPossibleClasses.add(d.class_name || d.class || 'Other'));
+        const uniqueClasses = Array.from(allPossibleClasses);
 
         const scaleAnalysis = sizes.map(sz => {
-            const gtCount = prodRow[`${sz}_gt`] || 0;
-            const atProd = prodRow[`${sz}_yield`] || 0;
+            // Global metrics for this size
+            const szTPs = tpList.filter(d => getSizeGrp(d.bbox) === sz && (d.confidence || 0) >= prodT);
+            const szGT = tpList.filter(d => getSizeGrp(d.bbox) === sz).length +
+                fnList.filter(d => getSizeGrp(d.bbox) === sz).length;
+            const yieldAtProd = szGT > 0 ? (szTPs.length / szGT) * 100 : 0;
 
-            let signature = 'no_data';
-            if (gtCount === 0) signature = 'no_data';
-            else if (atProd >= 80) signature = 'stable_strong';
-            else if (atProd >= 50) signature = 'moderate';
-            else if (atProd > 0) signature = 'weak';
-            else signature = 'structural_blind';
+            // Class-wise metrics for this size
+            const classBreakdown = uniqueClasses.map(cls => {
+                const clsTPs = tpList.filter(d => getSizeGrp(d.bbox) === sz && (d.confidence || 0) >= prodT && (d.class_name === cls || d.class === cls));
+                const clsGT = tpList.filter(d => getSizeGrp(d.bbox) === sz && (d.class_name === cls || d.class === cls)).length +
+                    fnList.filter(d => getSizeGrp(d.bbox) === sz && (d.class_name === cls || d.class === cls)).length;
+                return {
+                    name: cls,
+                    reliability: clsGT > 0 ? (clsTPs.length / clsGT) * 100 : 0,
+                    samples: clsGT
+                };
+            }).filter(c => c.samples > 0);
 
             return {
                 size: sz,
                 label: sizeLabels[sz],
-                gt: gtCount,
-                atProd: parseFloat(atProd), // ensure it's a number
-                signature
+                gt: szGT,
+                atProd: parseFloat(yieldAtProd.toFixed(1)),
+                classes: classBreakdown
             };
         });
 
-        // Diagnostic Narrative Text (Original)
-        const weak = scaleAnalysis.filter(s => (s.signature === 'weak' || s.signature === 'structural_blind') && s.gt > 0);
-        const scaleNarrativeCheck = weak.length > 0
-            ? `Weakness detected in ${weak.map(s => s.label).join(', ')} objects (detection rate < 50%). Recommendation: Add more training examples for these sizes.`
-            : "Scale performance is stable across all object sizes.";
 
 
-        // --- SCALE DIAGNOSTIC STORY (NEW) ---
-        let scaleStory = {
-            headline: "Scale Performance is Optimal",
-            narrative: "The model performs consistently well across all object sizes, indicating robust feature learning and generalization.",
-            action: "No specific action required for scale. Continue monitoring.",
-            color: '#52c41a' // Green
+        // 1.3 Generate Multi-Point Story (Simple English)
+        const observations = [];
+        const actions = [];
+        let storyColor = '#52c41a'; // Default Green (Optimal)
+        let mainHeadline = "Size Performance is Optimal";
+
+        // Logic to build the story based on class-wise failures
+        const weakPoints = scaleAnalysis.filter(s => s.gt > 0 && s.atProd < 70);
+
+        if (weakPoints.length > 0) {
+            storyColor = weakPoints.some(s => s.atProd < 40) ? '#ff4d4f' : '#faad14';
+            mainHeadline = weakPoints.some(s => s.atProd < 40) ? "Critical Gaps in Size Detection" : "Size Reliability Needs Attention";
+
+            weakPoints.forEach(wp => {
+                const worstClass = wp.classes.sort((a, b) => a.reliability - b.reliability)[0];
+                if (wp.atProd < 70) {
+                    observations.push(`The model is struggling to find ${wp.label} objects, achieving only ${wp.atProd}% reliability.`);
+                    if (worstClass && worstClass.reliability < 50) {
+                        observations.push(`Specifically, the class "${worstClass.name}" is getting missed frequently at this size.`);
+                    }
+                }
+
+                // intuitive expert advice
+                if (wp.size === 'tiny' || wp.size === 'small') {
+                    if (!actions.includes("Pixel Perfection: Tiny items have very few pixels. If your label is even slightly off-center, the model will miss it. Audit these boxes for a tight fit.")) {
+                        actions.push("Pixel Perfection: Tiny items have very few pixels. If your label is even slightly off-center, the model will miss it. Audit these boxes for a tight fit.");
+                    }
+                    if (!actions.includes("Model Blindness: Items might be too small for the camera's resolution. Add zoomed-in data to show the model the fine details.")) {
+                        actions.push("Model Blindness: Items might be too small for the camera's resolution. Add zoomed-in data to show the model the fine details.");
+                    }
+                } else if (wp.size === 'large') {
+                    if (!actions.includes("Empty Box Space: Check if your 'Large' boxes have too much background inside. The model learns the wrong shape if the box is loose.")) {
+                        actions.push("Empty Box Space: Check if your 'Large' boxes have too much background inside. The model learns the wrong shape if the box is loose.");
+                    }
+                    if (!actions.includes("Data Shortage: You need more pictures where this object is large. The model hasn't seen enough 'Up-close' examples.")) {
+                        actions.push("Data Shortage: You need more pictures where this object is large. The model hasn't seen enough 'Up-close' examples.");
+                    }
+                }
+            });
+
+            if (actions.length === 0) {
+                actions.push("Improve data balance: Add more variety of the underperforming sizes in your next dataset.");
+            }
+        } else {
+            observations.push("High Consistency: The model performs uniformly across all size groups.");
+            observations.push("No major blind spots: Scaling behavior is predictable and stable.");
+            actions.push("Maintain quality: The current scale distribution is healthy. No changes needed.");
+        }
+
+        const scaleStory = {
+            headline: mainHeadline,
+            observations,
+            actions,
+            color: storyColor
         };
 
-        if (scaleNarrativeCheck.includes("Weakness detected")) {
-            // Check if specifically Tiny is weak
-            const tinyWeak = weak.find(w => w.label === 'Tiny');
-            const largeWeak = weak.find(w => w.label === 'Large');
-
-            if (tinyWeak) {
-                scaleStory = {
-                    headline: "Significant Weakness with Small Objects",
-                    narrative: "The model has a notable difficulty in detecting small objects, leading to high false negatives in this category. This could be due to insufficient training data for small objects or architectural limitations.",
-                    action: "Augment dataset with more small objects, consider higher resolution inputs, or explore multi-scale detection architectures.",
-                    color: '#ff4d4f' // Red
-                };
-            } else if (largeWeak) {
-                scaleStory = {
-                    headline: "Weakness with Large Objects Detected",
-                    narrative: "The model shows reduced performance on large objects. This might indicate issues with receptive field size or how contextual information is utilized.",
-                    action: "Review anchor box configurations, ensure diverse large object examples in training, or adjust model architecture for better large object handling.",
-                    color: '#faad14' // Yellow
-                };
-            } else {
-                scaleStory = {
-                    headline: "Inconsistent Scale Performance",
-                    narrative: "Performance varies across different object sizes, suggesting the model hasn't fully generalized scale invariance. There are specific size ranges where reliability drops.",
-                    action: "Increase diversity of object scales in the training data. Consider techniques like image pyramids or scale-aware training strategies.",
-                    color: '#faad14' // Yellow
-                };
-            }
-        }
+        const scaleNarrativeCheck = observations.length > 0 ? observations.join(' ') : "Scale performance is stable.";
 
 
         // --- 2. SPATIAL DIAGNOSTICS LOGIC ---
@@ -473,46 +530,7 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
         }
 
 
-        // --- 3. PRODUCTION STRATEGY LOGIC ---
-        // 1. Identify Model Ceiling (First major drop in yield)
-        let ceilingT = 0.9;
-        let ceilingDrop = 0;
-        for (let i = 0; i < sizeStressData.length - 1; i++) {
-            const curr = sizeStressData[i];
-            const next = sizeStressData[i + 1];
-            // Calculate aggregate yield (sum of all gt / sum of all yields)
-            // Simplified: just check total TPs
-            const currTP = ['tiny', 'small', 'medium', 'large'].reduce((sum, sz) => sum + (tpList.filter(d => getSizeGrp(d.bbox) === sz && (d.confidence || 0) >= curr.t).length), 0);
-            const nextTP = ['tiny', 'small', 'medium', 'large'].reduce((sum, sz) => sum + (tpList.filter(d => getSizeGrp(d.bbox) === sz && (d.confidence || 0) >= next.t).length), 0);
-
-            const drop = currTP - nextTP;
-            if (drop > (tpList.length * 0.15)) { // 15% drop trigger
-                ceilingT = next.t;
-                ceilingDrop = drop;
-                break;
-            }
-        }
-
-        // 2. Identify Best F1 (Target)
-        // We need to simulate F1 at each threshold
-        let bestF1 = 0;
-        let bestT = 0.5;
-
-        CONF_LIST.forEach(t => {
-            const simTP = tpList.filter(d => (d.confidence || 0) >= t).length;
-            const simFP = fpList.filter(d => (d.confidence || 0) >= t).length;
-            const simFN = fnList.length + (tpList.length - simTP); // FN = Baseline FN + TP lost due to threshold
-
-            const sP = (simTP + simFP) > 0 ? simTP / (simTP + simFP) : 0;
-            const sR = (simTP + simFN) > 0 ? simTP / (simTP + simFN) : 0;
-            const sF1 = (sP + sR) > 0 ? (2 * sP * sR) / (sP + sR) : 0;
-
-            if (sF1 > bestF1) {
-                bestF1 = sF1;
-                bestT = t;
-            }
-        });
-
+        // --- 4. PRODUCTION STRATEGY LOGIC ---
         // 3. Generate Strategy Log
         const strategyLog = [];
         strategyLog.push(`[AUTO] Scan complete. ${tpList.length} TPs analysis.`);
@@ -1083,35 +1101,81 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                             <ExperimentOutlined style={{ color: '#722ed1' }} />
                             <span>3.1 Size Performance (Scale Fidelity)</span>
                         </Space>
-                    } style={{ marginBottom: '2rem' }}>
-                        <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
+                    } style={{ marginBottom: '1.5rem' }}>
+                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
                             {/* Left: The Story */}
-                            <div style={{ flex: 1 }}>
-                                <Title level={4} style={{ marginTop: 0, color: kpis.scaleDiagnostic.story.color }}>
+                            <div style={{ flex: 1, minWidth: '350px' }}>
+                                <Title level={4} style={{ marginTop: 0, color: kpis.scaleDiagnostic.story.color, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px' }}>
                                     {kpis.scaleDiagnostic.story.headline}
                                 </Title>
-                                <Text style={{ fontSize: '14px', lineHeight: '1.6', color: '#555', display: 'block', marginBottom: '1rem' }}>
-                                    {kpis.scaleDiagnostic.story.narrative}
-                                </Text>
-                                <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', padding: '12px', borderRadius: '4px' }}>
-                                    <Text strong style={{ color: '#389e0d', display: 'block', marginBottom: '4px' }}>Recommended Action:</Text>
-                                    <Text type="secondary">{kpis.scaleDiagnostic.story.action}</Text>
+
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <Text strong style={{ color: '#555', display: 'block', marginBottom: '4px', fontSize: '13px' }}>OBSERVATIONS:</Text>
+                                    <ul style={{ paddingLeft: '18px', margin: 0 }}>
+                                        {kpis.scaleDiagnostic.story.observations.map((obs, i) => (
+                                            <li key={i} style={{ marginBottom: '4px' }}>
+                                                <Text style={{ color: '#555', fontSize: '14px' }}>{obs}</Text>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                <div style={{ background: kpis.scaleDiagnostic.story.color === '#52c41a' ? '#f6ffed' : '#fffbe6', border: `1px solid ${kpis.scaleDiagnostic.story.color === '#52c41a' ? '#b7eb8f' : '#ffe58f'}`, padding: '12px', borderRadius: '4px' }}>
+                                    <Text strong style={{ color: kpis.scaleDiagnostic.story.color === '#52c41a' ? '#389e0d' : '#d48806', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', fontSize: '13px' }}>
+                                        <BulbOutlined /> RECOMMENDATIONS:
+                                    </Text>
+                                    <ul style={{ paddingLeft: '18px', margin: 0 }}>
+                                        {kpis.scaleDiagnostic.story.actions.map((act, i) => (
+                                            <li key={i} style={{ marginBottom: '2px' }}>
+                                                <Text type="secondary" style={{ color: '#555', fontSize: '14px' }}>{act}</Text>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
                             </div>
 
                             {/* Right: The Data Table */}
-                            <div style={{ width: '400px' }}>
+                            <div style={{ width: '420px' }}>
                                 <Table
                                     dataSource={kpis.scaleDiagnostic.analysis}
                                     pagination={false}
                                     size="small"
                                     rowKey="size"
+                                    expandable={{
+                                        expandedRowRender: record => (
+                                            <div style={{ padding: '4px 0 4px 34px', background: '#fff' }}>
+                                                <Table
+                                                    dataSource={record.classes}
+                                                    pagination={false}
+                                                    size="small"
+                                                    showHeader={false}
+                                                    rowKey="name"
+                                                    columns={[
+                                                        { title: 'Class', dataIndex: 'name', key: 'name', render: (t) => <Text style={{ fontSize: '13px', color: '#888' }}>{t}</Text> },
+                                                        {
+                                                            title: 'Reliability',
+                                                            dataIndex: 'reliability',
+                                                            key: 'reliability',
+                                                            align: 'right',
+                                                            render: (v) => {
+                                                                const color = v >= 80 ? '#52c41a' : (v >= 50 ? '#faad14' : '#ff4d4f');
+                                                                return <Text strong style={{ color, fontSize: '13px', opacity: 0.8 }}>{v.toFixed(1)}%</Text>;
+                                                            }
+                                                        },
+                                                        { title: 'Samples', dataIndex: 'samples', key: 'samples', align: 'right', render: (v) => <Text type="secondary" style={{ fontSize: '12px', opacity: 0.7 }}>{v}</Text> }
+                                                    ]}
+                                                />
+                                            </div>
+                                        ),
+                                        rowExpandable: record => record.classes.length > 1,
+                                        defaultExpandAllRows: true
+                                    }}
                                     columns={[
                                         {
                                             title: 'Size Group',
                                             dataIndex: 'label',
                                             key: 'label',
-                                            render: (text) => <Text strong>{text}</Text>
+                                            render: (text) => <Text strong style={{ fontSize: '14px' }}>{text}</Text>
                                         },
                                         {
                                             title: 'Reliability',
@@ -1120,15 +1184,21 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                                             align: 'right',
                                             render: (val, record) => {
                                                 const color = val >= 80 ? '#52c41a' : (val >= 50 ? '#faad14' : '#ff4d4f');
-                                                return <Text style={{ color, fontWeight: 'bold' }}>{val}%</Text>;
-                                            }
+                                                return <Text style={{ color, fontWeight: 'bold', fontSize: '14px' }}>{val}%</Text>;
+                                            },
+                                            title: (
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <div>Reliability</div>
+                                                    <div style={{ fontSize: '10px', color: '#aaa', fontWeight: 'normal' }}>AT {(kpis.productionStrategy.target)}% TARGET</div>
+                                                </div>
+                                            )
                                         },
                                         {
                                             title: 'Samples',
                                             dataIndex: 'gt',
                                             key: 'gt',
                                             align: 'right',
-                                            render: (val) => <Text type="secondary">{val}</Text>
+                                            render: (val) => <Text type="secondary" style={{ fontSize: '13px' }}>{val}</Text>
                                         }
                                     ]}
                                 />
