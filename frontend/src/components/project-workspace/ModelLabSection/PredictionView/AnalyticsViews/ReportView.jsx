@@ -184,16 +184,95 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
 
     // --- KPIs & DIAGNOSTICS CALCULATION (INCLUDING STORY MODE) ---
     const kpis = useMemo(() => {
-        if (!qualityStats?.has_ground_truth) return null;
+        // --- 0. DATA PREPARATION (UNIFYING SPLIT & UPLOAD MODES) ---
+        let tpList = [];
+        let fpList = [];
+        let fnList = [];
 
-        // Use backend's detailed lists
-        const tpList = qualityStats.detailed_true_positives || [];
-        const fpList = qualityStats.detailed_false_positives || [];
-        const fnList = qualityStats.detailed_missed_objects || [];
+        if (qualityStats?.has_ground_truth) {
+            // MODE A: Split / Baseline (Use Backend Quality Stats)
+            tpList = qualityStats.detailed_true_positives || [];
+            fpList = qualityStats.detailed_false_positives || [];
+            fnList = qualityStats.detailed_missed_objects || [];
+        } else if (verifications?.length > 0) {
+            // MODE B: Manual Upload (Use Verifications matching logic from ChartsView)
+            const getFileName = (path) => path ? path.split(/[/\\]/).pop() : '';
+
+            // 1. Prepare Helper Data
+            let rawMeta = experiment.input_images || {};
+            if (typeof rawMeta === 'string') {
+                try { rawMeta = JSON.parse(rawMeta); } catch (e) { rawMeta = {}; }
+            }
+            const hashLookup = {};
+            Object.entries(rawMeta).forEach(([path, hash]) => {
+                hashLookup[getFileName(path)] = hash;
+            });
+
+            // 2. Build Bbox-Mapping (Match 0.1 tolerance COORDINATES)
+            const vMap = {};
+            const localHumanMissing = [];
+
+            verifications.forEach(v => {
+                const vFile = getFileName(v.image_name);
+                const vHash = v.image_hash_md5 || v.imageHashMd5;
+                const targetHash = hashLookup[vFile];
+                const isExpMatch = String(v.experiment_id) === String(experiment.id) ||
+                    (experiment.name && String(v.experiment_id) === String(experiment.name));
+
+                if (isExpMatch && vFile && vHash === targetHash) {
+                    const predKey = Object.keys(experiment.predictions || {}).find(k => getFileName(k) === vFile);
+                    const imgDets = experiment.predictions?.[predKey] || [];
+
+                    // FIND CLOSEST MATCH (0.1 TOLERANCE)
+                    const matchedAI = imgDets.find(d =>
+                        d.bbox && v.bbox &&
+                        Math.abs(d.bbox[0] - v.bbox[0]) < 0.1 && Math.abs(d.bbox[1] - v.bbox[1]) < 0.1 &&
+                        Math.abs(d.bbox[2] - v.bbox[2]) < 0.1 && Math.abs(d.bbox[3] - v.bbox[3]) < 0.1
+                    );
+
+                    if (matchedAI) {
+                        // Map status to AI's original bbox coordinates
+                        const key = `${vFile}|${matchedAI.bbox.join(',')}`;
+                        vMap[key] = v.status;
+                    } else if (v.status !== 'fail') {
+                        // User manually marked a missing object
+                        localHumanMissing.push({ ...v, type: 'Human Missing', imgName: vFile });
+                    }
+                }
+            });
+
+            // 3. Classify AI Detections as TP vs FP
+            Object.entries(experiment.predictions || {}).forEach(([imgName, dets]) => {
+                const fName = getFileName(imgName);
+                (dets || []).forEach(d => {
+                    if (!d.bbox) return;
+                    const key = `${fName}|${d.bbox.join(',')}`;
+                    const status = vMap[key];
+
+                    const item = {
+                        ...d,
+                        imgName: fName,
+                        class_name: d.class_name || d.class || 'Unknown',
+                        type: status === 'fail' ? 'False Positive' : 'True Positive'
+                    };
+
+                    if (status === 'fail') {
+                        fpList.push(item);
+                    } else {
+                        tpList.push(item);
+                    }
+                });
+            });
+
+            // 4. Combine Missed Objects
+            fnList = [...localHumanMissing];
+        }
 
         const tp = tpList.length;
         const fp = fpList.length;
         const fn = fnList.length;
+
+        if (tp === 0 && fp === 0 && fn === 0) return null; // Still hide if NO data at all
 
         // Calculate precision, recall, F1
         const p = (tp + fp) > 0 ? (tp / (tp + fp)) * 100 : 0;
@@ -484,7 +563,7 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
             },
             executiveSummary
         };
-    }, [qualityStats, experiment]);
+    }, [qualityStats, experiment, verifications]);
 
     // --- DATA EXTRACTION (For Section 1) ---
     // Use reportData like logic but inside component since we calculate predictionAnalytics inside
