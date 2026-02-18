@@ -897,9 +897,47 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
     return (
         <div className="report-container" style={{ padding: '2rem', background: '#fff', minHeight: '100%' }}>
             {/* Header section */}
-            <div className="report-header" style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                <Title level={2} style={{ color: '#1890ff', marginBottom: '0.5rem' }}>Training Report</Title>
-                <Text type="secondary">Comprehensive analysis of model performance and deployment readiness.</Text>
+            <style>
+                {`
+                @media print {
+                    body * { visibility: hidden; }
+                    .report-container, .report-container * { visibility: visible; }
+                    .report-container { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0 !important; background: white; }
+                    .no-print { display: none !important; }
+                    /* Clean up for print */
+                    .ant-card { break-inside: auto; box-shadow: none !important; border: 1px solid #e8e8e8 !important; }
+                    .ant-col .ant-card { break-inside: avoid; }
+                    .ant-card-body { break-inside: auto !important; }
+                    .ant-card-body { break-inside: auto !important; }
+                    .ant-card-body { break-inside: auto !important; }
+                    /* Allow break inside report sections, avoid break inside cards/tables if possible */
+                    .report-section { margin-bottom: 40px !important; break-inside: auto; }
+                    table, tbody, thead, tfoot { break-inside: auto !important; }
+                    tr, td, th { break-inside: avoid !important; }
+                    /* Assessment Box Height Fix */
+                    .assessment-box { height: auto !important; }
+
+                    /* Intelligent Pagination */
+                    h1, h2, h3, h4, .ant-typography, .ant-typography-h1, .ant-typography-h2, .ant-typography-h3, .ant-typography-h4 {
+                        break-after: avoid;
+                        page-break-after: avoid;
+                    }
+                    /* Unlock flex layouts for print to allow content splitting */
+                    .story-layout-container { display: block !important; }
+                    .story-layout-container > div { width: 100% !important; min-width: 0 !important; margin-bottom: 2rem; }
+                    /* Force Grid */
+                    .ant-col-md-6 { flex: 0 0 25% !important; max-width: 25% !important; }
+                }
+                `}
+            </style>
+            <div className="report-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <div style={{ textAlign: 'left' }}>
+                    <Title level={2} style={{ color: '#1890ff', marginBottom: '0.5rem', margin: 0 }}>Training Report</Title>
+                    <Text type="secondary">Comprehensive analysis of model performance and deployment readiness.</Text>
+                </div>
+                <Button type="primary" size="large" icon={<DownloadOutlined />} onClick={() => window.print()} className="no-print">
+                    Export PDF Report
+                </Button>
             </div>
 
             {/* SECTION 01: TRAINING PERFORMANCE (RESTORED DESIGN) */}
@@ -1302,7 +1340,7 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                             <span>3.1 Size Performance (Scale Fidelity)</span>
                         </Space>
                     } style={{ marginBottom: '1.5rem' }}>
-                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                        <div className="story-layout-container" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
                             {/* Left: The Story */}
                             <div style={{ flex: 1, minWidth: '350px' }}>
                                 <Title level={4} style={{ marginTop: 0, color: kpis.scaleDiagnostic.story.color, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px' }}>
@@ -1413,7 +1451,7 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                             <span>3.2 Spatial Bias Analysis (Blind Spots)</span>
                         </Space>
                     }>
-                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                        <div className="story-layout-container" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
                             {/* Left: The Story */}
                             <div style={{ flex: 1, minWidth: '350px' }}>
                                 <Title level={4} style={{ marginTop: 0, color: kpis.spatialStory.color, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px' }}>
@@ -1455,7 +1493,8 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                                     background: '#f9f9f9',
                                     border: '1px solid #eee',
                                     padding: '6px',
-                                    borderRadius: '4px'
+                                    borderRadius: '4px',
+                                    breakInside: 'avoid'
                                 }}>
                                     {kpis.spatialData.map((tile, i) => (
                                         <div key={i} style={{
@@ -1481,101 +1520,103 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                             </div>
                         </div>
                     </Card>
-                </div>
+                </div >
             )}
 
             {/* SECTION 04: DEPLOYMENT READINESS */}
-            {kpis && kpis.productionStrategy && (
-                <div className="report-section" style={{ marginTop: '3rem', marginBottom: '3rem' }}>
-                    <Title level={2} style={{ color: '#1890ff', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <CloudSyncOutlined /> Section 04: Deployment Readiness
-                    </Title>
-                    <Text type="secondary" style={{ display: 'block', marginBottom: '1.5rem' }}>
-                        Automated stability audit to determine if the model is ready for live production use.
-                    </Text>
+            {
+                kpis && kpis.productionStrategy && (
+                    <div className="report-section" style={{ marginTop: '3rem', marginBottom: '3rem' }}>
+                        <Title level={2} style={{ color: '#1890ff', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <CloudSyncOutlined /> Section 04: Deployment Readiness
+                        </Title>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: '1.5rem' }}>
+                            Automated stability audit to determine if the model is ready for live production use.
+                        </Text>
 
-                    <Row gutter={16}>
-                        {/* 4.1 RELIABILITY LIMIT */}
-                        <Col span={6}>
-                            <Card size="small" style={{ background: '#f9f9f9', textAlign: 'center', height: '100%' }}>
-                                <Text strong style={{ color: '#722ed1', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>Reliability Limit</Text>
-                                <Title level={2} style={{ margin: '8px 0', color: '#722ed1' }}>
-                                    {kpis.productionStrategy.ceiling}%
-                                </Title>
-                                <Text type="secondary" style={{ fontSize: '11px' }}>Maximum Confidence Score</Text>
-                            </Card>
-                        </Col>
-                        {/* 4.2 OPTIMAL BALANCE */}
-                        <Col span={6}>
-                            <Card size="small" style={{ background: '#f0f9ff', textAlign: 'center', height: '100%', borderColor: '#69c0ff' }}>
-                                <Text strong style={{ color: '#1890ff', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>Optimal Balance Point</Text>
-                                <Title level={2} style={{ margin: '8px 0', color: '#1890ff' }}>
-                                    {kpis.productionStrategy.target}%
-                                </Title>
-                                <Text type="secondary" style={{ fontSize: '11px' }}>Recommended Confidence Setting</Text>
-                            </Card>
-                        </Col>
-                        {/* 4.3 AUTOMATION */}
-                        <Col span={6}>
-                            <Card size="small" style={{ background: '#f6ffed', textAlign: 'center', height: '100%', borderColor: '#b7eb8f' }}>
-                                <Text strong style={{ color: '#389e0d', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>Automation Rate</Text>
-                                <Title level={2} style={{ margin: '8px 0', color: '#389e0d' }}>
-                                    {kpis.productionStrategy.automationPct}%
-                                </Title>
-                                <Text type="secondary" style={{ fontSize: '11px' }}>% of real objects found by model</Text>
-                            </Card>
-                        </Col>
-                        {/* 4.4 PILOT READINESS */}
-                        <Col span={6}>
-                            <Card size="small" style={{ background: kpis.productionStrategy.status === 'READY' ? '#f6ffed' : '#fff1f0', textAlign: 'center', height: '100%', borderColor: kpis.productionStrategy.status === 'READY' ? '#b7eb8f' : '#ffa39e' }}>
-                                <Text strong style={{ color: kpis.productionStrategy.status === 'READY' ? '#52c41a' : '#ff4d4f', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>DEPLOYMENT STATUS</Text>
-                                <Title level={2} style={{ margin: '8px 0', color: kpis.productionStrategy.status === 'READY' ? '#52c41a' : '#ff4d4f' }}>
-                                    {kpis.productionStrategy.status}
-                                </Title>
-                                <Text type="secondary" style={{ fontSize: '11px' }}>{kpis.productionStrategy.action}</Text>
-                            </Card>
-                        </Col>
-                    </Row>
+                        <Row gutter={16}>
+                            {/* 4.1 RELIABILITY LIMIT */}
+                            <Col span={6}>
+                                <Card size="small" style={{ background: '#f9f9f9', textAlign: 'center', height: '100%' }}>
+                                    <Text strong style={{ color: '#722ed1', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>Reliability Limit</Text>
+                                    <Title level={2} style={{ margin: '8px 0', color: '#722ed1' }}>
+                                        {kpis.productionStrategy.ceiling}%
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '11px' }}>Maximum Confidence Score</Text>
+                                </Card>
+                            </Col>
+                            {/* 4.2 OPTIMAL BALANCE */}
+                            <Col span={6}>
+                                <Card size="small" style={{ background: '#f0f9ff', textAlign: 'center', height: '100%', borderColor: '#69c0ff' }}>
+                                    <Text strong style={{ color: '#1890ff', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>Optimal Balance Point</Text>
+                                    <Title level={2} style={{ margin: '8px 0', color: '#1890ff' }}>
+                                        {kpis.productionStrategy.target}%
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '11px' }}>Recommended Confidence Setting</Text>
+                                </Card>
+                            </Col>
+                            {/* 4.3 AUTOMATION */}
+                            <Col span={6}>
+                                <Card size="small" style={{ background: '#f6ffed', textAlign: 'center', height: '100%', borderColor: '#b7eb8f' }}>
+                                    <Text strong style={{ color: '#389e0d', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>Automation Rate</Text>
+                                    <Title level={2} style={{ margin: '8px 0', color: '#389e0d' }}>
+                                        {kpis.productionStrategy.automationPct}%
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '11px' }}>% of real objects found by model</Text>
+                                </Card>
+                            </Col>
+                            {/* 4.4 PILOT READINESS */}
+                            <Col span={6}>
+                                <Card size="small" style={{ background: kpis.productionStrategy.status === 'READY' ? '#f6ffed' : '#fff1f0', textAlign: 'center', height: '100%', borderColor: kpis.productionStrategy.status === 'READY' ? '#b7eb8f' : '#ffa39e' }}>
+                                    <Text strong style={{ color: kpis.productionStrategy.status === 'READY' ? '#52c41a' : '#ff4d4f', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>DEPLOYMENT STATUS</Text>
+                                    <Title level={2} style={{ margin: '8px 0', color: kpis.productionStrategy.status === 'READY' ? '#52c41a' : '#ff4d4f' }}>
+                                        {kpis.productionStrategy.status}
+                                    </Title>
+                                    <Text type="secondary" style={{ fontSize: '11px' }}>{kpis.productionStrategy.action}</Text>
+                                </Card>
+                            </Col>
+                        </Row>
 
-                    {/* NOT READY REASONS */}
-                    {kpis.productionStrategy.notReadyReasons && kpis.productionStrategy.notReadyReasons.length > 0 && (
-                        <div style={{ marginTop: '1rem', padding: '12px', background: '#fff2e8', borderRadius: '4px', border: '1px solid #ffbb96' }}>
-                            <Text strong style={{ color: '#d4380d', display: 'block', marginBottom: '6px', fontSize: '12px', textTransform: 'uppercase' }}>⚠ Why Not Ready:</Text>
-                            <ul style={{ paddingLeft: '20px', margin: 0 }}>
-                                {kpis.productionStrategy.notReadyReasons.map((reason, idx) => (
-                                    <li key={idx} style={{ color: '#ad4e00', fontSize: '12px', marginBottom: '2px' }}>{reason}</li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
-
-                    {/* DUAL BRIEFING: PRODUCTION + TRAINING */}
-                    <Row gutter={16} style={{ marginTop: '1rem' }}>
-                        {/* PRODUCTION ASSESSMENT */}
-                        <Col span={12}>
-                            <div style={{ padding: '12px', background: '#f0f2f5', borderRadius: '4px', border: '1px solid #d9d9d9', fontFamily: 'monospace', height: '100%' }}>
-                                <Text strong style={{ color: '#1890ff', display: 'block', marginBottom: '6px', fontSize: '12px', textTransform: 'uppercase' }}>🔍 Production Assessment</Text>
-                                <ul style={{ paddingLeft: '16px', margin: 0 }}>
-                                    {(kpis.productionStrategy.productionLog || []).map((line, idx) => (
-                                        <li key={idx} style={{ color: '#595959', fontSize: '11px', marginBottom: '3px' }}>{line}</li>
+                        {/* NOT READY REASONS */}
+                        {kpis.productionStrategy.notReadyReasons && kpis.productionStrategy.notReadyReasons.length > 0 && (
+                            <div style={{ marginTop: '1rem', padding: '12px', background: '#fff2e8', borderRadius: '4px', border: '1px solid #ffbb96' }}>
+                                <Text strong style={{ color: '#d4380d', display: 'block', marginBottom: '6px', fontSize: '12px', textTransform: 'uppercase' }}>⚠ Why Not Ready:</Text>
+                                <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                                    {kpis.productionStrategy.notReadyReasons.map((reason, idx) => (
+                                        <li key={idx} style={{ color: '#ad4e00', fontSize: '12px', marginBottom: '2px' }}>{reason}</li>
                                     ))}
                                 </ul>
                             </div>
-                        </Col>
-                        {/* TRAINING ASSESSMENT */}
-                        <Col span={12}>
-                            <div style={{ padding: '12px', background: '#f9f0ff', borderRadius: '4px', border: '1px solid #d3adf7', fontFamily: 'monospace', height: '100%' }}>
-                                <Text strong style={{ color: '#722ed1', display: 'block', marginBottom: '6px', fontSize: '12px', textTransform: 'uppercase' }}>↑ Training Assessment</Text>
-                                <ul style={{ paddingLeft: '16px', margin: 0 }}>
-                                    {(kpis.productionStrategy.trainingLog || []).map((line, idx) => (
-                                        <li key={idx} style={{ color: '#595959', fontSize: '11px', marginBottom: '3px' }}>{line}</li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </Col>
-                    </Row>
-                </div>
-            )}
+                        )}
+
+                        {/* DUAL BRIEFING: PRODUCTION + TRAINING */}
+                        <Row gutter={16} style={{ marginTop: '1rem' }}>
+                            {/* PRODUCTION ASSESSMENT */}
+                            <Col span={12}>
+                                <div className="assessment-box" style={{ padding: '12px', background: '#f0f2f5', borderRadius: '4px', border: '1px solid #d9d9d9', fontFamily: 'monospace', height: '100%' }}>
+                                    <Text strong style={{ color: '#1890ff', display: 'block', marginBottom: '6px', fontSize: '12px', textTransform: 'uppercase' }}>🔍 Production Assessment</Text>
+                                    <ul style={{ paddingLeft: '16px', margin: 0 }}>
+                                        {(kpis.productionStrategy.productionLog || []).map((line, idx) => (
+                                            <li key={idx} style={{ color: '#595959', fontSize: '11px', marginBottom: '3px' }}>{line}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </Col>
+                            {/* TRAINING ASSESSMENT */}
+                            <Col span={12}>
+                                <div className="assessment-box" style={{ padding: '12px', background: '#f9f0ff', borderRadius: '4px', border: '1px solid #d3adf7', fontFamily: 'monospace', height: '100%' }}>
+                                    <Text strong style={{ color: '#722ed1', display: 'block', marginBottom: '6px', fontSize: '12px', textTransform: 'uppercase' }}>↑ Training Assessment</Text>
+                                    <ul style={{ paddingLeft: '16px', margin: 0 }}>
+                                        {(kpis.productionStrategy.trainingLog || []).map((line, idx) => (
+                                            <li key={idx} style={{ color: '#595959', fontSize: '11px', marginBottom: '3px' }}>{line}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </Col>
+                        </Row>
+                    </div>
+                )
+            }
 
             {/* FOOTER */}
             <div className="report-footer" style={{ marginTop: '3rem', paddingTop: '1rem', borderTop: '1px solid #f0f0f0', textAlign: 'center' }}>
@@ -1583,7 +1624,7 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                     Training Report • Generated {new Date().toLocaleString()}
                 </Text>
             </div>
-        </div>
+        </div >
     );
 };
 
