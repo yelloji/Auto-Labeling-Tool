@@ -791,7 +791,7 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
 
             {/* SECTION 02: PREDICTION ANALYTICS */}
             <div className="report-section" style={{ marginBottom: '2rem' }}>
-                <Title level={3} style={{ fontSize: '16px', fontWeight: 600, marginBottom: '1rem', color: '#00f2ff' }}>
+                <Title level={2} style={{ color: '#00f2ff', display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <AimOutlined /> Section 02: Prediction Analytics
                 </Title>
 
@@ -914,7 +914,7 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
             {/* SECTION 03: EVIDENCE-BASED DIAGNOSTICS */}
             {kpis && kpis.scaleDiagnostic && kpis.spatialData && (
                 <div className="report-section" style={{ marginTop: '3rem', marginBottom: '3rem' }}>
-                    <Title level={3} style={{ fontSize: '16px', fontWeight: 600, marginBottom: '1rem', color: '#722ed1' }}>
+                    <Title level={2} style={{ color: '#722ed1', display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <CheckCircleOutlined /> Section 03: Evidence-Based Diagnostics
                     </Title>
 
@@ -1066,7 +1066,7 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
             {/* SECTION 04: DEPLOYMENT READINESS */}
             {kpis && kpis.productionStrategy && (
                 <div className="report-section" style={{ marginTop: '3rem', marginBottom: '3rem' }}>
-                    <Title level={3} style={{ fontSize: '16px', fontWeight: 600, marginBottom: '1rem', color: '#1890ff' }}>
+                    <Title level={2} style={{ color: '#1890ff', display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <CloudSyncOutlined /> Section 04: Deployment Readiness
                     </Title>
                     <Text type="secondary" style={{ display: 'block', marginBottom: '1.5rem' }}>
