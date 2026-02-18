@@ -53,10 +53,17 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
         // Basic scope
         const predictionImages = experiment.image_count || 0;
         let gtCoverage = qualityStats?.total_gt || 0;
+        let tp = 0, fp = 0, fn = 0;
 
-        // --- MANUAL GT CALCULATION (For Upload Mode) ---
-        // If backend GT is missing (Upload), calculate from Verifications like ChartsView
-        if (!gtCoverage && verifications?.length > 0) {
+        // --- METRICS CALCULATION PRIORITY ---
+        if (qualityStats?.has_ground_truth) {
+            // Priority 1: Backend Quality Stats (Split / Baseline Mode)
+            tp = qualityStats.detailed_true_positives?.length || 0;
+            fp = qualityStats.detailed_false_positives?.length || 0;
+            fn = qualityStats.detailed_missed_objects?.length || 0;
+            gtCoverage = qualityStats.total_gt;
+        } else if (verifications?.length > 0) {
+            // Priority 2: Manual Verifications (Upload Mode)
             // 1. Prepare Helpers
             const getFileName = (path) => path ? path.split(/[/\\]/).pop() : '';
 
@@ -87,42 +94,28 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                     if (v.status === 'fail') {
                         verifiedFails++;
                     } else if (v.status !== 'pass' && !v.matched_ai) {
-                        // If it's not fail/pass and no AI matched, it's a human add
-                        // ChartsView logic: "No AI match + Not 'fail' status = User manually marked a missing object"
-                        // But wait, we need to check if it matched AI first.
-                        // Simplified check: If status is NOT 'fail' and NOT 'pass', it's likely a new box.
-                        // Actually, let's trust the 'type' if available or fallback to status check.
-                        // Smart check: If status is 'fail', it subtracts from GT (it was an AI box).
-                        // If status is 'pass', it confirms GT (it was an AI box).
-                        // If status is undefined/null/other, did it match AI?
-
-                        // Let's replicate ChartsView exact logic for robustness:
                         const predKey = Object.keys(experiment.predictions || {}).find(k => getFileName(k) === vFile);
                         const imgDets = experiment.predictions?.[predKey] || [];
-
                         const matchedAI = imgDets.find(d =>
                             d.bbox && v.bbox &&
                             Math.abs(d.bbox[0] - v.bbox[0]) < 0.1 && Math.abs(d.bbox[1] - v.bbox[1]) < 0.1 &&
                             Math.abs(d.bbox[2] - v.bbox[2]) < 0.1 && Math.abs(d.bbox[3] - v.bbox[3]) < 0.1
                         );
-
-                        if (matchedAI) {
-                            // It's an AI box
-                        } else {
-                            // It's a Human box (Missing Object)
-                            humanMissing++;
-                        }
+                        if (!matchedAI) humanMissing++;
                     }
                 }
             });
 
-            // Effective GT = (Total AI - Verified Fails) + Human Missing
-            // Note: verifiedFails are FP (not GT).
-            // Pass are TP (GT).
-            // Unverified are TP (GT assumed).
-            // So Start with Total AI, remove Fails, add Missing.
-            gtCoverage = Math.max(0, (total_detections - verifiedFails) + humanMissing);
+            fp = verifiedFails;
+            fn = humanMissing;
+            tp = Math.max(0, total_detections - fp);
+            gtCoverage = tp + fn;
         }
+
+        const precision = (tp + fp) > 0 ? (tp / (tp + fp)) * 100 : 0;
+        const recall = (tp + fn) > 0 ? (tp / (tp + fn)) * 100 : 0;
+        const f1 = (precision + recall) > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+
 
         // Class distribution (same as Overview)
         const classDistribArray = Object.entries(classes_detected).map(([className, count]) => ({
@@ -170,9 +163,14 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                 predictionImages,
                 totalDetections: total_detections,
                 gtCoverage,
+                tp,
+                fp,
+                fn,
+                precision,
+                recall,
+                f1: f1.toFixed(1),
                 classDistribution: classDistribArray,
                 confidenceRanges: confRangesArray,
-                // Add a simple avg confidence check
                 avgConfidence: total_detections > 0 ? (Object.entries(confidence_distribution).reduce((acc, [range, count]) => {
                     const [min, max] = range.split('-').map(parseFloat);
                     const mid = (min + max) / 2;
@@ -180,6 +178,8 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                 }, 0) / total_detections * 100).toFixed(1) : 0
             }
         };
+
+
     }, [experiment, qualityStats]);
 
     // --- KPIs & DIAGNOSTICS CALCULATION (INCLUDING STORY MODE) ---
@@ -839,6 +839,57 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                                 </Card>
                             </Col>
                         </Row>
+
+                        {/* Prediction Performance Metrics */}
+                        <div style={{ marginBottom: '2rem' }}>
+                            <Title level={4} style={{ fontSize: '14px', marginBottom: '1rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                Performance Metrics (vs Ground Truth)
+                            </Title>
+                            <Row gutter={[16, 16]}>
+                                <Col xs={24} sm={4}>
+                                    <Card size="small" style={{ textAlign: 'center', height: '100%', borderTop: '3px solid #52c41a' }}>
+                                        <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Precision</Text>
+                                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#52c41a' }}>{predictionAnalytics.scope.precision.toFixed(1)}%</div>
+                                        <Text type="secondary" style={{ fontSize: '10px' }}>Correctness</Text>
+                                    </Card>
+                                </Col>
+                                <Col xs={24} sm={4}>
+                                    <Card size="small" style={{ textAlign: 'center', height: '100%', borderTop: '3px solid #1890ff' }}>
+                                        <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Recall</Text>
+                                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1890ff' }}>{predictionAnalytics.scope.recall.toFixed(1)}%</div>
+                                        <Text type="secondary" style={{ fontSize: '10px' }}>Completeness</Text>
+                                    </Card>
+                                </Col>
+                                <Col xs={24} sm={4}>
+                                    <Card size="small" style={{ textAlign: 'center', height: '100%', borderTop: '3px solid #722ed1' }}>
+                                        <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>F1 Score</Text>
+                                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#722ed1' }}>{predictionAnalytics.scope.f1}%</div>
+                                        <Text type="secondary" style={{ fontSize: '10px' }}>Harmonic Mean</Text>
+                                    </Card>
+                                </Col>
+                                <Col xs={24} sm={4}>
+                                    <Card size="small" style={{ textAlign: 'center', height: '100%', borderTop: '3px solid #52c41a' }}>
+                                        <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>True Positive</Text>
+                                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#52c41a' }}>{predictionAnalytics.scope.tp}</div>
+                                        <Text type="secondary" style={{ fontSize: '10px' }}>Correct Detections</Text>
+                                    </Card>
+                                </Col>
+                                <Col xs={24} sm={4}>
+                                    <Card size="small" style={{ textAlign: 'center', height: '100%', borderTop: '3px solid #fa8c16' }}>
+                                        <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>False Positives</Text>
+                                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fa8c16' }}>{predictionAnalytics.scope.fp}</div>
+                                        <Text type="secondary" style={{ fontSize: '10px' }}>Extra Detections</Text>
+                                    </Card>
+                                </Col>
+                                <Col xs={24} sm={4}>
+                                    <Card size="small" style={{ textAlign: 'center', height: '100%', borderTop: '3px solid #ff4d4f' }}>
+                                        <Text type="secondary" style={{ fontSize: '10px', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Missing (FN)</Text>
+                                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ff4d4f' }}>{predictionAnalytics.scope.fn}</div>
+                                        <Text type="secondary" style={{ fontSize: '10px' }}>Undetected Objects</Text>
+                                    </Card>
+                                </Col>
+                            </Row>
+                        </div>
 
                         {/* Class Distribution Table */}
                         <Card size="small" title="Class Distribution" style={{ marginBottom: '16px' }}>
