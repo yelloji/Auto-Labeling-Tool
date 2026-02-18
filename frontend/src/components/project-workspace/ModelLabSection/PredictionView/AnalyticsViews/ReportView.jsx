@@ -52,7 +52,77 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
 
         // Basic scope
         const predictionImages = experiment.image_count || 0;
-        const gtCoverage = qualityStats?.total_gt || 0;
+        let gtCoverage = qualityStats?.total_gt || 0;
+
+        // --- MANUAL GT CALCULATION (For Upload Mode) ---
+        // If backend GT is missing (Upload), calculate from Verifications like ChartsView
+        if (!gtCoverage && verifications?.length > 0) {
+            // 1. Prepare Helpers
+            const getFileName = (path) => path ? path.split(/[/\\]/).pop() : '';
+
+            // 2. Parse Metadata for Hash Lookup
+            let rawMeta = experiment.input_images || {};
+            if (typeof rawMeta === 'string') {
+                try { rawMeta = JSON.parse(rawMeta); } catch (e) { rawMeta = {}; }
+            }
+            const hashLookup = {};
+            Object.entries(rawMeta).forEach(([path, hash]) => {
+                hashLookup[getFileName(path)] = hash;
+            });
+
+            // 3. Analyze Verifications
+            let verifiedFails = 0;
+            let humanMissing = 0;
+
+            verifications.forEach(v => {
+                const vFile = getFileName(v.image_name);
+                const vHash = v.image_hash_md5 || v.imageHashMd5;
+                const targetHash = hashLookup[vFile];
+
+                // Triple Match Logic (ExpID + Name + Hash)
+                const isExpMatch = String(v.experiment_id) === String(experiment.id) ||
+                    (experiment.name && String(v.experiment_id) === String(experiment.name));
+
+                if (isExpMatch && vFile && vHash === targetHash) {
+                    if (v.status === 'fail') {
+                        verifiedFails++;
+                    } else if (v.status !== 'pass' && !v.matched_ai) {
+                        // If it's not fail/pass and no AI matched, it's a human add
+                        // ChartsView logic: "No AI match + Not 'fail' status = User manually marked a missing object"
+                        // But wait, we need to check if it matched AI first.
+                        // Simplified check: If status is NOT 'fail' and NOT 'pass', it's likely a new box.
+                        // Actually, let's trust the 'type' if available or fallback to status check.
+                        // Smart check: If status is 'fail', it subtracts from GT (it was an AI box).
+                        // If status is 'pass', it confirms GT (it was an AI box).
+                        // If status is undefined/null/other, did it match AI?
+
+                        // Let's replicate ChartsView exact logic for robustness:
+                        const predKey = Object.keys(experiment.predictions || {}).find(k => getFileName(k) === vFile);
+                        const imgDets = experiment.predictions?.[predKey] || [];
+
+                        const matchedAI = imgDets.find(d =>
+                            d.bbox && v.bbox &&
+                            Math.abs(d.bbox[0] - v.bbox[0]) < 0.1 && Math.abs(d.bbox[1] - v.bbox[1]) < 0.1 &&
+                            Math.abs(d.bbox[2] - v.bbox[2]) < 0.1 && Math.abs(d.bbox[3] - v.bbox[3]) < 0.1
+                        );
+
+                        if (matchedAI) {
+                            // It's an AI box
+                        } else {
+                            // It's a Human box (Missing Object)
+                            humanMissing++;
+                        }
+                    }
+                }
+            });
+
+            // Effective GT = (Total AI - Verified Fails) + Human Missing
+            // Note: verifiedFails are FP (not GT).
+            // Pass are TP (GT).
+            // Unverified are TP (GT assumed).
+            // So Start with Total AI, remove Fails, add Missing.
+            gtCoverage = Math.max(0, (total_detections - verifiedFails) + humanMissing);
+        }
 
         // Class distribution (same as Overview)
         const classDistribArray = Object.entries(classes_detected).map(([className, count]) => ({
