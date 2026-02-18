@@ -454,8 +454,8 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
         const scaleNarrativeCheck = observations.length > 0 ? observations.join(' ') : "Scale performance is stable.";
 
 
-        // --- 2. SPATIAL DIAGNOSTICS LOGIC ---
-        // Normalize bounds
+        // --- 3. COGNITIVE SPATIAL ENGINE (ADVANCED) ---
+        // Normalize frame bounds
         let maxX = 1, maxY = 1;
         [...tpList, ...fpList, ...fnList].forEach(d => {
             if (d.bbox) {
@@ -464,70 +464,155 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
             }
         });
 
-        const spatialGrid = Array(9).fill(0).map(() => ({ fp: 0, fn: 0, total: 0 }));
-        const spatialErrors = [...fpList, ...fnList]; // Analyze errors only
+        // Sync and analyze errors with Production Target
+        const syncFP = fpList.filter(d => (d.confidence || 0) >= prodT).map(d => ({ ...d, _isFP: true }));
+        const syncFN = [...fnList, ...tpList.filter(d => (d.confidence || 0) < prodT)].map(d => ({ ...d, _isFP: false }));
+        const spatialErrors = [...syncFP, ...syncFN];
 
-        spatialErrors.forEach(d => {
-            if (d.bbox) {
-                const cx = (d.bbox[0] + d.bbox[2]) / 2;
-                const cy = (d.bbox[1] + d.bbox[3]) / 2;
-                const col = Math.min(2, Math.floor((cx / maxX) * 3));
-                const row = Math.min(2, Math.floor((cy / maxY) * 3));
-                const idx = row * 3 + col;
-                if (idx >= 0 && idx < 9) {
-                    if (d.type === 'False Positive' || ((!d.matched_iou) && (!d.confidence))) spatialGrid[idx].fp++;
-                    else spatialGrid[idx].fn++;
-                    spatialGrid[idx].total++;
+        const getGridStats = (errors) => {
+            const grid = Array(9).fill(0).map(() => ({ fp: 0, fn: 0, total: 0, classErrors: {} }));
+            errors.forEach(d => {
+                if (d.bbox) {
+                    const cx = (d.bbox[0] + d.bbox[2]) / 2;
+                    const cy = (d.bbox[1] + d.bbox[3]) / 2;
+                    const col = Math.min(2, Math.floor((cx / maxX) * 3));
+                    const row = Math.min(2, Math.floor((cy / maxY) * 3));
+                    const idx = row * 3 + col;
+                    if (idx >= 0 && idx < 9) {
+                        const cls = d.class_name || d.class || 'Unknown';
+                        grid[idx].classErrors[cls] = (grid[idx].classErrors[cls] || 0) + 1;
+                        if (d._isFP) grid[idx].fp++;
+                        else grid[idx].fn++;
+                        grid[idx].total++;
+                    }
                 }
-            }
-        });
-
-        const totalSpatialErrors = spatialErrors.length || 1;
-        const spatialData = spatialGrid.map((tile, i) => {
-            const row = Math.floor(i / 3);
-            const col = i % 3;
-            const label = `${String.fromCharCode(65 + row)}${col + 1}`;
-            return {
+            });
+            const totalE = errors.length || 1;
+            return grid.map((tile, i) => ({
                 ...tile,
-                label,
-                density: parseFloat(((tile.total / totalSpatialErrors) * 100).toFixed(1))
-            };
-        });
-
-        // Spatial Narratives (Original - for raw checks)
-        const hotspots = spatialData.filter(t => t.density >= 25).sort((a, b) => b.density - a.density);
-        const warmspots = spatialData.filter(t => t.density >= 15 && t.density < 25).sort((a, b) => b.density - a.density);
-
-        const spatialNarrative = hotspots.map(h => ({
-            type: 'urgent',
-            msg: `${h.label} region accounts for ${h.density}% of all errors.`
-        }));
-
-        // --- SPATIAL DIAGNOSTIC STORY (NEW) ---
-        let spatialStory = {
-            headline: "No Significant Spatial Bias Detected",
-            narrative: "The model's performance is consistent across the image frame, indicating no particular blind spots or regions of weakness.",
-            action: "Continue to ensure diverse spatial distribution in future datasets.",
-            color: '#52c41a' // Green
+                label: `${String.fromCharCode(65 + Math.floor(i / 3))}${(i % 3) + 1}`,
+                density: parseFloat(((tile.total / totalE) * 100).toFixed(1))
+            }));
         };
 
-        if (hotspots.length > 0) {
-            const h = hotspots[0]; // Primary hotspot
-            spatialStory = {
-                headline: "Critical Spatial Blind Spots Identified",
-                narrative: `The model exhibits significant performance degradation in specific regions of the image frame, particularly in the ${h.label} region (${h.density}% of errors). This indicates a strong spatial bias.`,
-                action: "Analyze training data for spatial imbalances. Ensure objects of interest appear uniformly across the image frame. Consider data augmentation techniques like random cropping or shifting.",
-                color: '#ff4d4f' // Red
-            };
-        } else if (warmspots.length > 0) {
-            const h = warmspots[0];
-            spatialStory = {
-                headline: "Potential Spatial Bias Detected",
-                narrative: `There are noticeable performance drops in certain image regions, such as the ${h.label} region. While not critical, this suggests a minor spatial bias.`,
-                action: "Investigate if objects are consistently located in specific parts of the image in the training data. Diversify object placement through augmentation.",
-                color: '#faad14' // Yellow
-            };
+        const globalSpatial = getGridStats(spatialErrors);
+        const hotspots = globalSpatial.filter(t => t.density >= 25).sort((a, b) => b.density - a.density);
+        const warmspots = globalSpatial.filter(t => t.density >= 15 && t.density < 25).sort((a, b) => b.density - a.density);
+
+        // --- 3.1 VIRTUAL MULTI-SCALE SCAN (PATTERN CONFLICT) ---
+        const szGrps = ['tiny', 'small', 'medium', 'large'];
+        const szSnaps = {};
+        szGrps.forEach(sz => {
+            const szErr = spatialErrors.filter(d => getSizeGrp(d.bbox) === sz);
+            if (szErr.length > 5) szSnaps[sz] = getGridStats(szErr);
+        });
+
+        // Aggregate Pattern Synthesis (Executive Point of View)
+        const getPatterns = (d) => ({
+            corners: (d[0].density + d[2].density + d[6].density + d[8].density),
+            left: (d[0].density + d[3].density + d[6].density),
+            right: (d[2].density + d[5].density + d[8].density),
+            top: (d[0].density + d[1].density + d[2].density),
+            bottom: (d[6].density + d[7].density + d[8].density),
+            center: d[4].density
+        });
+
+        const gPatterns = getPatterns(globalSpatial);
+        const obs = [];
+        const recs = [];
+
+        // Human-readable zone positions
+        const zoneNames = { A1: 'top-left', A2: 'top-center', A3: 'top-right', B1: 'center-left', B2: 'center', B3: 'center-right', C1: 'bottom-left', C2: 'bottom-center', C3: 'bottom-right' };
+        const describeErrors = (h) => {
+            const parts = [];
+            if (h.fn > 0) parts.push(`${h.fn} missed object${h.fn > 1 ? 's' : ''}`);
+            if (h.fp > 0) parts.push(`${h.fp} false alarm${h.fp > 1 ? 's' : ''}`);
+            return parts.length > 0 ? parts.join(' and ') : `${h.total} error${h.total > 1 ? 's' : ''}`;
+        };
+
+        // --- ORDER 1: Aggregate Patterns (environmental overview) ---
+        if (gPatterns.corners > 30) {
+            obs.push(`Corner Clustering: ${gPatterns.corners.toFixed(0)}% of all errors happen in the 4 corner areas of the image.`);
+            recs.push("Check Corner Clarity: Verify if lens distortion, dark corners (vignetting), or focus drop-off might be hiding objects near the edges.");
         }
+        if (Math.abs(gPatterns.left - gPatterns.right) > 15) {
+            const side = gPatterns.left > gPatterns.right ? 'left' : 'right';
+            const pct = Math.abs(gPatterns.left - gPatterns.right).toFixed(0);
+            obs.push(`Left/Right Imbalance: The ${side} side of the image has ${pct}% more errors than the opposite side. This suggests an environmental factor on that side.`);
+            recs.push(`Verify Lighting: Check if persistent shadows, glares, or obstructions exist mainly on the ${side} side of the capture area.`);
+        }
+        if (Math.abs(gPatterns.top - gPatterns.bottom) > 15) {
+            const zone = gPatterns.top > gPatterns.bottom ? 'upper' : 'lower';
+            const pct = Math.abs(gPatterns.top - gPatterns.bottom).toFixed(0);
+            obs.push(`Top/Bottom Imbalance: The ${zone} half of the image has ${pct}% more errors. This may indicate a camera height or angle issue.`);
+            recs.push(`Audit Camera Mounting: Check if camera perspective creates different object visibility or resolution in the ${zone} part of the frame.`);
+        }
+
+        // --- ORDER 2: Region Specifics (matches the 3x3 heatmap) ---
+        hotspots.forEach(h => {
+            const cls = Object.entries(h.classErrors).sort((a, b) => b[1] - a[1])[0];
+            const pos = zoneNames[h.label] || h.label;
+            const errDesc = describeErrors(h);
+            obs.push(`⚠ Critical Zone ${h.label} (${pos}): ${h.density}% of all failures — ${errDesc}. Most affected class: "${cls ? cls[0] : 'unknown'}".`);
+            recs.push(`Priority Audit (${h.label}): Manually review "${cls ? cls[0] : 'unknown'}" labels in the ${pos} area of your images. ${h.fn > h.fp ? 'Focus on missing annotations.' : 'Focus on over-sensitive detections.'}`);
+        });
+        warmspots.forEach(h => {
+            const cls = Object.entries(h.classErrors).sort((a, b) => b[1] - a[1])[0];
+            const pos = zoneNames[h.label] || h.label;
+            const errDesc = describeErrors(h);
+            obs.push(`Watch Zone ${h.label} (${pos}): ${h.density}% error density — ${errDesc}. Class: "${cls ? cls[0] : 'unknown'}".`);
+        });
+
+        // --- ORDER 3 (LAST): Complete Size Breakdown ---
+        const spatialSizeLabels = { tiny: 'Tiny', small: 'Small', medium: 'Medium', large: 'Large' };
+        const sizeIssues = [];
+        szGrps.forEach(sz => {
+            const szErr = spatialErrors.filter(d => getSizeGrp(d.bbox) === sz);
+            if (szErr.length > 0) {
+                const szFP = szErr.filter(d => d._isFP).length;
+                const szFN = szErr.length - szFP;
+                const snap = szSnaps[sz];
+                const dangerZones = snap ? snap.filter(t => t.density >= 30).sort((a, b) => b.density - a.density) : [];
+                const zoneInfo = dangerZones.length > 0 ? ` — danger zone${dangerZones.length > 1 ? 's' : ''}: ${dangerZones.map(z => `${z.label} (${zoneNames[z.label] || z.label}, ${z.density}%)`).join(', ')}` : '';
+                const errType = szFN > szFP * 2 ? 'mostly missed objects' : (szFP > szFN * 2 ? 'mostly false alarms' : 'mixed errors');
+                sizeIssues.push(`${spatialSizeLabels[sz]}: ${szErr.length} errors (${errType}: ${szFN} missed, ${szFP} false alarms)${zoneInfo}`);
+            }
+        });
+        if (sizeIssues.length > 0) {
+            obs.push(`Size Breakdown: ${sizeIssues.join(' · ')}.`);
+        }
+
+        // --- ORDER 4 (LAST): Per-Class Summary ---
+        const classErrorMap = {};
+        spatialErrors.forEach(d => {
+            const cls = d.class_name || d.class || 'Unknown';
+            if (!classErrorMap[cls]) classErrorMap[cls] = { fp: 0, fn: 0, total: 0 };
+            if (d._isFP) classErrorMap[cls].fp++;
+            else classErrorMap[cls].fn++;
+            classErrorMap[cls].total++;
+        });
+        const classIssues = Object.entries(classErrorMap)
+            .sort((a, b) => b[1].total - a[1].total)
+            .map(([cls, v]) => {
+                const errType = v.fn > v.fp * 2 ? 'mostly missed' : (v.fp > v.fn * 2 ? 'mostly false alarms' : 'mixed');
+                return `"${cls}": ${v.total} errors (${errType}: ${v.fn} missed, ${v.fp} false alarms)`;
+            });
+        if (classIssues.length > 0) {
+            obs.push(`Class Breakdown: ${classIssues.join(' · ')}.`);
+        }
+
+        // Final Story Synthesis
+        const spatialStory = {
+            headline: hotspots.length > 0 ? "Complex Spatial Blind Spots Identified" : (obs.length > 0 ? "Spatial Patterns Require Attention" : "Healthy Spatial Distribution"),
+            observations: obs.length > 0 ? obs.slice(0, 10) : ["Model performance is consistent across all frame regions."],
+            recommendations: recs.length > 0 ? recs.slice(0, 4) : ["Maintain current spatial diversity in future datasets."],
+            color: hotspots.length > 0 ? '#ff4d4f' : (warmspots.length > 0 || obs.length > 0 ? '#faad14' : '#52c41a')
+        };
+
+        const spatialData = globalSpatial;
+        const spatialNarrative = hotspots.map(h => ({ type: 'urgent', msg: `${h.label} region accounts for ${h.density}% of all errors.` }));
+
+
 
 
         // --- 4. PRODUCTION STRATEGY LOGIC ---
@@ -1210,53 +1295,74 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                     <Card size="small" title={
                         <Space>
                             <AimOutlined style={{ color: '#eb2f96' }} />
-                            <span>3.2 Spatial Bias Analysis</span>
+                            <span>3.2 Spatial Bias Analysis (Blind Spots)</span>
                         </Space>
                     }>
-                        <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
                             {/* Left: The Story */}
-                            <div style={{ flex: 1 }}>
-                                <Title level={4} style={{ marginTop: 0, color: kpis.spatialStory.color }}>
+                            <div style={{ flex: 1, minWidth: '350px' }}>
+                                <Title level={4} style={{ marginTop: 0, color: kpis.spatialStory.color, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px' }}>
                                     {kpis.spatialStory.headline}
                                 </Title>
-                                <Text style={{ fontSize: '14px', lineHeight: '1.6', color: '#555', display: 'block', marginBottom: '1rem' }}>
-                                    {kpis.spatialStory.narrative}
-                                </Text>
-                                <div style={{ background: '#fff0f6', border: '1px solid #ffadd2', padding: '12px', borderRadius: '4px' }}>
-                                    <Text strong style={{ color: '#c41d7f', display: 'block', marginBottom: '4px' }}>Recommended Check:</Text>
-                                    <Text type="secondary">{kpis.spatialStory.action}</Text>
+
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <Text strong style={{ color: '#555', display: 'block', marginBottom: '4px', fontSize: '13px' }}>OBSERVATIONS:</Text>
+                                    <ul style={{ paddingLeft: '18px', margin: 0 }}>
+                                        {kpis.spatialStory.observations.map((obs, i) => (
+                                            <li key={i} style={{ marginBottom: '4px' }}>
+                                                <Text style={{ color: '#555', fontSize: '14px' }}>{obs}</Text>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                <div style={{ background: kpis.spatialStory.color === '#52c41a' ? '#f6ffed' : (kpis.spatialStory.color === '#faad14' ? '#fffbe6' : '#fff1f0'), border: `1px solid ${kpis.spatialStory.color === '#52c41a' ? '#b7eb8f' : (kpis.spatialStory.color === '#faad14' ? '#ffe58f' : '#ffa39e')}`, padding: '12px', borderRadius: '4px' }}>
+                                    <Text strong style={{ color: kpis.spatialStory.color === '#52c41a' ? '#389e0d' : (kpis.spatialStory.color === '#faad14' ? '#d48806' : '#cf1322'), display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', fontSize: '13px' }}>
+                                        <BulbOutlined /> RECOMMENDATIONS:
+                                    </Text>
+                                    <ul style={{ paddingLeft: '18px', margin: 0 }}>
+                                        {kpis.spatialStory.recommendations.map((act, i) => (
+                                            <li key={i} style={{ marginBottom: '2px' }}>
+                                                <Text type="secondary" style={{ color: '#555', fontSize: '14px' }}>{act}</Text>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
                             </div>
 
                             {/* Right: 3x3 Grid Visualization */}
-                            <div style={{ width: '200px' }}>
+                            <div style={{ width: '180px', marginTop: '4px' }}>
                                 <div style={{
                                     display: 'grid',
                                     gridTemplateColumns: 'repeat(3, 1fr)',
-                                    gap: '2px',
-                                    aspectRatio: '1',
-                                    background: '#f0f0f0',
-                                    border: '1px solid #d9d9d9',
-                                    padding: '2px'
+                                    gap: '4px',
+                                    aspectRatio: '1.2',
+                                    background: '#f9f9f9',
+                                    border: '1px solid #eee',
+                                    padding: '6px',
+                                    borderRadius: '4px'
                                 }}>
                                     {kpis.spatialData.map((tile, i) => (
                                         <div key={i} style={{
-                                            background: tile.density > 25 ? '#ffccc7' : (tile.density > 15 ? '#fffb8f' : '#fff'),
+                                            background: tile.density > 25 ? '#ff4d4f' : (tile.density > 15 ? '#faad14' : '#f0f0f0'),
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
                                             flexDirection: 'column',
-                                            border: '1px solid #f0f0f0',
-                                            cursor: 'default'
+                                            border: '1px solid #fff',
+                                            borderRadius: '2px',
+                                            opacity: tile.density > 0 ? 0.8 : 0.3,
+                                            cursor: 'default',
+                                            transition: 'all 0.3s'
                                         }} title={`${tile.label}: ${tile.density}% errors`}>
-                                            <Text strong style={{ fontSize: '12px', color: tile.density > 25 ? '#cf1322' : '#595959' }}>
-                                                {tile.density}%
+                                            <Text strong style={{ fontSize: '12px', color: tile.density > 15 ? '#fff' : '#595959' }}>
+                                                {tile.density > 0 ? `${tile.density}%` : '0%'}
                                             </Text>
-                                            <Text type="secondary" style={{ fontSize: '9px' }}>{tile.label}</Text>
+                                            <Text style={{ fontSize: '9px', color: tile.density > 15 ? '#eee' : '#999' }}>{tile.label}</Text>
                                         </div>
                                     ))}
                                 </div>
-                                <Text type="secondary" style={{ fontSize: '10px', display: 'block', textAlign: 'center', marginTop: '4px' }}>Error Density Heatmap</Text>
+                                <Text type="secondary" style={{ fontSize: '10px', display: 'block', textAlign: 'center', marginTop: '6px', opacity: 0.6 }}>ERROR DENSITY HEATMAP</Text>
                             </div>
                         </div>
                     </Card>
