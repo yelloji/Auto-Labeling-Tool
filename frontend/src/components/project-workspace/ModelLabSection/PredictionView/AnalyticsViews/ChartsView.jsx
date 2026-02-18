@@ -568,7 +568,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             if (mode === 'production' && productionChosen) {
                 const c = productionChosen;
                 const ceilingT = modelCeiling.t !== null ? (modelCeiling.t * 100).toFixed(0) : 'N/A';
-                bullets.push(`MODEL CEILING 🛑 at ~${ceilingT}%: TP collapses beyond this point.`);
+                bullets.push(`MAXIMUM SAFE CONFIDENCE 🛑 at ~${ceilingT}%: TP collapses beyond this point.`);
                 bullets.push(`OPTIMAL: ${(c.t * 100).toFixed(0)}% confidence (Best F1 Score)`);
                 const f1 = (calcF1(c.tp, c.fp, c.fn) * 100).toFixed(1);
                 bullets.push(`Results: ${c.tp} correct, ${c.fp} false alarms, ${c.fn} missed (F1=${f1}%)`);
@@ -596,7 +596,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
             } else if (retrainTargets) {
                 const rt = retrainTargets;
                 if (modelCeiling.t !== null) {
-                    bullets.push(`MODEL CEILING 🛑 at ~${(modelCeiling.t * 100).toFixed(0)}% (Automation drop ${(modelCeiling.drop * 100).toFixed(0)}%).`);
+                    bullets.push(`MAXIMUM SAFE CONFIDENCE 🛑 at ~${(modelCeiling.t * 100).toFixed(0)}% (Automation drop ${(modelCeiling.drop * 100).toFixed(0)}%).`);
                 }
                 bullets.push(`TargetConfidence (pre-wall): ${(rt.confidence * 100).toFixed(0)}% (best usable region before collapse).`);
                 bullets.push(`At ${(rt.confidence * 100).toFixed(0)}%: TP=${rt.row.tp}, FP=${rt.row.fp}, FN=${rt.row.fn} → Automation=${(rt.row.automation * 100).toFixed(0)}%.`);
@@ -1494,7 +1494,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
 
                                             {kpis.engineState?.model_ceiling?.t !== null && kpis.engineState?.model_ceiling?.t !== undefined && (
                                                 <ReferenceLine x={kpis.engineState.model_ceiling.t} stroke="#722ed1" strokeWidth={1} strokeDasharray="4 4">
-                                                    <Label value="Model Ceiling" position="top" fill="#722ed1" fontSize={8} fontWeight="bold" offset={10} />
+                                                    <Label value="MAX SAFE CONFIDENCE" position="top" fill="#722ed1" fontSize={8} fontWeight="bold" offset={10} />
                                                 </ReferenceLine>
                                             )}
 
@@ -1527,7 +1527,7 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                         dataSource={stressStrategy === 'retrain' ? kpis.engineState?.briefing?.retrain : kpis.engineState?.briefing?.production}
                                         renderItem={item => {
                                             const isReject = item.includes('REJECTED');
-                                            const isCeiling = item.includes('MODEL CEILING');
+                                            const isCeiling = item.includes('MAXIMUM SAFE CONFIDENCE');
                                             const isDiag = item.includes('Diagnosis:');
 
                                             return (
@@ -1957,9 +1957,9 @@ const ChartsView = ({ experiment, verifications = [], projectLabels = [], traini
                                                                         insight.type === 'action' ? 'rgba(250, 173, 20, 0.05)' :
                                                                             'rgba(0, 242, 255, 0.05)',
                                                             borderLeft: `2px solid ${insight.type === 'urgent' || insight.type === 'warning' ? '#ff4d4f' :
-                                                                    insight.type === 'success' ? '#52c41a' :
-                                                                        insight.type === 'action' ? '#faad14' :
-                                                                            '#00f2ff'
+                                                                insight.type === 'success' ? '#52c41a' :
+                                                                    insight.type === 'action' ? '#faad14' :
+                                                                        '#00f2ff'
                                                                 }`,
                                                             marginBottom: '4px',
                                                             fontFamily: 'monospace'

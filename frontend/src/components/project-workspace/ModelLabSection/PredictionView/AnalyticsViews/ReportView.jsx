@@ -322,36 +322,68 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
             return row;
         });
 
-        // Identify Best F1 (Target)
-        let bestF1 = 0;
-        let bestT = experiment.confidence || 0.45; // Default fallback
+        // === INDUSTRIAL PERFORMANCE ENGINE (Exact port of Charts algorithm) ===
+        // Step 1: Build fine-grained performance rows (1% steps, same as Charts)
+        const totalGTCount = tpList.length + fnList.length;
+        const CONF_STEP_FINE = 0.01;
+        const MIN_AUTOMATION = 0.15;
+        const W_TP = 2, W_FP = 1, W_FN = 10; // Charts training weights
 
-        CONF_LIST.forEach(t => {
-            const simTP = tpList.filter(d => (d.confidence || 0) >= t).length;
-            const simFP = fpList.filter(d => (d.confidence || 0) >= t).length;
-            const simFN = fnList.length + (tpList.length - simTP);
+        const calcF1 = (tp, fp, fn) => {
+            const precision = (tp + fp) > 0 ? tp / (tp + fp) : 0;
+            const recall = (tp + fn) > 0 ? tp / (tp + fn) : 0;
+            return (precision + recall) > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+        };
 
-            const sP = (simTP + simFP) > 0 ? simTP / (simTP + simFP) : 0;
-            const sR = (simTP + simFN) > 0 ? simTP / (simTP + simFN) : 0;
-            const sF1 = (sP + sR) > 0 ? (2 * sP * sR) / (sP + sR) : 0;
+        const fineConfList = [];
+        for (let t = CONF_STEP_FINE; t <= 0.951; t += CONF_STEP_FINE) fineConfList.push(parseFloat(t.toFixed(2)));
 
-            if (sF1 > bestF1) {
-                bestF1 = sF1;
-                bestT = t;
-            }
+        const pRowsFine = fineConfList.map(t => {
+            const tpCount = tpList.filter(d => (d.confidence || 0) >= t).length;
+            const fpCount = fpList.filter(d => (d.confidence || 0) >= t).length;
+            const fnCount = fnList.length + (tpList.length - tpCount);
+            const automation = totalGTCount > 0 ? (tpCount / totalGTCount) : 0;
+            const score = (W_TP * tpCount) - (W_FP * fpCount) - (W_FN * fnCount);
+            const tpIoUs = tpList.filter(d => (d.confidence || 0) >= t).map(d => d.matched_iou || 0).filter(v => v > 0);
+            return { t, tp: tpCount, fp: fpCount, fn: fnCount, automation, score, tpIoUs };
         });
 
-        // Identify Model Ceiling (Structural drop)
+        // Step 2: Filter valid rows (automation >= 15%)
+        const validRows = pRowsFine.filter(r => r.automation >= MIN_AUTOMATION);
+
+        // Step 3: Production target — F1-based selection from validRows (same as Charts)
+        let bestF1 = 0;
+        let bestT = experiment.confidence || 0.45;
+        if (validRows.length > 0) {
+            const productionChosen = validRows.reduce((prev, curr) => {
+                const prevF1 = calcF1(prev.tp, prev.fp, prev.fn);
+                const currF1 = calcF1(curr.tp, curr.fp, curr.fn);
+                return currF1 >= prevF1 ? curr : prev;
+            });
+            bestF1 = calcF1(productionChosen.tp, productionChosen.fp, productionChosen.fn);
+            bestT = productionChosen.t;
+        }
+
+        // Step 4: Model Ceiling — automation-based drop detection (same as Charts)
         let ceilingT = 0.9;
-        for (let i = 0; i < sizeStressData.length - 1; i++) {
-            const curr = sizeStressData[i];
-            const next = sizeStressData[i + 1];
-            const currTP = ['tiny', 'small', 'medium', 'large'].reduce((sum, sz) => sum + (tpList.filter(d => getSizeGrp(d.bbox) === sz && (d.confidence || 0) >= curr.t).length), 0);
-            const nextTP = ['tiny', 'small', 'medium', 'large'].reduce((sum, sz) => sum + (tpList.filter(d => getSizeGrp(d.bbox) === sz && (d.confidence || 0) >= next.t).length), 0);
-            if ((currTP - nextTP) > (tpList.length * 0.15)) {
-                ceilingT = next.t;
-                break;
+        if (validRows.length >= 2) {
+            const aMax = Math.max(...validRows.map(r => r.automation));
+            const dropTrigger = Math.max(0.10, 0.25 * aMax);
+            let firstMaterialDrop = null;
+            let maxDrop = { t: null, val: -1 };
+
+            for (let i = 0; i < validRows.length - 1; i++) {
+                const drop = validRows[i].automation - validRows[i + 1].automation;
+                if (drop > maxDrop.val) {
+                    maxDrop = { t: validRows[i + 1].t, val: drop };
+                }
+                if (!firstMaterialDrop && drop >= dropTrigger) {
+                    firstMaterialDrop = { t: validRows[i + 1].t, val: drop };
+                }
             }
+
+            if (firstMaterialDrop) ceilingT = firstMaterialDrop.t;
+            else if (maxDrop.t !== null) ceilingT = maxDrop.t;
         }
 
         const prodT = bestT; // Use the optimized target as the production basis
@@ -616,17 +648,96 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
 
 
         // --- 4. PRODUCTION STRATEGY LOGIC ---
-        // 3. Generate Strategy Log
-        const strategyLog = [];
-        strategyLog.push(`[AUTO] Scan complete. ${tpList.length} TPs analysis.`);
-        strategyLog.push(`[CEILING] Detected structural ceiling at ${(ceilingT * 100).toFixed(0)}%.`);
-        if (ceilingT < 0.5) strategyLog.push(`[WARN] Ceiling is dangerously low (<50%). Model is unstable.`);
+        // Compute results at production threshold
+        const prodTP = tpList.filter(d => (d.confidence || 0) >= prodT).length;
+        const prodFP = fpList.filter(d => (d.confidence || 0) >= prodT).length;
+        const prodFN = fnList.length + (tpList.length - prodTP);
+        const prodF1Val = (prodTP + prodFP) > 0 && (prodTP + prodFN) > 0
+            ? (2 * (prodTP / (prodTP + prodFP)) * (prodTP / (prodTP + prodFN))) / ((prodTP / (prodTP + prodFP)) + (prodTP / (prodTP + prodFN)))
+            : 0;
+        const automationPct = totalGTCount > 0 ? ((prodTP / totalGTCount) * 100).toFixed(0) : 0;
 
-        strategyLog.push(`[OPTIMAL] Peak F1 (${(bestF1 * 100).toFixed(1)}%) found at ${(bestT * 100).toFixed(0)}% confidence.`);
+        // Neighbor delta analysis (why not lower / why not higher)
+        const CONF_STEP_SIZE = 0.01;
+        const tLow = parseFloat((prodT - CONF_STEP_SIZE).toFixed(2));
+        const tHigh = parseFloat((prodT + CONF_STEP_SIZE).toFixed(2));
 
-        const isReady = bestF1 > 0.6 && ceilingT > 0.6; // Simple readiness heuristic
+        const getCountsAtT = (t) => {
+            const tp = tpList.filter(d => (d.confidence || 0) >= t).length;
+            const fp = fpList.filter(d => (d.confidence || 0) >= t).length;
+            const fn = fnList.length + (tpList.length - tp);
+            return { tp, fp, fn };
+        };
+
+        const lowCounts = getCountsAtT(tLow);
+        const highCounts = getCountsAtT(tHigh);
+
+        let whyNotLower = '';
+        if (lowCounts) {
+            const dtpDown = lowCounts.tp - prodTP;
+            const dfpDown = lowCounts.fp - prodFP;
+            whyNotLower = dfpDown > dtpDown
+                ? `FP rises faster than TP (more false alarms than value)`
+                : `only small TP gain with higher FP cost`;
+        }
+
+        let whyNotHigher = '';
+        if (highCounts) {
+            whyNotHigher = `FN increases and Automation drops (more missed objects)`;
+        }
+
+        // Training mode: Pre-wall target (same as Charts — uses validRows pre-filtered by ceiling)
+        const preWallRows = validRows.filter(r => r.t <= ceilingT);
+        const trainTarget = preWallRows.length > 0
+            ? preWallRows.reduce((prev, curr) => curr.score >= prev.score ? curr : prev)
+            : null;
+
+        // TargetIoU (P75 of matched IoUs at training target)
+        const trainTPItems = trainTarget
+            ? tpList.filter(d => (d.confidence || 0) >= trainTarget.t)
+            : [];
+        const matchedIoUs = trainTPItems.map(d => d.matched_iou || 0).filter(v => v > 0).sort((a, b) => a - b);
+        const targetIoU = matchedIoUs.length > 0
+            ? (() => { const pos = (matchedIoUs.length - 1) * 0.75; const base = Math.floor(pos); return matchedIoUs[base + 1] !== undefined ? matchedIoUs[base] + (pos - base) * (matchedIoUs[base + 1] - matchedIoUs[base]) : matchedIoUs[base]; })()
+            : 0;
+
+        // Training diagnosis
+        const trainDiagnosis = trainTarget && (trainTarget.fn / totalGTCount) > 0.50
+            ? 'Recall/Coverage limit (many missed objects). Add more diverse training data.'
+            : 'Improve confidence strength to push ceiling right. Model needs stronger feature extraction.';
+
+        // Generate structured briefing logs
+        const productionLog = [];
+        productionLog.push(`[CEILING] MAXIMUM SAFE CONFIDENCE at ~${(ceilingT * 100).toFixed(0)}%: TP collapses beyond this point.`);
+        productionLog.push(`[OPTIMAL] ${(prodT * 100).toFixed(0)}% confidence (Best F1 Score).`);
+        productionLog.push(`[RESULTS] ${prodTP} correct, ${prodFP} false alarms, ${prodFN} missed (F1=${(prodF1Val * 100).toFixed(1)}%).`);
+        if (whyNotLower) productionLog.push(`[WHY NOT ${(tLow * 100).toFixed(0)}%] ${whyNotLower}.`);
+        if (whyNotHigher) productionLog.push(`[WHY NOT ${(tHigh * 100).toFixed(0)}%] ${whyNotHigher}.`);
+
+        const trainingLog = [];
+        trainingLog.push(`[CEILING] MAXIMUM SAFE CONFIDENCE at ~${(ceilingT * 100).toFixed(0)}% (structural drop zone).`);
+        if (trainTarget) {
+            trainingLog.push(`[TARGET] Pre-wall confidence: ${(trainTarget.t * 100).toFixed(0)}% (best usable region before collapse).`);
+            trainingLog.push(`[AT ${(trainTarget.t * 100).toFixed(0)}%] TP=${trainTarget.tp}, FP=${trainTarget.fp}, FN=${trainTarget.fn} → Automation=${(trainTarget.automation * 100).toFixed(0)}%.`);
+        }
+        trainingLog.push(`[IoU] Target IoU: ${targetIoU > 0 ? targetIoU.toFixed(2) : 'N/A'} (box quality goal for next training).`);
+        trainingLog.push(`[DIAGNOSIS] ${trainDiagnosis}`);
+
+        // Combined readiness log (legacy compatibility)
+        const strategyLog = [...productionLog];
+
+        const isReady = bestF1 > 0.6 && ceilingT > 0.6;
         const status = isReady ? "READY" : "NOT READY";
-        const action = isReady ? "Recommended for Pilot" : "Retraining Required";
+        const action = isReady ? "Recommended for Pilot" : "Not Ready for Production. Retraining Required.";
+
+        // Not-ready reasons (data-backed)
+        const notReadyReasons = [];
+        if (!isReady) {
+            if (bestF1 <= 0.6) notReadyReasons.push(`F1 score (${(bestF1 * 100).toFixed(1)}%) is below 60% minimum threshold`);
+            if (ceilingT <= 0.6) notReadyReasons.push(`MAXIMUM SAFE CONFIDENCE (${(ceilingT * 100).toFixed(0)}%) is below 60% stability threshold`);
+            if (prodFP > prodTP) notReadyReasons.push(`False alarms (${prodFP}) exceed correct detections (${prodTP})`);
+            if (prodFN > prodTP) notReadyReasons.push(`Missed objects (${prodFN}) exceed correct detections (${prodTP})`);
+        }
 
 
         // --- 4. EXECUTIVE SUMMARY ---
@@ -662,7 +773,11 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                 target: (bestT * 100).toFixed(0),
                 status,
                 action,
-                log: strategyLog
+                log: strategyLog,
+                productionLog,
+                trainingLog,
+                notReadyReasons,
+                automationPct
             },
             executiveSummary
         };
@@ -1381,7 +1496,7 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
 
                     <Row gutter={16}>
                         {/* 4.1 RELIABILITY LIMIT */}
-                        <Col span={8}>
+                        <Col span={6}>
                             <Card size="small" style={{ background: '#f9f9f9', textAlign: 'center', height: '100%' }}>
                                 <Text strong style={{ color: '#722ed1', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>Reliability Limit</Text>
                                 <Title level={2} style={{ margin: '8px 0', color: '#722ed1' }}>
@@ -1391,7 +1506,7 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                             </Card>
                         </Col>
                         {/* 4.2 OPTIMAL BALANCE */}
-                        <Col span={8}>
+                        <Col span={6}>
                             <Card size="small" style={{ background: '#f0f9ff', textAlign: 'center', height: '100%', borderColor: '#69c0ff' }}>
                                 <Text strong style={{ color: '#1890ff', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>Optimal Balance Point</Text>
                                 <Title level={2} style={{ margin: '8px 0', color: '#1890ff' }}>
@@ -1400,10 +1515,20 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                                 <Text type="secondary" style={{ fontSize: '11px' }}>Recommended Confidence Setting</Text>
                             </Card>
                         </Col>
-                        {/* 4.3 PILOT READINESS */}
-                        <Col span={8}>
+                        {/* 4.3 AUTOMATION */}
+                        <Col span={6}>
+                            <Card size="small" style={{ background: '#f6ffed', textAlign: 'center', height: '100%', borderColor: '#b7eb8f' }}>
+                                <Text strong style={{ color: '#389e0d', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>Automation Rate</Text>
+                                <Title level={2} style={{ margin: '8px 0', color: '#389e0d' }}>
+                                    {kpis.productionStrategy.automationPct}%
+                                </Title>
+                                <Text type="secondary" style={{ fontSize: '11px' }}>% of real objects found by model</Text>
+                            </Card>
+                        </Col>
+                        {/* 4.4 PILOT READINESS */}
+                        <Col span={6}>
                             <Card size="small" style={{ background: kpis.productionStrategy.status === 'READY' ? '#f6ffed' : '#fff1f0', textAlign: 'center', height: '100%', borderColor: kpis.productionStrategy.status === 'READY' ? '#b7eb8f' : '#ffa39e' }}>
-                                <Text strong style={{ color: kpis.productionStrategy.status === 'READY' ? '#52c41a' : '#ff4d4f', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>Pilot Readiness</Text>
+                                <Text strong style={{ color: kpis.productionStrategy.status === 'READY' ? '#52c41a' : '#ff4d4f', display: 'block', fontSize: '11px', textTransform: 'uppercase' }}>DEPLOYMENT STATUS</Text>
                                 <Title level={2} style={{ margin: '8px 0', color: kpis.productionStrategy.status === 'READY' ? '#52c41a' : '#ff4d4f' }}>
                                     {kpis.productionStrategy.status}
                                 </Title>
@@ -1412,14 +1537,43 @@ const ReportView = ({ experiment, training, verifications = [] }) => {
                         </Col>
                     </Row>
 
-                    <div style={{ marginTop: '1rem', padding: '12px', background: '#f0f2f5', borderRadius: '4px', border: '1px solid #d9d9d9', fontFamily: 'monospace' }}>
-                        <Text strong style={{ color: '#595959', display: 'block', marginBottom: '4px' }}>READINESS AUDIT LOG:</Text>
-                        <ul style={{ paddingLeft: '20px', margin: 0 }}>
-                            {kpis.productionStrategy.log.map((line, idx) => (
-                                <li key={idx} style={{ color: '#595959', fontSize: '12px' }}>{line}</li>
-                            ))}
-                        </ul>
-                    </div>
+                    {/* NOT READY REASONS */}
+                    {kpis.productionStrategy.notReadyReasons && kpis.productionStrategy.notReadyReasons.length > 0 && (
+                        <div style={{ marginTop: '1rem', padding: '12px', background: '#fff2e8', borderRadius: '4px', border: '1px solid #ffbb96' }}>
+                            <Text strong style={{ color: '#d4380d', display: 'block', marginBottom: '6px', fontSize: '12px', textTransform: 'uppercase' }}>⚠ Why Not Ready:</Text>
+                            <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                                {kpis.productionStrategy.notReadyReasons.map((reason, idx) => (
+                                    <li key={idx} style={{ color: '#ad4e00', fontSize: '12px', marginBottom: '2px' }}>{reason}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {/* DUAL BRIEFING: PRODUCTION + TRAINING */}
+                    <Row gutter={16} style={{ marginTop: '1rem' }}>
+                        {/* PRODUCTION ASSESSMENT */}
+                        <Col span={12}>
+                            <div style={{ padding: '12px', background: '#f0f2f5', borderRadius: '4px', border: '1px solid #d9d9d9', fontFamily: 'monospace', height: '100%' }}>
+                                <Text strong style={{ color: '#1890ff', display: 'block', marginBottom: '6px', fontSize: '12px', textTransform: 'uppercase' }}>🔍 Production Assessment</Text>
+                                <ul style={{ paddingLeft: '16px', margin: 0 }}>
+                                    {(kpis.productionStrategy.productionLog || []).map((line, idx) => (
+                                        <li key={idx} style={{ color: '#595959', fontSize: '11px', marginBottom: '3px' }}>{line}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </Col>
+                        {/* TRAINING ASSESSMENT */}
+                        <Col span={12}>
+                            <div style={{ padding: '12px', background: '#f9f0ff', borderRadius: '4px', border: '1px solid #d3adf7', fontFamily: 'monospace', height: '100%' }}>
+                                <Text strong style={{ color: '#722ed1', display: 'block', marginBottom: '6px', fontSize: '12px', textTransform: 'uppercase' }}>↑ Training Assessment</Text>
+                                <ul style={{ paddingLeft: '16px', margin: 0 }}>
+                                    {(kpis.productionStrategy.trainingLog || []).map((line, idx) => (
+                                        <li key={idx} style={{ color: '#595959', fontSize: '11px', marginBottom: '3px' }}>{line}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </Col>
+                    </Row>
                 </div>
             )}
 
