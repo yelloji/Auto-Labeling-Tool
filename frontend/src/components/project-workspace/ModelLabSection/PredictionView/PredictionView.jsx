@@ -50,7 +50,6 @@ import {
 
 // Modular Components
 import AnalyticsModal from './AnalyticsModal';
-import ComparisonModal from './ComparisonModal';
 import ImageViewerModal from './ImageViewerModal';
 
 import { projectsAPI, handleAPIError } from '../../../../services/api';
@@ -83,7 +82,6 @@ const PredictionView = ({ training }) => {
     const [verifications, setVerifications] = useState([]); // Project-level manual reviews
 
     // Advanced Features Modals
-    const [compareVisible, setCompareVisible] = useState(false);
     const [analyticsVisible, setAnalyticsVisible] = useState(false);
     const [projectLabels, setProjectLabels] = useState([]); // All used labels in the project
 
@@ -1467,7 +1465,6 @@ const PredictionView = ({ training }) => {
                         <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'space-between' }}>
                             <Space>
                                 <Button icon={<LineChartOutlined />} onClick={() => setAnalyticsVisible(true)} disabled={!selectedExp || selectedExp.status !== 'completed'}>📈 Analytics</Button>
-                                <Button icon={<ExperimentOutlined />} onClick={() => setCompareVisible(true)} disabled={experiments.length < 2}>📊 Compare</Button>
                             </Space>
                             <Tooltip title={!config.name?.trim() || config.name.trim().length < 3 ? "Name must be at least 3 characters" : ""}>
                                 <Button
@@ -1778,12 +1775,6 @@ const PredictionView = ({ training }) => {
                 verifications={verifications}
                 projectLabels={projectLabels}
                 trainingClasses={getTrainingClasses()}
-            />
-
-            <ComparisonModal
-                visible={compareVisible}
-                onCancel={() => setCompareVisible(false)}
-                experiments={experiments}
             />
         </div >
     );
