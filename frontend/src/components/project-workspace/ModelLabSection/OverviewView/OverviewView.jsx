@@ -7,6 +7,7 @@ import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
 import ModelManagerView from '../ModelManagerView/ModelManagerView';
 import ValidationView from '../ValidationView/ValidationView';
 import PredictionView from '../PredictionView/PredictionView';
+import ComparisonEngineView from '../ComparisonEngine/ComparisonEngineView';
 import './OverviewView.css';
 
 const { Title, Text } = Typography;
@@ -489,6 +490,11 @@ const OverviewView = ({ training }) => {
                     key: 'prediction',
                     label: 'Prediction',
                     children: <PredictionView training={training} />
+                },
+                {
+                    key: 'comparison',
+                    label: 'Comparison Engine',
+                    children: <ComparisonEngineView currentTraining={training} />
                 }
             ]} />
         </div>

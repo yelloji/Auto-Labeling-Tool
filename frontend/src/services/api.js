@@ -657,6 +657,14 @@ export const projectsAPI = {
     }
     return { blob: response.data, filename };
   },
+
+  // Compare two experiments (Global Comparison Engine)
+  compareExperiments: async (projectId, baselineId, challengerId) => {
+    const response = await api.get(`/api/v1/experiments/compare`, {
+      params: { project_id: projectId, baseline_id: baselineId, challenger_id: challengerId }
+    });
+    return response.data;
+  },
 };
 
 // ==================== IMAGE TRANSFORMATIONS API ====================

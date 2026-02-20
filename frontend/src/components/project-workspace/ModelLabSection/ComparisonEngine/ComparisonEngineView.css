@@ -1,0 +1,61 @@
+.comparison-engine-container {
+    background: transparent;
+    border-radius: 8px;
+}
+
+.delta-dashboard {
+    padding: 24px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.delta-card {
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    overflow: hidden;
+    position: relative;
+}
+
+.delta-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.success-card {
+    background: linear-gradient(135deg, #f6ffed 0%, #e6f7ff 100%);
+    border: 1px solid #b7eb8f;
+}
+
+.danger-card {
+    background: linear-gradient(135deg, #fff1f0 0%, #fff0f6 100%);
+    border: 1px solid #ffa39e;
+}
+
+.delta-icon {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    font-size: 80px;
+    opacity: 0.1;
+    pointer-events: none;
+}
+
+.delta-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.delta-value {
+    font-size: 36px;
+    font-weight: bold;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+
+.delta-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #595959;
+}

@@ -449,6 +449,25 @@ async def delete_manual_verification(verification_id: str, db: Session = Depends
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+from utils.comparison_engine import calculate_model_delta
+
+@router.get("/experiments/compare")
+async def compare_experiments(
+    project_id: int, 
+    baseline_id: str, 
+    challenger_id: str, 
+    db: Session = Depends(get_db)
+):
+    """Deep delta analysis comparing human verifications from baseline against raw predictions of challenger."""
+    try:
+        result = calculate_model_delta(db, project_id, baseline_id, challenger_id)
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        return result
+    except HTTPException: raise
+    except Exception as e:
+        logger.error("api.compare", f"Failed to compare experiments: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Training session upsert/get (identity fields)
 class SessionUpsert(BaseModel):
