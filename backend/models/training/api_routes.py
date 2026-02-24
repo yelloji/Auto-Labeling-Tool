@@ -449,22 +449,42 @@ async def delete_manual_verification(verification_id: str, db: Session = Depends
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-from utils.comparison_engine import calculate_model_delta, calculate_three_way_delta
+from utils.comparison_engine import calculate_model_delta, calculate_three_way_delta, calculate_split_comparison
 
 @router.get("/experiments/compare")
 async def compare_experiments(
-    project_id: int, 
-    baseline_id: str, 
+    project_id: int,
+    baseline_id: str,
     challenger_id: str,
     challenger_c_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Deep delta analysis comparing human verifications from baseline against raw predictions of challenger(s)."""
+    """
+    Compare two or three prediction experiments.
+
+    Auto-detects mode:
+    - SPLIT: both experiments used a dataset split (real GT) → returns side-by-side metrics.
+    - UPLOAD: experiments used uploaded images → uses human verifications as pseudo-GT.
+    """
     try:
-        if challenger_c_id:
+        baseline_exp   = db.query(ModelExperiment).filter(ModelExperiment.id == baseline_id).first()
+        challenger_exp = db.query(ModelExperiment).filter(ModelExperiment.id == challenger_id).first()
+
+        if not baseline_exp or not challenger_exp:
+            raise HTTPException(status_code=404, detail="One or both experiments not found.")
+
+        both_are_split = (
+            baseline_exp.dataset_source not in (None, 'upload') and
+            challenger_exp.dataset_source not in (None, 'upload')
+        )
+
+        if both_are_split:
+            result = calculate_split_comparison(db, baseline_id, challenger_id, challenger_c_id)
+        elif challenger_c_id:
             result = calculate_three_way_delta(db, project_id, baseline_id, challenger_id, challenger_c_id)
         else:
             result = calculate_model_delta(db, project_id, baseline_id, challenger_id)
+
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
         return result

@@ -1,16 +1,108 @@
 """
 Global Comparison Engine Utility
-Calculates the object-level delta between a Baseline model and a Challenger model.
-Supports 2-way (A vs B) and optional 3-way (A vs B vs C) comparisons.
+
+Supports two comparison modes:
+  - SPLIT MODE:  Both experiments ran on a dataset split with real ground truth labels.
+                 GT is loaded automatically — no human verifications needed.
+                 Returns side-by-side quality metrics (Precision, Recall, F1, IoU, TP/FP/FN).
+  - UPLOAD MODE: No ground truth. Compares human verifications (PASS/FAIL/manual marks)
+                 from the baseline against raw predictions of the challenger.
 """
 import json
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
 from database.models import HumanVerification, ModelExperiment
 from utils.ground_truth_loader import calculate_iou
+from utils.analytics_engine import calculate_experiment_quality
 from logging_system.professional_logger import get_professional_logger
 
 logger = get_professional_logger()
+
+
+def _get_project_root() -> Path:
+    """Resolve the project root (parent of /backend) — same logic as api_routes.py."""
+    current = Path(__file__).resolve()
+    backend_dir = next(p for p in current.parents if p.name == "backend")
+    return backend_dir.parent
+
+
+
+def calculate_split_comparison(
+    db: Session,
+    baseline_exp_id: str,
+    challenger_b_id: str,
+    challenger_c_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Split-mode comparison: uses real GT labels from the dataset.
+    Runs calculate_experiment_quality on each experiment and returns side-by-side metrics.
+    No human verifications required.
+    """
+    try:
+        project_root = _get_project_root()
+
+        baseline_exp = db.query(ModelExperiment).filter(ModelExperiment.id == baseline_exp_id).first()
+        challenger_b  = db.query(ModelExperiment).filter(ModelExperiment.id == challenger_b_id).first()
+
+        if not baseline_exp or not challenger_b:
+            return {"error": "One or both experiments not found."}
+
+        stats_a = calculate_experiment_quality(baseline_exp, project_root)
+        stats_b = calculate_experiment_quality(challenger_b,  project_root)
+
+        result = {
+            "mode": "split",
+            "baseline": _format_split_stats(baseline_exp.name, baseline_exp_id, stats_a, baseline_exp),
+            "challenger_b": _format_split_stats(challenger_b.name, challenger_b_id, stats_b, challenger_b),
+        }
+
+        if challenger_c_id:
+            challenger_c = db.query(ModelExperiment).filter(ModelExperiment.id == challenger_c_id).first()
+            if challenger_c:
+                stats_c = calculate_experiment_quality(challenger_c, project_root)
+                result["challenger_c"] = _format_split_stats(challenger_c.name, challenger_c_id, stats_c, challenger_c)
+
+
+        return result
+
+    except Exception as e:
+        logger.error("engine.split_comparison", f"Failed to compute split comparison: {str(e)}")
+        return {"error": str(e)}
+
+
+def _format_split_stats(name: str, exp_id: str, stats: Dict, exp=None) -> Dict:
+    """Normalise quality stats into a consistent shape for the frontend."""
+    base = {
+        "name": name,
+        "id": exp_id,
+        "dataset_source": getattr(exp, 'dataset_source', None) if exp else None,
+        "dataset_path": getattr(exp, 'dataset_path', None) if exp else None,
+    }
+    if not stats.get("has_ground_truth"):
+        return {
+            **base,
+            "has_ground_truth": False,
+            "gt_error": stats.get("error", "dataset_path missing or no annotations found"),
+            "precision": None, "recall": None, "f1": None, "avg_iou": None,
+            "true_positives": None, "false_positives": None, "false_negatives": None,
+            "total_gt": None, "total_preds": None,
+        }
+    return {
+        **base,
+        "has_ground_truth": True,
+        "precision":        stats.get("precision"),
+        "recall":           stats.get("recall"),
+        "f1":               stats.get("f1"),
+        "avg_iou":          round((stats.get("avg_iou") or 0) * 100, 1),
+        "true_positives":   stats.get("total_gt", 0) - stats.get("missed_objects", 0),
+        "false_positives":  stats.get("false_positives", 0),
+        "false_negatives":  stats.get("missed_objects", 0),
+        "total_gt":         stats.get("total_gt"),
+        "total_preds":      stats.get("total_preds"),
+    }
+
+
 
 def calculate_three_way_delta(
     db: Session,
