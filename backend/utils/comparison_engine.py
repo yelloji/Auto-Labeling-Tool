@@ -1,15 +1,50 @@
 """
 Global Comparison Engine Utility
 Calculates the object-level delta between a Baseline model and a Challenger model.
+Supports 2-way (A vs B) and optional 3-way (A vs B vs C) comparisons.
 """
 import json
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
 from database.models import HumanVerification, ModelExperiment
 from utils.ground_truth_loader import calculate_iou
 from logging_system.professional_logger import get_professional_logger
 
 logger = get_professional_logger()
+
+def calculate_three_way_delta(
+    db: Session,
+    project_id: int,
+    baseline_exp_id: str,
+    challenger_b_id: str,
+    challenger_c_id: str
+) -> Dict[str, Any]:
+    """
+    Runs two independent A vs B and A vs C comparisons and merges the results.
+    Returns both result sets so the frontend can display them side-by-side.
+    """
+    result_b = calculate_model_delta(db, project_id, baseline_exp_id, challenger_b_id)
+    result_c = calculate_model_delta(db, project_id, baseline_exp_id, challenger_c_id)
+
+    if "error" in result_b:
+        return result_b
+    if "error" in result_c:
+        return result_c
+
+    return {
+        "mode": "three_way",
+        "baseline_name": result_b.get("baseline_name"),
+        "challenger_b": {
+            "name": result_b.get("challenger_name"),
+            "counts": result_b.get("counts"),
+            "deltas": result_b.get("deltas"),
+        },
+        "challenger_c": {
+            "name": result_c.get("challenger_name"),
+            "counts": result_c.get("counts"),
+            "deltas": result_c.get("deltas"),
+        },
+    }
 
 def calculate_model_delta(db: Session, project_id: int, baseline_exp_id: str, challenger_exp_id: str) -> Dict[str, Any]:
     """
