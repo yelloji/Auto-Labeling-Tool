@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Typography, Select, Button, Spin, Empty, Tag, Space, Row, Col, Divider, Tooltip, Switch } from 'antd';
-import { SwapOutlined, CheckCircleOutlined, CloseCircleOutlined, InfoCircleOutlined, PlusOutlined, MinusOutlined } from '@ant-design/icons';
+import { SwapOutlined, CheckCircleOutlined, CloseCircleOutlined, InfoCircleOutlined, PlusOutlined, MinusOutlined, WarningOutlined, LinkOutlined } from '@ant-design/icons';
 import { trainingAPI, projectsAPI } from '../../../../services/api';
 import DeltaGalleryModal from './DeltaGalleryModal';
 import './ComparisonEngineView.css';
@@ -147,6 +147,10 @@ const ComparisonEngineView = ({ currentTraining }) => {
     const [loading, setLoading] = useState(false);
     const [comparisonData, setComparisonData] = useState(null);
 
+    // Dataset Overlap
+    const [overlapInfo, setOverlapInfo] = useState(null); // { common, totalA, totalB, totalC }
+    const [overlapLoading, setOverlapLoading] = useState(false);
+
     // Gallery Modal
     const [galleryVisible, setGalleryVisible] = useState(false);
     const [galleryConfig, setGalleryConfig] = useState({ type: '', items: [], challengerName: '', challengerId: null });
@@ -181,6 +185,39 @@ const ComparisonEngineView = ({ currentTraining }) => {
     useEffect(() => { fetchExps(baselineTrainingId, setBaselineExperiments); }, [baselineTrainingId]);
     useEffect(() => { fetchExps(challengerTrainingId, setChallengerExperiments); }, [challengerTrainingId]);
     useEffect(() => { fetchExps(challengerCTrainingId, setChallengerCExperiments); }, [challengerCTrainingId]);
+
+    // Calculate dataset overlap whenever selection changes
+    useEffect(() => {
+        const computeOverlap = async () => {
+            if (!baselineId || !challengerId) { setOverlapInfo(null); return; }
+            setOverlapLoading(true);
+            try {
+                const [imgsA, imgsB] = await Promise.all([
+                    projectsAPI.getExperimentImages(baselineId),
+                    projectsAPI.getExperimentImages(challengerId),
+                ]);
+                const setA = new Set(imgsA.map(f => f.split('/').pop()));
+                const setB = new Set(imgsB.map(f => f.split('/').pop()));
+                const common = [...setA].filter(f => setB.has(f)).length;
+
+                let commonC = null, totalC = null;
+                if (modelCEnabled && challengerCId) {
+                    const imgsC = await projectsAPI.getExperimentImages(challengerCId);
+                    const setC = new Set(imgsC.map(f => f.split('/').pop()));
+                    commonC = [...setA].filter(f => setC.has(f)).length;
+                    totalC = imgsC.length;
+                }
+
+                setOverlapInfo({ common, totalA: imgsA.length, totalB: imgsB.length, commonC, totalC });
+            } catch (e) {
+                console.error('Failed to compute overlap', e);
+                setOverlapInfo(null);
+            } finally {
+                setOverlapLoading(false);
+            }
+        };
+        computeOverlap();
+    }, [baselineId, challengerId, challengerCId, modelCEnabled]);
 
     // Disable Model C → clear its state
     const handleToggleModelC = (enabled) => {
@@ -288,6 +325,44 @@ const ComparisonEngineView = ({ currentTraining }) => {
                         </>
                     )}
                 </Row>
+
+                {/* Dataset Overlap Strip */}
+                {(baselineId && challengerId) && (
+                    <div style={{ marginTop: 16 }}>
+                        {overlapLoading ? (
+                            <Text type="secondary" style={{ fontSize: 12 }}>Checking image overlap...</Text>
+                        ) : overlapInfo !== null ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+                                {/* A vs B overlap */}
+                                <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                                    padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+                                    background: overlapInfo.common === 0 ? '#fff1f0' : '#f6ffed',
+                                    border: `1px solid ${overlapInfo.common === 0 ? '#ffa39e' : '#b7eb8f'}`,
+                                    color: overlapInfo.common === 0 ? '#cf1322' : '#389e0d',
+                                }}>
+                                    {overlapInfo.common === 0
+                                        ? <><WarningOutlined /> A vs B: 0 common images — comparison will be empty!</>
+                                        : <><LinkOutlined /> A vs B: <strong>{overlapInfo.common}</strong> common images ({overlapInfo.totalA} / {overlapInfo.totalB})</>}
+                                </span>
+                                {/* A vs C overlap (when enabled) */}
+                                {modelCEnabled && challengerCId && overlapInfo.commonC !== null && (
+                                    <span style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                                        padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+                                        background: overlapInfo.commonC === 0 ? '#fff1f0' : '#f6ffed',
+                                        border: `1px solid ${overlapInfo.commonC === 0 ? '#ffa39e' : '#b7eb8f'}`,
+                                        color: overlapInfo.commonC === 0 ? '#cf1322' : '#389e0d',
+                                    }}>
+                                        {overlapInfo.commonC === 0
+                                            ? <><WarningOutlined /> A vs C: 0 common images — comparison will be empty!</>
+                                            : <><LinkOutlined /> A vs C: <strong>{overlapInfo.commonC}</strong> common images ({overlapInfo.totalA} / {overlapInfo.totalC})</>}
+                                    </span>
+                                )}
+                            </div>
+                        ) : null}
+                    </div>
+                )}
 
                 {/* Toggle Model C */}
                 <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
