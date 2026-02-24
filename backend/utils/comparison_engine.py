@@ -51,20 +51,29 @@ def calculate_split_comparison(
         stats_a = calculate_experiment_quality(baseline_exp, project_root)
         stats_b = calculate_experiment_quality(challenger_b,  project_root)
 
+        stats_a_fmt = _format_split_stats(baseline_exp.name, baseline_exp_id, stats_a, baseline_exp)
+        stats_b_fmt = _format_split_stats(challenger_b.name, challenger_b_id, stats_b, challenger_b)
+
         result = {
             "mode": "split",
-            "baseline": _format_split_stats(baseline_exp.name, baseline_exp_id, stats_a, baseline_exp),
-            "challenger_b": _format_split_stats(challenger_b.name, challenger_b_id, stats_b, challenger_b),
+            "baseline":     _strip_internals(stats_a_fmt),
+            "challenger_b": _strip_internals(stats_b_fmt),
+            "delta_b": _compute_delta_gallery(stats_a_fmt, stats_b_fmt)
+                       if stats_a_fmt.get("has_ground_truth") and stats_b_fmt.get("has_ground_truth")
+                       else None,
         }
 
         if challenger_c_id:
             challenger_c = db.query(ModelExperiment).filter(ModelExperiment.id == challenger_c_id).first()
             if challenger_c:
                 stats_c = calculate_experiment_quality(challenger_c, project_root)
-                result["challenger_c"] = _format_split_stats(challenger_c.name, challenger_c_id, stats_c, challenger_c)
-
+                stats_c_fmt = _format_split_stats(challenger_c.name, challenger_c_id, stats_c, challenger_c)
+                result["challenger_c"] = _strip_internals(stats_c_fmt)
+                result["delta_c"] = _compute_delta_gallery(stats_a_fmt, stats_c_fmt) \
+                    if stats_a_fmt.get("has_ground_truth") and stats_c_fmt.get("has_ground_truth") else None
 
         return result
+
 
     except Exception as e:
         logger.error("engine.split_comparison", f"Failed to compute split comparison: {str(e)}")
@@ -73,11 +82,17 @@ def calculate_split_comparison(
 
 def _format_split_stats(name: str, exp_id: str, stats: Dict, exp=None) -> Dict:
     """Normalise quality stats into a consistent shape for the frontend."""
+    completed = getattr(exp, 'completed_at', None)
     base = {
         "name": name,
         "id": exp_id,
+        "training_name": getattr(exp, 'training_name', None) if exp else None,
         "dataset_source": getattr(exp, 'dataset_source', None) if exp else None,
         "dataset_path": getattr(exp, 'dataset_path', None) if exp else None,
+        "confidence": getattr(exp, 'confidence', None) if exp else None,
+        "iou_threshold": getattr(exp, 'iou_threshold', None) if exp else None,
+        "image_count": getattr(exp, 'image_count', None) if exp else None,
+        "completed_at": completed.isoformat() if completed else None,
     }
     if not stats.get("has_ground_truth"):
         return {
@@ -100,7 +115,102 @@ def _format_split_stats(name: str, exp_id: str, stats: Dict, exp=None) -> Dict:
         "false_negatives":  stats.get("missed_objects", 0),
         "total_gt":         stats.get("total_gt"),
         "total_preds":      stats.get("total_preds"),
+        # Detailed per-detection lists for delta gallery (kept on each model)
+        "_detail_fps":  stats.get("detailed_false_positives", []),
+        "_detail_fns":  stats.get("detailed_missed_objects", []),
+        "_detail_tps":  stats.get("detailed_true_positives", []),
     }
+
+
+def _strip_internals(d: Dict) -> Dict:
+    """Remove internal _detail_* keys before sending response to frontend."""
+    return {k: v for k, v in d.items() if not k.startswith("_")}
+
+
+def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
+    """
+    Compare FP/FN counts per image between baseline (A) and challenger (B).
+
+    Rules (image-level, based on count difference):
+      - Fixed FP   : image has FEWER FPs in B than in A (improvement)    ✅
+      - Fixed FN   : image has FEWER FNs in B than in A (improvement)    ✅
+      - New FP     : image has MORE  FPs in B than in A (regression)     ❌
+      - New FN     : image has MORE  FNs in B than in A (regression)     ❌
+    """
+    a_fps = stats_a.get("_detail_fps", [])
+    a_fns = stats_a.get("_detail_fns", [])
+    b_fps = stats_b.get("_detail_fps", [])
+    b_fns = stats_b.get("_detail_fns", [])
+
+    # Build per-image count maps
+    def count_map(detail_list):
+        m: Dict[str, int] = {}
+        for d in detail_list:
+            img = d.get("image")
+            if img:
+                m[img] = m.get(img, 0) + 1
+        return m
+
+    a_fp_map = count_map(a_fps)
+    a_fn_map = count_map(a_fns)
+    b_fp_map = count_map(b_fps)
+    b_fn_map = count_map(b_fns)
+
+    all_images = set(a_fp_map) | set(b_fp_map) | set(a_fn_map) | set(b_fn_map)
+
+    fixed_fp, new_fp, fixed_fn, new_fn = [], [], [], []
+
+    for img in sorted(all_images):
+        a_fp = a_fp_map.get(img, 0)
+        b_fp = b_fp_map.get(img, 0)
+        a_fn = a_fn_map.get(img, 0)
+        b_fn = b_fn_map.get(img, 0)
+
+        item = {
+            "image_name": img,
+            "a_fps": a_fp, "b_fps": b_fp,
+            "a_fns": a_fn, "b_fns": b_fn,
+            "fp_delta": b_fp - a_fp,
+            "fn_delta": b_fn - a_fn,
+        }
+
+        if b_fp < a_fp:
+            fixed_fp.append(item)
+        elif b_fp > a_fp:
+            new_fp.append(item)
+
+        if b_fn < a_fn:
+            fixed_fn.append(item)
+        elif b_fn > a_fn:
+            new_fn.append(item)
+
+    # Sort: biggest improvement / biggest regression first
+    fixed_fp.sort(key=lambda x: x["fp_delta"])        # most negative first (biggest fix)
+    new_fp.sort(key=lambda x: -x["fp_delta"])          # most positive first (biggest regression)
+    fixed_fn.sort(key=lambda x: x["fn_delta"])
+    new_fn.sort(key=lambda x: -x["fn_delta"])
+
+    return {
+        "fixed_fp": fixed_fp,
+        "fixed_fn": fixed_fn,
+        "new_fp":   new_fp,
+        "new_fn":   new_fn,
+        "counts": {
+            "fixed_fp": len(fixed_fp),
+            "fixed_fn": len(fixed_fn),
+            "new_fp":   len(new_fp),
+            "new_fn":   len(new_fn),
+        },
+        # Total detections saved / added across all images in each category
+        "detections": {
+            "fp_saved":  sum(abs(x["fp_delta"]) for x in fixed_fp),
+            "fn_saved":  sum(abs(x["fn_delta"]) for x in fixed_fn),
+            "fp_added":  sum(x["fp_delta"] for x in new_fp),
+            "fn_added":  sum(x["fn_delta"] for x in new_fn),
+        }
+    }
+
+
 
 
 

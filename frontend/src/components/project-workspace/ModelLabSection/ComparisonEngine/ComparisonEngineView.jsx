@@ -123,50 +123,224 @@ const DeltaPanel = ({ data, label, onGallery, baselineId, challengerId, projectI
     );
 };
 
-// ─── Split Mode Overview Panel ───────────────────────────────────────────────
+// ─── Metric Row (used inside SplitOverviewPanel) ──────────────────────────────
 const MetricRow = ({ label, valA, valB, valC, unit = '%', higherIsBetter = true }) => {
-    const delta = (a, b) => {
+    const calcDelta = (a, b) => {
         if (a == null || b == null) return null;
         return parseFloat((b - a).toFixed(1));
     };
     const badge = (d) => {
         if (d === null) return null;
-        const better = higherIsBetter ? d > 0 : d < 0;
-        const color = d === 0 ? '#8c8c8c' : better ? '#52c41a' : '#f5222d';
+        const better = higherIsBetter === null ? false : higherIsBetter ? d > 0 : d < 0;
+        const color = d === 0 ? '#8c8c8c' : (higherIsBetter === null ? '#8c8c8c' : better ? '#52c41a' : '#f5222d');
         return <span style={{ fontSize: 11, color, fontWeight: 600 }}>{d > 0 ? '+' : ''}{d}{unit}</span>;
     };
     return (
         <Row gutter={8} align="middle" style={{ marginBottom: 10 }}>
             <Col span={6}><Text type="secondary" style={{ fontSize: 12 }}>{label}</Text></Col>
-            <Col span={valC ? 5 : 7} style={{ textAlign: 'center' }}>
+            <Col span={valC !== undefined ? 5 : 7} style={{ textAlign: 'center' }}>
                 <Text strong>{valA != null ? `${valA}${unit}` : '—'}</Text>
             </Col>
-            <Col span={valC ? 6 : 11} style={{ textAlign: 'center' }}>
+            <Col span={valC !== undefined ? 6 : 11} style={{ textAlign: 'center' }}>
                 <Text strong>{valB != null ? `${valB}${unit}` : '—'}</Text>
-                {' '}{badge(delta(valA, valB))}
+                {' '}{badge(calcDelta(valA, valB))}
             </Col>
             {valC !== undefined && (
                 <Col span={7} style={{ textAlign: 'center' }}>
                     <Text strong>{valC != null ? `${valC}${unit}` : '—'}</Text>
-                    {' '}{badge(delta(valA, valC))}
+                    {' '}{badge(calcDelta(valA, valC))}
                 </Col>
             )}
         </Row>
     );
 };
 
-const SplitOverviewPanel = ({ data, is3Way }) => {
+// ─── Model Info Card (shown at top of results) ───────────────────────────────
+const ModelInfoCard = ({ model, label, color }) => {
+    if (!model) return null;
+    const fmt = (v) => v != null ? v : '—';
+    const dateStr = model.completed_at
+        ? new Date(model.completed_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
+        : '—';
+    return (
+        <div style={{
+            flex: 1, padding: '12px 16px', borderRadius: 8,
+            border: `1.5px solid ${color}22`, background: `${color}08`,
+            borderTop: `3px solid ${color}`
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Tag color={color === '#1890ff' ? 'blue' : color === '#722ed1' ? 'purple' : 'default'} style={{ fontSize: 11 }}>{label}</Tag>
+                <Text strong style={{ fontSize: 13 }}>{model.name}</Text>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
+                <div><Text type="secondary" style={{ fontSize: 11 }}>Training</Text><br /><Text style={{ fontSize: 12 }}>{fmt(model.training_name)}</Text></div>
+                <div><Text type="secondary" style={{ fontSize: 11 }}>Split</Text><br /><Text style={{ fontSize: 12, textTransform: 'uppercase' }}>{fmt(model.dataset_source)}</Text></div>
+                <div><Text type="secondary" style={{ fontSize: 11 }}>Confidence</Text><br /><Text style={{ fontSize: 12 }}>{model.confidence != null ? `${(model.confidence * 100).toFixed(0)}%` : '—'}</Text></div>
+                <div><Text type="secondary" style={{ fontSize: 11 }}>Images</Text><br /><Text style={{ fontSize: 12 }}>{fmt(model.image_count)}</Text></div>
+                <div style={{ gridColumn: '1/-1' }}><Text type="secondary" style={{ fontSize: 11 }}>Completed</Text><br /><Text style={{ fontSize: 12 }}>{dateStr}</Text></div>
+            </div>
+        </div>
+    );
+};
+
+// ─── Delta Gallery Card ───────────────────────────────────────────────────────
+const DeltaCard = ({ imageCount, totalImages, detectionCount, title, description, detectionLabel, good, onClick }) => {
+    const hasData = imageCount > 0;
+    const pct = totalImages > 0 ? Math.round((imageCount / totalImages) * 100) : 0;
+    const borderColor = good ? '#b7eb8f' : '#ffa39e';
+    const badgeBg = good ? '#52c41a' : '#f5222d';
+    const bg = good ? '#f6ffed' : '#fff1f0';
+    return (
+        <div
+            onClick={hasData ? onClick : undefined}
+            style={{
+                flex: 1, borderRadius: 10, overflow: 'hidden',
+                border: `1px solid ${borderColor}`, background: '#fff',
+                cursor: hasData ? 'pointer' : 'default',
+                transition: 'transform 0.15s, box-shadow 0.15s',
+                opacity: hasData ? 1 : 0.55,
+            }}
+            onMouseEnter={e => { if (hasData) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.12)'; } }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+        >
+            {/* Header strip */}
+            <div style={{ background: bg, borderBottom: `1px solid ${borderColor}`, padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 13 }}>{good ? '✅' : '❌'}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: good ? '#389e0d' : '#cf1322', textTransform: 'uppercase', letterSpacing: 0.3 }}>{title}</span>
+            </div>
+
+            <div style={{ padding: '12px 14px' }}>
+                {/* Image count + percentage */}
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                        <span style={{ fontSize: 30, fontWeight: 800, color: badgeBg, lineHeight: 1 }}>{imageCount}</span>
+                        <span style={{ fontSize: 12, color: '#8c8c8c' }}>/ {totalImages ?? '?'} images</span>
+                    </div>
+                    {hasData && totalImages > 0 && (
+                        <span style={{ fontSize: 15, fontWeight: 700, color: badgeBg }}>{pct}%</span>
+                    )}
+                </div>
+
+                {/* Progress bar */}
+                {totalImages > 0 && (
+                    <div style={{ height: 4, borderRadius: 4, background: '#f0f0f0', marginBottom: 8 }}>
+                        <div style={{ height: 4, borderRadius: 4, width: `${pct}%`, background: badgeBg, transition: 'width 0.4s ease' }} />
+                    </div>
+                )}
+
+                {/* Detection count */}
+                <div style={{ fontSize: 12, marginBottom: 8 }}>
+                    {hasData
+                        ? <><span style={{ fontWeight: 700, color: badgeBg }}>{good ? '−' : '+'}{detectionCount}</span>{' '}<span style={{ color: '#8c8c8c' }}>{detectionLabel}</span></>
+                        : <span style={{ color: '#bfbfbf' }}>No images affected</span>
+                    }
+                </div>
+
+                {/* Description */}
+                <div style={{ fontSize: 11, color: '#8c8c8c', lineHeight: 1.45, borderTop: `1px dashed ${borderColor}`, paddingTop: 8 }}>
+                    {description}
+                </div>
+
+                {hasData && (
+                    <div style={{ fontSize: 10, color: '#bfbfbf', marginTop: 8, textAlign: 'right' }}>View affected images →</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ─── Metric Verdict Row (quick win/loss summary) ──────────────────────────────
+const VerdictRow = ({ a, b, c, is3Way }) => {
+    const metrics = [
+        { key: 'Precision', vA: a.precision, vB: b.precision, higherBetter: true },
+        { key: 'Recall', vA: a.recall, vB: b.recall, higherBetter: true },
+        { key: 'F1 Score', vA: a.f1, vB: b.f1, higherBetter: true },
+        { key: 'Avg IoU', vA: a.avg_iou, vB: b.avg_iou, higherBetter: true },
+        { key: 'Less FP', vA: a.false_positives, vB: b.false_positives, higherBetter: false },
+        { key: 'Less FN', vA: a.false_negatives, vB: b.false_negatives, higherBetter: false },
+    ];
+    const bWins = metrics.filter(({ vA, vB, higherBetter }) => vA != null && vB != null && (higherBetter ? vB > vA : vB < vA)).length;
+    const aWins = metrics.filter(({ vA, vB, higherBetter }) => vA != null && vB != null && (higherBetter ? vA > vB : vA < vB)).length;
+    const bLeads = bWins > aWins;
+    const tied = bWins === aWins;
+    const totalMetrics = metrics.filter(m => m.vA != null && m.vB != null).length;
+    return (
+        <div style={{ marginBottom: 16 }}>
+            {/* Score banner */}
+            <div style={{
+                display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10,
+                padding: '10px 16px', borderRadius: 8,
+                background: bLeads ? '#e6f7ff' : !tied ? '#f9f0ff' : '#fafafa',
+                border: `1.5px solid ${bLeads ? '#91caff' : !tied ? '#d3adf7' : '#e8e8e8'}`,
+            }}>
+                <span style={{
+                    fontSize: !tied && !bLeads ? 16 : 12, fontWeight: 800,
+                    color: '#fff', background: '#531dab',
+                    padding: !tied && !bLeads ? '5px 18px' : '3px 12px',
+                    borderRadius: 20,
+                    boxShadow: !tied && !bLeads ? '0 0 0 3px #b37feb, 0 2px 8px rgba(83,29,171,0.4)' : 'none',
+                    transition: 'all 0.2s',
+                }}>Baseline &nbsp;{aWins}/{totalMetrics}</span>
+                <span style={{ fontSize: 12, color: '#bfbfbf', fontWeight: 600 }}>vs</span>
+                <span style={{
+                    fontSize: !tied && bLeads ? 16 : 12, fontWeight: 800,
+                    color: '#fff', background: '#0958d9',
+                    padding: !tied && bLeads ? '5px 18px' : '3px 12px',
+                    borderRadius: 20,
+                    boxShadow: !tied && bLeads ? '0 0 0 3px #69b1ff, 0 2px 8px rgba(9,88,217,0.4)' : 'none',
+                    transition: 'all 0.2s',
+                }}>Model B &nbsp;{bWins}/{totalMetrics}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, marginLeft: 6, color: bLeads ? '#389e0d' : !tied ? '#722ed1' : '#8c8c8c' }}>
+                    {bLeads ? '🏆 Model B wins' : !tied ? '🏆 Baseline wins' : '🤝 Tied'}
+                </span>
+            </div>
+            {/* Per-metric chips */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {metrics.map(({ key, vA, vB, higherBetter }) => {
+                    if (vA == null || vB == null) return null;
+                    const bBetter = higherBetter ? vB > vA : vB < vA;
+                    const aBetter = higherBetter ? vA > vB : vA < vB;
+                    const winner = bBetter ? 'B' : aBetter ? 'A' : 'TIE';
+                    const diff = Math.abs(vB - vA).toFixed(1);
+                    return (
+                        <div key={key} style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #d9d9d9', fontSize: 12 }}>
+                            <span style={{ padding: '4px 9px', background: '#fafafa', color: '#595959', fontWeight: 500, borderRight: '1px solid #d9d9d9' }}>{key}</span>
+                            <span style={{
+                                padding: '4px 10px', fontWeight: 700,
+                                background: winner === 'B' ? '#0958d9' : winner === 'A' ? '#531dab' : '#8c8c8c',
+                                color: '#fff',
+                            }}>
+                                {winner === 'TIE' ? 'Tie' : `${winner === 'B' ? 'Model B' : 'Baseline'} +${diff}`}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+// ─── Split Mode Overview Panel ────────────────────────────────────────────────
+const SplitOverviewPanel = ({ data, is3Way, onDelta }) => {
     const a = data.baseline;
     const b = data.challenger_b;
     const c = data.challenger_c;
+    const delta = data.delta_b;
     const hasGT = a?.has_ground_truth && b?.has_ground_truth;
 
     return (
         <div className="delta-dashboard">
             <Title level={4} style={{ marginBottom: 4 }}>Split Mode — Quality Comparison</Title>
-            <Text type="secondary" style={{ display: 'block', marginBottom: 20 }}>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
                 Real ground truth from dataset labels. No manual verification needed.
             </Text>
+
+            {/* ── Model Info Header ── */}
+            <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+                <ModelInfoCard model={a} label="Baseline" color="#595959" />
+                <ModelInfoCard model={b} label="Model B" color="#1890ff" />
+                {is3Way && c && <ModelInfoCard model={c} label="Model C" color="#722ed1" />}
+            </div>
 
             {!hasGT ? (
                 <div style={{ padding: '16px 0' }}>
@@ -186,7 +360,7 @@ const SplitOverviewPanel = ({ data, is3Way }) => {
 
             ) : (
                 <>
-                    {/* Header Row */}
+                    {/* ── Column Header ── */}
                     <Row gutter={8} style={{ marginBottom: 8 }}>
                         <Col span={6} />
                         <Col span={is3Way ? 5 : 7} style={{ textAlign: 'center' }}>
@@ -204,7 +378,7 @@ const SplitOverviewPanel = ({ data, is3Way }) => {
 
                     <Divider style={{ margin: '8px 0' }} />
 
-                    {/* Metric Rows */}
+                    {/* ── Metric Rows ── */}
                     <MetricRow label="Precision" valA={a.precision} valB={b.precision} valC={is3Way && c ? c.precision : undefined} />
                     <MetricRow label="Recall" valA={a.recall} valB={b.recall} valC={is3Way && c ? c.recall : undefined} />
                     <MetricRow label="F1 Score" valA={a.f1} valB={b.f1} valC={is3Way && c ? c.f1 : undefined} />
@@ -212,11 +386,65 @@ const SplitOverviewPanel = ({ data, is3Way }) => {
 
                     <Divider style={{ margin: '8px 0 16px' }} />
 
-                    {/* TP / FP / FN Counts */}
+                    {/* ── TP / FP / FN ── */}
                     <MetricRow label="True Positives ✓" valA={a.true_positives} valB={b.true_positives} valC={is3Way && c ? c.true_positives : undefined} unit="" />
                     <MetricRow label="False Positives ✗" valA={a.false_positives} valB={b.false_positives} valC={is3Way && c ? c.false_positives : undefined} unit="" higherIsBetter={false} />
                     <MetricRow label="False Negatives △" valA={a.false_negatives} valB={b.false_negatives} valC={is3Way && c ? c.false_negatives : undefined} unit="" higherIsBetter={false} />
                     <MetricRow label="Total GT objects" valA={a.total_gt} valB={b.total_gt} valC={is3Way && c ? c.total_gt : undefined} unit="" higherIsBetter={null} />
+
+                    {/* ── Delta Gallery Cards ── */}
+                    {delta && (
+                        <>
+                            <VerdictRow a={a} b={b} c={c} is3Way={is3Way} />
+
+                            <Divider style={{ margin: '12px 0 12px' }}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Individual Image Delta — Model B vs Baseline</Text>
+                            </Divider>
+                            <div style={{ display: 'flex', gap: 12 }}>
+                                <DeltaCard
+                                    good
+                                    imageCount={delta.counts?.fixed_fp ?? 0}
+                                    totalImages={a.image_count ?? b.image_count}
+                                    detectionCount={delta.detections?.fp_saved ?? 0}
+                                    detectionLabel="false alarms removed"
+                                    title="False Positives Fixed"
+                                    description={`Model B reduced wrong detections on ${delta.counts?.fixed_fp ?? 0} images — ${delta.detections?.fp_saved ?? 0} fewer false alarms in total.`}
+                                    onClick={() => onDelta('fixed_fp', delta.fixed_fp, b.name)}
+                                />
+                                <DeltaCard
+                                    good
+                                    imageCount={delta.counts?.fixed_fn ?? 0}
+                                    totalImages={a.image_count ?? b.image_count}
+                                    detectionCount={delta.detections?.fn_saved ?? 0}
+                                    detectionLabel="missed objects now found"
+                                    title="Missed Objects Fixed"
+                                    description={`Model B found more real objects on ${delta.counts?.fixed_fn ?? 0} images — ${delta.detections?.fn_saved ?? 0} objects that were previously missed.`}
+                                    onClick={() => onDelta('fixed_fn', delta.fixed_fn, b.name)}
+                                />
+                                <DeltaCard
+                                    good={false}
+                                    imageCount={delta.counts?.new_fp ?? 0}
+                                    totalImages={a.image_count ?? b.image_count}
+                                    detectionCount={delta.detections?.fp_added ?? 0}
+                                    detectionLabel="new false alarms introduced"
+                                    title="New False Positives"
+                                    description={`Model B created extra wrong detections on ${delta.counts?.new_fp ?? 0} images — ${delta.detections?.fp_added ?? 0} false alarms added.`}
+                                    onClick={() => onDelta('new_fp', delta.new_fp, b.name)}
+                                />
+                                <DeltaCard
+                                    good={false}
+                                    imageCount={delta.counts?.new_fn ?? 0}
+                                    totalImages={a.image_count ?? b.image_count}
+                                    detectionCount={delta.detections?.fn_added ?? 0}
+                                    detectionLabel="objects now being missed"
+                                    title="New Missed Objects"
+                                    description={`Model B missed real objects on ${delta.counts?.new_fn ?? 0} images — ${delta.detections?.fn_added ?? 0} detections lost.`}
+                                    onClick={() => onDelta('new_fn', delta.new_fn, b.name)}
+                                />
+                            </div>
+                        </>
+                    )}
+
                 </>
             )}
         </div>
@@ -495,7 +723,13 @@ const ComparisonEngineView = ({ currentTraining }) => {
                     <Empty description={comparisonData.message} />
                 ) : comparisonData.mode === 'split' ? (
                     // ── Split Mode Overview Panel ──
-                    <SplitOverviewPanel data={comparisonData} is3Way={!!comparisonData.challenger_c} />
+                    <SplitOverviewPanel
+                        data={comparisonData}
+                        is3Way={!!comparisonData.challenger_c}
+                        onDelta={(type, items, challengerName) =>
+                            openGallery(type, items.map(i => ({ image_name: i.image_name })), challengerName, challengerId)
+                        }
+                    />
                 ) : comparisonData.mode === 'three_way' ? (
                     // ── 3-Way Results ──
                     <div className="delta-dashboard">
