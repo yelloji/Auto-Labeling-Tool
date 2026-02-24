@@ -409,7 +409,7 @@ const SplitOverviewPanel = ({ data, is3Way, onDelta }) => {
                                     detectionLabel="false alarms removed"
                                     title="False Positives Fixed"
                                     description={`Model B reduced wrong detections on ${delta.counts?.fixed_fp ?? 0} images — ${delta.detections?.fp_saved ?? 0} fewer false alarms in total.`}
-                                    onClick={() => onDelta('fixed_fp', delta.fixed_fp, b.name)}
+                                    onClick={() => onDelta('fixed_fp', delta.fixed_fp || [], b.name)}
                                 />
                                 <DeltaCard
                                     good
@@ -419,7 +419,7 @@ const SplitOverviewPanel = ({ data, is3Way, onDelta }) => {
                                     detectionLabel="missed objects now found"
                                     title="Missed Objects Fixed"
                                     description={`Model B found more real objects on ${delta.counts?.fixed_fn ?? 0} images — ${delta.detections?.fn_saved ?? 0} objects that were previously missed.`}
-                                    onClick={() => onDelta('fixed_fn', delta.fixed_fn, b.name)}
+                                    onClick={() => onDelta('fixed_fn', delta.fixed_fn || [], b.name)}
                                 />
                                 <DeltaCard
                                     good={false}
@@ -429,7 +429,7 @@ const SplitOverviewPanel = ({ data, is3Way, onDelta }) => {
                                     detectionLabel="new false alarms introduced"
                                     title="New False Positives"
                                     description={`Model B created extra wrong detections on ${delta.counts?.new_fp ?? 0} images — ${delta.detections?.fp_added ?? 0} false alarms added.`}
-                                    onClick={() => onDelta('new_fp', delta.new_fp, b.name)}
+                                    onClick={() => onDelta('new_fp', delta.new_fp || [], b.name)}
                                 />
                                 <DeltaCard
                                     good={false}
@@ -439,7 +439,7 @@ const SplitOverviewPanel = ({ data, is3Way, onDelta }) => {
                                     detectionLabel="objects now being missed"
                                     title="New Missed Objects"
                                     description={`Model B missed real objects on ${delta.counts?.new_fn ?? 0} images — ${delta.detections?.fn_added ?? 0} detections lost.`}
-                                    onClick={() => onDelta('new_fn', delta.new_fn, b.name)}
+                                    onClick={() => onDelta('new_fn', delta.new_fn || [], b.name)}
                                 />
                             </div>
                         </>
@@ -723,13 +723,26 @@ const ComparisonEngineView = ({ currentTraining }) => {
                     <Empty description={comparisonData.message} />
                 ) : comparisonData.mode === 'split' ? (
                     // ── Split Mode Overview Panel ──
-                    <SplitOverviewPanel
-                        data={comparisonData}
-                        is3Way={!!comparisonData.challenger_c}
-                        onDelta={(type, items, challengerName) =>
-                            openGallery(type, items.map(i => ({ image_name: i.image_name })), challengerName, challengerId)
-                        }
-                    />
+                    <div className="delta-dashboard">
+                        <SplitOverviewPanel
+                            data={comparisonData}
+                            is3Way={!!comparisonData.challenger_c}
+                            onDelta={(type, items, challengerName) =>
+                                openGallery(type, items, challengerName, challengerId)
+                            }
+                        />
+                        <DeltaGalleryModal
+                            visible={galleryVisible}
+                            onCancel={() => setGalleryVisible(false)}
+                            items={galleryConfig.items}
+                            type={galleryConfig.type}
+                            baselineName={comparisonData.baseline_name}
+                            challengerName={galleryConfig.challengerName}
+                            baselineId={baselineId}
+                            challengerId={galleryConfig.challengerId}
+                            projectId={currentTraining.projectId}
+                        />
+                    </div>
                 ) : comparisonData.mode === 'three_way' ? (
                     // ── 3-Way Results ──
                     <div className="delta-dashboard">

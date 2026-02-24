@@ -142,29 +142,35 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
     b_fps = stats_b.get("_detail_fps", [])
     b_fns = stats_b.get("_detail_fns", [])
 
-    # Build per-image count maps
-    def count_map(detail_list):
-        m: Dict[str, int] = {}
+    # Build per-image detail maps
+    def detail_map(detail_list):
+        m: Dict[str, list] = {}
         for d in detail_list:
             img = d.get("image")
             if img:
-                m[img] = m.get(img, 0) + 1
+                if img not in m: m[img] = []
+                m[img].append(d)
         return m
 
-    a_fp_map = count_map(a_fps)
-    a_fn_map = count_map(a_fns)
-    b_fp_map = count_map(b_fps)
-    b_fn_map = count_map(b_fns)
+    a_fp_map = detail_map(a_fps)
+    a_fn_map = detail_map(a_fns)
+    b_fp_map = detail_map(b_fps)
+    b_fn_map = detail_map(b_fns)
 
-    all_images = set(a_fp_map) | set(b_fp_map) | set(a_fn_map) | set(b_fn_map)
+    all_images = set(list(a_fp_map.keys()) + list(b_fp_map.keys()) + list(a_fn_map.keys()) + list(b_fn_map.keys()))
 
     fixed_fp, new_fp, fixed_fn, new_fn = [], [], [], []
 
     for img in sorted(all_images):
-        a_fp = a_fp_map.get(img, 0)
-        b_fp = b_fp_map.get(img, 0)
-        a_fn = a_fn_map.get(img, 0)
-        b_fn = b_fn_map.get(img, 0)
+        a_fp_list = a_fp_map.get(img, [])
+        b_fp_list = b_fp_map.get(img, [])
+        a_fn_list = a_fn_map.get(img, [])
+        b_fn_list = b_fn_map.get(img, [])
+
+        a_fp = len(a_fp_list)
+        b_fp = len(b_fp_list)
+        a_fn = len(a_fn_list)
+        b_fn = len(b_fn_list)
 
         item = {
             "image_name": img,
@@ -172,6 +178,10 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
             "a_fns": a_fn, "b_fns": b_fn,
             "fp_delta": b_fp - a_fp,
             "fn_delta": b_fn - a_fn,
+            "a_fp_list": a_fp_list,
+            "b_fp_list": b_fp_list,
+            "a_fn_list": a_fn_list,
+            "b_fn_list": b_fn_list,
         }
 
         if b_fp < a_fp:
