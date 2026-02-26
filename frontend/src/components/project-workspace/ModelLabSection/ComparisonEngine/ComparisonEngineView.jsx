@@ -442,6 +442,32 @@ const SplitOverviewPanel = ({ data, is3Way, onDelta }) => {
                                     onClick={() => onDelta('new_fn', delta.new_fn || [], b.name)}
                                 />
                             </div>
+
+                            <Divider style={{ margin: '12px 0 12px' }}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Confidence Analysis — Unchanged Bounding Box Counts</Text>
+                            </Divider>
+                            <div style={{ display: 'flex', gap: 12 }}>
+                                <DeltaCard
+                                    good
+                                    imageCount={delta.counts?.improved_conf ?? 0}
+                                    totalImages={a.image_count ?? b.image_count}
+                                    detectionCount={delta.counts?.improved_conf ?? 0}
+                                    detectionLabel="images with >5% higher confidence"
+                                    title="Confidence Improved"
+                                    description={`Model B showed significantly higher confidence on True Positives for ${delta.counts?.improved_conf ?? 0} images without changing box counts.`}
+                                    onClick={() => onDelta('improved_conf', delta.improved_conf || [], b.name)}
+                                />
+                                <DeltaCard
+                                    good={false}
+                                    imageCount={delta.counts?.degraded_conf ?? 0}
+                                    totalImages={a.image_count ?? b.image_count}
+                                    detectionCount={delta.counts?.degraded_conf ?? 0}
+                                    detectionLabel="images with >5% lower confidence"
+                                    title="Confidence Degraded"
+                                    description={`Model B showed significantly lower confidence on True Positives for ${delta.counts?.degraded_conf ?? 0} images without changing box counts.`}
+                                    onClick={() => onDelta('degraded_conf', delta.degraded_conf || [], b.name)}
+                                />
+                            </div>
                         </>
                     )}
 

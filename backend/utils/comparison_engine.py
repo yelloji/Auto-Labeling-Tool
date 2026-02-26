@@ -139,8 +139,10 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
     """
     a_fps = stats_a.get("_detail_fps", [])
     a_fns = stats_a.get("_detail_fns", [])
+    a_tps = stats_a.get("_detail_tps", [])
     b_fps = stats_b.get("_detail_fps", [])
     b_fns = stats_b.get("_detail_fns", [])
+    b_tps = stats_b.get("_detail_tps", [])
 
     # Build per-image detail maps
     def detail_map(detail_list):
@@ -154,34 +156,108 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
 
     a_fp_map = detail_map(a_fps)
     a_fn_map = detail_map(a_fns)
+    a_tp_map = detail_map(a_tps)
     b_fp_map = detail_map(b_fps)
     b_fn_map = detail_map(b_fns)
+    b_tp_map = detail_map(b_tps)
 
-    all_images = set(list(a_fp_map.keys()) + list(b_fp_map.keys()) + list(a_fn_map.keys()) + list(b_fn_map.keys()))
+    all_images = set(
+        list(a_fp_map.keys()) + list(b_fp_map.keys()) + 
+        list(a_fn_map.keys()) + list(b_fn_map.keys()) +
+        list(a_tp_map.keys()) + list(b_tp_map.keys())
+    )
 
     fixed_fp, new_fp, fixed_fn, new_fn = [], [], [], []
+    improved_conf, degraded_conf = [], []
+
+    def calculate_iou(box1, box2):
+        x1 = max(box1[0], box2[0])
+        y1 = max(box1[1], box2[1])
+        x2 = min(box1[2], box2[2])
+        y2 = min(box1[3], box2[3])
+        if x2 < x1 or y2 < y1: return 0.0
+        intersection = (x2 - x1) * (y2 - y1)
+        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+        union = area1 + area2 - intersection
+        return intersection / union if union > 0 else 0.0
 
     for img in sorted(all_images):
         a_fp_list = a_fp_map.get(img, [])
         b_fp_list = b_fp_map.get(img, [])
         a_fn_list = a_fn_map.get(img, [])
         b_fn_list = b_fn_map.get(img, [])
+        a_tp_list = a_tp_map.get(img, [])
+        b_tp_list = b_tp_map.get(img, [])
 
         a_fp = len(a_fp_list)
         b_fp = len(b_fp_list)
         a_fn = len(a_fn_list)
         b_fn = len(b_fn_list)
+        fp_delta = b_fp - a_fp
+        fn_delta = b_fn - a_fn
+
+        # Confidence and Class Confusion analysis on True Positives
+        conf_deltas = []
+        class_confusions = []
+        matched_b_tps = set()
+        
+        for a_tp in a_tp_list:
+            best_iou = 0.5
+            best_match = None
+            best_idx = -1
+            for idx, b_tp in enumerate(b_tp_list):
+                if idx in matched_b_tps: continue
+                iou = calculate_iou(a_tp.get("bbox", [0,0,0,0]), b_tp.get("bbox", [0,0,0,0]))
+                if iou > best_iou:
+                    best_iou = iou
+                    best_match = b_tp
+                    best_idx = idx
+            
+            if best_match:
+                matched_b_tps.add(best_idx)
+                conf_a = a_tp.get("confidence", 0)
+                conf_b = best_match.get("confidence", 0)
+                conf_deltas.append(conf_b - conf_a)
+                
+                class_a = a_tp.get("class_name")
+                class_b = best_match.get("class_name")
+                if class_a != class_b:
+                    class_confusions.append({
+                        "bbox": best_match.get("bbox"),
+                        "baseline_class": class_a,
+                        "challenger_class": class_b
+                    })
+        
+        avg_conf_delta = sum(conf_deltas) / len(conf_deltas) if conf_deltas else 0.0
+
+        # Determine Verdict
+        verdict = "no change"
+        # B is better if it reduced FPs/FNs significantly, or if counts are same but confidence improved
+        if fp_delta < 0 or fn_delta < 0:
+            verdict = "B better"
+        elif fp_delta > 0 or fn_delta > 0:
+            verdict = "B worse"
+        elif avg_conf_delta > 0.05:
+            verdict = "B better"
+        elif avg_conf_delta < -0.05:
+            verdict = "B worse"
 
         item = {
             "image_name": img,
             "a_fps": a_fp, "b_fps": b_fp,
             "a_fns": a_fn, "b_fns": b_fn,
-            "fp_delta": b_fp - a_fp,
-            "fn_delta": b_fn - a_fn,
+            "fp_delta": fp_delta,
+            "fn_delta": fn_delta,
+            "avg_conf_delta": round(avg_conf_delta, 3),
+            "class_confusions": class_confusions,
+            "verdict": verdict,
             "a_fp_list": a_fp_list,
             "b_fp_list": b_fp_list,
             "a_fn_list": a_fn_list,
             "b_fn_list": b_fn_list,
+            "a_tp_list": a_tp_list,
+            "b_tp_list": b_tp_list,
         }
 
         if b_fp < a_fp:
@@ -193,23 +269,36 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
             fixed_fn.append(item)
         elif b_fn > a_fn:
             new_fn.append(item)
+            
+        # If no box count changes, but confidence changed significantly (>5%)
+        if fp_delta == 0 and fn_delta == 0:
+            if avg_conf_delta > 0.05:
+                improved_conf.append(item)
+            elif avg_conf_delta < -0.05:
+                degraded_conf.append(item)
 
     # Sort: biggest improvement / biggest regression first
     fixed_fp.sort(key=lambda x: x["fp_delta"])        # most negative first (biggest fix)
-    new_fp.sort(key=lambda x: -x["fp_delta"])          # most positive first (biggest regression)
+    new_fp.sort(key=lambda x: -x["fp_delta"])         # most positive first (biggest regression)
     fixed_fn.sort(key=lambda x: x["fn_delta"])
     new_fn.sort(key=lambda x: -x["fn_delta"])
+    improved_conf.sort(key=lambda x: -x["avg_conf_delta"])
+    degraded_conf.sort(key=lambda x: x["avg_conf_delta"])
 
     return {
         "fixed_fp": fixed_fp,
         "fixed_fn": fixed_fn,
         "new_fp":   new_fp,
         "new_fn":   new_fn,
+        "improved_conf": improved_conf,
+        "degraded_conf": degraded_conf,
         "counts": {
             "fixed_fp": len(fixed_fp),
             "fixed_fn": len(fixed_fn),
             "new_fp":   len(new_fp),
             "new_fn":   len(new_fn),
+            "improved_conf": len(improved_conf),
+            "degraded_conf": len(degraded_conf),
         },
         # Total detections saved / added across all images in each category
         "detections": {
