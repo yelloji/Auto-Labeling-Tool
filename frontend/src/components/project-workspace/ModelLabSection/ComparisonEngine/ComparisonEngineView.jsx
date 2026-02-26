@@ -451,20 +451,20 @@ const SplitOverviewPanel = ({ data, is3Way, onDelta }) => {
                                     good
                                     imageCount={delta.counts?.improved_conf ?? 0}
                                     totalImages={a.image_count ?? b.image_count}
-                                    detectionCount={delta.counts?.improved_conf ?? 0}
-                                    detectionLabel="images with >5% higher confidence"
+                                    detectionCount={delta.detections?.improved_conf ?? 0}
+                                    detectionLabel="boxes with >5% higher confidence"
                                     title="Confidence Improved"
-                                    description={`Model B showed significantly higher confidence on True Positives for ${delta.counts?.improved_conf ?? 0} images without changing box counts.`}
+                                    description={`${b.name} showed significantly higher confidence on True Positives for ${delta.counts?.improved_conf ?? 0} images.`}
                                     onClick={() => onDelta('improved_conf', delta.improved_conf || [], b.name)}
                                 />
                                 <DeltaCard
                                     good={false}
                                     imageCount={delta.counts?.degraded_conf ?? 0}
                                     totalImages={a.image_count ?? b.image_count}
-                                    detectionCount={delta.counts?.degraded_conf ?? 0}
-                                    detectionLabel="images with >5% lower confidence"
+                                    detectionCount={delta.detections?.degraded_conf ?? 0}
+                                    detectionLabel="boxes with >5% lower confidence"
                                     title="Confidence Degraded"
-                                    description={`Model B showed significantly lower confidence on True Positives for ${delta.counts?.degraded_conf ?? 0} images without changing box counts.`}
+                                    description={`${b.name} showed significantly lower confidence on True Positives for ${delta.counts?.degraded_conf ?? 0} images.`}
                                     onClick={() => onDelta('degraded_conf', delta.degraded_conf || [], b.name)}
                                 />
                             </div>

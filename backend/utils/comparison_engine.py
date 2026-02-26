@@ -218,7 +218,8 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
                 matched_b_tps.add(best_idx)
                 conf_a = a_tp.get("confidence", 0)
                 conf_b = best_match.get("confidence", 0)
-                conf_deltas.append(conf_b - conf_a)
+                delta = conf_b - conf_a
+                conf_deltas.append(delta)
                 
                 class_a = a_tp.get("class_name")
                 class_b = best_match.get("class_name")
@@ -230,6 +231,8 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
                     })
         
         avg_conf_delta = sum(conf_deltas) / len(conf_deltas) if conf_deltas else 0.0
+        improved_boxes = sum(1 for d in conf_deltas if d > 0.05)
+        degraded_boxes = sum(1 for d in conf_deltas if d < -0.05)
 
         # Determine Verdict
         verdict = "no change"
@@ -250,6 +253,8 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
             "fp_delta": fp_delta,
             "fn_delta": fn_delta,
             "avg_conf_delta": round(avg_conf_delta, 3),
+            "improved_boxes": improved_boxes,
+            "degraded_boxes": degraded_boxes,
             "class_confusions": class_confusions,
             "verdict": verdict,
             "a_fp_list": a_fp_list,
@@ -270,12 +275,11 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
         elif b_fn > a_fn:
             new_fn.append(item)
             
-        # If no box count changes, but confidence changed significantly (>5%)
-        if fp_delta == 0 and fn_delta == 0:
-            if avg_conf_delta > 0.05:
-                improved_conf.append(item)
-            elif avg_conf_delta < -0.05:
-                degraded_conf.append(item)
+        # Track confidence improvements regardless of FP/FN changes
+        if improved_boxes > 0:
+            improved_conf.append(item)
+        if degraded_boxes > 0:
+            degraded_conf.append(item)
 
     # Sort: biggest improvement / biggest regression first
     fixed_fp.sort(key=lambda x: x["fp_delta"])        # most negative first (biggest fix)
@@ -306,6 +310,8 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
             "fn_saved":  sum(abs(x["fn_delta"]) for x in fixed_fn),
             "fp_added":  sum(x["fp_delta"] for x in new_fp),
             "fn_added":  sum(x["fn_delta"] for x in new_fn),
+            "improved_conf": sum(x["improved_boxes"] for x in improved_conf),
+            "degraded_conf": sum(x["degraded_boxes"] for x in degraded_conf),
         }
     }
 
