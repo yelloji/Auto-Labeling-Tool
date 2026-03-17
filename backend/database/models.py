@@ -111,7 +111,11 @@ class Image(Base):
     # Train/Val/Test split section
     # Use nullable=True to handle cases where the column doesn't exist yet
     split_section = Column(String(10), default="train", nullable=True)  # train, val, test
-    
+
+    # Image identity hash — MD5 of raw image bytes (nullable for legacy records)
+    # Used for cross-experiment matching (import-with-labels, auto-verification)
+    image_hash_md5 = Column(String(32), nullable=True, index=True)
+
     # Timestamps
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
