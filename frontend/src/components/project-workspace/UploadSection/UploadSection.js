@@ -30,7 +30,10 @@ import {
   Progress,
   message,
   Space,
-  Modal
+  Modal,
+  Alert,
+  Tag,
+  Collapse
 } from 'antd';
 import {
   UploadOutlined,
@@ -42,7 +45,9 @@ import {
   YoutubeOutlined,
   ApiOutlined,
   CloudOutlined,
-  SettingOutlined
+  SettingOutlined,
+  CheckCircleOutlined,
+  WarningOutlined
 } from '@ant-design/icons';
 import { projectsAPI, datasetsAPI, handleAPIError } from '../../../services/api';
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
@@ -76,6 +81,7 @@ const UploadSection = ({ projectId }) => {
   // Upload type and file handling
   const [uploadType, setUploadType] = useState('files'); // Current upload type: 'files' or 'folder'
   const [pendingFiles, setPendingFiles] = useState([]); // Files waiting for batch name confirmation
+  const [uploadResult, setUploadResult] = useState(null); // Result of last bulk upload for inline display
 
   // Video upload state
   const [videoFile, setVideoFile] = useState(null); // Selected video file
@@ -426,11 +432,6 @@ const UploadSection = ({ projectId }) => {
 
     try {
       const result = await projectsAPI.uploadImagesToProject(projectId, formData);
-      if (result.duplicate) {
-        message.warning(result.message);
-      } else {
-        message.success(`${file.name} uploaded successfully to "${batchNameToUse}"!`);
-      }
 
       logInfo('app.frontend.interactions', 'single_file_upload_success', 'Single file upload successful', {
         timestamp: new Date().toISOString(),
@@ -501,14 +502,6 @@ const UploadSection = ({ projectId }) => {
 
     try {
       const result = await projectsAPI.uploadMultipleImagesToProject(projectId, formData);
-      const uploaded = result.results?.successful_uploads ?? files.length;
-      const skipped = result.skipped_duplicates ?? 0;
-      if (uploaded > 0) {
-        message.success(`${uploaded} file${uploaded !== 1 ? 's' : ''} uploaded successfully to "${batchNameToUse}"!`);
-      }
-      if (skipped > 0) {
-        message.warning(`${skipped} image${skipped !== 1 ? 's' : ''} skipped — already exist in this project: ${(result.duplicate_files || []).join(', ')}`);
-      }
 
       logInfo('app.frontend.interactions', 'multiple_files_upload_success', 'Multiple files upload successful', {
         timestamp: new Date().toISOString(),
@@ -1214,6 +1207,48 @@ const UploadSection = ({ projectId }) => {
         {/* Import with Labels status — shows below buttons when folder selected */}
         <ImportWithLabelsSection ref={importLabelsRef} projectId={projectId} />
 
+        {/* Upload result card — shown after file/folder select upload */}
+        {uploadResult && (
+          <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
+            <Alert
+              type={uploadResult.uploaded > 0 ? 'success' : 'warning'}
+              showIcon
+              icon={uploadResult.uploaded > 0 ? <CheckCircleOutlined /> : <WarningOutlined />}
+              message={
+                <span>
+                  {uploadResult.uploaded > 0 && (
+                    <><strong>{uploadResult.uploaded}</strong> image{uploadResult.uploaded !== 1 ? 's' : ''} uploaded to &ldquo;{uploadResult.batchName}&rdquo;</>
+                  )}
+                  {uploadResult.uploaded > 0 && uploadResult.skipped > 0 && ', '}
+                  {uploadResult.skipped > 0 && (
+                    <><strong>{uploadResult.skipped}</strong> skipped</>
+                  )}
+                </span>
+              }
+              description={
+                uploadResult.skipped > 0 ? (
+                  <div style={{ fontSize: 12, marginTop: 4 }}>
+                    <Collapse ghost size="small" items={[{
+                      key: 'dup',
+                      label: <span><WarningOutlined style={{ color: '#faad14' }} />{' '}<strong>{uploadResult.skipped}</strong> image{uploadResult.skipped !== 1 ? 's' : ''} already exist in this project</span>,
+                      children: (
+                        <div style={{ maxHeight: 160, overflowY: 'auto', fontSize: 11 }}>
+                          {uploadResult.duplicateFiles.map(f => (
+                            <Tag key={f} color="orange" style={{ marginBottom: 2 }}>{f}</Tag>
+                          ))}
+                        </div>
+                      )
+                    }]} />
+                    <Button size="small" style={{ marginTop: 4 }} onClick={() => setUploadResult(null)}>Dismiss</Button>
+                  </div>
+                ) : (
+                  <Button size="small" style={{ marginTop: 4 }} onClick={() => setUploadResult(null)}>Dismiss</Button>
+                )
+              }
+            />
+          </div>
+        )}
+
         {/* Video FPS Selection - Shows when video is selected */}
         {videoFile && Array.isArray(videoFile) && videoFile.length > 0 && (
           <div style={{
@@ -1365,19 +1400,26 @@ const UploadSection = ({ projectId }) => {
             const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
 
             try {
-              // Use bulk upload for multiple files, single upload for one file
+              setUploadResult(null);
+              let result;
               if (files.length > 1) {
-                await uploadMultipleFiles(files, batchNameToUse);
+                result = await uploadMultipleFiles(files, batchNameToUse);
+                setUploadResult({
+                  uploaded: result.results?.successful_uploads ?? files.length,
+                  skipped: result.skipped_duplicates ?? 0,
+                  duplicateFiles: result.duplicate_files || [],
+                  batchName: batchNameToUse
+                });
               } else {
-                // For single file, use the uploadFile function
-                for (const file of files) {
-                  await uploadFile(file, batchNameToUse);
-                }
+                result = await uploadFile(files[0], batchNameToUse);
+                setUploadResult({
+                  uploaded: result?.duplicate ? 0 : 1,
+                  skipped: result?.duplicate ? 1 : 0,
+                  duplicateFiles: result?.duplicate ? [files[0].name] : [],
+                  batchName: batchNameToUse
+                });
               }
-
-              // Refresh UI after successful upload
               loadRecentImages();
-              message.success(`${files.length} file(s) uploaded successfully to "${batchNameToUse}"!`);
             } catch (error) {
               logError('app.frontend.interactions', 'file_upload_error', 'File upload error via file input', {
                 timestamp: new Date().toISOString(),
@@ -1431,14 +1473,15 @@ const UploadSection = ({ projectId }) => {
             setUploading(true);
 
             try {
-              // Upload all files in the folder using folder name as batch name
-              for (const file of files) {
-                await uploadFile(file, folderName);
-              }
-
-              // Refresh UI after successful upload
+              setUploadResult(null);
+              const result = await uploadMultipleFiles(files, folderName);
+              setUploadResult({
+                uploaded: result.results?.successful_uploads ?? files.length,
+                skipped: result.skipped_duplicates ?? 0,
+                duplicateFiles: result.duplicate_files || [],
+                batchName: folderName
+              });
               loadRecentImages();
-              message.success(`${files.length} file(s) uploaded successfully to "${folderName}"!`);
             } catch (error) {
               logError('app.frontend.interactions', 'folder_upload_error', 'Folder upload error', {
                 timestamp: new Date().toISOString(),
