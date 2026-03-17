@@ -10,16 +10,16 @@
  *   COCO  — single annotations.json
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
-  Button, Input, Progress, Tag, Typography, Alert, Divider, Space
+  Button, Input, Progress, Tag, Typography, Alert, Space
 } from 'antd';
 import {
   FolderOpenOutlined, CheckCircleOutlined, WarningOutlined, LoadingOutlined
 } from '@ant-design/icons';
 import { datasetsAPI } from '../../../services/api';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff']);
 
@@ -52,8 +52,12 @@ function summariseFiles(files) {
   return { images, labels, hasYaml, hasJson };
 }
 
-const ImportWithLabelsSection = ({ projectId }) => {
+const ImportWithLabelsSection = forwardRef(({ projectId }, ref) => {
   const folderInputRef  = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    triggerFolderSelect: () => folderInputRef.current?.click()
+  }));
 
   const [files,       setFiles]       = useState([]);
   const [batchName,   setBatchName]   = useState('');
@@ -139,38 +143,35 @@ const ImportWithLabelsSection = ({ projectId }) => {
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
-  return (
-    <div style={{ marginTop: 24 }}>
-      <Divider />
+  // Nothing to show if no folder selected yet
+  if (!files.length && !result && !error) return (
+    <input
+      ref={folderInputRef}
+      type="file"
+      webkitdirectory="true"
+      directory="true"
+      multiple
+      style={{ display: 'none' }}
+      onChange={handleFolderSelect}
+    />
+  );
 
-      <Title level={5} style={{ marginBottom: 4 }}>
-        Import Images with Labels
-      </Title>
-      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 16 }}>
-        Select a folder containing images + label files. Supports YOLO (.txt + data.yaml) and COCO (annotations.json).
-        Annotations are created automatically — no re-labeling needed.
-      </Text>
+  return (
+    <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
+      {/* Hidden folder input — triggered externally via ref */}
+      <input
+        ref={folderInputRef}
+        type="file"
+        webkitdirectory="true"
+        directory="true"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleFolderSelect}
+      />
 
       {/* Folder picker + batch name */}
       <Space direction="vertical" style={{ width: '100%' }} size={10}>
         <Space wrap>
-          <Button
-            icon={<FolderOpenOutlined />}
-            onClick={() => folderInputRef.current?.click()}
-            disabled={loading}
-          >
-            Select Folder (images + labels)
-          </Button>
-          {/* Hidden folder input */}
-          <input
-            ref={folderInputRef}
-            type="file"
-            webkitdirectory="true"
-            directory="true"
-            multiple
-            style={{ display: 'none' }}
-            onChange={handleFolderSelect}
-          />
           <FormatBadge />
         </Space>
 
@@ -268,6 +269,6 @@ const ImportWithLabelsSection = ({ projectId }) => {
       </Space>
     </div>
   );
-};
+});
 
 export default ImportWithLabelsSection;

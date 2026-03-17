@@ -87,6 +87,7 @@ const UploadSection = ({ projectId }) => {
   // ==================== REFS ====================
   const fileInputRef = useRef(null); // Reference to hidden file input element
   const folderInputRef = useRef(null); // Reference to hidden folder input element
+  const importLabelsRef = useRef(null); // Reference to ImportWithLabelsSection
 
   // ==================== COMPONENT INITIALIZATION ====================
 
@@ -1186,7 +1187,21 @@ const UploadSection = ({ projectId }) => {
           >
             Select Folder
           </Button>
+          <Button
+            type="primary"
+            icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
+            style={{ height: '2.25rem', fontSize: '0.875rem' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              importLabelsRef.current?.triggerFolderSelect();
+            }}
+          >
+            Select Folder (images + labels)
+          </Button>
         </div>
+
+        {/* Import with Labels status — shows below buttons when folder selected */}
+        <ImportWithLabelsSection ref={importLabelsRef} projectId={projectId} />
 
         {/* Video FPS Selection - Shows when video is selected */}
         {videoFile && Array.isArray(videoFile) && videoFile.length > 0 && (
@@ -1537,21 +1552,6 @@ const UploadSection = ({ projectId }) => {
             </div>
           </Card>
 
-          {/* YouTube Video Import */}
-          <Card size="small" style={{ marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <YoutubeOutlined style={{ fontSize: '1.25rem', color: '#ff4d4f', marginRight: '0.75rem' }} />
-              <div style={{ flex: 1 }}>
-                <Text strong style={{ fontSize: '0.875rem' }}>Import YouTube Video</Text>
-              </div>
-            </div>
-            <Input
-              placeholder="e.g. https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-              suffix={<Button type="primary" size="small" style={{ height: '1.5rem', border: 'none' }}>→</Button>}
-              style={{ marginTop: '0.75rem', fontSize: '0.875rem' }}
-            />
-          </Card>
-
           {/* API and Cloud Provider Options */}
           <Row gutter={['1rem', '1rem']}>
             <Col span={12}>
@@ -1645,9 +1645,6 @@ const UploadSection = ({ projectId }) => {
           )}
         </Card>
       )}
-
-      {/* ==================== IMPORT WITH LABELS ==================== */}
-      <ImportWithLabelsSection projectId={projectId} />
 
       {/* ==================== BATCH NAME MODAL ==================== */}
       <Modal
