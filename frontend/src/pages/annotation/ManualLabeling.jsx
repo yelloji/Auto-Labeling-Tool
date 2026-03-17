@@ -707,12 +707,24 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
       const response = await AnnotationAPI.getDatasetImages(datasetId, 0, 1000);
-      setImageList(response.images);
+      const allImages = response.images;
+
+      // If navigated from Dataset section with a filtered list, use that order/subset
+      const filteredIds = location.state?.filteredImageIds;
+      let imagesToShow = allImages;
+      if (filteredIds && filteredIds.length > 0) {
+        const ordered = filteredIds
+          .map(id => allImages.find(img => img.id === id))
+          .filter(Boolean);
+        if (ordered.length > 0) imagesToShow = ordered;
+      }
+
+      setImageList(imagesToShow);
       setDatasetProgress({
-        total: response.images.length,
-        labeled: response.images.filter(img => img.is_labeled).length,
-        percentage: response.images.length > 0 ?
-          Math.round((response.images.filter(img => img.is_labeled).length / response.images.length) * 100) : 0
+        total: allImages.length,
+        labeled: allImages.filter(img => img.is_labeled).length,
+        percentage: allImages.length > 0 ?
+          Math.round((allImages.filter(img => img.is_labeled).length / allImages.length) * 100) : 0
       });
       logInfo('app.frontend.interactions', 'dataset_images_loaded_success', 'Dataset images loaded successfully', {
         datasetId,

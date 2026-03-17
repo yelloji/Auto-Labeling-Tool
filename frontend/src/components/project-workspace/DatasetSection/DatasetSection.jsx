@@ -1,6 +1,6 @@
 // src/components/project-workspace/DatasetSection.jsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Spin,
@@ -43,6 +43,7 @@ const DatasetSection = ({ projectId }) => {
   const [totalImages, setTotalImages] = useState(0);
   const [pageSize] = useState(50); // Show 50 images per page for optimal performance
   const navigate = useNavigate();
+  const filteredImagesRef = useRef([]);
 
   useEffect(() => {
     logInfo('app.frontend.ui', 'dataset_section_initialized', 'DatasetSection component initialized', {
@@ -289,6 +290,7 @@ const DatasetSection = ({ projectId }) => {
     const endIndex = startIndex + pageSize;
     const paginatedImages = filteredImages.slice(startIndex, endIndex);
 
+    filteredImagesRef.current = filteredImages;
     setImages(paginatedImages);
     setTotalImages(filteredImages.length);
 
@@ -321,7 +323,7 @@ const DatasetSection = ({ projectId }) => {
     });
     // Navigate to manual labeling page — imageId must be in query params (ManualLabeling reads searchParams)
     navigate(`/annotate/${image.dataset_id}/manual?imageId=${image.id}`, {
-      state: { projectId: projectId }
+      state: { projectId: projectId, filteredImageIds: filteredImagesRef.current.map(img => img.id) }
     });
   };
 
