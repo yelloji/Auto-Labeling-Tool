@@ -319,12 +319,9 @@ const DatasetSection = ({ projectId }) => {
       datasetId: image.dataset_id,
       imageName: image.filename || image.name
     });
-    // Navigate to manual labeling page
-    navigate(`/annotate/${image.dataset_id}/manual`, {
-      state: {
-        imageId: image.id,
-        projectId: projectId
-      }
+    // Navigate to manual labeling page — imageId must be in query params (ManualLabeling reads searchParams)
+    navigate(`/annotate/${image.dataset_id}/manual?imageId=${image.id}`, {
+      state: { projectId: projectId }
     });
   };
 
