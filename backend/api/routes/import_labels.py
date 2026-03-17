@@ -323,7 +323,8 @@ async def import_with_labels(
         # unique filename, relative DB path).
         storage_dir = path_manager.get_image_storage_path(project_name, name, "unassigned")
 
-        saved_images: dict[str, str] = {}          # original_stem → image_id
+        saved_images: dict[str, str] = {}            # original_stem → image_id
+        image_dims:   dict[str, tuple] = {}          # original_stem → (width, height)
         image_files_for_parsers: dict[str, str] = {}  # stem → fname (membership check only)
         warnings: list[str] = []
 
@@ -344,13 +345,16 @@ async def import_with_labels(
             except Exception:
                 md5 = None
 
+            w = image_info["width"] or 1
+            h = image_info["height"] or 1
+
             image_rec = Image(
                 filename=saved_filename,
                 original_filename=Path(upload.filename or "").name,
                 file_path=rel_path,
                 dataset_id=dataset.id,
-                width=image_info["width"],
-                height=image_info["height"],
+                width=w,
+                height=h,
                 file_size=image_info["file_size"],
                 format=image_info["format"],
                 split_type="unassigned",
@@ -361,6 +365,7 @@ async def import_with_labels(
             db.add(image_rec)
             db.flush()
             saved_images[orig_stem] = image_rec.id
+            image_dims[orig_stem]   = (w, h)
             image_files_for_parsers[orig_stem] = Path(upload.filename or "").name
 
         db.commit()
@@ -388,6 +393,8 @@ async def import_with_labels(
                 warnings.append(f"Labels for '{stem}' found but image was not uploaded — skipped")
                 continue
 
+            w, h = image_dims.get(stem, (1, 1))
+
             for ann in anns:
                 class_name = ann["class_name"]
                 label_id, was_created = _get_or_create_label(db, project_id, class_name)
@@ -400,16 +407,29 @@ async def import_with_labels(
                     if class_name not in classes_reused:
                         classes_reused.append(class_name)
 
+                # Denormalize bbox to pixel coordinates (app stores pixels, not 0-1)
+                x_min_px = ann["x_min"] * w
+                y_min_px = ann["y_min"] * h
+                x_max_px = ann["x_max"] * w
+                y_max_px = ann["y_max"] * h
+
+                # Convert segmentation from [[[x,y],...]] normalized
+                # to [{"x": px, "y": py}, ...] pixel format (same as app's labeling tool)
+                seg_px = None
+                if ann["segmentation"]:
+                    pairs = ann["segmentation"][0]  # unwrap outer list → [[x,y],...]
+                    seg_px = [{"x": p[0] * w, "y": p[1] * h} for p in pairs]
+
                 annotation = Annotation(
                     image_id=image_id,
                     class_name=class_name,
                     class_id=label_id,
-                    x_min=ann["x_min"],
-                    y_min=ann["y_min"],
-                    x_max=ann["x_max"],
-                    y_max=ann["y_max"],
+                    x_min=x_min_px,
+                    y_min=y_min_px,
+                    x_max=x_max_px,
+                    y_max=y_max_px,
                     confidence=1.0,
-                    segmentation=ann["segmentation"],
+                    segmentation=seg_px,
                     is_auto_generated=False,
                 )
                 db.add(annotation)
