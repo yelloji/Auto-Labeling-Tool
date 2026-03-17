@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import ImportWithLabelsSection from './ImportWithLabelsSection';
 import {
   Typography,
   Card,
@@ -1644,6 +1645,9 @@ const UploadSection = ({ projectId }) => {
           )}
         </Card>
       )}
+
+      {/* ==================== IMPORT WITH LABELS ==================== */}
+      <ImportWithLabelsSection projectId={projectId} />
 
       {/* ==================== BATCH NAME MODAL ==================== */}
       <Modal

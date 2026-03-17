@@ -21,6 +21,7 @@ import uvicorn
 from api.routes import labels
 
 from api.routes import projects, datasets, annotations, models, enhanced_export, releases
+from api.routes import import_labels
 from models.training import api_routes as training_api
 from api.routes import analytics, augmentation, dataset_management
 from api.routes import image_transformations, logs, frontend_logs, release_detail_view
@@ -125,6 +126,7 @@ app.include_router(labels.router, prefix="/api/v1/projects", tags=["labels"])
 # Include API routes
 app.include_router(projects.router, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(datasets.router, prefix="/api/v1/datasets", tags=["datasets"])
+app.include_router(import_labels.router, prefix="/api/v1", tags=["import-labels"])
 app.include_router(annotations.router, prefix="/api/v1/images", tags=["image-annotations"])
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 

@@ -1189,6 +1189,19 @@ export const datasetsAPI = {
     return response.data;
   },
 
+  // Import images with label files (YOLO or COCO format)
+  importWithLabels: async (projectId, name, files, onUploadProgress) => {
+    const formData = new FormData();
+    formData.append('project_id', projectId);
+    formData.append('name', name);
+    files.forEach(file => formData.append('files', file));
+    const response = await api.post('/api/v1/datasets/import-with-labels', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress,
+    });
+    return response.data;
+  },
+
   // Get specific dataset
   getDataset: async (datasetId) => {
     const response = await api.get(`/api/v1/datasets/${datasetId}`);
