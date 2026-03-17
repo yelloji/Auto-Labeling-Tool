@@ -31,7 +31,8 @@ import {
   Space,
   Modal,
   Tag,
-  Collapse
+  Collapse,
+  Alert
 } from 'antd';
 import {
   UploadOutlined,
@@ -62,6 +63,7 @@ const UploadSection = ({ projectId }) => {
   // Batch naming and tagging
   const [batchName, setBatchName] = useState(''); // User-defined batch name for uploads
   const [tags, setTags] = useState([]); // Selected dataset tags for categorization
+  const [tagWarning, setTagWarning] = useState(null); // Warning when selected dataset is not in unassigned stage
 
   // Upload management
   const [uploading, setUploading] = useState(false); // Upload in progress flag
@@ -126,7 +128,8 @@ const UploadSection = ({ projectId }) => {
       const datasets = response.datasets || response || [];
       const options = datasets.map(dataset => ({
         value: dataset.id,
-        label: dataset.name
+        label: dataset.name,
+        split_type: dataset.split_type
       }));
       setAvailableDatasets(options);
 
@@ -898,6 +901,7 @@ const UploadSection = ({ projectId }) => {
               value={tags}
               onChange={(selectedTags) => {
                 setTags(selectedTags);
+                setTagWarning(null);
 
                 logInfo('app.frontend.ui', 'tags_selection_changed', 'Tags selection changed', {
                   timestamp: new Date().toISOString(),
@@ -905,6 +909,14 @@ const UploadSection = ({ projectId }) => {
                   selectedTags: selectedTags,
                   previousBatchName: batchName
                 });
+
+                // Check if selected dataset is not in unassigned stage
+                if (selectedTags.length > 0) {
+                  const selectedDataset = availableDatasets.find(d => d.value === selectedTags[selectedTags.length - 1]);
+                  if (selectedDataset && selectedDataset.split_type && selectedDataset.split_type !== 'unassigned') {
+                    setTagWarning(`"${selectedDataset.label}" is currently in the "${selectedDataset.split_type}" stage. Move it back to Unassigned before adding new images.`);
+                  }
+                }
 
                 // Clear batch name when tags are selected (mutual exclusivity)
                 if (selectedTags.length > 0 && batchName.trim()) {
@@ -925,6 +937,18 @@ const UploadSection = ({ projectId }) => {
         </Row>
       </Card>
 
+      {/* Tag stage warning */}
+      {tagWarning && (
+        <Alert
+          type="warning"
+          showIcon
+          message={tagWarning}
+          style={{ marginBottom: '1rem' }}
+          closable
+          onClose={() => setTagWarning(null)}
+        />
+      )}
+
       {/* ==================== UPLOAD AREA ==================== */}
       <Card>
         {/* Upload Buttons */}
@@ -932,6 +956,7 @@ const UploadSection = ({ projectId }) => {
           <Button
             type="primary"
             icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
+            disabled={!!tagWarning}
             style={{ marginRight: '0.5rem', height: '2.25rem', fontSize: '0.875rem' }}
             onClick={(e) => {
               e.stopPropagation();
@@ -942,6 +967,7 @@ const UploadSection = ({ projectId }) => {
           </Button>
           <Button
             icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
+            disabled={!!tagWarning}
             style={{ marginRight: '0.5rem', height: '2.25rem', fontSize: '0.875rem' }}
             onClick={(e) => {
               e.stopPropagation();
@@ -953,6 +979,7 @@ const UploadSection = ({ projectId }) => {
           <Button
             type="primary"
             icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
+            disabled={!!tagWarning}
             style={{ height: '2.25rem', fontSize: '0.875rem' }}
             onClick={(e) => {
               e.stopPropagation();
