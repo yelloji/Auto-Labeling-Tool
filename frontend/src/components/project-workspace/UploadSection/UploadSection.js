@@ -1160,7 +1160,7 @@ const UploadSection = ({ projectId }) => {
                   uploaded: result.results?.successful_uploads ?? files.length,
                   skipped: result.skipped_duplicates ?? 0,
                   duplicateFiles: result.duplicate_files || [],
-                  batchName: batchNameToUse
+                  batchName: result.dataset_name || batchNameToUse
                 });
               } else {
                 result = await uploadFile(files[0], batchNameToUse);
@@ -1168,7 +1168,7 @@ const UploadSection = ({ projectId }) => {
                   uploaded: result?.duplicate ? 0 : 1,
                   skipped: result?.duplicate ? 1 : 0,
                   duplicateFiles: result?.duplicate ? [files[0].name] : [],
-                  batchName: batchNameToUse
+                  batchName: result?.dataset_name || batchNameToUse
                 });
               }
               loadRecentImages();

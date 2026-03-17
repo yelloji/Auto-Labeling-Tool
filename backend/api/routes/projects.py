@@ -2674,7 +2674,7 @@ async def upload_multiple_images_to_project(
     project_id: str,
     files: List[UploadFile] = File(...),
     batch_name: str = Form(None),
-    tags: str = Form("[]"),
+    dataset_ids: str = Form("[]"),
     db: Session = Depends(get_db)
 ):
     """Upload multiple images to a project"""
@@ -2682,7 +2682,7 @@ async def upload_multiple_images_to_project(
         "project_id": project_id,
         "file_count": len(files),
         "batch_name": batch_name,
-        "tags": tags,
+        "dataset_ids": dataset_ids,
         "endpoint": f"/projects/{project_id}/upload-bulk"
     })
     
@@ -2704,33 +2704,38 @@ async def upload_multiple_images_to_project(
             "file_count": len(files)
         })
         
-        # Parse tags
-        logger.debug("operations.operations", f"Parsing tags for dataset selection", "tags_parsing", {
-            "tags": tags
+        # Parse dataset_ids (tags = existing datasets selected by user)
+        logger.debug("operations.operations", f"Parsing dataset_ids for dataset selection", "dataset_ids_parsing", {
+            "dataset_ids": dataset_ids
         })
-        
+
         try:
-            tags_list = json.loads(tags) if tags else []
+            dataset_ids_list = json.loads(dataset_ids) if dataset_ids else []
         except json.JSONDecodeError:
-            logger.warning("errors.validation", f"Failed to parse tags JSON", "tags_json_parse_error", {
-                "tags": tags
+            logger.warning("errors.validation", f"Failed to parse dataset_ids JSON", "dataset_ids_json_parse_error", {
+                "dataset_ids": dataset_ids
             })
-            tags_list = []
-        
-        # Determine dataset name: use selected tag (existing dataset) or batch_name (new dataset)
-        if tags_list and len(tags_list) > 0:
-            # User selected existing dataset from tags dropdown
-            default_dataset_name = tags_list[0]  # Use first selected tag as dataset name
-            logger.debug("operations.datasets", f"Using existing dataset from tags", "existing_dataset_selected", {
-                "dataset_name": default_dataset_name,
-                "tags_list": tags_list
+            dataset_ids_list = []
+
+        # Resolve target dataset by ID (tags) or batch name (new dataset)
+        target_dataset_from_id = None
+        if dataset_ids_list:
+            target_dataset_from_id = db.query(DatasetModel).filter(
+                DatasetModel.id == dataset_ids_list[0],
+                DatasetModel.project_id == project_id
+            ).first()
+            if not target_dataset_from_id:
+                raise HTTPException(status_code=404, detail="Selected dataset not found")
+            default_dataset_name = target_dataset_from_id.name
+            logger.debug("operations.datasets", f"Using existing dataset resolved by dataset_id", "existing_dataset_selected", {
+                "dataset_id": dataset_ids_list[0],
+                "dataset_name": default_dataset_name
             })
         else:
-            # User entered new batch name - require it to be provided
             if not batch_name or not batch_name.strip():
                 logger.warning("errors.validation", f"Batch name required but not provided", "batch_name_missing", {
                     "batch_name": batch_name,
-                    "tags_list": tags_list
+                    "dataset_ids_list": dataset_ids_list
                 })
                 raise HTTPException(status_code=400, detail="Batch name is required when not using existing dataset")
             default_dataset_name = batch_name.strip()
@@ -2738,10 +2743,10 @@ async def upload_multiple_images_to_project(
                 "dataset_name": default_dataset_name,
                 "batch_name": batch_name
             })
-        
+
         logger.info("operations.datasets", f"Dataset name determined for bulk upload", "dataset_name_determined", {
             "dataset_name": default_dataset_name,
-            "source": "tags" if tags_list else "batch_name"
+            "source": "dataset_ids" if dataset_ids_list else "batch_name"
         })
         
         # Create project and dataset upload directories
@@ -2764,39 +2769,47 @@ async def upload_multiple_images_to_project(
             "project_id": project_id,
             "dataset_name": default_dataset_name
         })
-        
-        existing_datasets = DatasetOperations.get_datasets_by_project(db, project_id)
-        target_dataset = None
-        for dataset in existing_datasets:
-            if dataset.name == default_dataset_name:
-                target_dataset = dataset
-                break
-        
-        # Create new dataset if not found
-        if not target_dataset:
-            logger.info("operations.datasets", f"Creating new dataset for bulk upload", "new_dataset_creation", {
-                "dataset_name": default_dataset_name,
-                "project_id": project_id,
-                "project_name": project.name
-            })
-            
-            target_dataset = DatasetOperations.create_dataset(
-                db=db,
-                name=default_dataset_name,
-                description=f"Images uploaded to {project.name}",
-                project_id=project_id
-            )
-            
-            logger.info("operations.datasets", f"New dataset created successfully for bulk upload", "new_dataset_created", {
-                "dataset_id": target_dataset.id,
-                "dataset_name": target_dataset.name,
-                "project_id": project_id
-            })
-        else:
-            logger.debug("operations.datasets", f"Using existing dataset for bulk upload", "existing_dataset_used", {
+
+        # If we already resolved the dataset by ID (tags path), use it directly
+        if target_dataset_from_id:
+            target_dataset = target_dataset_from_id
+            logger.debug("operations.datasets", f"Using existing dataset resolved by ID for bulk upload", "existing_dataset_used_by_id", {
                 "dataset_id": target_dataset.id,
                 "dataset_name": target_dataset.name
             })
+        else:
+            existing_datasets = DatasetOperations.get_datasets_by_project(db, project_id)
+            target_dataset = None
+            for dataset in existing_datasets:
+                if dataset.name == default_dataset_name:
+                    target_dataset = dataset
+                    break
+
+            # Create new dataset if not found
+            if not target_dataset:
+                logger.info("operations.datasets", f"Creating new dataset for bulk upload", "new_dataset_creation", {
+                    "dataset_name": default_dataset_name,
+                    "project_id": project_id,
+                    "project_name": project.name
+                })
+
+                target_dataset = DatasetOperations.create_dataset(
+                    db=db,
+                    name=default_dataset_name,
+                    description=f"Images uploaded to {project.name}",
+                    project_id=project_id
+                )
+
+                logger.info("operations.datasets", f"New dataset created successfully for bulk upload", "new_dataset_created", {
+                    "dataset_id": target_dataset.id,
+                    "dataset_name": target_dataset.name,
+                    "project_id": project_id
+                })
+            else:
+                logger.debug("operations.datasets", f"Using existing dataset for bulk upload", "existing_dataset_used", {
+                    "dataset_id": target_dataset.id,
+                    "dataset_name": target_dataset.name
+                })
         
         # Process all files
         logger.info("operations.images", f"Starting bulk image processing", "bulk_image_processing_start", {
@@ -3005,7 +3018,7 @@ async def upload_multiple_images_to_project(
             "message": f"Successfully uploaded {results['successful_uploads']} of {results['total_files']} files",
             "dataset_id": target_dataset.id,
             "dataset_name": target_dataset.name,
-            "tags": tags_list,
+            "tags": dataset_ids_list,
             "batch_name": default_dataset_name,
             "skipped_duplicates": results['skipped_duplicates'],
             "duplicate_files": results['duplicate_files'],
