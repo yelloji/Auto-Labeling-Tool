@@ -2355,7 +2355,7 @@ async def upload_images_to_project(
         "filename": file.filename,
         "content_type": file.content_type,
         "batch_name": batch_name,
-        "tags": tags,
+        "dataset_ids": dataset_ids,
         "endpoint": f"/projects/{project_id}/upload"
     })
     
