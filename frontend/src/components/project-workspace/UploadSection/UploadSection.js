@@ -21,7 +21,6 @@ import {
   Typography,
   Card,
   Button,
-  Upload,
   Input,
   Select,
   Row,
@@ -31,13 +30,11 @@ import {
   message,
   Space,
   Modal,
-  Alert,
   Tag,
   Collapse
 } from 'antd';
 import {
   UploadOutlined,
-  InboxOutlined,
   PictureOutlined,
   DatabaseOutlined,
   TagOutlined,
@@ -53,7 +50,6 @@ import { projectsAPI, datasetsAPI, handleAPIError } from '../../../services/api'
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 const { Title, Text, Paragraph } = Typography;
-const { Dragger } = Upload;
 const { Option } = Select;
 
 /**
@@ -68,10 +64,7 @@ const UploadSection = ({ projectId }) => {
   const [tags, setTags] = useState([]); // Selected dataset tags for categorization
 
   // Upload management
-  const [uploadedFiles, setUploadedFiles] = useState([]); // List of successfully uploaded files
   const [uploading, setUploading] = useState(false); // Upload in progress flag
-  const [uploadProgress, setUploadProgress] = useState(0); // Upload progress percentage (0-100)
-  const [uploadTimeout, setUploadTimeout] = useState(null); // Timeout for batch upload processing
 
   // Data and UI state
   const [availableDatasets, setAvailableDatasets] = useState([]); // Available datasets for tagging
@@ -80,7 +73,6 @@ const UploadSection = ({ projectId }) => {
 
   // Upload type and file handling
   const [uploadType, setUploadType] = useState('files'); // Current upload type: 'files' or 'folder'
-  const [pendingFiles, setPendingFiles] = useState([]); // Files waiting for batch name confirmation
   const [uploadResult, setUploadResult] = useState(null); // Result of last bulk upload for inline display
 
   // Video upload state
@@ -241,12 +233,11 @@ const UploadSection = ({ projectId }) => {
 
   /**
    * Handle batch name confirmation from modal
-   * Validates batch name and either opens file dialog or processes pending drag & drop files
+   * Validates batch name and opens file dialog
    */
   const handleBatchNameConfirm = () => {
     logUserClick('batch_name_confirm_button_clicked', 'User clicked batch name confirm button');
 
-    // Validate batch name
     if (!batchName.trim()) {
       logError('app.frontend.validation', 'batch_name_empty', 'Batch name validation failed: empty name', {
         timestamp: new Date().toISOString(),
@@ -261,124 +252,16 @@ const UploadSection = ({ projectId }) => {
     logInfo('app.frontend.interactions', 'batch_name_confirmed', 'Batch name confirmed', {
       timestamp: new Date().toISOString(),
       projectId: projectId,
-      batchName: batchName,
-      pendingFilesCount: pendingFiles.length
+      batchName: batchName
     });
 
     setBatchNameModalVisible(false);
 
-    // Check if we have pending files from drag & drop
-    if (pendingFiles.length > 0) {
-      // Process pending drag & drop files
-      const batchNameToUse = batchName;
-
-      pendingFiles.forEach(async ({ file, onSuccess, onError, onProgress }) => {
-        try {
-          // Simulate progress
-          let percent = 0;
-          const interval = setInterval(() => {
-            percent = Math.min(99, percent + 10);
-            onProgress({ percent });
-          }, 200);
-
-          // Upload the file
-          await uploadFile(file, batchNameToUse);
-
-          // Clear interval and set progress to 100%
-          clearInterval(interval);
-          onProgress({ percent: 100 });
-          onSuccess("ok", null);
-
-          // Reload recent images
-          loadRecentImages();
-        } catch (error) {
-          onError(error);
-        }
-      });
-
-      // Clear pending files
-      setPendingFiles([]);
-    } else {
-      // Regular file selection flow
-      if (fileInputRef.current) {
-        fileInputRef.current.click();
-      }
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
-  /**
-   * Handle drag and drop with batch name modal (UNUSED - kept for reference)
-   * This function is not currently used as drag & drop logic is handled in uploadProps
-   */
-  const handleDragDrop = (files) => {
-    if (tags.length === 0) {
-      // No tags selected, show batch name modal first
-      setPendingFiles(files);
-      setBatchNameModalVisible(true);
-    } else {
-      // Tags are selected, proceed directly with upload
-      processDragDropFiles(files);
-    }
-  };
-
-  /**
-   * Process drag and drop files after batch name is confirmed (UNUSED - kept for reference)
-   * This function is not currently used as drag & drop logic is handled in uploadProps
-   */
-  const processDragDropFiles = (files) => {
-    const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
-
-    // Process files using the existing upload logic
-    files.forEach(file => {
-      const fileObj = {
-        file,
-        onSuccess: () => { },
-        onError: () => { },
-        onProgress: () => { }
-      };
-
-      // Add to pending files for batch processing
-      setPendingFiles(prev => {
-        const newFiles = [...prev, fileObj];
-
-        // Clear existing timeout
-        if (uploadTimeout) {
-          clearTimeout(uploadTimeout);
-        }
-
-        // Set new timeout to upload after 500ms
-        const newTimeout = setTimeout(async () => {
-          try {
-            setUploading(true);
-            setUploadProgress(0);
-
-            const progressInterval = setInterval(() => {
-              setUploadProgress(prev => Math.min(prev + 10, 90));
-            }, 100);
-
-            const filesToUpload = newFiles.map(item => item.file);
-            const result = await uploadMultipleFiles(filesToUpload, batchNameToUse);
-
-            clearInterval(progressInterval);
-            setUploadProgress(100);
-
-            setUploadedFiles(prev => [...prev, ...newFiles.map(item => ({ ...result, file: item.file }))]);
-
-            loadRecentImages();
-            setPendingFiles([]);
-          } catch (error) {
-            console.error('Drag drop upload error:', error);
-          } finally {
-            setUploading(false);
-            setUploadProgress(0);
-          }
-        }, 500);
-
-        setUploadTimeout(newTimeout);
-        return newFiles;
-      });
-    });
-  };
 
   // ==================== EFFECTS ====================
 
@@ -929,120 +812,6 @@ const UploadSection = ({ projectId }) => {
     }
   };
 
-  // ==================== UPLOAD CONFIGURATION ====================
-
-  /**
-   * Configuration object for Ant Design Dragger component
-   * Handles drag & drop uploads with batch name modal integration
-   */
-  const uploadProps = {
-    name: 'file',
-    multiple: true,
-
-    /**
-     * Custom upload handler for drag & drop files
-     * Shows batch name modal if no tags are selected and no batch name is set
-     */
-    customRequest: async ({ file, onSuccess, onError, onProgress }) => {
-      // Check if we need to show batch name modal for drag & drop
-      if (tags.length === 0 && !batchName.trim()) {
-        // Store the file and show batch name modal
-        setPendingFiles([{ file, onSuccess, onError, onProgress }]);
-        setBatchNameModalVisible(true);
-        return;
-      }
-
-      try {
-        // Create a batch name if not provided (fallback for tagged uploads)
-        const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
-
-        // Simulate progress for better UX
-        let percent = 0;
-        const interval = setInterval(() => {
-          percent = Math.min(99, percent + 10);
-          onProgress({ percent });
-        }, 200);
-
-        // Upload the file using our upload function
-        await uploadFile(file, batchNameToUse);
-
-        // Complete the progress and notify success
-        clearInterval(interval);
-        onProgress({ percent: 100 });
-        onSuccess("ok", null);
-
-        // Refresh recent images display
-        loadRecentImages();
-      } catch (error) {
-        onError(error);
-      }
-    },
-
-    /**
-     * Handle upload status changes and update UI accordingly
-     */
-    onChange(info) {
-      const { status } = info.file;
-
-      // Show success/error messages
-      if (status === 'done') {
-        message.success(`${info.file.name} file uploaded successfully.`);
-      } else if (status === 'error') {
-        message.error(`${info.file.name} file upload failed.`);
-      }
-
-      // Update uploaded files list for display
-      setUploadedFiles(prevFiles => {
-        const newFiles = [...prevFiles, { file: info.file, status }];
-
-        // Reset progress after a delay for visual feedback
-        if (uploadTimeout) {
-          clearTimeout(uploadTimeout);
-        }
-
-        const newTimeout = setTimeout(() => {
-          if (status === 'done' || status === 'error') {
-            setUploadProgress(0);
-          }
-        }, 500);
-
-        setUploadTimeout(newTimeout);
-        return newFiles;
-      });
-    },
-
-    // File type restrictions
-    accept: 'image/*,.jpg,.jpeg,.png,.bmp,.webp,.avif',
-
-    /**
-     * Validate files before upload
-     * Checks file type and size constraints
-     */
-    beforeUpload: (file) => {
-      // Check if file is an image
-      const isImage = file.type.startsWith('image/');
-      if (!isImage) {
-        message.error(`${file.name} is not an image file`);
-        return false;
-      }
-
-      // Check file size (20MB limit)
-      const isLt20M = file.size / 1024 / 1024 < 20;
-      if (!isLt20M) {
-        message.error(`${file.name} must be smaller than 20MB!`);
-        return false;
-      }
-
-      return true;
-    },
-
-    // Upload list display configuration
-    showUploadList: {
-      showPreviewIcon: true,
-      showRemoveIcon: true,
-      showDownloadIcon: false,
-    },
-  };
 
   // ==================== RENDER ====================
 
@@ -1158,16 +927,6 @@ const UploadSection = ({ projectId }) => {
 
       {/* ==================== UPLOAD AREA ==================== */}
       <Card>
-        {/* Drag & Drop Upload Area */}
-        <Dragger {...uploadProps} style={{ marginBottom: '1rem' }}>
-          <p className="ant-upload-drag-icon" style={{ margin: 0, paddingBottom: '1rem' }}>
-            <InboxOutlined style={{ fontSize: '3rem', color: '#1890ff' }} />
-          </p>
-          <p className="ant-upload-text" style={{ fontSize: '1.125rem', fontWeight: 500, margin: 0 }}>
-            Drag and drop file(s) to upload, or:
-          </p>
-        </Dragger>
-
         {/* Upload Buttons */}
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
           <Button
@@ -1207,45 +966,38 @@ const UploadSection = ({ projectId }) => {
         {/* Import with Labels status — shows below buttons when folder selected */}
         <ImportWithLabelsSection ref={importLabelsRef} projectId={projectId} />
 
-        {/* Upload result card — shown after file/folder select upload */}
+        {/* Upload result — shown after file/folder select upload */}
         {uploadResult && (
-          <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
-            <Alert
-              type={uploadResult.uploaded > 0 ? 'success' : 'warning'}
-              showIcon
-              icon={uploadResult.uploaded > 0 ? <CheckCircleOutlined /> : <WarningOutlined />}
-              message={
-                <span>
-                  {uploadResult.uploaded > 0 && (
-                    <><strong>{uploadResult.uploaded}</strong> image{uploadResult.uploaded !== 1 ? 's' : ''} uploaded to &ldquo;{uploadResult.batchName}&rdquo;</>
-                  )}
-                  {uploadResult.uploaded > 0 && uploadResult.skipped > 0 && ', '}
-                  {uploadResult.skipped > 0 && (
-                    <><strong>{uploadResult.skipped}</strong> skipped</>
-                  )}
-                </span>
-              }
-              description={
-                uploadResult.skipped > 0 ? (
-                  <div style={{ fontSize: 12, marginTop: 4 }}>
-                    <Collapse ghost size="small" items={[{
-                      key: 'dup',
-                      label: <span><WarningOutlined style={{ color: '#faad14' }} />{' '}<strong>{uploadResult.skipped}</strong> image{uploadResult.skipped !== 1 ? 's' : ''} already exist in this project</span>,
-                      children: (
-                        <div style={{ maxHeight: 160, overflowY: 'auto', fontSize: 11 }}>
-                          {uploadResult.duplicateFiles.map(f => (
-                            <Tag key={f} color="orange" style={{ marginBottom: 2 }}>{f}</Tag>
-                          ))}
-                        </div>
-                      )
-                    }]} />
-                    <Button size="small" style={{ marginTop: 4 }} onClick={() => setUploadResult(null)}>Dismiss</Button>
+          <div style={{
+            background: '#f5f5f5',
+            borderRadius: 8,
+            padding: '16px',
+            marginBottom: '1rem',
+            textAlign: 'center'
+          }}>
+            <div style={{ marginBottom: 8 }}>
+              {uploadResult.uploaded > 0 && (
+                <Text strong>{uploadResult.uploaded} image{uploadResult.uploaded !== 1 ? 's' : ''} uploaded to &ldquo;{uploadResult.batchName}&rdquo;</Text>
+              )}
+              {uploadResult.uploaded > 0 && uploadResult.skipped > 0 && <Text> — </Text>}
+              {uploadResult.skipped > 0 && (
+                <Text type="warning"><strong>{uploadResult.skipped}</strong> skipped</Text>
+              )}
+            </div>
+            {uploadResult.skipped > 0 && (
+              <Collapse ghost size="small" style={{ textAlign: 'left' }} items={[{
+                key: 'dup',
+                label: <Text type="secondary" style={{ fontSize: 12 }}><WarningOutlined style={{ color: '#faad14', marginRight: 4 }} />{uploadResult.skipped} image{uploadResult.skipped !== 1 ? 's' : ''} already exist in this project</Text>,
+                children: (
+                  <div style={{ maxHeight: 160, overflowY: 'auto', fontSize: 11 }}>
+                    {uploadResult.duplicateFiles.map(f => (
+                      <Tag key={f} color="orange" style={{ marginBottom: 2 }}>{f}</Tag>
+                    ))}
                   </div>
-                ) : (
-                  <Button size="small" style={{ marginTop: 4 }} onClick={() => setUploadResult(null)}>Dismiss</Button>
                 )
-              }
-            />
+              }]} />
+            )}
+            <Button size="small" style={{ marginTop: 8 }} onClick={() => setUploadResult(null)}>Dismiss</Button>
           </div>
         )}
 
@@ -1629,74 +1381,54 @@ const UploadSection = ({ projectId }) => {
       </Card>
 
       {/* ==================== UPLOAD STATUS & PROGRESS ==================== */}
-      {(uploading || uploadedFiles.length > 0 || recentImages.length > 0) && (
+      {recentImages.length > 0 && (
         <Card title={<span style={{ fontSize: '1rem' }}>Upload Status</span>} style={{ marginTop: '1.5rem' }}>
-          {/* Upload Progress Bar */}
-          {uploading && (
-            <div style={{ marginBottom: '1rem' }}>
-              <Text style={{ fontSize: '0.875rem' }}>Uploading files...</Text>
-              <Progress percent={uploadProgress} status="active" strokeWidth={8} />
-            </div>
-          )}
-
-          {/* Recently Uploaded Files Display */}
-          {(uploadedFiles.length > 0 || recentImages.length > 0) && (
-            <div>
-              <Title level={5} style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>Recently Uploaded ({recentImages.length || uploadedFiles.length} files)</Title>
-              <Row gutter={['1rem', '1rem']}>
-                {/* Display recent images or uploaded files (max 6) */}
-                {(recentImages.length > 0 ? recentImages : uploadedFiles.slice(-6)).map((fileInfo, index) => (
-                  <Col span={4} key={index}>
-                    <Card
-                      size="small"
-                      cover={
-                        <div style={{
-                          height: '5rem',
-                          background: '#f5f5f5',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          {/* Show thumbnail if available, otherwise show placeholder icon */}
-                          {fileInfo.thumbnail_url ? (
-                            <img
-                              src={fileInfo.thumbnail_url}
-                              alt={fileInfo.filename || 'Image'}
-                              style={{ maxHeight: '5rem', maxWidth: '100%' }}
-                            />
-                          ) : (
-                            <PictureOutlined style={{ fontSize: '1.5rem', color: '#999' }} />
-                          )}
-                        </div>
+          <div>
+            <Title level={5} style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>Recently Uploaded ({recentImages.length} files)</Title>
+            <Row gutter={['1rem', '1rem']}>
+              {recentImages.map((fileInfo, index) => (
+                <Col span={4} key={index}>
+                  <Card
+                    size="small"
+                    cover={
+                      <div style={{
+                        height: '5rem',
+                        background: '#f5f5f5',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        {fileInfo.thumbnail_url ? (
+                          <img
+                            src={fileInfo.thumbnail_url}
+                            alt={fileInfo.filename || 'Image'}
+                            style={{ maxHeight: '5rem', maxWidth: '100%' }}
+                          />
+                        ) : (
+                          <PictureOutlined style={{ fontSize: '1.5rem', color: '#999' }} />
+                        )}
+                      </div>
+                    }
+                  >
+                    <Card.Meta
+                      title={
+                        <Text ellipsis style={{ fontSize: '0.75rem' }}>
+                          {fileInfo.filename || 'Unknown'}
+                        </Text>
                       }
-                    >
-                      <Card.Meta
-                        title={
-                          <Text ellipsis style={{ fontSize: '0.75rem' }}>
-                            {fileInfo.filename || fileInfo.file?.name || 'Unknown'}
-                          </Text>
-                        }
-                        description={
-                          <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
-                            {fileInfo.file?.size ? `${(fileInfo.file.size / 1024).toFixed(1)} KB` : ''}
-                          </Text>
-                        }
-                      />
-                    </Card>
-                  </Col>
-                ))}
-              </Row>
-
-              {/* Show "View all" button if more than 6 files */}
-              {(recentImages.length > 6 || uploadedFiles.length > 6) && (
-                <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-                  <Button type="link" style={{ fontSize: '0.8125rem' }}>
-                    View all {recentImages.length || uploadedFiles.length} uploaded files
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+                    />
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+            {recentImages.length > 6 && (
+              <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                <Button type="link" style={{ fontSize: '0.8125rem' }}>
+                  View all {recentImages.length} uploaded files
+                </Button>
+              </div>
+            )}
+          </div>
         </Card>
       )}
 
@@ -1710,12 +1442,10 @@ const UploadSection = ({ projectId }) => {
           logUserClick('batch_name_modal_cancel_button_clicked', 'User clicked batch name modal cancel button');
           logInfo('app.frontend.ui', 'batch_name_modal_cancelled', 'Batch name modal cancelled', {
             timestamp: new Date().toISOString(),
-            projectId: projectId,
-            pendingFilesCount: pendingFiles.length
+            projectId: projectId
           });
           setBatchNameModalVisible(false);
           setBatchName('');
-          setPendingFiles([]); // Clear any pending files
         }}
         okText="Continue"
         cancelText="Cancel"
