@@ -3029,8 +3029,8 @@ async def get_project_images(
                 "total_datasets": len(datasets)
             })
             
-            images = ImageOperations.get_images_by_dataset(db, dataset.id)
-            
+            images = ImageOperations.get_images_by_dataset(db, dataset.id, limit=99999)
+
             # Skip datasets with no images to prevent empty folders in frontend
             if len(images) == 0:
                 logger.debug("operations.datasets", f"Skipping empty dataset", "empty_dataset_skipped", {
