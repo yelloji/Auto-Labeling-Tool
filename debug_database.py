@@ -585,6 +585,7 @@ class DatabaseDebugger:
             
             # Check if physical file exists
             file_exists = os.path.exists(image['file_path'])
+            print(f"      🔑 MD5 Hash: {image['image_hash_md5'] or '❌ Not set'}")
             print(f"      💾 Physical File: {'✅ Exists' if file_exists else '❌ Missing'}")
             
             # Get annotations count
