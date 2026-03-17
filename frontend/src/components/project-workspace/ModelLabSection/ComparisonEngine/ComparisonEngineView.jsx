@@ -250,7 +250,7 @@ const DeltaCard = ({ imageCount, totalImages, detectionCount, title, description
 };
 
 // ─── Metric Verdict Row (quick win/loss summary) ──────────────────────────────
-const VerdictRow = ({ a, b, c, is3Way }) => {
+const VerdictRow = ({ a, b, labelA = 'Baseline', labelB = 'Model B', colorB = '#0958d9', shadowB = '#69b1ff' }) => {
     const metrics = [
         { key: 'Precision', vA: a.precision, vB: b.precision, higherBetter: true },
         { key: 'Recall', vA: a.recall, vB: b.recall, higherBetter: true },
@@ -280,18 +280,18 @@ const VerdictRow = ({ a, b, c, is3Way }) => {
                     borderRadius: 20,
                     boxShadow: !tied && !bLeads ? '0 0 0 3px #b37feb, 0 2px 8px rgba(83,29,171,0.4)' : 'none',
                     transition: 'all 0.2s',
-                }}>Baseline &nbsp;{aWins}/{totalMetrics}</span>
+                }}>{labelA} &nbsp;{aWins}/{totalMetrics}</span>
                 <span style={{ fontSize: 12, color: '#bfbfbf', fontWeight: 600 }}>vs</span>
                 <span style={{
                     fontSize: !tied && bLeads ? 16 : 12, fontWeight: 800,
-                    color: '#fff', background: '#0958d9',
+                    color: '#fff', background: colorB,
                     padding: !tied && bLeads ? '5px 18px' : '3px 12px',
                     borderRadius: 20,
-                    boxShadow: !tied && bLeads ? '0 0 0 3px #69b1ff, 0 2px 8px rgba(9,88,217,0.4)' : 'none',
+                    boxShadow: !tied && bLeads ? `0 0 0 3px ${shadowB}, 0 2px 8px rgba(9,88,217,0.4)` : 'none',
                     transition: 'all 0.2s',
-                }}>Model B &nbsp;{bWins}/{totalMetrics}</span>
+                }}>{labelB} &nbsp;{bWins}/{totalMetrics}</span>
                 <span style={{ fontSize: 13, fontWeight: 700, marginLeft: 6, color: bLeads ? '#389e0d' : !tied ? '#722ed1' : '#8c8c8c' }}>
-                    {bLeads ? '🏆 Model B wins' : !tied ? '🏆 Baseline wins' : '🤝 Tied'}
+                    {bLeads ? `🏆 ${labelB} wins` : !tied ? `🏆 ${labelA} wins` : '🤝 Tied'}
                 </span>
             </div>
             {/* Per-metric chips */}
@@ -307,10 +307,10 @@ const VerdictRow = ({ a, b, c, is3Way }) => {
                             <span style={{ padding: '4px 9px', background: '#fafafa', color: '#595959', fontWeight: 500, borderRight: '1px solid #d9d9d9' }}>{key}</span>
                             <span style={{
                                 padding: '4px 10px', fontWeight: 700,
-                                background: winner === 'B' ? '#0958d9' : winner === 'A' ? '#531dab' : '#8c8c8c',
+                                background: winner === 'B' ? colorB : winner === 'A' ? '#531dab' : '#8c8c8c',
                                 color: '#fff',
                             }}>
-                                {winner === 'TIE' ? 'Tie' : `${winner === 'B' ? 'Model B' : 'Baseline'} +${diff}`}
+                                {winner === 'TIE' ? 'Tie' : `${winner === 'B' ? labelB : labelA} +${diff}`}
                             </span>
                         </div>
                     );
@@ -321,11 +321,12 @@ const VerdictRow = ({ a, b, c, is3Way }) => {
 };
 
 // ─── Split Mode Overview Panel ────────────────────────────────────────────────
-const SplitOverviewPanel = ({ data, is3Way, onDelta, isUpload }) => {
+const SplitOverviewPanel = ({ data, is3Way, onDelta, onDeltaC, isUpload }) => {
     const a = data.baseline;
     const b = data.challenger_b;
     const c = data.challenger_c;
     const delta = data.delta_b;
+    const deltaC = data.delta_c;
     const hasGT = a?.has_ground_truth && b?.has_ground_truth;
 
     return (
@@ -396,10 +397,10 @@ const SplitOverviewPanel = ({ data, is3Way, onDelta, isUpload }) => {
                     <MetricRow label="False Negatives △" valA={a.false_negatives} valB={b.false_negatives} valC={is3Way && c ? c.false_negatives : undefined} unit="" higherIsBetter={false} />
                     <MetricRow label="Total GT objects" valA={a.total_gt} valB={b.total_gt} valC={is3Way && c ? c.total_gt : undefined} unit="" higherIsBetter={null} />
 
-                    {/* ── Delta Gallery Cards ── */}
+                    {/* ── Delta Gallery Cards — Model B ── */}
                     {delta && (
                         <>
-                            <VerdictRow a={a} b={b} c={c} is3Way={is3Way} />
+                            <VerdictRow a={a} b={b} labelA="Baseline" labelB="Model B" colorB="#0958d9" shadowB="#69b1ff" />
 
                             <Divider style={{ margin: '12px 0 12px' }}>
                                 <Text type="secondary" style={{ fontSize: 12 }}>Individual Image Delta — Model B vs Baseline</Text>
@@ -470,6 +471,84 @@ const SplitOverviewPanel = ({ data, is3Way, onDelta, isUpload }) => {
                                     title="Confidence Degraded"
                                     description={`${b.name} showed significantly lower confidence on True Positives for ${delta.counts?.degraded_conf ?? 0} images.`}
                                     onClick={() => onDelta('degraded_conf', delta.degraded_conf || [], b.name)}
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* ── Delta Gallery Cards — Model C (3-way only) ── */}
+                    {is3Way && c && deltaC && (
+                        <>
+                            <VerdictRow a={a} b={c} labelA="Baseline" labelB="Model C" colorB="#722ed1" shadowB="#b37feb" />
+                            <Divider style={{ margin: '20px 0 12px' }}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Individual Image Delta — Model C vs Baseline</Text>
+                            </Divider>
+                            <div style={{ display: 'flex', gap: 12 }}>
+                                <DeltaCard
+                                    good
+                                    imageCount={deltaC.counts?.fixed_fp ?? 0}
+                                    totalImages={a.image_count ?? c.image_count}
+                                    detectionCount={deltaC.detections?.fp_saved ?? 0}
+                                    detectionLabel="false alarms removed"
+                                    title="False Positives Fixed"
+                                    description={`Model C reduced wrong detections on ${deltaC.counts?.fixed_fp ?? 0} images — ${deltaC.detections?.fp_saved ?? 0} fewer false alarms in total.`}
+                                    onClick={() => onDeltaC('fixed_fp', deltaC.fixed_fp || [], c.name)}
+                                />
+                                <DeltaCard
+                                    good
+                                    imageCount={deltaC.counts?.fixed_fn ?? 0}
+                                    totalImages={a.image_count ?? c.image_count}
+                                    detectionCount={deltaC.detections?.fn_saved ?? 0}
+                                    detectionLabel="missed objects now found"
+                                    title="Missed Objects Fixed"
+                                    description={`Model C found more real objects on ${deltaC.counts?.fixed_fn ?? 0} images — ${deltaC.detections?.fn_saved ?? 0} objects that were previously missed.`}
+                                    onClick={() => onDeltaC('fixed_fn', deltaC.fixed_fn || [], c.name)}
+                                />
+                                <DeltaCard
+                                    good={false}
+                                    imageCount={deltaC.counts?.new_fp ?? 0}
+                                    totalImages={a.image_count ?? c.image_count}
+                                    detectionCount={deltaC.detections?.fp_added ?? 0}
+                                    detectionLabel="new false alarms introduced"
+                                    title="New False Positives"
+                                    description={`Model C created extra wrong detections on ${deltaC.counts?.new_fp ?? 0} images — ${deltaC.detections?.fp_added ?? 0} false alarms added.`}
+                                    onClick={() => onDeltaC('new_fp', deltaC.new_fp || [], c.name)}
+                                />
+                                <DeltaCard
+                                    good={false}
+                                    imageCount={deltaC.counts?.new_fn ?? 0}
+                                    totalImages={a.image_count ?? c.image_count}
+                                    detectionCount={deltaC.detections?.fn_added ?? 0}
+                                    detectionLabel="objects now being missed"
+                                    title="New Missed Objects"
+                                    description={`Model C missed real objects on ${deltaC.counts?.new_fn ?? 0} images — ${deltaC.detections?.fn_added ?? 0} detections lost.`}
+                                    onClick={() => onDeltaC('new_fn', deltaC.new_fn || [], c.name)}
+                                />
+                            </div>
+
+                            <Divider style={{ margin: '12px 0 12px' }}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Confidence Analysis — Model C vs Baseline</Text>
+                            </Divider>
+                            <div style={{ display: 'flex', gap: 12 }}>
+                                <DeltaCard
+                                    good
+                                    imageCount={deltaC.counts?.improved_conf ?? 0}
+                                    totalImages={a.image_count ?? c.image_count}
+                                    detectionCount={deltaC.detections?.improved_conf ?? 0}
+                                    detectionLabel="boxes with >5% higher confidence"
+                                    title="Confidence Improved"
+                                    description={`${c.name} showed significantly higher confidence on True Positives for ${deltaC.counts?.improved_conf ?? 0} images.`}
+                                    onClick={() => onDeltaC('improved_conf', deltaC.improved_conf || [], c.name)}
+                                />
+                                <DeltaCard
+                                    good={false}
+                                    imageCount={deltaC.counts?.degraded_conf ?? 0}
+                                    totalImages={a.image_count ?? c.image_count}
+                                    detectionCount={deltaC.detections?.degraded_conf ?? 0}
+                                    detectionLabel="boxes with >5% lower confidence"
+                                    title="Confidence Degraded"
+                                    description={`${c.name} showed significantly lower confidence on True Positives for ${deltaC.counts?.degraded_conf ?? 0} images.`}
+                                    onClick={() => onDeltaC('degraded_conf', deltaC.degraded_conf || [], c.name)}
                                 />
                             </div>
                         </>
@@ -879,6 +958,9 @@ const ComparisonEngineView = ({ currentTraining }) => {
                             isUpload={!!comparisonData._isUpload}
                             onDelta={(type, items, challengerName) =>
                                 openGallery(type, items, challengerName, challengerId)
+                            }
+                            onDeltaC={(type, items, challengerName) =>
+                                openGallery(type, items, challengerName, challengerCId)
                             }
                         />
                         <DeltaGalleryModal

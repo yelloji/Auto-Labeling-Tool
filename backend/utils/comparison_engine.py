@@ -596,9 +596,10 @@ def calculate_upload_comparison(
     project_id: int,
     baseline_exp_id: str,
     challenger_exp_id: str,
+    challenger_c_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Upload vs Upload comparison: no YOLO GT exists for either experiment.
+    Upload vs Upload comparison (2-way or 3-way): no YOLO GT exists for any experiment.
     Human verifications act as pseudo ground truth.
 
     Metrics panel : each experiment uses its own human verifications → Precision / Recall / F1
@@ -653,18 +654,31 @@ def calculate_upload_comparison(
             exp_vs = [v for v in verifications if str(v.experiment_id) == str(exp.id)]
             return {Path(v.image_name).name for v in exp_vs}
 
-        common_images = reviewed_images(baseline_exp) & reviewed_images(challenger_exp)
+        common_ab = reviewed_images(baseline_exp) & reviewed_images(challenger_exp)
+        delta_b = _compute_delta_gallery(stats_a, stats_b, common_images=common_ab) \
+            if common_ab else None
 
-        delta_b = _compute_delta_gallery(stats_a, stats_b, common_images=common_images) \
-            if common_images else None
-
-        return {
+        result = {
             "mode":         "split",
             "_isUpload":    True,
             "baseline":     baseline_fmt,
             "challenger_b": challenger_fmt,
             "delta_b":      delta_b,
         }
+
+        # 3-way: add challenger C
+        if challenger_c_id:
+            challenger_c_exp = db.query(ModelExperiment).filter(ModelExperiment.id == challenger_c_id).first()
+            if challenger_c_exp:
+                q_c = _compute_upload_quality(challenger_c_exp, verifications)
+                stats_c = {**q_c, "has_ground_truth": True}
+                common_ac = reviewed_images(baseline_exp) & reviewed_images(challenger_c_exp)
+                delta_c = _compute_delta_gallery(stats_a, stats_c, common_images=common_ac) \
+                    if common_ac else None
+                result["challenger_c"] = fmt(challenger_c_exp, q_c)
+                result["delta_c"] = delta_c
+
+        return result
 
     except Exception as e:
         logger.error("engine.upload_comparison", f"Failed to compute upload comparison: {str(e)}")

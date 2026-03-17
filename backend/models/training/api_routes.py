@@ -484,10 +484,8 @@ async def compare_experiments(
 
         if both_are_split:
             result = calculate_split_comparison(db, baseline_id, challenger_id, challenger_c_id)
-        elif both_are_upload and not challenger_c_id:
-            result = calculate_upload_comparison(db, project_id, baseline_id, challenger_id)
-        elif challenger_c_id:
-            result = calculate_three_way_delta(db, project_id, baseline_id, challenger_id, challenger_c_id)
+        elif both_are_upload:
+            result = calculate_upload_comparison(db, project_id, baseline_id, challenger_id, challenger_c_id)
         else:
             result = {"error": "Mixed mode (split + upload) is not supported. Please compare two split experiments or two upload experiments."}
 
