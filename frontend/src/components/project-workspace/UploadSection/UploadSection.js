@@ -944,8 +944,6 @@ const UploadSection = ({ projectId }) => {
           showIcon
           message={tagWarning}
           style={{ marginBottom: '1rem' }}
-          closable
-          onClose={() => setTagWarning(null)}
         />
       )}
 
