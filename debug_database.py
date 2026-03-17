@@ -1643,12 +1643,29 @@ class DatabaseDebugger:
         print(f"   Size: {db_size_mb:.2f} MB")
         print(f"   Last Modified: {datetime.fromtimestamp(os.path.getmtime(self.db_path))}")
     
+    def apply_migrations(self):
+        """Apply any pending column migrations safely (idempotent)."""
+        migrations = [
+            ('images', 'image_hash_md5', 'VARCHAR(32)', 'MD5 hash for cross-experiment image matching'),
+        ]
+        for table, column, col_type, description in migrations:
+            try:
+                self.conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}')
+                self.conn.commit()
+                print(f'✅ Migration: added {column} to {table}  ({description})')
+            except sqlite3.OperationalError as e:
+                if 'duplicate column name' in str(e):
+                    pass  # already exists, silent skip
+                else:
+                    print(f'❌ Migration error [{table}.{column}]: {e}')
+
     def run_full_debug(self):
         """Run complete database debug analysis"""
         if not self.connect():
             return
-        
+
         try:
+            self.apply_migrations()
             print("🔍 Starting Database Debug Analysis...")
             print(f"📅 Analysis Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             

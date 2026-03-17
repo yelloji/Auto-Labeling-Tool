@@ -15,23 +15,19 @@ See docs/FEATURE_IMPORT_IMAGES_WITH_LABELS.md for full specification.
 """
 
 import hashlib
-import io
 import json
-import os
 import random
-import uuid
 from pathlib import Path
 from typing import List, Optional
 
 import yaml
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from PIL import Image as PILImage
 from sqlalchemy.orm import Session
 
-from core.config import settings
+from core.file_handler import file_handler
 from database.database import get_db
-from database.models import Annotation, Dataset, Image, Label, Project
-from database.operations import DatasetOperations, ImageOperations
+from database.models import Annotation, Image, Label, Project
+from database.operations import DatasetOperations
 from logging_system.professional_logger import get_professional_logger
 from utils.path_utils import path_manager
 
@@ -99,10 +95,10 @@ def _detect_format(filenames: list) -> str:
 # ── YOLO Parser ───────────────────────────────────────────────────────────────
 
 def _parse_yolo(
-    image_files: dict,      # {stem: (filename, bytes)}
+    image_files: dict,      # {stem: filename}
     label_files: dict,      # {stem: bytes}
     yaml_bytes: bytes,
-    img_dims: dict,         # {stem: (width, height)}
+    img_dims: dict,         # {stem: (width, height)} — unused, coords already normalized
 ) -> tuple[dict, list]:
     """
     Returns:
@@ -168,7 +164,7 @@ def _parse_yolo(
 
 def _parse_coco(
     json_bytes: bytes,
-    image_files: dict,   # {filename_no_ext: (filename, bytes)}  — keyed by full filename too
+    image_files: dict,   # {stem: filename}
 ) -> tuple[dict, list]:
     """
     Returns:
@@ -264,31 +260,37 @@ async def import_with_labels(
             raise HTTPException(status_code=404, detail="Project not found")
         project_name = project.name
 
-        # ── 2. Read all uploaded files into memory ─────────────────────────
-        image_files: dict[str, tuple[str, bytes]] = {}   # stem → (filename, bytes)
-        label_txt:   dict[str, bytes] = {}               # stem → bytes
+        # ── 2. Separate image UploadFiles from label file bytes ────────────
+        # Image UploadFiles are kept untouched (stream not consumed) so that
+        # file_handler.save_uploaded_file() can stream them to disk exactly
+        # like normal uploads do.  Label files (.txt/.yaml/.json) are small
+        # and safe to read into memory up-front.
+        # Duplicate stems: first occurrence wins.
+
+        image_uploads: dict[str, UploadFile] = {}  # stem → UploadFile (first wins)
+        label_txt:   dict[str, bytes] = {}         # stem → bytes
         yaml_bytes:  Optional[bytes]  = None
         json_bytes:  Optional[bytes]  = None
-
-        all_filenames = []
-        file_data: dict[str, tuple[str, bytes]] = {}     # filename → (filename, bytes)
+        all_filenames: list[str] = []
 
         for upload in files:
-            raw = await upload.read()
-            fname = Path(upload.filename).name
-            stem  = Path(fname).stem
-            ext   = Path(fname).suffix.lower()
-            all_filenames.append(fname.lower())
-            file_data[fname] = (fname, raw)
+            full     = upload.filename or ""
+            fname    = Path(full).name
+            stem     = Path(fname).stem
+            ext      = Path(fname).suffix.lower()
+            fname_lc = fname.lower()
+            all_filenames.append(fname_lc)
 
             if ext in IMAGE_EXTENSIONS:
-                image_files[stem] = (fname, raw)
-            elif ext == ".txt" and fname.lower() != "data.yaml":
-                label_txt[stem] = raw
-            elif fname.lower() == "data.yaml" or (ext in (".yaml", ".yml") and "data" in fname.lower()):
-                yaml_bytes = raw
+                if stem not in image_uploads:          # first occurrence wins
+                    image_uploads[stem] = upload
+            elif ext == ".txt" and fname_lc != "data.yaml":
+                if stem not in label_txt:
+                    label_txt[stem] = await upload.read()
+            elif fname_lc == "data.yaml" or (ext in (".yaml", ".yml") and "data" in fname_lc):
+                yaml_bytes = await upload.read()
             elif ext == ".json":
-                json_bytes = raw
+                json_bytes = await upload.read()
 
         # ── 3. Detect format ───────────────────────────────────────────────
         fmt = _detect_format(all_filenames)
@@ -315,47 +317,41 @@ async def import_with_labels(
         )
 
         # ── 5. Save images to disk + create Image records ──────────────────
+        # Delegate to file_handler.save_uploaded_file() — identical to the
+        # normal upload flow (shutil.copyfileobj stream, clean filename,
+        # unique filename, relative DB path).
         storage_dir = path_manager.get_image_storage_path(project_name, name, "unassigned")
-        path_manager.ensure_directory_exists(storage_dir)
 
-        saved_images: dict[str, str] = {}   # stem → image_id
-        classes_created: list[str] = []
-        classes_reused:  list[str] = []
-        total_annotations = 0
+        saved_images: dict[str, str] = {}          # original_stem → image_id
+        image_files_for_parsers: dict[str, str] = {}  # stem → fname (membership check only)
         warnings: list[str] = []
 
-        for stem, (fname, raw) in image_files.items():
-            # Save file
-            dest = storage_dir / fname
-            # Avoid overwrite
-            counter = 1
-            while dest.exists():
-                dest = storage_dir / f"{stem}_{counter}{Path(fname).suffix}"
-                counter += 1
-            dest.write_bytes(raw)
-
-            # Get image dimensions
+        for orig_stem, upload in image_uploads.items():
             try:
-                with PILImage.open(io.BytesIO(raw)) as pil_img:
-                    width, height = pil_img.size
-                    fmt_name = (pil_img.format or "jpeg").lower()
-            except Exception:
-                width, height, fmt_name = None, None, "jpeg"
+                rel_path, image_info = await file_handler.save_uploaded_file(
+                    upload, str(dataset.id), project_name, name, "unassigned"
+                )
+            except Exception as e:
+                warnings.append(f"{upload.filename}: failed to save — {e}")
+                continue
 
-            rel_path = path_manager.get_relative_image_path(
-                project_name, name, dest.name, "unassigned"
-            )
-            md5 = _md5(raw)
+            # Compute MD5 from the file now on disk
+            saved_filename = Path(rel_path).name
+            abs_path = storage_dir / saved_filename
+            try:
+                md5 = _md5(abs_path.read_bytes())
+            except Exception:
+                md5 = None
 
             image_rec = Image(
-                filename=dest.name,
-                original_filename=fname,
+                filename=saved_filename,
+                original_filename=Path(upload.filename or "").name,
                 file_path=rel_path,
                 dataset_id=dataset.id,
-                width=width,
-                height=height,
-                file_size=len(raw),
-                format=fmt_name,
+                width=image_info["width"],
+                height=image_info["height"],
+                file_size=image_info["file_size"],
+                format=image_info["format"],
                 split_type="unassigned",
                 split_section="train",
                 image_hash_md5=md5,
@@ -363,22 +359,28 @@ async def import_with_labels(
             )
             db.add(image_rec)
             db.flush()
-            saved_images[stem] = image_rec.id
+            saved_images[orig_stem] = image_rec.id
+            image_files_for_parsers[orig_stem] = Path(upload.filename or "").name
 
         db.commit()
 
         # ── 6. Parse labels ────────────────────────────────────────────────
         if fmt == "yolo":
             annotations_map, parse_warnings = _parse_yolo(
-                image_files, label_txt, yaml_bytes,
-                img_dims={}   # not needed — coords already normalized
+                image_files_for_parsers, label_txt, yaml_bytes,
+                img_dims={}   # not needed — YOLO coords already normalized
             )
         else:  # coco
-            annotations_map, parse_warnings = _parse_coco(json_bytes, image_files)
+            annotations_map, parse_warnings = _parse_coco(json_bytes, image_files_for_parsers)
 
         warnings.extend(parse_warnings)
 
         # ── 7. Write Annotation records ────────────────────────────────────
+        classes_created: list[str] = []
+        classes_reused:  list[str] = []
+        classes_created_set: set[str] = set()   # tracks what was created in THIS session
+        total_annotations = 0
+
         for stem, anns in annotations_map.items():
             image_id = saved_images.get(stem)
             if not image_id:
@@ -387,11 +389,13 @@ async def import_with_labels(
 
             for ann in anns:
                 class_name = ann["class_name"]
-                label_id, created = _get_or_create_label(db, project_id, class_name)
-                if created:
+                label_id, was_created = _get_or_create_label(db, project_id, class_name)
+                if was_created:
+                    classes_created_set.add(class_name)
                     if class_name not in classes_created:
                         classes_created.append(class_name)
-                else:
+                elif class_name not in classes_created_set:
+                    # Only mark as reused if it truly pre-existed (not created this session)
                     if class_name not in classes_reused:
                         classes_reused.append(class_name)
 
