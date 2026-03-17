@@ -12,7 +12,7 @@
 
 import React, { useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
-  Button, Input, Progress, Tag, Typography, Alert, Space
+  Button, Input, Progress, Tag, Typography, Alert, Space, Collapse
 } from 'antd';
 import {
   FolderOpenOutlined, CheckCircleOutlined, WarningOutlined, LoadingOutlined
@@ -247,20 +247,18 @@ const ImportWithLabelsSection = forwardRef(({ projectId }, ref) => {
                   <div style={{ marginTop: 4 }}>Classes reused: {result.classes_reused.map(c => <Tag key={c}>{c}</Tag>)}</div>
                 )}
                 {result.skipped_duplicates > 0 && (
-                  <div style={{ marginTop: 4 }}>
-                    <WarningOutlined style={{ color: '#faad14' }} />{' '}
-                    <strong>{result.skipped_duplicates}</strong> image{result.skipped_duplicates > 1 ? 's' : ''} skipped — already exist in this project:{' '}
-                    {result.duplicate_files?.map(f => <Tag key={f} color="orange">{f}</Tag>)}
-                  </div>
+                  <Collapse ghost size="small" style={{ marginTop: 4 }} items={[{
+                    key: 'dup',
+                    label: <span><WarningOutlined style={{ color: '#faad14' }} />{' '}<strong>{result.skipped_duplicates}</strong> image{result.skipped_duplicates > 1 ? 's' : ''} skipped — already exist in this project</span>,
+                    children: <div style={{ maxHeight: 160, overflowY: 'auto', fontSize: 11 }}>{result.duplicate_files?.map(f => <Tag key={f} color="orange" style={{ marginBottom: 2 }}>{f}</Tag>)}</div>
+                  }]} />
                 )}
                 {result.warnings?.length > 0 && (
-                  <div style={{ marginTop: 6 }}>
-                    <WarningOutlined style={{ color: '#faad14' }} />{' '}
-                    {result.warnings.length} warning{result.warnings.length > 1 ? 's' : ''}:
-                    <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                      {result.warnings.map((w, i) => <li key={i}>{w}</li>)}
-                    </ul>
-                  </div>
+                  <Collapse ghost size="small" style={{ marginTop: 4 }} items={[{
+                    key: 'warn',
+                    label: <span><WarningOutlined style={{ color: '#faad14' }} />{' '}<strong>{result.warnings.length}</strong> warning{result.warnings.length > 1 ? 's' : ''}</span>,
+                    children: <ul style={{ margin: '4px 0 0 16px', padding: 0, maxHeight: 160, overflowY: 'auto', fontSize: 11 }}>{result.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                  }]} />
                 )}
                 <Button
                   size="small"
