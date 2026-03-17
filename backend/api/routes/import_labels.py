@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from core.file_handler import file_handler
 from database.database import get_db
 from database.models import Annotation, Image, Label, Project
-from database.operations import DatasetOperations
+from database.operations import DatasetOperations, ImageOperations
 from logging_system.professional_logger import get_professional_logger
 from utils.path_utils import path_manager
 
@@ -142,9 +142,10 @@ def _parse_yolo(
                 segmentation = None
             else:
                 # Segmentation: flat x1 y1 x2 y2 ...
+                # Wrap in outer list: [[[x,y],...]] — same format as app's polygon storage
                 pairs = [[_clamp(values[i]), _clamp(values[i + 1])]
                          for i in range(0, len(values) - 1, 2)]
-                segmentation = pairs
+                segmentation = [pairs]
                 x_min, y_min, x_max, y_max = _bbox_from_polygon(pairs)
 
             anns.append({
@@ -206,7 +207,7 @@ def _parse_coco(
             flat = seg_raw[0]
             pairs = [[_clamp(flat[i] / img_w), _clamp(flat[i + 1] / img_h)]
                      for i in range(0, len(flat) - 1, 2)]
-            segmentation = pairs
+            segmentation = [pairs]  # wrap: [[[x,y],...]] — same format as app's polygon storage
 
         # BBox
         bbox = ann.get("bbox")
@@ -420,6 +421,9 @@ async def import_with_labels(
                 img_rec.is_labeled = True
 
         db.commit()
+
+        # Update dataset stats so total_images count is correct (management UI filters out 0-image datasets)
+        DatasetOperations.update_dataset_stats(db, dataset.id)
 
         logger.info("api.import_labels", f"Import complete: {len(saved_images)} images, {total_annotations} annotations", "import_complete", {
             "project_id": project_id,
