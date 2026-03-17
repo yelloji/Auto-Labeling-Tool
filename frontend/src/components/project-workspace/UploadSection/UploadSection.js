@@ -843,7 +843,7 @@ const UploadSection = ({ projectId }) => {
               <Text strong style={{ fontSize: '0.875rem' }}>Batch Name:</Text>
             </div>
             <Input
-              placeholder={`Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`}
+              placeholder={`Uploaded on ${new Date().toISOString().slice(0,10)}`}
               value={batchName}
               onChange={(e) => {
                 const newBatchName = e.target.value;
@@ -1149,7 +1149,7 @@ const UploadSection = ({ projectId }) => {
             });
 
             setUploading(true);
-            const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
+            const batchNameToUse = batchName || `Uploaded on ${new Date().toISOString().slice(0,10)}`;
 
             try {
               setUploadResult(null);
@@ -1212,7 +1212,7 @@ const UploadSection = ({ projectId }) => {
             // Extract folder name from the first file's path
             const firstFile = files[0];
             const pathParts = firstFile.webkitRelativePath.split('/');
-            const folderName = pathParts[0] || `Folder_${new Date().toLocaleDateString()}`;
+            const folderName = pathParts[0] || `Folder_${new Date().toISOString().slice(0,10)}`;
 
             logInfo('app.frontend.interactions', 'folder_selected_for_upload', 'Folder selected for upload', {
               timestamp: new Date().toISOString(),
