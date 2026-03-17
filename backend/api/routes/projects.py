@@ -2390,9 +2390,16 @@ async def upload_images_to_project(
             raise HTTPException(status_code=400, detail="File must be an image")
         
         # Parse dataset_ids (tags = existing datasets selected by user)
+        logger.debug("operations.operations", f"Parsing dataset_ids for dataset selection", "dataset_ids_parsing", {
+            "dataset_ids": dataset_ids
+        })
+
         try:
             dataset_ids_list = json.loads(dataset_ids) if dataset_ids else []
         except json.JSONDecodeError:
+            logger.warning("errors.validation", f"Failed to parse dataset_ids JSON", "dataset_ids_json_parse_error", {
+                "dataset_ids": dataset_ids
+            })
             dataset_ids_list = []
 
         # Resolve target dataset by ID (tags) or batch name (new dataset)
@@ -2405,10 +2412,27 @@ async def upload_images_to_project(
             if not target_dataset_from_id:
                 raise HTTPException(status_code=404, detail="Selected dataset not found")
             default_dataset_name = target_dataset_from_id.name
+            logger.debug("operations.datasets", f"Using existing dataset resolved by dataset_id", "existing_dataset_selected", {
+                "dataset_id": dataset_ids_list[0],
+                "dataset_name": default_dataset_name
+            })
         else:
             if not batch_name or not batch_name.strip():
+                logger.warning("errors.validation", f"Batch name required but not provided", "batch_name_missing", {
+                    "batch_name": batch_name,
+                    "dataset_ids_list": dataset_ids_list
+                })
                 raise HTTPException(status_code=400, detail="Batch name is required when not using existing dataset")
             default_dataset_name = batch_name.strip()
+            logger.debug("operations.datasets", f"Using new batch name for dataset", "new_batch_name_used", {
+                "dataset_name": default_dataset_name,
+                "batch_name": batch_name
+            })
+
+        logger.info("operations.datasets", f"Dataset name determined for upload", "dataset_name_determined", {
+            "dataset_name": default_dataset_name,
+            "source": "dataset_ids" if dataset_ids_list else "batch_name"
+        })
         
         # Use path_manager for consistent path handling
         from utils.path_utils import path_manager
