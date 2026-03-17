@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from core.file_handler import file_handler
 from database.database import get_db
-from database.models import Annotation, Image, Label, Project
+from database.models import Annotation, Dataset as DatasetModel, Image, Label, Project
 from database.operations import DatasetOperations, ImageOperations
 from logging_system.professional_logger import get_professional_logger
 from utils.path_utils import path_manager
@@ -327,6 +327,7 @@ async def import_with_labels(
         image_dims:   dict[str, tuple] = {}          # original_stem → (width, height)
         image_files_for_parsers: dict[str, str] = {}  # stem → fname (membership check only)
         warnings: list[str] = []
+        skipped_duplicates: list[str] = []           # filenames skipped as duplicates
 
         for orig_stem, upload in image_uploads.items():
             # Compute MD5 from upload bytes before stream is consumed by save
@@ -336,6 +337,21 @@ async def import_with_labels(
                 await upload.seek(0)  # Reset so save_uploaded_file can read normally
             except Exception:
                 md5 = None
+
+            # Duplicate check — skip if same MD5 already exists in this project
+            if md5:
+                existing = (
+                    db.query(Image)
+                    .join(DatasetModel, Image.dataset_id == DatasetModel.id)
+                    .filter(
+                        DatasetModel.project_id == project_id,
+                        Image.image_hash_md5 == md5
+                    )
+                    .first()
+                )
+                if existing:
+                    skipped_duplicates.append(Path(upload.filename or "").name)
+                    continue
 
             try:
                 rel_path, image_info = await file_handler.save_uploaded_file(
@@ -457,12 +473,14 @@ async def import_with_labels(
 
         return {
             "dataset_id":       dataset.id,
-            "format_detected":  fmt,
-            "total_images":     len(saved_images),
-            "total_annotations": total_annotations,
-            "classes_created":  classes_created,
-            "classes_reused":   classes_reused,
-            "warnings":         warnings,
+            "format_detected":       fmt,
+            "total_images":          len(saved_images),
+            "total_annotations":     total_annotations,
+            "classes_created":       classes_created,
+            "classes_reused":        classes_reused,
+            "warnings":              warnings,
+            "skipped_duplicates":    len(skipped_duplicates),
+            "duplicate_files":       skipped_duplicates,
         }
 
     except HTTPException:

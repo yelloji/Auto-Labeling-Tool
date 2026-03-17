@@ -246,6 +246,13 @@ const ImportWithLabelsSection = forwardRef(({ projectId }, ref) => {
                 {result.classes_reused?.length > 0 && (
                   <div style={{ marginTop: 4 }}>Classes reused: {result.classes_reused.map(c => <Tag key={c}>{c}</Tag>)}</div>
                 )}
+                {result.skipped_duplicates > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    <WarningOutlined style={{ color: '#faad14' }} />{' '}
+                    <strong>{result.skipped_duplicates}</strong> image{result.skipped_duplicates > 1 ? 's' : ''} skipped — already exist in this project:{' '}
+                    {result.duplicate_files?.map(f => <Tag key={f} color="orange">{f}</Tag>)}
+                  </div>
+                )}
                 {result.warnings?.length > 0 && (
                   <div style={{ marginTop: 6 }}>
                     <WarningOutlined style={{ color: '#faad14' }} />{' '}
