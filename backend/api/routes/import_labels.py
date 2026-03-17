@@ -329,6 +329,14 @@ async def import_with_labels(
         warnings: list[str] = []
 
         for orig_stem, upload in image_uploads.items():
+            # Compute MD5 from upload bytes before stream is consumed by save
+            try:
+                raw_bytes = await upload.read()
+                md5 = _md5(raw_bytes)
+                await upload.seek(0)  # Reset so save_uploaded_file can read normally
+            except Exception:
+                md5 = None
+
             try:
                 rel_path, image_info = await file_handler.save_uploaded_file(
                     upload, str(dataset.id), project_name, name, "unassigned"
@@ -337,13 +345,7 @@ async def import_with_labels(
                 warnings.append(f"{upload.filename}: failed to save — {e}")
                 continue
 
-            # Compute MD5 from the file now on disk
             saved_filename = Path(rel_path).name
-            abs_path = storage_dir / saved_filename
-            try:
-                md5 = _md5(abs_path.read_bytes())
-            except Exception:
-                md5 = None
 
             w = image_info["width"] or 1
             h = image_info["height"] or 1
