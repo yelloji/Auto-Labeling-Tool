@@ -449,7 +449,7 @@ async def delete_manual_verification(verification_id: str, db: Session = Depends
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-from utils.comparison_engine import calculate_model_delta, calculate_three_way_delta, calculate_split_comparison
+from utils.comparison_engine import calculate_model_delta, calculate_three_way_delta, calculate_split_comparison, calculate_upload_comparison
 
 @router.get("/experiments/compare")
 async def compare_experiments(
@@ -473,17 +473,23 @@ async def compare_experiments(
         if not baseline_exp or not challenger_exp:
             raise HTTPException(status_code=404, detail="One or both experiments not found.")
 
-        both_are_split = (
+        both_are_split  = (
             baseline_exp.dataset_source not in (None, 'upload') and
             challenger_exp.dataset_source not in (None, 'upload')
+        )
+        both_are_upload = (
+            baseline_exp.dataset_source in (None, 'upload') and
+            challenger_exp.dataset_source in (None, 'upload')
         )
 
         if both_are_split:
             result = calculate_split_comparison(db, baseline_id, challenger_id, challenger_c_id)
+        elif both_are_upload and not challenger_c_id:
+            result = calculate_upload_comparison(db, project_id, baseline_id, challenger_id)
         elif challenger_c_id:
             result = calculate_three_way_delta(db, project_id, baseline_id, challenger_id, challenger_c_id)
         else:
-            result = calculate_model_delta(db, project_id, baseline_id, challenger_id)
+            result = {"error": "Mixed mode (split + upload) is not supported. Please compare two split experiments or two upload experiments."}
 
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])

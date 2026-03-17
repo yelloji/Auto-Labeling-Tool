@@ -127,7 +127,7 @@ def _strip_internals(d: Dict) -> Dict:
     return {k: v for k, v in d.items() if not k.startswith("_")}
 
 
-def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
+def _compute_delta_gallery(stats_a: Dict, stats_b: Dict, common_images: Optional[set] = None) -> Dict:
     """
     Compare FP/FN counts per image between baseline (A) and challenger (B).
 
@@ -136,6 +136,9 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
       - Fixed FN   : image has FEWER FNs in B than in A (improvement)    ✅
       - New FP     : image has MORE  FPs in B than in A (regression)     ❌
       - New FN     : image has MORE  FNs in B than in A (regression)     ❌
+
+    common_images: if provided, only images in this set are compared (used for mixed mode
+                   to restrict delta to images that both experiments actually ran on).
     """
     a_fps = stats_a.get("_detail_fps", [])
     a_fns = stats_a.get("_detail_fns", [])
@@ -162,10 +165,14 @@ def _compute_delta_gallery(stats_a: Dict, stats_b: Dict) -> Dict:
     b_tp_map = detail_map(b_tps)
 
     all_images = set(
-        list(a_fp_map.keys()) + list(b_fp_map.keys()) + 
+        list(a_fp_map.keys()) + list(b_fp_map.keys()) +
         list(a_fn_map.keys()) + list(b_fn_map.keys()) +
         list(a_tp_map.keys()) + list(b_tp_map.keys())
     )
+
+    # For mixed mode: restrict to images present in both experiments
+    if common_images is not None:
+        all_images = all_images & common_images
 
     fixed_fp, new_fp, fixed_fn, new_fn = [], [], [], []
     improved_conf, degraded_conf = [], []
@@ -466,3 +473,201 @@ def calculate_model_delta(db: Session, project_id: int, baseline_exp_id: str, ch
     except Exception as e:
         logger.error("engine.comparison", f"Failed to compute delta: {str(e)}")
         return {"error": str(e)}
+
+
+def _compute_upload_quality(exp, verifications) -> Dict:
+    """
+    Compute TP/FP/FN metrics for an upload experiment using human verifications.
+    Mirrors the ChartsView Exception Mode logic in the frontend.
+
+    - TP = AI predictions not marked 'fail'
+    - FP = AI predictions marked 'fail' by a human reviewer
+    - FN = human verifications that had no matching AI prediction (manually drawn boxes)
+    """
+    predictions = exp.predictions
+    if isinstance(predictions, str):
+        predictions = json.loads(predictions)
+    if not predictions:
+        return {
+            "has_ground_truth": True, "precision": None, "recall": None, "f1": None,
+            "avg_iou": None, "true_positives": 0, "false_positives": 0,
+            "false_negatives": 0, "total_gt": 0, "total_preds": 0, "image_count": 0,
+        }
+
+    def get_filename(path):
+        return path.replace('\\', '/').split('/')[-1] if path else ''
+
+    def make_key(filename, bbox):
+        return f"{filename}|{','.join(str(x) for x in bbox)}"
+
+    # Filter verifications to this experiment only
+    exp_verifs = [v for v in verifications if str(v.experiment_id) == str(exp.id)]
+
+    # Build vMap: anchored on the AI detection bbox so keys stay consistent
+    vmap = {}
+    human_missing = []
+
+    for v in exp_verifs:
+        v_file = get_filename(v.image_name)
+        v_bbox = [v.x_min, v.y_min, v.x_max, v.y_max]
+
+        pred_key = next((k for k in predictions if get_filename(k) == v_file), None)
+        img_dets = predictions.get(pred_key, []) if pred_key else []
+
+        matched_ai = None
+        for d in img_dets:
+            d_bbox = d.get('bbox', [])
+            if len(d_bbox) == 4 and (
+                abs(d_bbox[0] - v_bbox[0]) < 1.0 and
+                abs(d_bbox[1] - v_bbox[1]) < 1.0 and
+                abs(d_bbox[2] - v_bbox[2]) < 1.0 and
+                abs(d_bbox[3] - v_bbox[3]) < 1.0
+            ):
+                matched_ai = d
+                break
+
+        if matched_ai:
+            if v.status in ('pass', 'fail'):
+                vmap[make_key(v_file, matched_ai['bbox'])] = v.status
+        elif v.status != 'fail':
+            # No AI match + not a rejection → user drew where AI had nothing (FN)
+            human_missing.append(v)
+
+    # Classify every AI prediction as TP or FP; collect detail lists for delta gallery
+    tp, fp = 0, 0
+    detail_fps: list = []
+    detail_tps: list = []
+
+    for img_name, dets in predictions.items():
+        if not isinstance(dets, list):
+            continue
+        file_name = get_filename(img_name)
+        for d in dets:
+            key  = make_key(file_name, d.get('bbox', []))
+            det_obj = {
+                "image":      file_name,
+                "class_name": d.get('name') or str(d.get('class', '')),
+                "confidence": d.get('confidence', 0.0),
+                "bbox":       d.get('bbox', []),
+            }
+            if vmap.get(key) == 'fail':
+                fp += 1
+                detail_fps.append(det_obj)
+            else:
+                tp += 1
+                detail_tps.append(det_obj)
+
+    # FN detail list: human-drawn boxes that had no matching AI prediction
+    detail_fns: list = []
+    for v in human_missing:
+        detail_fns.append({
+            "image":      get_filename(v.image_name),
+            "class_name": getattr(v, 'class_name', '') or '',
+            "bbox":       [v.x_min, v.y_min, v.x_max, v.y_max],
+        })
+
+    fn = len(human_missing)
+    precision = round((tp / (tp + fp)) * 100, 1) if (tp + fp) > 0 else None
+    recall    = round((tp / (tp + fn)) * 100, 1) if (tp + fn) > 0 else None
+    f1        = round((2 * precision * recall) / (precision + recall), 1) \
+                if (precision is not None and recall is not None and (precision + recall) > 0) else None
+
+    return {
+        "has_ground_truth": True,
+        "precision":        precision,
+        "recall":           recall,
+        "f1":               f1,
+        "avg_iou":          None,
+        "true_positives":   tp,
+        "false_positives":  fp,
+        "false_negatives":  fn,
+        "total_gt":         tp + fn,
+        "total_preds":      tp + fp,
+        "image_count":      len(predictions),
+        # Internal detail lists — used by _compute_delta_gallery
+        "_detail_fps":      detail_fps,
+        "_detail_fns":      detail_fns,
+        "_detail_tps":      detail_tps,
+    }
+
+
+def calculate_upload_comparison(
+    db: Session,
+    project_id: int,
+    baseline_exp_id: str,
+    challenger_exp_id: str,
+) -> Dict[str, Any]:
+    """
+    Upload vs Upload comparison: no YOLO GT exists for either experiment.
+    Human verifications act as pseudo ground truth.
+
+    Metrics panel : each experiment uses its own human verifications → Precision / Recall / F1
+    Delta cards   : FP/FN detail lists built from verifications, compared image by image.
+                    Only images reviewed in BOTH experiments are included in delta.
+    """
+    try:
+        baseline_exp   = db.query(ModelExperiment).filter(ModelExperiment.id == baseline_exp_id).first()
+        challenger_exp = db.query(ModelExperiment).filter(ModelExperiment.id == challenger_exp_id).first()
+
+        if not baseline_exp or not challenger_exp:
+            return {"error": "One or both experiments not found."}
+
+        verifications = db.query(HumanVerification).filter(
+            HumanVerification.project_id == project_id
+        ).all()
+
+        def fmt(exp, q):
+            completed = exp.completed_at.isoformat() if exp.completed_at else None
+            return {
+                "name":           exp.name,
+                "id":             exp.id,
+                "training_name":  exp.training_name,
+                "dataset_source": exp.dataset_source or 'upload',
+                "confidence":     exp.confidence,
+                "image_count":    exp.image_count or q.get('image_count'),
+                "completed_at":   completed,
+                "has_ground_truth": q.get("has_ground_truth", True),
+                "precision":      q.get("precision"),
+                "recall":         q.get("recall"),
+                "f1":             q.get("f1"),
+                "avg_iou":        None,
+                "true_positives":  q.get("true_positives"),
+                "false_positives": q.get("false_positives"),
+                "false_negatives": q.get("false_negatives"),
+                "total_gt":        q.get("total_gt"),
+                "total_preds":     q.get("total_preds"),
+            }
+
+        q_a = _compute_upload_quality(baseline_exp,   verifications)
+        q_b = _compute_upload_quality(challenger_exp, verifications)
+
+        baseline_fmt   = fmt(baseline_exp,   q_a)
+        challenger_fmt = fmt(challenger_exp, q_b)
+
+        # Build stats dicts with _detail_* for delta gallery
+        stats_a = {**q_a, "has_ground_truth": True}
+        stats_b = {**q_b, "has_ground_truth": True}
+
+        # Common images: filenames reviewed in BOTH experiments
+        def reviewed_images(exp):
+            exp_vs = [v for v in verifications if str(v.experiment_id) == str(exp.id)]
+            return {Path(v.image_name).name for v in exp_vs}
+
+        common_images = reviewed_images(baseline_exp) & reviewed_images(challenger_exp)
+
+        delta_b = _compute_delta_gallery(stats_a, stats_b, common_images=common_images) \
+            if common_images else None
+
+        return {
+            "mode":         "split",
+            "_isUpload":    True,
+            "baseline":     baseline_fmt,
+            "challenger_b": challenger_fmt,
+            "delta_b":      delta_b,
+        }
+
+    except Exception as e:
+        logger.error("engine.upload_comparison", f"Failed to compute upload comparison: {str(e)}")
+        return {"error": str(e)}
+
+

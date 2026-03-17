@@ -321,7 +321,7 @@ const VerdictRow = ({ a, b, c, is3Way }) => {
 };
 
 // ─── Split Mode Overview Panel ────────────────────────────────────────────────
-const SplitOverviewPanel = ({ data, is3Way, onDelta }) => {
+const SplitOverviewPanel = ({ data, is3Way, onDelta, isUpload }) => {
     const a = data.baseline;
     const b = data.challenger_b;
     const c = data.challenger_c;
@@ -330,9 +330,13 @@ const SplitOverviewPanel = ({ data, is3Way, onDelta }) => {
 
     return (
         <div className="delta-dashboard">
-            <Title level={4} style={{ marginBottom: 4 }}>Split Mode — Quality Comparison</Title>
+            <Title level={4} style={{ marginBottom: 4 }}>
+                {isUpload ? 'Upload Mode — Quality Comparison' : 'Split Mode — Quality Comparison'}
+            </Title>
             <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-                Real ground truth from dataset labels. No manual verification needed.
+                {isUpload
+                    ? 'Ground truth from human verifications. Users can review and override.'
+                    : 'Real ground truth from dataset labels. No manual verification needed.'}
             </Text>
 
             {/* ── Model Info Header ── */}
@@ -477,6 +481,76 @@ const SplitOverviewPanel = ({ data, is3Way, onDelta }) => {
     );
 };
 
+// ─── Upload Mode: Compute per-experiment metrics from human verifications ─────
+const _getFileName = (path) => (path ? path.split('/').pop().split('\\').pop() : '');
+
+const computeUploadMetrics = (expObj, allVerifications) => {
+    if (!expObj?.predictions) return null;
+
+    const vMap = {};
+    const humanMissing = [];
+
+    allVerifications
+        .filter(v => String(v.experiment_id) === String(expObj.id))
+        .forEach(v => {
+            const vFile = _getFileName(v.image_name);
+            const predKey = Object.keys(expObj.predictions).find(k => _getFileName(k) === vFile);
+            const imgDets = expObj.predictions[predKey] || [];
+
+            const matchedAI = imgDets.find(d =>
+                d.bbox && v.bbox &&
+                Math.abs(d.bbox[0] - v.bbox[0]) < 0.1 &&
+                Math.abs(d.bbox[1] - v.bbox[1]) < 0.1 &&
+                Math.abs(d.bbox[2] - v.bbox[2]) < 0.1 &&
+                Math.abs(d.bbox[3] - v.bbox[3]) < 0.1
+            );
+
+            if (matchedAI) {
+                if (v.status === 'pass' || v.status === 'fail') {
+                    vMap[`${vFile}|${matchedAI.bbox.join(',')}`] = v.status;
+                }
+            } else if (v.status !== 'fail') {
+                humanMissing.push(v);
+            }
+        });
+
+    let tp = 0, fp = 0;
+    Object.entries(expObj.predictions).forEach(([imgName, dets]) => {
+        if (!Array.isArray(dets)) return;
+        const fileName = _getFileName(imgName);
+        dets.forEach(d => {
+            const key = `${fileName}|${d.bbox?.join(',') || ''}`;
+            if (vMap[key] === 'fail') fp++;
+            else tp++;
+        });
+    });
+
+    const fn = humanMissing.length;
+    const precision = (tp + fp) > 0 ? parseFloat(((tp / (tp + fp)) * 100).toFixed(1)) : null;
+    const recall    = (tp + fn) > 0 ? parseFloat(((tp / (tp + fn)) * 100).toFixed(1)) : null;
+    const f1        = (precision != null && recall != null && (precision + recall) > 0)
+        ? parseFloat(((2 * precision * recall) / (precision + recall)).toFixed(1))
+        : null;
+
+    return {
+        name:           expObj.name,
+        training_name:  expObj.training_name  || null,
+        confidence:     expObj.confidence     || null,
+        completed_at:   expObj.completed_at   || null,
+        dataset_source: 'upload',
+        precision,
+        recall,
+        f1,
+        avg_iou:        null,
+        true_positives:  tp,
+        false_positives: fp,
+        false_negatives: fn,
+        total_gt:        tp + fn,
+        image_count:     Object.keys(expObj.predictions).length,
+        has_ground_truth: true,
+    };
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const ComparisonEngineView = ({ currentTraining }) => {
     const [trainings, setTrainings] = useState([]);
@@ -598,6 +672,55 @@ const ComparisonEngineView = ({ currentTraining }) => {
                 modelCEnabled ? challengerCId : null
             );
             console.log('Compare Data:', data);
+
+            // Upload mode (2-way only): compute per-experiment metrics from human verifications.
+            // Guards: backend mode must NOT be split/three_way, Model C must be off,
+            // AND both experiments must be genuine upload experiments (dataset_source === 'upload').
+            // Never apply upload math to split experiments — they have real GT already.
+            const baselineExp   = baselineExperiments.find(e => String(e.id) === String(baselineId));
+            const challengerExp = challengerExperiments.find(e => String(e.id) === String(challengerId));
+            const bothAreUpload = baselineExp?.dataset_source === 'upload' && challengerExp?.dataset_source === 'upload';
+
+            if (!['split', 'three_way'].includes(data.mode) && !modelCEnabled && bothAreUpload) {
+                try {
+                    const verifications   = await projectsAPI.getProjectVerifications(currentTraining.projectId);
+                    const baselineMetrics   = computeUploadMetrics(baselineExp, verifications);
+                    const challengerMetrics = computeUploadMetrics(challengerExp, verifications);
+
+                    if (baselineMetrics && challengerMetrics) {
+                        data.mode      = 'split';
+                        data._isUpload = true;
+                        data.baseline     = baselineMetrics;
+                        data.challenger_b = challengerMetrics;
+                        data.delta_b = {
+                            counts: {
+                                fixed_fp:      data.counts?.resolved_fps  ?? 0,
+                                fixed_fn:      data.counts?.resolved_fns  ?? 0,
+                                new_fp:        0,
+                                new_fn:        data.counts?.regressions   ?? 0,
+                                improved_conf: 0,
+                                degraded_conf: 0,
+                            },
+                            detections: {
+                                fp_saved: data.counts?.resolved_fps  ?? 0,
+                                fn_saved: data.counts?.resolved_fns  ?? 0,
+                                fp_added: 0,
+                                fn_added: data.counts?.regressions   ?? 0,
+                            },
+                            fixed_fp:      data.deltas?.resolved_false_positives || [],
+                            fixed_fn:      data.deltas?.resolved_misses          || [],
+                            new_fp:        [],
+                            new_fn:        data.deltas?.regressions              || [],
+                            improved_conf: [],
+                            degraded_conf: [],
+                        };
+                    }
+                } catch (uploadErr) {
+                    console.warn('Upload metrics computation failed, falling back to basic view:', uploadErr);
+                    // setComparisonData(data) still runs below with original untransformed data
+                }
+            }
+
             setComparisonData(data);
         } catch (err) {
             console.error(err);
@@ -753,6 +876,7 @@ const ComparisonEngineView = ({ currentTraining }) => {
                         <SplitOverviewPanel
                             data={comparisonData}
                             is3Way={!!comparisonData.challenger_c}
+                            isUpload={!!comparisonData._isUpload}
                             onDelta={(type, items, challengerName) =>
                                 openGallery(type, items, challengerName, challengerId)
                             }
