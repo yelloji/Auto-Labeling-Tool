@@ -426,7 +426,11 @@ const UploadSection = ({ projectId }) => {
 
     try {
       const result = await projectsAPI.uploadImagesToProject(projectId, formData);
-      message.success(`${file.name} uploaded successfully to "${batchNameToUse}"!`);
+      if (result.duplicate) {
+        message.warning(result.message);
+      } else {
+        message.success(`${file.name} uploaded successfully to "${batchNameToUse}"!`);
+      }
 
       logInfo('app.frontend.interactions', 'single_file_upload_success', 'Single file upload successful', {
         timestamp: new Date().toISOString(),
@@ -497,7 +501,14 @@ const UploadSection = ({ projectId }) => {
 
     try {
       const result = await projectsAPI.uploadMultipleImagesToProject(projectId, formData);
-      message.success(`${files.length} files uploaded successfully to "${batchNameToUse}"!`);
+      const uploaded = result.results?.successful_uploads ?? files.length;
+      const skipped = result.skipped_duplicates ?? 0;
+      if (uploaded > 0) {
+        message.success(`${uploaded} file${uploaded !== 1 ? 's' : ''} uploaded successfully to "${batchNameToUse}"!`);
+      }
+      if (skipped > 0) {
+        message.warning(`${skipped} image${skipped !== 1 ? 's' : ''} skipped — already exist in this project: ${(result.duplicate_files || []).join(', ')}`);
+      }
 
       logInfo('app.frontend.interactions', 'multiple_files_upload_success', 'Multiple files upload successful', {
         timestamp: new Date().toISOString(),

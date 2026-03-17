@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from datetime import datetime
+import hashlib
 import os
 import shutil
 import json
@@ -17,6 +18,7 @@ import io
 from pathlib import Path
 
 from database.database import get_db
+from database.models import Image as ImageModel, Dataset as DatasetModel
 from database.operations import ProjectOperations, DatasetOperations, ImageOperations, AnnotationOperations
 from database.operations import AiModelOperations
 from api.services.model_serialization import serialize_ai_model
@@ -2476,7 +2478,7 @@ async def upload_images_to_project(
             image = Image.open(io.BytesIO(contents))
             width, height = image.size
             image_format = image.format
-            
+
             logger.debug("operations.images", f"Image validation successful", "image_validation_success", {
                 "width": width,
                 "height": height,
@@ -2489,7 +2491,26 @@ async def upload_images_to_project(
                 "error": str(e)
             })
             raise HTTPException(status_code=400, detail=f"Invalid image file: {str(e)}")
-        
+
+        # Duplicate check — skip if same MD5 already exists in this project
+        md5 = hashlib.md5(contents).hexdigest()
+        existing = (
+            db.query(ImageModel)
+            .join(DatasetModel, ImageModel.dataset_id == DatasetModel.id)
+            .filter(
+                DatasetModel.project_id == project_id,
+                ImageModel.image_hash_md5 == md5
+            )
+            .first()
+        )
+        if existing:
+            return {
+                "success": False,
+                "duplicate": True,
+                "message": f"{Path(file.filename).name} already exists in this project — skipped",
+                "filename": Path(file.filename).name,
+            }
+
         # Save file
         logger.debug("operations.images", f"Saving image file to storage", "image_save_start", {
             "file_path": str(file_path),
@@ -2561,7 +2582,9 @@ async def upload_images_to_project(
             file_size=len(contents),
             format=image_format
         )
-        
+        image_record.image_hash_md5 = md5
+        db.commit()
+
         logger.info("operations.images", f"Image record created successfully in database", "image_record_created", {
             "image_id": image_record.id,
             "filename": safe_filename,
@@ -2773,10 +2796,12 @@ async def upload_multiple_images_to_project(
             'total_files': len(files),
             'successful_uploads': 0,
             'failed_uploads': 0,
+            'skipped_duplicates': 0,
+            'duplicate_files': [],
             'uploaded_images': [],
             'errors': []
         }
-        
+
         for index, file in enumerate(files):
             logger.debug("operations.images", f"Processing file {index + 1}/{len(files)}", "individual_file_processing", {
                 "file_index": index + 1,
@@ -2831,7 +2856,7 @@ async def upload_multiple_images_to_project(
                     image = Image.open(io.BytesIO(contents))
                     width, height = image.size
                     image_format = image.format
-                    
+
                     logger.debug("operations.images", f"Image validation successful", "image_validation_success", {
                         "filename": file.filename,
                         "width": width,
@@ -2844,14 +2869,30 @@ async def upload_multiple_images_to_project(
                     error_msg = f"Invalid image file {file.filename}: {str(e)}"
                     results['errors'].append(error_msg)
                     results['failed_uploads'] += 1
-                    
+
                     logger.error("errors.validation", f"Image validation failed for bulk upload", "image_validation_failure", {
                         "filename": file.filename,
                         "error": str(e),
                         "file_index": index + 1
                     })
                     continue
-                
+
+                # Duplicate check — skip if same MD5 already exists in this project
+                md5 = hashlib.md5(contents).hexdigest()
+                existing = (
+                    db.query(ImageModel)
+                    .join(DatasetModel, ImageModel.dataset_id == DatasetModel.id)
+                    .filter(
+                        DatasetModel.project_id == project_id,
+                        ImageModel.image_hash_md5 == md5
+                    )
+                    .first()
+                )
+                if existing:
+                    results['skipped_duplicates'] += 1
+                    results['duplicate_files'].append(Path(file.filename).name)
+                    continue
+
                 # Save file
                 logger.debug("operations.images", f"Saving image file to storage", "image_save_start", {
                     "file_path": file_path,
@@ -2887,7 +2928,9 @@ async def upload_multiple_images_to_project(
                     file_size=len(contents),
                     format=image_format
                 )
-                
+                image_record.image_hash_md5 = md5
+                db.commit()
+
                 logger.debug("operations.images", f"Image record created successfully", "image_record_created", {
                     "image_id": image_record.id,
                     "filename": safe_filename,
@@ -2951,6 +2994,8 @@ async def upload_multiple_images_to_project(
             "dataset_name": target_dataset.name,
             "tags": tags_list,
             "batch_name": default_dataset_name,
+            "skipped_duplicates": results['skipped_duplicates'],
+            "duplicate_files": results['duplicate_files'],
             "results": results
         }
         
