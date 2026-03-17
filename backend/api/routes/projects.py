@@ -2635,7 +2635,7 @@ async def upload_images_to_project(
             "dataset_id": target_dataset.id,
             "dataset_name": target_dataset.name,
             "file_path": file_path,
-            "tags": tags_list,
+            "tags": dataset_ids_list,
             "batch_name": default_dataset_name,
             "image_info": {
                 "width": width,
