@@ -689,6 +689,10 @@ async def get_project_datasets(project_id: str, db: Session = Depends(get_db)):
                 })
                 continue
                 
+            # Derive current stage from images (split_type lives on Image, not Dataset)
+            first_image = db.query(ImageModel).filter(ImageModel.dataset_id == dataset.id).first()
+            dataset_stage = first_image.split_type if first_image else 'unassigned'
+
             dataset_response = {
                 "id": dataset.id,
                 "name": dataset.name,
@@ -698,7 +702,7 @@ async def get_project_datasets(project_id: str, db: Session = Depends(get_db)):
                 "unlabeled_images": dataset.unlabeled_images,
                 "auto_label_enabled": dataset.auto_label_enabled,
                 "model_id": dataset.model_id,
-                "split_type": dataset.split_type,
+                "split_type": dataset_stage,
                 "created_at": dataset.created_at,
                 "updated_at": dataset.updated_at
             }
