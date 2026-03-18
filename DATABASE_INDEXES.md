@@ -56,6 +56,33 @@ With it → database jumps directly to matching rows (fast).
 
 ---
 
+## Table: labels
+
+### Added Indexes
+| Index | Column | Why |
+|---|---|---|
+| ix_labels_project_id | project_id | Every annotation session: "get all labels for this project" |
+
+---
+
+## Table: releases
+
+### Added Indexes
+| Index | Column | Why |
+|---|---|---|
+| ix_releases_project_id | project_id | Release history page: "get all releases for this project" |
+
+---
+
+## Table: model_experiments
+
+### Added Indexes
+| Index | Column | Why |
+|---|---|---|
+| ix_model_experiments_training_id | training_id | Prediction view: "get all experiments for this training run" |
+
+---
+
 ## Tables Already Well Indexed
 | Table | Indexes |
 |---|---|
@@ -64,6 +91,13 @@ With it → database jumps directly to matching rows (fast).
 | image_transformations | status, release_version, release_id |
 | image_variants | parent_image_id |
 | training_sessions | project_id+name, training_uid, project_id+status |
+
+## Tables Skipped (small / not yet active)
+| Table | Reason |
+|---|---|
+| auto_label_jobs | Feature not yet implemented — very few rows |
+| dataset_splits | Very few rows |
+| label_analytics | Rarely queried |
 
 ---
 

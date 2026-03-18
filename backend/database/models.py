@@ -265,7 +265,7 @@ class Release(Base):
     __tablename__ = "releases"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
 
     name = Column(String(100), nullable=False)
     description = Column(Text)
@@ -520,8 +520,8 @@ class Label(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
     color = Column(String(20), default="#ff0000")
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+
     # Relationship back to project
     project = relationship("Project", back_populates="labels")
     
@@ -616,7 +616,7 @@ class ModelExperiment(Base):
     __tablename__ = "model_experiments"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    training_id = Column(Integer, ForeignKey("training_sessions.id", ondelete="CASCADE"), nullable=False)
+    training_id = Column(Integer, ForeignKey("training_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     
     # Denormalized names for easier querying (no joins needed)
