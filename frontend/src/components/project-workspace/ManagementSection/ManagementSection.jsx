@@ -69,7 +69,7 @@ const DatasetCard = ({
       {
         key: 'rename',
         label: 'Rename',
-        icon: <EditOutlined />,
+        icon: <EditOutlined style={{ fontSize: '1rem' }} />,
         onClick: (e) => {
           e?.domEvent?.stopPropagation();
           logUserClick('dataset_rename_menu_clicked', `User clicked rename menu for dataset: ${dataset.name}`);
@@ -82,7 +82,7 @@ const DatasetCard = ({
       baseItems.push({
         key: 'move-to-unassigned',
         label: 'Move to Unassigned',
-        icon: <ClockCircleOutlined />,
+        icon: <ClockCircleOutlined style={{ fontSize: '1rem' }} />,
         onClick: (e) => {
           e?.domEvent?.stopPropagation();
           logUserClick('dataset_move_to_unassigned_menu_clicked', `User clicked move to unassigned menu for dataset: ${dataset.name}`);
@@ -95,7 +95,7 @@ const DatasetCard = ({
         baseItems.push({
           key: 'move-to-dataset',
           label: 'Move to Dataset',
-          icon: <CheckCircleOutlined />,
+          icon: <CheckCircleOutlined style={{ fontSize: '1rem' }} />,
           onClick: (e) => {
             e?.domEvent?.stopPropagation();
             logUserClick('dataset_move_to_completed_menu_clicked', `User clicked move to completed menu for dataset: ${dataset.name}`);
@@ -108,7 +108,7 @@ const DatasetCard = ({
         {
           key: 'move-to-unassigned',
           label: 'Move to Unassigned',
-          icon: <ClockCircleOutlined />,
+          icon: <ClockCircleOutlined style={{ fontSize: '1rem' }} />,
           onClick: (e) => {
             e?.domEvent?.stopPropagation();
             logUserClick('dataset_move_to_unassigned_menu_clicked', `User clicked move to unassigned menu for dataset: ${dataset.name}`);
@@ -118,7 +118,7 @@ const DatasetCard = ({
         {
           key: 'move-to-annotating',
           label: 'Move to Annotating',
-          icon: <PlayCircleOutlined />,
+          icon: <PlayCircleOutlined style={{ fontSize: '1rem' }} />,
           onClick: (e) => {
             e?.domEvent?.stopPropagation();
             logUserClick('dataset_move_to_annotating_menu_clicked', `User clicked move to annotating menu for dataset: ${dataset.name}`);
@@ -131,7 +131,7 @@ const DatasetCard = ({
     baseItems.push({
       key: 'delete',
       label: 'Delete',
-      icon: <DeleteOutlined />,
+      icon: <DeleteOutlined style={{ fontSize: '1rem' }} />,
       danger: true,
       onClick: (e) => {
         e?.domEvent?.stopPropagation();
@@ -160,63 +160,72 @@ const DatasetCard = ({
       key={dataset.id}
       size="small"
       style={{
-        marginBottom: '12px',
+        marginBottom: '0.5rem',
         cursor: 'pointer',
         transition: 'all 0.3s ease',
-        border: '1px solid #f0f0f0',
+        border: '0.0625rem solid #f0f0f0',
         position: 'relative'
       }}
       hoverable
-      bodyStyle={{ padding: '12px' }}
+      bodyStyle={{ padding: '0.625rem' }}
       onClick={handleCardClick}
     >
       <div style={{
         position: 'absolute',
-        top: '8px',
-        right: '8px',
+        top: '0.5rem',
+        right: '0.5rem',
         zIndex: 10
       }}>
         <Dropdown
-          menu={{ items: menuItems }}
+          menu={{
+            items: menuItems,
+            style: { fontSize: '0.875rem' }
+          }}
+          overlayStyle={{ fontSize: '0.875rem' }}
           trigger={['click']}
           placement="bottomRight"
         >
           <Button
             type="text"
-            icon={<MoreOutlined />}
+            icon={<MoreOutlined style={{ fontSize: '1rem' }} />}
             size="small"
             onClick={handleMoreButtonClick}
             style={{
               border: 'none',
               boxShadow: 'none',
-              padding: '4px'
+              padding: '0.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
           />
         </Dropdown>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', paddingRight: '24px' }}>
-        {getStatusIcon()}
-        <Text strong style={{ marginLeft: '8px', fontSize: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem', paddingRight: '1.25rem' }}>
+        {React.cloneElement(getStatusIcon(), { style: { ...getStatusIcon().props.style, fontSize: '1rem' } })}
+        <Text strong ellipsis style={{ marginLeft: '0.5rem', fontSize: '1rem' }}>
           {dataset.name}
         </Text>
       </div>
 
-      <div style={{ marginBottom: '8px' }}>
-        <Text type="secondary" style={{ fontSize: '12px' }}>
+      <div style={{ marginBottom: '0.5rem' }}>
+        <Text type="secondary" style={{ fontSize: '0.875rem' }}>
           {dataset.total_images} images
         </Text>
         {(status === 'annotating' || status === 'unassigned') && (
-          <div style={{ marginTop: '4px' }}>
+          <div style={{ marginTop: '0.25rem' }}>
             <Progress
               percent={getProgressPercent()}
               size="small"
+              strokeWidth={8}
               status={getProgressPercent() === 100 ? 'success' : 'active'}
+              style={{ marginBottom: '0.25rem' }}
             />
-            <Text type="secondary" style={{ fontSize: '11px' }}>
+            <Text type="secondary" style={{ fontSize: '0.8125rem' }}>
               {dataset.labeled_images}/{dataset.total_images} labeled
               {dataset.labeled_images < dataset.total_images && status === 'annotating' && (
-                <Text type="warning" style={{ fontSize: '10px', display: 'block' }}>
+                <Text type="warning" style={{ fontSize: '0.75rem', display: 'block' }}>
                   Label all images to move to dataset
                 </Text>
               )}
@@ -224,13 +233,15 @@ const DatasetCard = ({
           </div>
         )}
         {status === 'completed' && (
-          <div style={{ marginTop: '4px' }}>
+          <div style={{ marginTop: '0.25rem' }}>
             <Progress
               percent={100}
               size="small"
+              strokeWidth={8}
               status="success"
+              style={{ marginBottom: '0.25rem' }}
             />
-            <Text type="secondary" style={{ fontSize: '11px' }}>
+            <Text type="secondary" style={{ fontSize: '0.8125rem' }}>
               {dataset.total_images}/{dataset.total_images} labeled
             </Text>
           </div>
@@ -238,7 +249,7 @@ const DatasetCard = ({
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text type="secondary" style={{ fontSize: '11px' }}>
+        <Text type="secondary" style={{ fontSize: '0.75rem' }}>
           {new Date(dataset.created_at).toLocaleDateString()}
         </Text>
       </div>
@@ -776,10 +787,10 @@ const ManagementSection = ({
     });
 
     return (
-      <div style={{ padding: '24px', textAlign: 'center' }}>
+      <div style={{ padding: '1.5rem', textAlign: 'center' }}>
         <Spin size="large" />
-        <div style={{ marginTop: '16px' }}>
-          <Text>Loading management data...</Text>
+        <div style={{ marginTop: '1rem' }}>
+          <Text style={{ fontSize: '1rem' }}>Loading management data...</Text>
         </div>
       </div>
     );
@@ -796,43 +807,65 @@ const ManagementSection = ({
   });
 
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
-          <Title level={2} style={{ margin: 0, marginBottom: '8px', background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
-            <TagOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+    <div style={{ padding: '1.25rem 1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+          <Title level={2} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block', fontSize: '1.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+            <TagOutlined style={{ marginRight: '0.75rem', color: '#1890ff', fontSize: '1.75rem' }} />
             Management
           </Title>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <Text type="secondary">Sort By:</Text>
-            <Select defaultValue="newest" style={{ width: 120 }} onChange={handleSortChange}>
-              <Select.Option value="newest">Newest</Select.Option>
-              <Select.Option value="oldest">Oldest</Select.Option>
-              <Select.Option value="name">Name</Select.Option>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem', whiteSpace: 'nowrap' }}>
+            <Text type="secondary" style={{ fontSize: '0.9375rem', lineHeight: '2.25rem', whiteSpace: 'nowrap' }}>Sort By:</Text>
+            <Select
+              defaultValue="newest"
+              style={{ width: '8.5rem', height: '2.25rem', fontSize: '0.875rem' }}
+              dropdownStyle={{ fontSize: '0.875rem' }}
+              className="vector-select"
+              popupClassName="vector-select-dropdown"
+              onChange={handleSortChange}
+            >
+              <Select.Option value="newest" style={{ fontSize: '0.875rem' }}>Newest</Select.Option>
+              <Select.Option value="oldest" style={{ fontSize: '0.875rem' }}>Oldest</Select.Option>
+              <Select.Option value="name" style={{ fontSize: '0.875rem' }}>Name</Select.Option>
             </Select>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleNewVersionClick}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <Button type="primary" icon={<PlusOutlined style={{ fontSize: '1.125rem' }} />} onClick={handleNewVersionClick} style={{ height: '2.25rem', fontSize: '1rem', padding: '0 1.25rem', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
             New Version
           </Button>
         </div>
       </div>
 
-      <Row gutter={[24, 24]}>
+      <Row gutter={['1.5rem', '1.5rem']}>
         {/* Unassigned Section */}
         <Col span={8}>
           <Card
             title={
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text strong>Unassigned</Text>
-                <Text type="secondary">{managementData?.unassigned?.count || 0} Datasets</Text>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+                <Text strong style={{ fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>Unassigned</Text>
+                <Text type="secondary" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{managementData?.unassigned?.count || 0} Datasets</Text>
               </div>
             }
-            style={{ height: '500px', overflow: 'auto' }}
+            style={{ height: '31.25rem', overflow: 'auto', borderRadius: '0.5rem' }}
+            bodyStyle={{ padding: '0.75rem' }}
           >
-            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <Button type="link" icon={<UploadOutlined />} onClick={handleUploadMoreClick}>
+            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+              <Button
+                type="link"
+                icon={<UploadOutlined style={{ fontSize: '1rem' }} />}
+                onClick={handleUploadMoreClick}
+                style={{
+                  fontSize: '0.875rem',
+                  whiteSpace: 'normal',
+                  height: 'auto',
+                  textAlign: 'center',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0.25rem 0.5rem'
+                }}
+              >
                 Upload More Images
               </Button>
             </div>
@@ -852,8 +885,8 @@ const ManagementSection = ({
                 />
               ))
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                <Text type="secondary">No unassigned datasets found.</Text>
+              <div style={{ textAlign: 'center', padding: '2.5rem 1.25rem' }}>
+                <Text type="secondary" style={{ fontSize: '0.875rem' }}>No unassigned datasets found.</Text>
               </div>
             )}
           </Card>
@@ -863,12 +896,13 @@ const ManagementSection = ({
         <Col span={8}>
           <Card
             title={
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text strong>Annotating</Text>
-                <Text type="secondary">{managementData?.annotating?.count || 0} Datasets</Text>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+                <Text strong style={{ fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>Annotating</Text>
+                <Text type="secondary" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{managementData?.annotating?.count || 0} Datasets</Text>
               </div>
             }
-            style={{ height: '500px', overflow: 'auto' }}
+            style={{ height: '31.25rem', overflow: 'auto', borderRadius: '0.5rem' }}
+            bodyStyle={{ padding: '0.75rem' }}
           >
             {managementData?.annotating?.datasets?.length > 0 ? (
               managementData.annotating.datasets.map(dataset => (
@@ -885,8 +919,10 @@ const ManagementSection = ({
                 />
               ))
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                <Text type="secondary">Upload and assign images to an annotator.</Text>
+              <div style={{ textAlign: 'center', padding: '2.5rem 1rem' }}>
+                <Text type="secondary" style={{ fontSize: '0.875rem', display: 'block', lineHeight: '1.4' }}>
+                  Upload and assign images to an annotator.
+                </Text>
               </div>
             )}
           </Card>
@@ -896,15 +932,30 @@ const ManagementSection = ({
         <Col span={8}>
           <Card
             title={
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text strong>Dataset</Text>
-                <Text type="secondary">{managementData?.dataset?.count || 0} Datasets</Text>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+                <Text strong style={{ fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>Dataset</Text>
+                <Text type="secondary" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{managementData?.dataset?.count || 0} Datasets</Text>
               </div>
             }
-            style={{ height: '500px', overflow: 'auto' }}
+            style={{ height: '31.25rem', overflow: 'auto', borderRadius: '0.5rem' }}
+            bodyStyle={{ padding: '0.75rem' }}
           >
-            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-              <Button type="link" icon={<EyeOutlined />} onClick={handleSeeAllImagesClick}>
+            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+              <Button
+                type="link"
+                icon={<EyeOutlined style={{ fontSize: '1rem' }} />}
+                onClick={handleSeeAllImagesClick}
+                style={{
+                  fontSize: '0.875rem',
+                  whiteSpace: 'normal',
+                  height: 'auto',
+                  textAlign: 'center',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0.25rem 0.5rem'
+                }}
+              >
                 See all {project?.image_count || 0} images
               </Button>
             </div>
@@ -924,8 +975,8 @@ const ManagementSection = ({
                 />
               ))
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                <Text type="secondary">No completed datasets found.</Text>
+              <div style={{ textAlign: 'center', padding: '2.5rem 1.25rem' }}>
+                <Text type="secondary" style={{ fontSize: '0.875rem' }}>No completed datasets found.</Text>
               </div>
             )}
           </Card>

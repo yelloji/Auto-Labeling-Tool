@@ -1,0 +1,583 @@
+/* ========== ANALYTICS MODAL - PREMIUM STYLING ========== */
+
+.analytics-modal .ant-modal-body {
+    padding: 0.5rem 1rem;
+    overflow-y: auto;
+    max-height: calc(90vh - 110px);
+}
+
+.analytics-modal .ant-modal-header {
+    background: #ffffff;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.analytics-modal .ant-modal-title {
+    color: #262626;
+    font-weight: 700;
+}
+
+.analytics-modal .ant-modal-close-x {
+    color: #8c8c8c;
+}
+
+/* ========== TABS STYLING ========== */
+
+.analytics-tabs .ant-tabs-nav {
+    margin-bottom: 0px !important;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    padding: 0 1rem;
+}
+
+.analytics-tabs .ant-tabs-tab {
+    padding: 8px 12px !important;
+    margin: 0 !important;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.analytics-tabs .ant-tabs-content-holder {
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.analytics-tabs .ant-tabs-tab:hover {
+    color: #1890ff;
+}
+
+.analytics-tabs .ant-tabs-tab-active {
+    background: #ffffff;
+    border-bottom: 2px solid #1890ff;
+}
+
+/* ========== TAB CONTENT ========== */
+
+.analytics-tab-content {
+    padding: 0.5rem;
+    min-height: 400px;
+}
+
+/* ========== PREMIUM METRIC CARDS ========== */
+
+.premium-metrics-row {
+    margin-bottom: 1.5rem;
+}
+
+.premium-metric-card {
+    border-radius: 16px;
+    border: none;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    position: relative;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.premium-metric-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.premium-metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
+}
+
+.premium-metric-card .ant-card-body {
+    padding: 1rem;
+    color: white;
+    position: relative;
+    z-index: 1;
+}
+
+.metric-icon {
+    font-size: 2.5rem;
+    opacity: 0.3;
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+}
+
+.metric-content {
+    position: relative;
+    z-index: 2;
+}
+
+.metric-title {
+    display: block;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-bottom: 0.5rem;
+}
+
+.metric-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.metric-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: white;
+    line-height: 1;
+}
+
+.metric-suffix {
+    font-size: 1rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.metric-trend {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    width: fit-content;
+}
+
+.trend-text {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.metric-insight {
+    display: block;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.75rem;
+    margin-top: 0.75rem;
+    font-weight: 500;
+}
+
+/* ========== SMART INSIGHTS ALERT ========== */
+
+.insights-alert {
+    border-radius: 12px;
+    border: 2px solid #1890ff20;
+    background: linear-gradient(135deg, #e6f7ff 0%, #f0f9ff 100%);
+}
+
+.insights-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.insight-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.insight-item:hover {
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+}
+
+.insight-item .anticon {
+    font-size: 1.2rem;
+}
+
+/* ========== DISTRIBUTION CARDS ========== */
+
+.distribution-card,
+.confidence-card {
+    border-radius: 12px;
+    border: 1px solid #f0f0f0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.distribution-card:hover,
+.confidence-card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    transform: translateY(-3px);
+    border-color: #1890ff30;
+}
+
+.distribution-card .ant-card-head,
+.confidence-card .ant-card-head {
+    background: linear-gradient(to right, #f0f7ff, white);
+    border-bottom: 2px solid #e6f7ff;
+    font-weight: 600;
+}
+
+.distribution-card .ant-table {
+    font-size: 0.875rem;
+}
+
+.distribution-card .ant-table-thead>tr>th {
+    background: #fafafa;
+    font-weight: 600;
+}
+
+/* ========== CONFIDENCE RANGES ========== */
+
+.conf-dist-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.conf-range-item {
+    padding: 0.75rem;
+    background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    border: 1px solid #f0f0f0;
+}
+
+.conf-range-item:hover {
+    background: linear-gradient(135deg, #f0f0f0 0%, #fafafa 100%);
+    border-color: #d9d9d9;
+    transform: translateX(2px);
+}
+
+/* ========== RESPONSIVE DESIGN ========== */
+
+/* Mobile (xs) */
+@media (max-width: 576px) {
+    .analytics-tab-content {
+        padding: 0.25rem;
+    }
+
+    .premium-metric-card {
+        min-height: 110px;
+    }
+
+    .metric-value {
+        font-size: 1.8rem;
+    }
+
+    .metric-icon {
+        font-size: 1.8rem;
+        right: 0.5rem;
+        top: 0.5rem;
+    }
+
+    .metric-title {
+        font-size: 0.65rem;
+    }
+
+    .analytics-tabs .ant-tabs-tab {
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+
+    .analytics-tabs .ant-tabs-tab-btn span:not(.anticon) {
+        display: none;
+    }
+
+    .insights-list {
+        gap: 0.5rem;
+    }
+
+    .insight-item {
+        padding: 0.4rem;
+    }
+}
+
+/* Tablet (sm) */
+@media (min-width: 577px) and (max-width: 768px) {
+    .premium-metric-card {
+        min-height: 120px;
+    }
+
+    .metric-value {
+        font-size: 2rem;
+    }
+}
+
+/* Desktop (md+) */
+@media (min-width: 769px) {
+    .premium-metric-card {
+        min-height: 140px;
+    }
+
+    .metric-value {
+        font-size: 2.5rem;
+    }
+}
+
+/* Large Desktop (lg+) */
+@media (min-width: 992px) {
+    .premium-metric-card {
+        min-height: 150px;
+    }
+
+    .metric-value {
+        font-size: 3rem;
+    }
+
+    .metric-icon {
+        font-size: 3rem;
+    }
+}
+
+/* ========== EMPTY STATES ========== */
+
+.ant-empty-description {
+    margin-top: 1rem;
+}
+
+.ant-empty-description ul {
+    list-style: none;
+    padding: 0;
+}
+
+.ant-empty-description li {
+    padding: 0.5rem 0;
+    text-align: left;
+}
+
+.ant-empty-description li:before {
+    content: "✓ ";
+    color: #52c41a;
+    font-weight: bold;
+    margin-right: 0.5rem;
+}
+
+/* ========== ANIMATIONS ========== */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.analytics-tab-content {
+    animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.02);
+    }
+}
+
+.premium-metric-card:hover .metric-icon {
+    animation: pulse 2s infinite;
+}
+
+/* ========== SCROLLBAR STYLING ========== */
+
+.analytics-modal .ant-modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.analytics-modal .ant-modal-body::-webkit-scrollbar-track {
+    background: #f0f0f0;
+    border-radius: 4px;
+}
+
+.analytics-modal .ant-modal-body::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 4px;
+}
+
+.analytics-modal .ant-modal-body::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+/* ========== PROFESSIONAL GLASS DIAGNOSTICS (PRO MAX) ========== */
+
+.glass-diagnostic-card {
+    background: rgba(255, 255, 255, 0.7) !important;
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05) !important;
+    transition: all 4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    height: 100%;
+    /* Important for balance */
+    display: flex;
+    flex-direction: column;
+}
+
+.glass-diagnostic-card:hover {
+    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.85) !important;
+    box-shadow: 0 12px 40px rgba(31, 38, 135, 0.1) !important;
+}
+
+.glass-inset-container {
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Accuracy Scan - Keep the user's favorite design */
+.luxury-scan-container {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #e6fffb;
+    border: 1px solid #b5f5ec;
+    padding: 1.25rem;
+}
+
+.luxury-scan-line {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(to right,
+            transparent 0%,
+            rgba(24, 144, 255, 0.05) 50%,
+            rgba(19, 194, 194, 0.2) 95%,
+            #13c2c2 100%);
+    box-shadow: 2px 0 8px rgba(19, 194, 194, 0.4);
+    z-index: 5;
+    pointer-events: none;
+    animation: luxuryScanLoop 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes luxuryScanLoop {
+    0% {
+        left: -50%;
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 0.8;
+    }
+
+    90% {
+        opacity: 0.8;
+    }
+
+    100% {
+        left: 100%;
+        opacity: 0;
+    }
+}
+
+.diagnostic-header-vibrant {
+    background: linear-gradient(to right, #f8faff, #ffffff);
+    border-bottom: 2px solid #e6f0ff !important;
+}
+
+/* ========== STRATEGIC RESEARCH REPORT (HYBRID DOSSIER) ========== */
+
+.report-dossier {
+    background: #fafafa;
+    border-radius: 12px;
+    padding: 2rem !important;
+    color: #262626;
+    border: 1px solid #f0f0f0;
+    box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.02);
+}
+
+.report-narrative-section {
+    background: #ffffff !important;
+    border: 1px solid #e8e8e8 !important;
+    border-radius: 4px !important;
+    /* Document look */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+.ceo-text {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #434343;
+    line-height: 1.8;
+}
+
+.strategic-item {
+    transition: all 0.2s ease;
+    padding: 0.5rem;
+    border-radius: 6px;
+}
+
+.strategic-item:hover {
+    background: #f0f7ff;
+}
+
+/* Metric Insight Tiles */
+.insight-tile {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.insight-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+.lineage-dna-card {
+    border: 1px solid #f0f0f0 !important;
+    background: #ffffff !important;
+}
+
+.lineage-dna-card .ant-card-head {
+    background: #fdfdfd !important;
+    border-bottom: 1px solid #f0f0f0 !important;
+    min-height: 40px !important;
+}
+
+.dna-row span {
+    font-size: 13px;
+}
+
+/* Executive Verdict Styles */
+.strategic-takeaway {
+    border-left: 4px solid #1890ff;
+    position: relative;
+    overflow: hidden;
+}
+
+.strategic-takeaway::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, transparent 50%, rgba(24, 144, 255, 0.05) 100%);
+}

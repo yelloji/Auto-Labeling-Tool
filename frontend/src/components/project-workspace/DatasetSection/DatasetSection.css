@@ -1,53 +1,55 @@
 /* Dataset Container */
 .dataset-container {
-  padding: 24px;
+  padding: 1.5rem;
   background: #fff;
-  min-height: calc(100vh - 64px);
+  min-height: calc(100vh - 4.5rem);
+  width: 100%;
+  box-sizing: border-box;
 }
 
-/* Image Grid for 200px thumbnails */
+/* Image Grid - Senior Compact Mode */
 .image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 200px);
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, 15.625rem);
+  gap: 1.25rem;
   justify-content: flex-start;
   align-items: flex-start;
-  margin-top: 16px;
-  padding: 0 10px;
+  margin-top: 1.25rem;
+  padding: 0;
+  width: 100%;
 }
 
-/* Responsive breakpoints for image grid */
-@media (max-width: 768px) {
+/* Responsive adjustments for smaller screens */
+@media (max-width: 80rem) {
   .image-grid {
-    grid-template-columns: repeat(auto-fill, 180px);
-    gap: 16px;
-    justify-content: center;
+    grid-template-columns: repeat(auto-fill, minmax(15.625rem, 1fr));
+  }
+}
+
+@media (max-width: 48rem) {
+  .image-grid {
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: 1rem;
   }
 
   .dataset-container {
-    padding: 16px;
+    padding: 1rem;
   }
 }
 
-@media (max-width: 480px) {
-  .image-grid {
-    grid-template-columns: repeat(auto-fill, 160px);
-    gap: 12px;
-  }
-}
-
-/* Image Card - 200px thumbnails */
+/* Image Card - Vector Scalable */
 .image-card {
   position: relative;
-  border: 1px solid #f0f0f0;
-  border-radius: 8px;
-  padding: 10px;
+  border: 0.0625rem solid #f0f0f0;
+  border-radius: 0.5rem;
+  padding: 0.625rem;
   background: #fff;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.05);
   cursor: pointer;
-  width: 200px;
-  height: fit-content;
+  width: 100%;
+  max-width: 15.625rem;
+  height: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -57,40 +59,42 @@
 
 .image-card:hover {
   border-color: #1890ff;
-  box-shadow: 0 6px 16px rgba(24, 144, 255, 0.15);
-  transform: translateY(-3px);
+  box-shadow: 0 0.375rem 1rem rgba(24, 144, 255, 0.15);
+  transform: translateY(-0.1875rem);
 }
 
 .annotation-overlay {
   position: absolute;
-  top: 4px;
-  left: 4px;
-  background: rgba(255, 255, 0, 0.8);
-  padding: 0.2rem 0.4rem;
-  font-size: 0.7rem;
-  font-weight: bold;
-  border-radius: 3px;
-  color: #333;
+  top: 0.25rem;
+  left: 0.25rem;
+  background: rgba(255, 255, 0, 0.85);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border-radius: 0.1875rem;
+  color: #111;
   z-index: 10;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.1);
 }
 
 .annotation-box {
-  border-radius: 2px;
+  border-radius: 0.125rem;
   z-index: 5;
 }
 
 .annotation-label {
   position: absolute;
-  top: -20px;
+  top: -1.25rem;
   left: 0;
-  background: rgba(255, 77, 79, 0.9);
+  background: rgba(139, 0, 0, 0.9);
+  /* Senior Dark Red */
   color: white;
-  padding: 1px 4px;
-  font-size: 0.6rem;
-  font-weight: bold;
-  border-radius: 2px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 0.125rem;
   white-space: nowrap;
-  max-width: 80px;
+  max-width: 6rem;
   overflow: hidden;
   text-overflow: ellipsis;
   z-index: 15;
@@ -100,24 +104,12 @@
   z-index: 5;
 }
 
-.annotation-polygon .annotation-label {
-  position: absolute;
-  background: rgba(255, 77, 79, 0.9);
-  color: white;
-  padding: 1px 4px;
-  font-size: 0.6rem;
-  font-weight: bold;
-  border-radius: 2px;
-  white-space: nowrap;
-  z-index: 15;
-}
-
 /* Additional styles for better annotation visibility */
 .image-card .annotation-text {
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.75);
   color: white;
-  padding: 2px 4px;
-  border-radius: 2px;
-  font-size: 10px;
-  font-weight: bold;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.125rem;
+  font-size: 0.75rem;
+  font-weight: 600;
 }

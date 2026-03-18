@@ -82,7 +82,78 @@ class DatabaseDebugger:
             # Get row count
             cursor.execute(f"SELECT COUNT(*) FROM {table_name};")
             count = cursor.fetchone()[0]
-        print(f"   📊 Total rows: {count}")
+            print(f"   📊 Total rows: {count}")
+
+    def get_human_verifications_table(self):
+        """Detailed info about human_verifications table (Pass/Fail reviews)"""
+        cursor = self.conn.cursor()
+        self.print_header("HUMAN VERIFICATIONS TABLE (PASS/FAIL)")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='human_verifications'")
+        if not cursor.fetchone():
+            print("❌ human_verifications table does not exist yet!")
+            return
+            
+        print("\n📐 Schema:")
+        cursor.execute("PRAGMA table_info('human_verifications')")
+        for col in cursor.fetchall():
+            col_info = f"   - {col[1]} ({col[2]})"
+            if col[3]: col_info += " NOT NULL"
+            if col[4] is not None: col_info += f" DEFAULT {col[4]}"
+            if col[5]: col_info += " PRIMARY KEY"
+            print(col_info)
+            
+        cursor.execute("SELECT COUNT(*) FROM human_verifications")
+        count = cursor.fetchone()[0]
+        print(f"\n📊 Total rows: {count}")
+        
+        if count:
+            print("\n✅ RECENT VERIFICATIONS (with full context):")
+            cursor.execute("""
+                SELECT 
+                    hv.*,
+                    me.dataset_source,
+                    me.training_id,
+                    me.dataset_path,
+                    me.name as experiment_name,
+                    p.name as project_name,
+                    ts.name as training_name
+                FROM human_verifications hv
+                LEFT JOIN model_experiments me ON hv.experiment_id = me.id
+                LEFT JOIN projects p ON hv.project_id = p.id
+                LEFT JOIN training_sessions ts ON me.training_id = ts.id
+                ORDER BY hv.created_at DESC 
+                LIMIT 20
+            """)
+            for row in cursor.fetchall():
+                # Status and is_manual flag
+                is_manual_str = " [MANUAL]" if row['is_manual'] else ""
+                status_icon = "🟢" if row['status'] == 'pass' else "🔴" if row['status'] == 'fail' else "🟡"
+                if row['status'] == 'missing':
+                    status_icon = "🟣"
+                print(f"\n   {status_icon} [{row['status'].upper()}]{is_manual_str} - {row['image_name']} (ID: {row['id'][:8]})")
+                
+                # Project info with name
+                project_display = f"{row['project_name'] or 'Unknown'} (ID: {row['project_id']})"
+                print(f"      ├─ Project: {project_display}")
+                
+                print(f"      ├─ Match: {row['class_name']} at [{row['x_min']:.2f}, {row['y_min']:.2f}, {row['x_max']:.2f}, {row['y_max']:.2f}]")
+                print(f"      ├─ Hashes: MD5: {row['image_hash_md5'] or 'N/A'}, Perceptual: {row['image_hash_perceptual'] or 'N/A'}")
+                print(f"      ├─ Experiment: {row['experiment_name'] or 'N/A'} (ID: {row['experiment_id'][:8] if row['experiment_id'] else 'N/A'})")
+                if row['is_manual']:
+                    print(f"      ├─ Source: HUMAN (Manual Box)")
+                else:
+                    print(f"      ├─ Source: AI Predicted")
+                print(f"      ├─ Dataset Source: {row['dataset_source'] or 'N/A'}")
+                print(f"      ├─ Dataset Path: {row['dataset_path'] or 'N/A'}")
+                
+                # Training info with name
+                training_display = f"{row['training_name'] or 'N/A'} (ID: {row['training_id'] or 'N/A'})"
+                print(f"      ├─ Training: {training_display}")
+                
+                if row['notes']:
+                    print(f"      ├─ Notes: {row['notes']}")
+                print(f"      ├─ Created: {row['created_at']}")
+                print(f"      └─ Updated: {row['updated_at']}")
 
     def get_training_sessions_table(self):
         """Detailed info about training_sessions table"""
@@ -148,6 +219,228 @@ class DatabaseDebugger:
                             print(f"         {cn}: (could not parse)")
                     else:
                         print(f"         {cn}: {val if val not in (None, '') else 'N/A'}")
+    
+    def get_model_experiments_table(self):
+        """Detailed info about model_experiments table"""
+        cursor = self.conn.cursor()
+        self.print_header("MODEL EXPERIMENTS TABLE")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='model_experiments'")
+        if not cursor.fetchone():
+            print("❌ model_experiments table does not exist!")
+            return
+        
+        print("\n📐 Schema:")
+        cursor.execute("PRAGMA table_info('model_experiments')")
+        for col in cursor.fetchall():
+            col_info = f"   - {col[1]} ({col[2]})"
+            if col[3]: col_info += " NOT NULL"
+            if col[4] is not None: col_info += f" DEFAULT {col[4]}"
+            if col[5]: col_info += " PRIMARY KEY"
+            print(col_info)
+            
+        cursor.execute("SELECT COUNT(*) FROM model_experiments")
+        count = cursor.fetchone()[0]
+        print(f"\n📊 Total rows: {count}")
+        
+        if count:
+            print(f"\n🧪 GROUPED EXPERIMENTS (Project > Training > Type):")
+            cursor.execute("PRAGMA table_info('model_experiments')")
+            _cols_info = cursor.fetchall()
+            _col_names = [c[1] for c in _cols_info]
+            
+            # Order: Type (Validation first) -> Project Name -> Training ID -> Newest First
+            cursor.execute("""
+                SELECT * FROM model_experiments 
+                ORDER BY experiment_type DESC, project_name ASC, training_id ASC, created_at DESC 
+                LIMIT 40
+            """)
+            
+            last_type = None
+            last_project = None
+            last_training = None
+            
+            for row in cursor.fetchall():
+                # Print Major Type Header (VALIDATION vs PREDICTION)
+                curr_type = row['experiment_type']
+                if curr_type != last_type:
+                    print(f"\n\n{'█' * 60}")
+                    print(f" 🔥 {curr_type.upper()} RECORDS")
+                    print(f"{'█' * 60}")
+                    last_type = curr_type
+                    last_project = None
+                    last_training = None
+
+                # Print Project Header
+                project_display = row['project_name'] or 'Unknown Project'
+                if project_display != last_project:
+                    print(f"\n{'#' * 40}")
+                    print(f"🏗️  PROJECT: {project_display.upper()}")
+                    print(f"{'#' * 40}")
+                    last_project = project_display
+                    last_training = None # Reset training for new project
+                
+                # Print Training Model Header
+                training_display = f"{row['training_name']} (ID: {row['training_id']})" if row['training_id'] else "No Training ID"
+                if training_display != last_training:
+                    print(f"\n   ⚙️  TRAINING MODEL: {training_display}")
+                    print(f"   {'=' * 30}")
+                    last_training = training_display
+                
+                print(f"\n      🔍 [{row['experiment_type'].upper()}] - {row['name'] or row['id'][:8]} (ID: {row['id']})")
+                print(f"      📁 Project: {row['project_name'] or 'N/A'} | 🔧 Training: {row['training_name'] or 'N/A'}")
+                
+                print(f"      ├─ Identification")
+                print(f"      │ Status: {row['status']}")
+                print(f"      │ PID: {row['process_pid'] or 'N/A'}")
+                print(f"      │ Created: {row['created_at']}")
+                
+                print(f"\n      ├─ Configuration") 
+                print(f"      │ Dataset Split: {row['dataset_source']}")
+                print(f"      │ Image Count: {row['image_count'] if row['image_count'] is not None else 'N/A'}")
+                print(f"      │ Confidence: {row['confidence']}")
+                print(f"      │ IoU Threshold: {row['iou_threshold']}")
+                print(f"      │ Image Size: {row['imgsz']}")
+                print(f"      │ Batch Size: {row['batch'] if row['batch'] is not None else 'N/A'}  # New Column")
+                print(f"      │ Half Precision (FP16): {bool(row['half']) if row['half'] is not None else 'N/A'}  # New Column")
+                print(f"      │ Weights Type: {row['weights_type'] or 'N/A'}")
+                print(f"      │ Task: {row['task'] or 'N/A'}")
+                print(f"      │ Framework: {row['framework'] or 'N/A'}")
+                print(f"      │ Device: {row['device'] or 'N/A'}")
+                print(f"      │ Max Detections: {row['max_detections'] if row['max_detections'] is not None else 'N/A'}")
+                print(f"      │ Is Default: {bool(row['is_default'])}")
+                
+                print(f"\n      ├─ Results - Validation")
+                if row['validation_metrics']:
+                    try:
+                        m = json.loads(row['validation_metrics']) if isinstance(row['validation_metrics'], str) else row['validation_metrics']
+                        # Map keys to human readable labels
+                        label_map = {
+                            'map50': 'mAP50',
+                            'map50_95': 'mAP50-95',
+                            'precision': 'Precision',
+                            'recall': 'Recall',
+                            'f1': 'F1-Score'
+                        }
+                        kpis = ", ".join([f"{label_map.get(k, k)}: {v:.3f}" if isinstance(v, (int, float)) else f"{label_map.get(k, k)}: {v}" for k, v in m.items() if k in label_map])
+                        print(f"      │ Overall Summary: {kpis}")
+                    except: print(f"      │ Metrics: (Raw Error) {row['validation_metrics']}")
+                else:
+                    print(f"      │ Overall Summary: N/A")
+                
+                # Per-Class Preview
+                if row['per_class_metrics']:
+                    try:
+                        pcm = json.loads(row['per_class_metrics']) if isinstance(row['per_class_metrics'], str) else row['per_class_metrics']
+                        class_names = [str(c.get('name', 'unknown')) for c in pcm]
+                        print(f"      │ Per-Class ({len(pcm)}): {', '.join(class_names[:5])}{'...' if len(class_names) > 5 else ''}")
+                    except: print(f"      │ Per-Class: Available (Parse Error)")
+                else:
+                    print(f"      │ Per-Class: N/A")
+
+                # Confusion Matrix Preview
+                # Confusion Matrix Preview (Render a small grid)
+                if row['confusion_matrix']:
+                    try:
+                        cm = json.loads(row['confusion_matrix']) if isinstance(row['confusion_matrix'], str) else row['confusion_matrix']
+                        unique_names = []
+                        for cell in cm:
+                            if cell['actual'] not in unique_names:
+                                unique_names.append(cell['actual'])
+                        
+                        total_samples = sum([c.get('count', 0) for c in cm])
+                        if total_samples == 0:
+                            print(f"      │ Confusion Matrix: Empty (No correct/incorrect detections to plot)")
+                        else:
+                            print(f"      │ Confusion Matrix ({len(unique_names)} classes, {total_samples} samples):")
+                            
+                            # Simple Grid Rendering
+                            if len(unique_names) <= 10: # Only grid for small matrices
+                                header = "      │ " + " " * 10 + "   " + "   ".join([f"{n[:10]:>10}" for n in unique_names])
+                                print(header)
+                                for actual in unique_names:
+                                    row_str = f"      │ {actual[:10]:>10}   "
+                                    for predicted in unique_names:
+                                        cell_data = next((c for c in cm if c['actual'] == actual and c['predicted'] == predicted), None)
+                                        val = cell_data['count'] if cell_data else 0
+                                        row_str += f"{val:>10}   "
+                                    print(row_str)
+                            else:
+                                print(f"      │ Matrix too large for terminal grid ({len(unique_names)} classes)")
+                    except Exception as e: 
+                        print(f"      │ Confusion Matrix: Available (Render Error: {e})")
+                else:
+                    print(f"      │ Confusion Matrix: N/A")
+
+                print(f"\n      ├─ Results - Prediction")
+                if row['predictions']:
+                    try:
+                        preds = json.loads(row['predictions']) if isinstance(row['predictions'], str) else row['predictions']
+                        
+                        # Handle both dict and list structures
+                        if isinstance(preds, dict):
+                            print(f"      │ Predictions: {len(preds)} images")
+                            print(f"      │ Sample (first 2 images):")
+                            for i, (img_name, dets) in enumerate(list(preds.items())[:2]):
+                                print(f"      │   ├─ {img_name}: {len(dets)} detection(s)")
+                                for det in dets[:3]:
+                                    cls = det.get('class', '?')
+                                    conf = det.get('confidence', 0)
+                                    print(f"      │   │  └─ {cls} ({conf:.2f})")
+                        elif isinstance(preds, list):
+                            print(f"      │ Predictions: {len(preds)} total entries")
+                            print(f"      │ Sample (first 2 images):")
+                            for pred in preds[:2]:
+                                img_name = pred.get('image', 'unknown')
+                                dets = pred.get('detections', [])
+                                print(f"      │   ├─ {img_name}: {len(dets)} detection(s)")
+                                for det in dets[:3]:
+                                    cls = det.get('class', '?')
+                                    conf = det.get('confidence', 0)
+                                    print(f"      │   │  └─ {cls} ({conf:.2f})")
+                    except Exception as e:
+                        print(f"      │ Predictions: Available (Parse Error: {e})")
+                else:
+                    print(f"      │ Predictions: N/A")
+
+                # Analytics Summary (Pre-computed stats)
+                if row['analytics_summary']:
+                    try:
+                        a = json.loads(row['analytics_summary']) if isinstance(row['analytics_summary'], str) else row['analytics_summary']
+                        print(f"      │ Analytics Summary:")
+                        print(f"      │   ├─ Total Objects: {a.get('total_detections', 0)}")
+                        print(f"      │   ├─ Images w/ Hits: {a.get('images_with_detections', 0)}")
+                        print(f"      │   ├─ Avg Confidence: {a.get('avg_confidence', 0):.4f}")
+                        if 'classes_detected' in a:
+                            classes = a['classes_detected']
+                            top_classes = sorted(classes.items(), key=lambda x: x[1], reverse=True)[:5]
+                            class_str = ", ".join([f"{k} ({v})" for k, v in top_classes])
+                            print(f"      │   └─ Top Classes: {class_str}{'...' if len(classes) > 5 else ''}")
+                    except Exception:
+                        print(f"      │ Analytics Summary: Available (Parse Error)")
+                else:
+                    print(f"      │ Analytics Summary: N/A")
+
+                if row['input_images']:
+                    try:
+                        imgs = json.loads(row['input_images']) if isinstance(row['input_images'], str) else row['input_images']
+                        print(f"      │ Input Images: {len(imgs)} images tracked")
+                    except: print(f"      │ Input Images: Available")
+                else:
+                    print(f"      │ Input Images: N/A")
+                
+                print(f"\n      ├─ Timing & Paths")
+                print(f"      │ Started: {row['started_at'] or 'N/A'}")
+                print(f"      │ Completed: {row['completed_at'] or 'N/A'}")
+                print(f"      │ Duration: {row['duration_sec'] if row['duration_sec'] is not None else 'N/A'} sec")
+                print(f"      │ Dataset Path: {row['dataset_path'] or 'N/A'}")
+                print(f"      │ Output Folder: {row['output_folder'] or 'N/A'}")
+                print(f"      │ User Notes: {row['user_notes'] or 'N/A'}")
+                
+                if row['error_message']:
+                    print(f"      ❌ Error: {row['error_message']}")
+                
+                print(f"      {'─' * 70}")
+
     
     def get_projects_overview(self):
         """Get overview of all projects"""
@@ -292,6 +585,7 @@ class DatabaseDebugger:
             
             # Check if physical file exists
             file_exists = os.path.exists(image['file_path'])
+            print(f"      🔑 MD5 Hash: {image['image_hash_md5'] or '❌ Not set'}")
             print(f"      💾 Physical File: {'✅ Exists' if file_exists else '❌ Missing'}")
             
             # Get annotations count
@@ -859,7 +1153,8 @@ class DatabaseDebugger:
         # Fetch and display entries
         cursor.execute("""
             SELECT id, name, type, format, file_path, project_id, project_name, nc, classes, 
-                   training_input_size, input_size_default, created_at, updated_at
+                   training_input_size, input_size_default, source_type, training_session_id, 
+                   description, is_best, created_at, updated_at
             FROM ai_models
             ORDER BY created_at
         """)
@@ -895,6 +1190,12 @@ class DatabaseDebugger:
             ids = row['input_size_default']
             print(f"   📏 Training Input Size: {tis if tis is not None else 'N/A'}")
             print(f"   📏 Input Size Default: {ids if ids is not None else 'N/A'}")
+
+            # New columns
+            print(f"   📌 Source Type: {row['source_type'] if row['source_type'] else 'N/A'}")
+            print(f"   🔗 Training Session ID: {row['training_session_id'] if row['training_session_id'] else 'N/A'}")
+            print(f"   📝 Description: {row['description'] if row['description'] else 'N/A'}")
+            print(f"   🏆 Is Best: {'Yes' if row['is_best'] else 'No'}")
 
             # Timestamps
             print(f"   📅 Created: {row['created_at']}")
@@ -1343,12 +1644,29 @@ class DatabaseDebugger:
         print(f"   Size: {db_size_mb:.2f} MB")
         print(f"   Last Modified: {datetime.fromtimestamp(os.path.getmtime(self.db_path))}")
     
+    def apply_migrations(self):
+        """Apply any pending column migrations safely (idempotent)."""
+        migrations = [
+            ('images', 'image_hash_md5', 'VARCHAR(32)', 'MD5 hash for cross-experiment image matching'),
+        ]
+        for table, column, col_type, description in migrations:
+            try:
+                self.conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}')
+                self.conn.commit()
+                print(f'✅ Migration: added {column} to {table}  ({description})')
+            except sqlite3.OperationalError as e:
+                if 'duplicate column name' in str(e):
+                    pass  # already exists, silent skip
+                else:
+                    print(f'❌ Migration error [{table}.{column}]: {e}')
+
     def run_full_debug(self):
         """Run complete database debug analysis"""
         if not self.connect():
             return
-        
+
         try:
+            self.apply_migrations()
             print("🔍 Starting Database Debug Analysis...")
             print(f"📅 Analysis Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             
@@ -1356,9 +1674,11 @@ class DatabaseDebugger:
             self.get_table_info()
             self.get_ai_models_table()  # Add AI models table analysis
             self.get_dev_mode_settings_table()  # Show dev-mode settings
+            self.get_model_experiments_table()  # Show model experiments
             self.get_training_sessions_table()  # Training sessions table analysis
             self.get_projects_overview()
             self.get_datasets_detailed()
+            self.get_human_verifications_table()  # Show manual Pass/Fail reviews
             self.get_labels_table()  # Add labels table analysis
             self.get_releases_table()  # Add releases table analysis
             self.get_image_transformations_table()  # Add image transformations table analysis
@@ -1387,6 +1707,7 @@ def main():
     parser.add_argument('--db', type=str, default='database.db', help='Path to database file')
     parser.add_argument('--labels', action='store_true', help='Show only labels table data')
     parser.add_argument('--ai-models', action='store_true', help='Show only ai_models table data')
+    parser.add_argument('--experiments', action='store_true', help='Show model_experiments table data')
     parser.add_argument('--training-sessions', action='store_true', help='Show training_sessions table data')
     parser.add_argument('--projects', action='store_true', help='Show projects overview')
     parser.add_argument('--datasets', action='store_true', help='Show datasets detailed view')
@@ -1399,6 +1720,7 @@ def main():
     parser.add_argument('--relationships', action='store_true', help='Show transformation-release relationships')
     parser.add_argument('--stats', action='store_true', help='Show database statistics')
     parser.add_argument('--schema', action='store_true', help='Show database schema information')
+    parser.add_argument('--human-verify', action='store_true', help='Show human verifications (Pass/Fail)')
     parser.add_argument('--filesystem', action='store_true', help='Compare file system vs database')
     args = parser.parse_args()
     
@@ -1417,6 +1739,7 @@ def main():
     targets = [
         args.labels,
         args.ai_models,
+        args.experiments,
         args.training_sessions,
         args.projects,
         args.datasets,
@@ -1429,6 +1752,7 @@ def main():
         args.relationships,
         args.stats,
         args.schema,
+        args.human_verify,
         args.filesystem,
     ]
     if any(targets):
@@ -1437,6 +1761,8 @@ def main():
                 debugger.get_labels_table()
             if args.ai_models:
                 debugger.get_ai_models_table()
+            if args.experiments:
+                debugger.get_model_experiments_table()
             if args.training_sessions:
                 debugger.get_training_sessions_table()
             if args.projects:
@@ -1461,6 +1787,8 @@ def main():
                 debugger.get_database_statistics()
             if args.schema:
                 debugger.get_table_info()
+            if args.human_verify:
+                debugger.get_human_verifications_table()
             if args.filesystem:
                 debugger.get_file_system_vs_database()
             debugger.close()

@@ -1,6 +1,6 @@
 // src/components/project-workspace/DatasetSection.jsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Spin,
@@ -43,6 +43,7 @@ const DatasetSection = ({ projectId }) => {
   const [totalImages, setTotalImages] = useState(0);
   const [pageSize] = useState(50); // Show 50 images per page for optimal performance
   const navigate = useNavigate();
+  const filteredImagesRef = useRef([]);
 
   useEffect(() => {
     logInfo('app.frontend.ui', 'dataset_section_initialized', 'DatasetSection component initialized', {
@@ -289,6 +290,7 @@ const DatasetSection = ({ projectId }) => {
     const endIndex = startIndex + pageSize;
     const paginatedImages = filteredImages.slice(startIndex, endIndex);
 
+    filteredImagesRef.current = filteredImages;
     setImages(paginatedImages);
     setTotalImages(filteredImages.length);
 
@@ -319,12 +321,9 @@ const DatasetSection = ({ projectId }) => {
       datasetId: image.dataset_id,
       imageName: image.filename || image.name
     });
-    // Navigate to manual labeling page
-    navigate(`/annotate/${image.dataset_id}/manual`, {
-      state: {
-        imageId: image.id,
-        projectId: projectId
-      }
+    // Navigate to manual labeling page — imageId must be in query params (ManualLabeling reads searchParams)
+    navigate(`/annotate/${image.dataset_id}/manual?imageId=${image.id}`, {
+      state: { projectId: projectId, filteredImageIds: filteredImagesRef.current.map(img => img.id) }
     });
   };
 
@@ -397,14 +396,14 @@ const DatasetSection = ({ projectId }) => {
       <div className="dataset-container">
         <div style={{
           textAlign: 'center',
-          padding: '60px 20px',
+          padding: '3.75rem 1.25rem',
           background: '#fafafa',
-          borderRadius: '8px',
-          border: '1px solid #f0f0f0'
+          borderRadius: '0.5rem',
+          border: '0.0625rem solid #f0f0f0'
         }}>
           <Spin size="large" />
-          <div style={{ marginTop: '16px' }}>
-            <Text type="secondary">Loading dataset images...</Text>
+          <div style={{ marginTop: '1rem' }}>
+            <Text type="secondary" style={{ fontSize: '1rem' }}>Loading dataset images...</Text>
           </div>
         </div>
       </div>
@@ -426,17 +425,39 @@ const DatasetSection = ({ projectId }) => {
         return null;
       })()}
       {/* Header */}
-      <div className="dataset-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-          <Title level={2} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
-            <DatabaseOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+      <div className="dataset-header" style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '0.75rem',
+        padding: '0',
+        flexWrap: 'wrap',
+        gap: '0.75rem'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Title level={2} style={{
+            margin: 0,
+            fontSize: '1.25rem',
+            background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            display: 'inline-flex',
+            alignItems: 'center',
+            fontWeight: 700,
+            flexShrink: 0
+          }}>
+            <DatabaseOutlined style={{ marginRight: '0.4375rem', color: '#1890ff', fontSize: '1.25rem' }} />
             Dataset
           </Title>
-          <Text type="secondary">
+          <Text type="secondary" style={{
+            fontSize: '0.8125rem',
+            marginTop: '0.125rem'
+          }}>
             Dataset images ready for training ({images.length} images)
           </Text>
         </div>
-        <Space>
+        <Space wrap style={{ flexShrink: 0 }}>
           <Button
             type="primary"
             icon={<ExportOutlined />}
@@ -444,7 +465,11 @@ const DatasetSection = ({ projectId }) => {
             style={{
               background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)',
               border: 'none',
-              fontWeight: '500'
+              fontWeight: '600',
+              padding: '0 0.875rem',
+              fontSize: '0.8125rem',
+              borderRadius: '0.375rem',
+              boxShadow: '0 0.125rem 0.5rem rgba(24, 144, 255, 0.2)'
             }}
           >
             Create New Release
@@ -453,6 +478,10 @@ const DatasetSection = ({ projectId }) => {
             icon={<ReloadOutlined />}
             onClick={handleRefreshClick}
             loading={loading}
+            style={{
+              borderRadius: '0.375rem',
+              fontSize: '0.8125rem'
+            }}
           >
             Refresh
           </Button>
@@ -462,12 +491,12 @@ const DatasetSection = ({ projectId }) => {
       {/* Filters and Search */}
       <div style={{
         background: '#fafafa',
-        padding: '16px',
-        borderRadius: '8px',
-        marginTop: '16px',
-        border: '1px solid #f0f0f0'
+        padding: '0.5rem 0.75rem',
+        borderRadius: '0.5rem',
+        marginTop: '0.5rem',
+        border: '0.0625rem solid #f0f0f0'
       }}>
-        <Row gutter={[16, 16]} align="middle">
+        <Row gutter={[8, 8]} align="middle">
           <Col xs={24} sm={12} md={6}>
             <Input
               placeholder="Search dataset images by name..."
@@ -475,14 +504,16 @@ const DatasetSection = ({ projectId }) => {
               value={search}
               onChange={handleSearchChange}
               allowClear
+              style={{ fontSize: '0.8125rem' }}
             />
           </Col>
-          <Col xs={8} sm={6} md={4}>
+          <Col xs={8} sm={6} md={3}>
             <Select
               value={filterSplitSection}
               onChange={handleSplitSectionFilterChange}
-              style={{ width: '100%' }}
-              placeholder="Split Section"
+              style={{ width: '100%', fontSize: '0.75rem' }}
+              placeholder="Split"
+              size="small"
             >
               <Option value="all">All Splits</Option>
               <Option value="train">Train</Option>
@@ -494,8 +525,9 @@ const DatasetSection = ({ projectId }) => {
             <Select
               value={filterDataset}
               onChange={handleDatasetFilterChange}
-              style={{ width: '100%' }}
+              style={{ width: '100%', fontSize: '0.75rem' }}
               placeholder="Dataset"
+              size="small"
             >
               <Option value="all">All Datasets</Option>
               {availableDatasets.map(dataset => (
@@ -503,12 +535,13 @@ const DatasetSection = ({ projectId }) => {
               ))}
             </Select>
           </Col>
-          <Col xs={8} sm={6} md={4}>
+          <Col xs={8} sm={6} md={3}>
             <Select
               value={filterClass}
               onChange={handleClassFilterChange}
-              style={{ width: '100%' }}
+              style={{ width: '100%', fontSize: '0.75rem' }}
               placeholder="Class"
+              size="small"
             >
               <Option value="all">All Classes</Option>
               {availableClasses.map(className => (
@@ -516,29 +549,30 @@ const DatasetSection = ({ projectId }) => {
               ))}
             </Select>
           </Col>
-          <Col xs={8} sm={6} md={4}>
+          <Col xs={12} sm={6} md={3}>
             <Select
               value={sortBy}
               onChange={handleSortByChange}
-              style={{ width: '100%' }}
+              style={{ width: '100%', fontSize: '0.75rem' }}
               placeholder="Sort by"
+              size="small"
             >
               <Option value="newest">Newest First</Option>
               <Option value="oldest">Oldest First</Option>
               <Option value="split">Split Section</Option>
             </Select>
           </Col>
-          <Col xs={24} sm={12} md={6}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <Text type="secondary" style={{ lineHeight: '32px' }}>
-                {totalImages > pageSize ?
-                  `Page ${currentPage} of ${Math.ceil(totalImages / pageSize)} (${totalImages} total images)` :
-                  `${images.length} of ${totalImages} dataset images`
-                }
-              </Text>
-            </div>
-          </Col>
         </Row>
+
+        {/* Pagination text moved BELOW to keep filters cute and single-line */}
+        <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'flex-start' }}>
+          <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
+            {totalImages > pageSize ?
+              `${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, totalImages)} of ${totalImages} images` :
+              `${images.length} of ${totalImages} images`
+            }
+          </Text>
+        </div>
       </div>
 
       {/* Image Grid */}
@@ -551,48 +585,50 @@ const DatasetSection = ({ projectId }) => {
           />
         ))}
       </div>
+      {
+        totalImages > pageSize && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            marginTop: '32px',
+            marginBottom: '24px'
+          }}>
+            <Pagination
+              current={currentPage}
+              total={totalImages}
+              pageSize={pageSize}
+              onChange={handlePageChange}
+              showSizeChanger={false}
+              showQuickJumper={totalImages > 100}
+              showTotal={(total, range) =>
+                `${range[0]}-${range[1]} of ${total} images`
+              }
+            />
+          </div>
+        )
+      }
 
-      {/* Pagination */}
-      {totalImages > pageSize && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          marginTop: '32px',
-          marginBottom: '24px'
-        }}>
-          <Pagination
-            current={currentPage}
-            total={totalImages}
-            pageSize={pageSize}
-            onChange={handlePageChange}
-            showSizeChanger={false}
-            showQuickJumper={totalImages > 100}
-            showTotal={(total, range) =>
-              `${range[0]}-${range[1]} of ${total} images`
-            }
-          />
-        </div>
-      )}
-
-      {images.length === 0 && !loading && (
-        <div style={{
-          textAlign: 'center',
-          padding: '60px 20px',
-          background: '#fafafa',
-          borderRadius: '8px',
-          border: '2px dashed #d9d9d9',
-          marginTop: '24px'
-        }}>
-          <Text type="secondary" style={{ fontSize: '16px' }}>
-            {allImages.length === 0 ? 'No labeled dataset images found' : 'No images match your filters'}
-          </Text>
-          <br />
-          <Text type="secondary">
-            {allImages.length === 0 ? 'Complete annotation tasks to see images here' : 'Try adjusting your search terms or filters'}
-          </Text>
-        </div>
-      )}
-    </div>
+      {
+        images.length === 0 && !loading && (
+          <div style={{
+            textAlign: 'center',
+            padding: '3.75rem 1.25rem',
+            background: '#fafafa',
+            borderRadius: '0.5rem',
+            border: '0.125rem dashed #d9d9d9',
+            marginTop: '1.5rem'
+          }}>
+            <Text type="secondary" style={{ fontSize: '1.125rem', fontWeight: 500 }}>
+              {allImages.length === 0 ? 'No labeled dataset images found' : 'No images match your filters'}
+            </Text>
+            <br />
+            <Text type="secondary" style={{ fontSize: '1rem', marginTop: '0.5rem', display: 'block' }}>
+              {allImages.length === 0 ? 'Complete annotation tasks to see images here' : 'Try adjusting your search terms or filters'}
+            </Text>
+          </div>
+        )
+      }
+    </div >
   );
 };
 
@@ -654,20 +690,52 @@ const DatasetImageCard = ({ image, onClick }) => {
     }
   };
 
+  // Get class color based on class_id (matching manual labeling UI)
+  const getClassColor = (classId) => {
+    const colors = [
+      '#ff4d4f', '#1890ff', '#52c41a', '#faad14', '#722ed1',
+      '#eb2f96', '#13c2c2', '#fa541c', '#a0d911', '#2f54eb'
+    ];
+    return colors[classId % colors.length];
+  };
+
   const splitInfo = getSplitInfo(image.split_section);
 
   const [imageDimensions, setImageDimensions] = useState({ width: 200, height: 150 });
 
   return (
     <div className="image-card" onClick={onClick} style={{ cursor: 'pointer' }}>
-      <div style={{ position: 'relative', width: '180px', height: 'auto', display: 'flex', justifyContent: 'center' }}>
+      {/* Split section tag - positioned above image */}
+      {image.split_section && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '-0.75rem',
+            left: '0',
+            backgroundColor: splitInfo.color,
+            color: 'white',
+            padding: '0.2rem 0.625rem',
+            borderRadius: '0.1875rem',
+            fontSize: '0.75rem',
+            fontWeight: '700',
+            textTransform: 'uppercase',
+            zIndex: 3,
+            boxShadow: '0 0.125rem 0.25rem rgba(0,0,0,0.3)'
+          }}
+        >
+          {splitInfo.label}
+        </div>
+      )}
+
+      <div style={{ position: 'relative', width: '100%', height: '10.75rem', display: 'flex', justifyContent: 'center', overflow: 'hidden', borderRadius: '0.375rem', background: '#f5f5f5' }}>
         <img
           src={imageUrl}
           alt={image.filename || image.name}
           style={{
-            width: '180px',
-            height: 'auto',
-            borderRadius: '6px',
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            borderRadius: '0.375rem',
             display: imageLoaded ? 'block' : 'none'
           }}
           onLoad={(e) => {
@@ -702,37 +770,19 @@ const DatasetImageCard = ({ image, onClick }) => {
           }}
         />
 
-        {/* Split section tag */}
-        {image.split_section && imageLoaded && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '4px',
-              left: '4px',
-              backgroundColor: splitInfo.color,
-              color: 'white',
-              padding: '2px 6px',
-              borderRadius: '3px',
-              fontSize: '10px',
-              fontWeight: 'bold',
-              textTransform: 'uppercase',
-              zIndex: 2,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
-            }}
-          >
-            {splitInfo.label}
-          </div>
-        )}
 
         {!imageLoaded && (
           <div style={{
-            width: '180px',
-            height: '135px',
+            width: '100%',
+            height: '100%',
             background: '#f5f5f5',
-            borderRadius: '6px',
+            borderRadius: '0.375rem',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            position: 'absolute',
+            top: 0,
+            left: 0
           }}>
             <Spin size="small" />
           </div>
@@ -745,13 +795,13 @@ const DatasetImageCard = ({ image, onClick }) => {
               position: 'absolute',
               top: 0,
               left: 0,
-              width: '180px',
+              width: '100%',
               height: '100%',
               pointerEvents: 'none',
-              borderRadius: '6px'
+              borderRadius: '0.375rem'
             }}
             viewBox={`0 0 ${image.width || imageDimensions.width} ${image.height || imageDimensions.height}`}
-            preserveAspectRatio="none"
+            preserveAspectRatio="xMidYMid meet"
           >
             {annotations.map((annotation, index) => {
               console.log(`Processing annotation ${index}:`, annotation);
@@ -807,24 +857,25 @@ const DatasetImageCard = ({ image, onClick }) => {
                   const labelX = typeof firstPoint === 'object' ? firstPoint.x : points[0];
                   const labelY = typeof firstPoint === 'object' ? firstPoint.y : points[1];
 
+                  const color = getClassColor(annotation.class_id || 0);
                   return (
                     <g key={`polygon-${annotation.id || index}`}>
                       <polygon
                         points={pointsString}
-                        fill="rgba(52, 196, 26, 0.3)"
-                        stroke="#34c426"
-                        strokeWidth="2"
+                        fill={`${color}40`}
+                        stroke={color}
+                        strokeWidth="3"
                         strokeDasharray="none"
                       />
                       {annotation.class_name && (
                         <text
                           x={labelX || 10}
-                          y={(labelY || 10) - 5}
-                          fill="#34c426"
-                          fontSize="12"
+                          y={(labelY || 10) - 8}
+                          fill={color}
+                          fontSize="24"
                           fontWeight="bold"
                           textAnchor="start"
-                          style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.7)' }}
+                          style={{ textShadow: '2px 2px 4px rgba(255,255,255,0.8)' }}
                         >
                           {annotation.class_name}
                         </text>
@@ -862,21 +913,22 @@ const DatasetImageCard = ({ image, onClick }) => {
                 }
 
                 if (pointsString) {
+                  const color = getClassColor(annotation.class_id || 0);
                   return (
                     <g key={`polygon-type-${annotation.id || index}`}>
                       <polygon
                         points={pointsString}
-                        fill="rgba(52, 196, 26, 0.2)"
-                        stroke="#34c426"
-                        strokeWidth="2"
+                        fill={`${color}40`}
+                        stroke={color}
+                        strokeWidth="3"
                         strokeDasharray="none"
                       />
                       {annotation.class_name && (
                         <text
                           x={points[0] || 10}
-                          y={(points[1] || 10) - 5}
-                          fill="#34c426"
-                          fontSize="12"
+                          y={(points[1] || 10) - 8}
+                          fill={color}
+                          fontSize="24"
                           fontWeight="bold"
                           textAnchor="start"
                         >
@@ -900,6 +952,7 @@ const DatasetImageCard = ({ image, onClick }) => {
                 const width = (annotation.x_max - annotation.x_min) * imageWidth;
                 const height = (annotation.y_max - annotation.y_min) * imageHeight;
 
+                const color = getClassColor(annotation.class_id || 0);
                 return (
                   <g key={`box-${annotation.id || index}`}>
                     <rect
@@ -907,17 +960,17 @@ const DatasetImageCard = ({ image, onClick }) => {
                       y={y}
                       width={width}
                       height={height}
-                      fill="rgba(255, 77, 79, 0.2)"
-                      stroke="#ff4d4f"
-                      strokeWidth="2"
+                      fill={`${color}33`}
+                      stroke={color}
+                      strokeWidth="3"
                       strokeDasharray="none"
                     />
                     {annotation.class_name && (
                       <text
                         x={x + 5}
-                        y={y - 5}
-                        fill="#ff4d4f"
-                        fontSize="12"
+                        y={y - 8}
+                        fill={color}
+                        fontSize="24"
                         fontWeight="bold"
                         textAnchor="start"
                       >
@@ -931,6 +984,7 @@ const DatasetImageCard = ({ image, onClick }) => {
               // Legacy format support - if annotation has x, y, width, height directly
               if (annotation.x !== undefined && annotation.y !== undefined &&
                 annotation.width !== undefined && annotation.height !== undefined) {
+                const color = getClassColor(annotation.class_id || 0);
                 return (
                   <g key={`legacy-box-${annotation.id || index}`}>
                     <rect
@@ -938,17 +992,17 @@ const DatasetImageCard = ({ image, onClick }) => {
                       y={annotation.y}
                       width={annotation.width}
                       height={annotation.height}
-                      fill="rgba(255, 77, 79, 0.2)"
-                      stroke="#ff4d4f"
-                      strokeWidth="2"
+                      fill={`${color}33`}
+                      stroke={color}
+                      strokeWidth="3"
                       strokeDasharray="none"
                     />
                     {annotation.class_name && (
                       <text
                         x={annotation.x + 5}
-                        y={annotation.y - 5}
-                        fill="#ff4d4f"
-                        fontSize="12"
+                        y={annotation.y - 8}
+                        fill={color}
+                        fontSize="24"
                         fontWeight="bold"
                         textAnchor="start"
                       >
@@ -967,12 +1021,12 @@ const DatasetImageCard = ({ image, onClick }) => {
 
       {/* Image filename below thumbnail */}
       <div style={{
-        width: '180px',
-        marginTop: '8px',
-        padding: '6px 8px',
+        width: '14.375rem',
+        marginTop: '0.625rem',
+        padding: '0.5rem 0.625rem',
         textAlign: 'center',
-        fontSize: '12px',
-        color: '#666',
+        fontSize: '0.875rem',
+        color: '#444',
         lineHeight: '1.3',
         wordBreak: 'break-word',
         overflow: 'hidden',
@@ -980,9 +1034,10 @@ const DatasetImageCard = ({ image, onClick }) => {
         WebkitLineClamp: 2,
         WebkitBoxOrient: 'vertical',
         background: '#fff',
-        borderRadius: '4px',
-        border: '1px solid #e8e8e8',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+        borderRadius: '0.375rem',
+        border: '0.0625rem solid #e8e8e8',
+        boxShadow: '0 0.0625rem 0.125rem rgba(0,0,0,0.05)',
+        fontWeight: 500
       }}>
         {image.filename || image.name || 'Unknown'}
       </div>

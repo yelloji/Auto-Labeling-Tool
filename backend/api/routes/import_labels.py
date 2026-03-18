@@ -1,0 +1,490 @@
+"""
+Import Images with Labels
+=========================
+Accepts a folder of images + label files (YOLO or COCO format) and:
+  1. Saves images to disk under projects/{name}/unassigned/{batch}/
+  2. Creates Image records with image_hash_md5
+  3. Parses label files → creates Annotation records
+  4. Creates new Label (class) records for any unknown classes
+
+Supported formats:
+  - YOLO  : .txt per image  +  data.yaml  (detection or segmentation)
+  - COCO  : single annotations.json       (detection or segmentation)
+
+See docs/FEATURE_IMPORT_IMAGES_WITH_LABELS.md for full specification.
+"""
+
+import hashlib
+import json
+import random
+from pathlib import Path
+from typing import List, Optional
+
+import yaml
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
+
+from core.file_handler import file_handler
+from database.database import get_db
+from database.models import Annotation, Dataset as DatasetModel, Image, Label, Project
+from database.operations import DatasetOperations, ImageOperations
+from logging_system.professional_logger import get_professional_logger
+from utils.path_utils import path_manager
+
+logger = get_professional_logger()
+router = APIRouter()
+
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _md5(data: bytes) -> str:
+    return hashlib.md5(data).hexdigest()
+
+
+def _random_color() -> str:
+    return "#{:06x}".format(random.randint(0, 0xFFFFFF))
+
+
+def _get_or_create_label(db: Session, project_id: int, class_name: str) -> tuple[int, bool]:
+    """Return (label.id, created). Creates label if it doesn't exist."""
+    existing = db.query(Label).filter(
+        Label.project_id == project_id,
+        Label.name == class_name
+    ).first()
+    if existing:
+        return existing.id, False
+    label = Label(name=class_name, color=_random_color(), project_id=project_id)
+    db.add(label)
+    db.flush()
+    return label.id, True
+
+
+def _bbox_from_polygon(pairs: list) -> tuple:
+    """Compute x_min,y_min,x_max,y_max from list of [x,y] pairs (normalized)."""
+    xs = [p[0] for p in pairs]
+    ys = [p[1] for p in pairs]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _clamp(v: float) -> float:
+    return max(0.0, min(1.0, v))
+
+
+# ── Format Detection ──────────────────────────────────────────────────────────
+
+def _detect_format(filenames: list) -> str:
+    """
+    Returns 'yolo', 'coco', 'yolo_missing_yaml', or 'no_labels'.
+    """
+    lower = [f.lower() for f in filenames]
+    has_json = any(f.endswith(".json") for f in lower)
+    has_txt  = any(f.endswith(".txt") and f != "data.yaml" for f in lower)
+    has_yaml = "data.yaml" in lower
+
+    if has_json:
+        return "coco"
+    if has_txt and has_yaml:
+        return "yolo"
+    if has_txt and not has_yaml:
+        return "yolo_missing_yaml"
+    return "no_labels"
+
+
+# ── YOLO Parser ───────────────────────────────────────────────────────────────
+
+def _parse_yolo(
+    image_files: dict,      # {stem: filename}
+    label_files: dict,      # {stem: bytes}
+    yaml_bytes: bytes,
+    img_dims: dict,         # {stem: (width, height)} — unused, coords already normalized
+) -> tuple[dict, list]:
+    """
+    Returns:
+      annotations_map : {stem: [ {class_name, x_min, y_min, x_max, y_max, segmentation} ]}
+      warnings        : [str]
+    """
+    yaml_data = yaml.safe_load(yaml_bytes.decode("utf-8"))
+    names = yaml_data.get("names", [])
+    # names may be a list or a dict {0: 'cat', 1: 'dog'}
+    if isinstance(names, dict):
+        names = [names[k] for k in sorted(names.keys())]
+
+    warnings = []
+    annotations_map = {}
+
+    for stem, txt_bytes in label_files.items():
+        if stem not in image_files:
+            warnings.append(f"{stem}.txt has no matching image — skipped")
+            continue
+
+        lines = txt_bytes.decode("utf-8").strip().splitlines()
+        anns = []
+        for line in lines:
+            parts = line.strip().split()
+            if len(parts) < 5:
+                continue
+            class_idx = int(parts[0])
+            if class_idx >= len(names):
+                warnings.append(f"{stem}.txt: class index {class_idx} not in data.yaml — skipped")
+                continue
+            class_name = names[class_idx]
+            values = [float(v) for v in parts[1:]]
+
+            if len(values) == 4:
+                # Detection: cx cy w h
+                cx, cy, w, h = values
+                x_min = _clamp(cx - w / 2)
+                y_min = _clamp(cy - h / 2)
+                x_max = _clamp(cx + w / 2)
+                y_max = _clamp(cy + h / 2)
+                segmentation = None
+            else:
+                # Segmentation: flat x1 y1 x2 y2 ...
+                # Wrap in outer list: [[[x,y],...]] — same format as app's polygon storage
+                pairs = [[_clamp(values[i]), _clamp(values[i + 1])]
+                         for i in range(0, len(values) - 1, 2)]
+                segmentation = [pairs]
+                x_min, y_min, x_max, y_max = _bbox_from_polygon(pairs)
+
+            anns.append({
+                "class_name":   class_name,
+                "x_min":        x_min,
+                "y_min":        y_min,
+                "x_max":        x_max,
+                "y_max":        y_max,
+                "segmentation": segmentation,
+            })
+        annotations_map[stem] = anns
+
+    return annotations_map, warnings
+
+
+# ── COCO Parser ───────────────────────────────────────────────────────────────
+
+def _parse_coco(
+    json_bytes: bytes,
+    image_files: dict,   # {stem: filename}
+) -> tuple[dict, list]:
+    """
+    Returns:
+      annotations_map : {image_filename_stem: [ {class_name, x_min, y_min, x_max, y_max, segmentation} ]}
+      warnings        : [str]
+    """
+    data = json.loads(json_bytes.decode("utf-8"))
+    warnings = []
+
+    # Build lookup maps
+    id_to_image = {img["id"]: img for img in data.get("images", [])}
+    id_to_cat   = {cat["id"]: cat["name"] for cat in data.get("categories", [])}
+
+    # Map COCO image filename → stem for our annotations_map key
+    annotations_map: dict[str, list] = {}
+
+    for ann in data.get("annotations", []):
+        img_info = id_to_image.get(ann.get("image_id"))
+        if not img_info:
+            warnings.append(f"annotation id={ann.get('id')}: image_id not found — skipped")
+            continue
+
+        file_name = img_info["file_name"]
+        stem = Path(file_name).stem
+        img_w = img_info.get("width", 1)
+        img_h = img_info.get("height", 1)
+
+        # Check image exists in upload
+        if file_name not in image_files and stem not in image_files:
+            warnings.append(f"{file_name} referenced in JSON but not uploaded — annotations skipped")
+            continue
+
+        class_name = id_to_cat.get(ann.get("category_id"), "unknown")
+
+        # Segmentation
+        seg_raw = ann.get("segmentation")
+        segmentation = None
+        if seg_raw and isinstance(seg_raw, list) and len(seg_raw) > 0 and isinstance(seg_raw[0], list):
+            flat = seg_raw[0]
+            pairs = [[_clamp(flat[i] / img_w), _clamp(flat[i + 1] / img_h)]
+                     for i in range(0, len(flat) - 1, 2)]
+            segmentation = [pairs]  # wrap: [[[x,y],...]] — same format as app's polygon storage
+
+        # BBox
+        bbox = ann.get("bbox")
+        if segmentation:
+            x_min, y_min, x_max, y_max = _bbox_from_polygon(segmentation)
+        elif bbox and len(bbox) == 4:
+            x, y, w, h = bbox
+            x_min = _clamp(x / img_w)
+            y_min = _clamp(y / img_h)
+            x_max = _clamp((x + w) / img_w)
+            y_max = _clamp((y + h) / img_h)
+        else:
+            warnings.append(f"annotation id={ann.get('id')}: no bbox or segmentation — skipped")
+            continue
+
+        if stem not in annotations_map:
+            annotations_map[stem] = []
+        annotations_map[stem].append({
+            "class_name":   class_name,
+            "x_min":        x_min,
+            "y_min":        y_min,
+            "x_max":        x_max,
+            "y_max":        y_max,
+            "segmentation": segmentation,
+        })
+
+    return annotations_map, warnings
+
+
+# ── Main Endpoint ─────────────────────────────────────────────────────────────
+
+@router.post("/datasets/import-with-labels")
+async def import_with_labels(
+    project_id: int = Form(...),
+    name: str = Form(...),
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Import images with pre-existing label files (YOLO or COCO format).
+
+    - Creates a new dataset batch under the project
+    - Saves images to disk, creates Image records with MD5 hash
+    - Parses label files and creates Annotation records
+    - Creates new Label (class) records for unknown classes
+    """
+    try:
+        # ── 1. Verify project ──────────────────────────────────────────────
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        project_name = project.name
+
+        # ── 2. Separate image UploadFiles from label file bytes ────────────
+        # Image UploadFiles are kept untouched (stream not consumed) so that
+        # file_handler.save_uploaded_file() can stream them to disk exactly
+        # like normal uploads do.  Label files (.txt/.yaml/.json) are small
+        # and safe to read into memory up-front.
+        # Duplicate stems: first occurrence wins.
+
+        image_uploads: dict[str, UploadFile] = {}  # stem → UploadFile (first wins)
+        label_txt:   dict[str, bytes] = {}         # stem → bytes
+        yaml_bytes:  Optional[bytes]  = None
+        json_bytes:  Optional[bytes]  = None
+        all_filenames: list[str] = []
+
+        for upload in files:
+            full     = upload.filename or ""
+            fname    = Path(full).name
+            stem     = Path(fname).stem
+            ext      = Path(fname).suffix.lower()
+            fname_lc = fname.lower()
+            all_filenames.append(fname_lc)
+
+            if ext in IMAGE_EXTENSIONS:
+                if stem not in image_uploads:          # first occurrence wins
+                    image_uploads[stem] = upload
+            elif ext == ".txt" and fname_lc != "data.yaml":
+                if stem not in label_txt:
+                    label_txt[stem] = await upload.read()
+            elif fname_lc == "data.yaml" or (ext in (".yaml", ".yml") and "data" in fname_lc):
+                yaml_bytes = await upload.read()
+            elif ext == ".json":
+                json_bytes = await upload.read()
+
+        # ── 3. Detect format ───────────────────────────────────────────────
+        fmt = _detect_format(all_filenames)
+
+        if fmt == "yolo_missing_yaml":
+            raise HTTPException(
+                status_code=400,
+                detail="data.yaml is required for YOLO format but was not found. "
+                       "Please include data.yaml with your class names."
+            )
+        if fmt == "no_labels":
+            raise HTTPException(
+                status_code=400,
+                detail="No label files found. Include .txt + data.yaml (YOLO) or annotations.json (COCO)."
+            )
+
+        # ── 4. Create Dataset record ───────────────────────────────────────
+        dataset = DatasetOperations.create_dataset(
+            db=db,
+            name=name,
+            project_id=project_id,
+            description=f"Imported with labels ({fmt.upper()})",
+            auto_label_enabled=False,
+        )
+
+        # ── 5. Save images to disk + create Image records ──────────────────
+        # Delegate to file_handler.save_uploaded_file() — identical to the
+        # normal upload flow (shutil.copyfileobj stream, clean filename,
+        # unique filename, relative DB path).
+        storage_dir = path_manager.get_image_storage_path(project_name, name, "unassigned")
+
+        saved_images: dict[str, str] = {}            # original_stem → image_id
+        image_dims:   dict[str, tuple] = {}          # original_stem → (width, height)
+        image_files_for_parsers: dict[str, str] = {}  # stem → fname (membership check only)
+        warnings: list[str] = []
+        skipped_duplicates: list[str] = []           # filenames skipped as duplicates
+
+        for orig_stem, upload in image_uploads.items():
+            # Compute MD5 from upload bytes before stream is consumed by save
+            try:
+                raw_bytes = await upload.read()
+                md5 = _md5(raw_bytes)
+                await upload.seek(0)  # Reset so save_uploaded_file can read normally
+            except Exception:
+                md5 = None
+
+            # Duplicate check — skip if same MD5 already exists in this project
+            if md5:
+                existing = (
+                    db.query(Image)
+                    .join(DatasetModel, Image.dataset_id == DatasetModel.id)
+                    .filter(
+                        DatasetModel.project_id == project_id,
+                        Image.image_hash_md5 == md5
+                    )
+                    .first()
+                )
+                if existing:
+                    skipped_duplicates.append(Path(upload.filename or "").name)
+                    continue
+
+            try:
+                rel_path, image_info = await file_handler.save_uploaded_file(
+                    upload, str(dataset.id), project_name, name, "unassigned"
+                )
+            except Exception as e:
+                warnings.append(f"{upload.filename}: failed to save — {e}")
+                continue
+
+            saved_filename = Path(rel_path).name
+
+            w = image_info["width"] or 1
+            h = image_info["height"] or 1
+
+            image_rec = Image(
+                filename=saved_filename,
+                original_filename=Path(upload.filename or "").name,
+                file_path=rel_path,
+                dataset_id=dataset.id,
+                width=w,
+                height=h,
+                file_size=image_info["file_size"],
+                format=image_info["format"],
+                split_type="unassigned",
+                split_section="train",
+                image_hash_md5=md5,
+                is_labeled=False,
+            )
+            db.add(image_rec)
+            db.flush()
+            saved_images[orig_stem] = image_rec.id
+            image_dims[orig_stem]   = (w, h)
+            image_files_for_parsers[orig_stem] = Path(upload.filename or "").name
+
+        db.commit()
+
+        # ── 6. Parse labels ────────────────────────────────────────────────
+        if fmt == "yolo":
+            annotations_map, parse_warnings = _parse_yolo(
+                image_files_for_parsers, label_txt, yaml_bytes,
+                img_dims={}   # not needed — YOLO coords already normalized
+            )
+        else:  # coco
+            annotations_map, parse_warnings = _parse_coco(json_bytes, image_files_for_parsers)
+
+        warnings.extend(parse_warnings)
+
+        # ── 7. Write Annotation records ────────────────────────────────────
+        classes_created: list[str] = []
+        classes_reused:  list[str] = []
+        classes_created_set: set[str] = set()   # tracks what was created in THIS session
+        total_annotations = 0
+
+        for stem, anns in annotations_map.items():
+            image_id = saved_images.get(stem)
+            if not image_id:
+                warnings.append(f"Labels for '{stem}' found but image was not uploaded — skipped")
+                continue
+
+            w, h = image_dims.get(stem, (1, 1))
+
+            for ann in anns:
+                class_name = ann["class_name"]
+                label_id, was_created = _get_or_create_label(db, project_id, class_name)
+                if was_created:
+                    classes_created_set.add(class_name)
+                    if class_name not in classes_created:
+                        classes_created.append(class_name)
+                elif class_name not in classes_created_set:
+                    # Only mark as reused if it truly pre-existed (not created this session)
+                    if class_name not in classes_reused:
+                        classes_reused.append(class_name)
+
+                # Denormalize bbox to pixel coordinates (app stores pixels, not 0-1)
+                x_min_px = ann["x_min"] * w
+                y_min_px = ann["y_min"] * h
+                x_max_px = ann["x_max"] * w
+                y_max_px = ann["y_max"] * h
+
+                # Convert segmentation from [[[x,y],...]] normalized
+                # to [{"x": px, "y": py}, ...] pixel format (same as app's labeling tool)
+                seg_px = None
+                if ann["segmentation"]:
+                    pairs = ann["segmentation"][0]  # unwrap outer list → [[x,y],...]
+                    seg_px = [{"x": p[0] * w, "y": p[1] * h} for p in pairs]
+
+                annotation = Annotation(
+                    image_id=image_id,
+                    class_name=class_name,
+                    class_id=label_id,
+                    x_min=x_min_px,
+                    y_min=y_min_px,
+                    x_max=x_max_px,
+                    y_max=y_max_px,
+                    confidence=1.0,
+                    segmentation=seg_px,
+                    is_auto_generated=False,
+                )
+                db.add(annotation)
+                total_annotations += 1
+
+            # Mark image as labeled
+            img_rec = db.query(Image).filter(Image.id == image_id).first()
+            if img_rec and anns:
+                img_rec.is_labeled = True
+
+        db.commit()
+
+        # Update dataset stats so total_images count is correct (management UI filters out 0-image datasets)
+        DatasetOperations.update_dataset_stats(db, dataset.id)
+
+        logger.info("api.import_labels", f"Import complete: {len(saved_images)} images, {total_annotations} annotations", "import_complete", {
+            "project_id": project_id,
+            "dataset_id": dataset.id,
+            "format": fmt,
+            "images": len(saved_images),
+            "annotations": total_annotations,
+        })
+
+        return {
+            "dataset_id":       dataset.id,
+            "format_detected":       fmt,
+            "total_images":          len(saved_images),
+            "total_annotations":     total_annotations,
+            "classes_created":       classes_created,
+            "classes_reused":        classes_reused,
+            "warnings":              warnings,
+            "skipped_duplicates":    len(skipped_duplicates),
+            "duplicate_files":       skipped_duplicates,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("api.import_labels", f"Import failed: {str(e)}", "import_error", {"error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))

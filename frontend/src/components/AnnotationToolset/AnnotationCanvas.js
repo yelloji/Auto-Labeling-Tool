@@ -14,6 +14,7 @@ const AnnotationCanvas = ({
   onAnnotationDelete,
   onImagePositionChange,
   onPolygonStateChange,
+  onToolChange, // New prop
   style = {}
 }) => {
   const canvasRef = useRef(null);
@@ -25,7 +26,7 @@ const AnnotationCanvas = ({
   const handleDoubleClickRef = useRef(null);
   const handleCanvasClickRef = useRef(null);
   const handleRightClickRef = useRef(null);
-  
+
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState(null);
   const [currentShape, setCurrentShape] = useState(null);
@@ -55,6 +56,7 @@ const AnnotationCanvas = ({
     imageUrl,
     imageId,
     onPolygonComplete: onShapeComplete,
+    onToolChange, // Pass to smart tool
     isActive: activeTool === 'smart_polygon',
     zoomLevel,
     imagePosition,
@@ -92,15 +94,15 @@ const AnnotationCanvas = ({
     let retryCount = 0;
     const maxRetries = 5; // Increased retries
     let isCancelled = false;
-    
+
     const loadImage = () => {
       if (isCancelled) return;
-      
+
       const img = new Image();
-      
+
       // Enable cross-origin for external images
       img.crossOrigin = 'anonymous';
-      
+
       img.onload = () => {
         if (isCancelled) return;
         logInfo('app.frontend.ui', 'image_loaded_successfully', 'Image loaded successfully', {
@@ -116,7 +118,7 @@ const AnnotationCanvas = ({
         setImageSize({ width: img.width, height: img.height });
         resizeCanvas();
       };
-      
+
       img.onerror = (error) => {
         if (isCancelled) return;
         logError('app.frontend.validation', 'image_load_failed', 'Failed to load image', {
@@ -129,7 +131,7 @@ const AnnotationCanvas = ({
         console.error('❌ AnnotationCanvas: Failed to load image:', error);
         console.error('❌ Image URL:', imageUrl);
         console.error('❌ Retry count:', retryCount);
-        
+
         // Retry loading with a delay
         if (retryCount < maxRetries) {
           retryCount++;
@@ -155,15 +157,15 @@ const AnnotationCanvas = ({
           console.error('💥 Final URL that failed:', imageUrl);
         }
       };
-      
+
       // Support all image formats: JPG, PNG, GIF, WEBP, BMP, SVG, etc.
       img.src = imageUrl;
-      
+
       console.log('🔄 Loading image:', imageUrl);
     };
-    
+
     loadImage();
-    
+
     // Cleanup function to cancel loading if component unmounts or imageUrl changes
     return () => {
       isCancelled = true;
@@ -197,7 +199,7 @@ const AnnotationCanvas = ({
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     const img = imageRef.current;
-    
+
     if (!canvas || !ctx || !img) {
       logError('app.frontend.validation', 'redraw_canvas_missing_elements', 'Cannot redraw canvas - missing required elements', {
         hasCanvas: !!canvas,
@@ -221,7 +223,7 @@ const AnnotationCanvas = ({
     // Draw image
     const displayWidth = imageSize.width * (zoomLevel / 100);
     const displayHeight = imageSize.height * (zoomLevel / 100);
-    
+
     ctx.drawImage(
       img,
       imagePosition.x,
@@ -257,7 +259,7 @@ const AnnotationCanvas = ({
       polygonPointsCount: polygonPoints.length,
       activeTool
     });
-  }, [annotations, selectedAnnotation, currentShape, polygonPoints, activeTool, imagePosition, imageSize, zoomLevel, smartPolygonTool, imageId]);
+  }, [annotations, selectedAnnotation, currentShape, polygonPoints, activeTool, imagePosition, imageSize, zoomLevel, smartPolygonTool, smartPolygonTool.previewPolygon, smartPolygonTool.currentPolygon, imageId]);
 
   // Resize canvas to fit container
   const resizeCanvas = useCallback(() => {
@@ -280,23 +282,23 @@ const AnnotationCanvas = ({
 
     const containerRect = container.getBoundingClientRect();
     const img = imageRef.current;
-    
+
     // Use the full container size for better layout
     const containerWidth = containerRect.width;
     const containerHeight = containerRect.height;
-    
+
     // Calculate image display size maintaining aspect ratio for ANY size
     const containerAspect = containerWidth / containerHeight;
     const imageAspect = img.width / img.height;
-    
+
     let displayWidth, displayHeight;
-    
+
     // Handle extreme aspect ratios and any image dimensions
     if (imageAspect > containerAspect) {
       // Image is wider - fit to width (works for panoramic, wide images)
       displayWidth = Math.min(containerWidth * 0.95, img.width);
       displayHeight = displayWidth / imageAspect;
-      
+
       // Ensure height doesn't exceed container
       if (displayHeight > containerHeight * 0.95) {
         displayHeight = containerHeight * 0.95;
@@ -306,14 +308,14 @@ const AnnotationCanvas = ({
       // Image is taller - fit to height (works for portrait, tall images)
       displayHeight = Math.min(containerHeight * 0.95, img.height);
       displayWidth = displayHeight * imageAspect;
-      
+
       // Ensure width doesn't exceed container
       if (displayWidth > containerWidth * 0.95) {
         displayWidth = containerWidth * 0.95;
         displayHeight = displayWidth / imageAspect;
       }
     }
-    
+
     // Handle very small images - ensure minimum display size
     const minSize = 100;
     if (displayWidth < minSize || displayHeight < minSize) {
@@ -335,7 +337,7 @@ const AnnotationCanvas = ({
     const baseH = (imageSize?.width && imageSize?.height) ? imageSize.height : img.height;
     const consistentW = baseW * (zoomLevel / 100);
     const consistentH = baseH * (zoomLevel / 100);
-    
+
     // Determine canvas size: expand when zoomed in to avoid clipping
     let canvasWidth = containerWidth;
     let canvasHeight = containerHeight;
@@ -383,31 +385,41 @@ const AnnotationCanvas = ({
     });
 
     // Removed verbose console logs in hot draw path
-    
+
     // Set styles based on selection state
+    const baseRem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    const labelFontSize = 1 * baseRem; // 1rem
+    const strokeWidth = isSelected ? 0.2 * baseRem : 0.125 * baseRem; // 0.2rem : 0.125rem
+    const pointRadius = 0.25 * baseRem; // 0.25rem (4px at 16px)
+
     ctx.strokeStyle = isSelected ? '#ff4d4f' : (annotation.color || '#1890ff');
-    ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.lineWidth = strokeWidth;
     ctx.fillStyle = isSelected ? 'rgba(255, 77, 79, 0.1)' : 'rgba(24, 144, 255, 0.1)';
-    
+
     const scale = zoomLevel / 100;
-    
+
     // For all annotation types, we need these coordinates
     const x = imagePosition.x + (annotation.x * scale);
     const y = imagePosition.y + (annotation.y * scale);
     const width = annotation.width * scale;
     const height = annotation.height * scale;
-    
+
     if (annotation.type === 'box') {
       ctx.fillRect(x, y, width, height);
       ctx.strokeRect(x, y, width, height);
-      
+
       // Draw label
       if (annotation.label) {
+        ctx.font = `bold ${labelFontSize}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+        const textMetrics = ctx.measureText(annotation.label);
+        const paddingX = 0.5 * baseRem;
+        const paddingY = 0.25 * baseRem;
+        const labelHeight = labelFontSize + paddingY * 2;
+
         ctx.fillStyle = annotation.color || '#1890ff';
-        ctx.fillRect(x, y - 20, ctx.measureText(annotation.label).width + 8, 20);
+        ctx.fillRect(x, y - labelHeight, textMetrics.width + paddingX * 2, labelHeight);
         ctx.fillStyle = '#fff';
-        ctx.font = '12px Arial';
-        ctx.fillText(annotation.label, x + 4, y - 6);
+        ctx.fillText(annotation.label, x + paddingX, y - paddingY - 2);
       }
     } else if (annotation.type === 'polygon' && annotation.points) {
       // Make sure we have valid points
@@ -419,11 +431,11 @@ const AnnotationCanvas = ({
         });
         return;
       }
-      
+
       // Draw the polygon
       ctx.beginPath();
       let validPointsCount = 0;
-      
+
       annotation.points.forEach((point, index) => {
         // Check if point is valid
         if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') {
@@ -434,32 +446,32 @@ const AnnotationCanvas = ({
           });
           return;
         }
-        
+
         validPointsCount++;
         const px = imagePosition.x + (point.x * scale);
         const py = imagePosition.y + (point.y * scale);
-        
+
         if (index === 0 || validPointsCount === 1) {
           ctx.moveTo(px, py);
         } else {
           ctx.lineTo(px, py);
         }
       });
-      
+
       // Only close and fill if we have enough valid points
       if (validPointsCount >= 3) {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
-        
+
         // Draw points at each vertex for better visibility
         annotation.points.forEach(point => {
           if (point && typeof point.x === 'number' && typeof point.y === 'number') {
             const px = imagePosition.x + (point.x * scale);
             const py = imagePosition.y + (point.y * scale);
-            
+
             ctx.beginPath();
-            ctx.arc(px, py, 3, 0, 2 * Math.PI);
+            ctx.arc(px, py, pointRadius, 0, 2 * Math.PI);
             ctx.fillStyle = isSelected ? '#ff4d4f' : '#1890ff';
             ctx.fill();
           }
@@ -471,18 +483,23 @@ const AnnotationCanvas = ({
           totalPoints: annotation.points.length
         });
       }
-      
+
       // Draw label for polygon too
       if (annotation.label) {
         // Find the topmost point to place the label
         const topY = Math.min(...annotation.points.map(p => p.y)) * scale + imagePosition.y;
         const leftX = Math.min(...annotation.points.map(p => p.x)) * scale + imagePosition.x;
-        
+
+        ctx.font = `bold ${labelFontSize}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+        const textMetrics = ctx.measureText(annotation.label);
+        const paddingX = 0.5 * baseRem;
+        const paddingY = 0.25 * baseRem;
+        const labelHeight = labelFontSize + paddingY * 2;
+
         ctx.fillStyle = annotation.color || '#1890ff';
-        ctx.fillRect(leftX, topY - 20, ctx.measureText(annotation.label).width + 8, 20);
+        ctx.fillRect(leftX, topY - labelHeight, textMetrics.width + paddingX * 2, labelHeight);
         ctx.fillStyle = '#fff';
-        ctx.font = '12px Arial';
-        ctx.fillText(annotation.label, leftX + 4, topY - 6);
+        ctx.fillText(annotation.label, leftX + paddingX, topY - paddingY - 2);
       }
     }
 
@@ -503,8 +520,9 @@ const AnnotationCanvas = ({
       imageId
     });
 
+    const baseRem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
     ctx.strokeStyle = isActive ? '#52c41a' : '#1890ff';
-    ctx.lineWidth = 3; // Make stroke thicker for better visibility
+    ctx.lineWidth = 0.2 * baseRem; // 0.2rem
     ctx.fillStyle = isActive ? 'rgba(82, 196, 26, 0.15)' : 'rgba(24, 144, 255, 0.15)';
 
     if (shape.type === 'box') {
@@ -522,8 +540,9 @@ const AnnotationCanvas = ({
       imageId
     });
 
+    const baseRem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
     ctx.strokeStyle = '#52c41a';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 0.125 * baseRem;
     ctx.fillStyle = 'rgba(82, 196, 26, 0.1)';
 
     ctx.beginPath();
@@ -534,7 +553,7 @@ const AnnotationCanvas = ({
         ctx.lineTo(point.x, point.y);
       }
     });
-    
+
     if (points.length > 2) {
       ctx.fill();
     }
@@ -543,16 +562,16 @@ const AnnotationCanvas = ({
     // Draw points
     points.forEach((point, index) => {
       ctx.beginPath();
-      ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+      ctx.arc(point.x, point.y, 0.25 * baseRem, 0, 2 * Math.PI);
       ctx.fillStyle = '#52c41a';
       ctx.fill();
-      
+
       // Highlight first point if we have enough points to complete
       if (index === 0 && points.length >= 3) {
         ctx.beginPath();
-        ctx.arc(point.x, point.y, 8, 0, 2 * Math.PI);
+        ctx.arc(point.x, point.y, 0.5 * baseRem, 0, 2 * Math.PI);
         ctx.strokeStyle = '#ff4d4f';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 0.125 * baseRem;
         ctx.stroke();
       }
     });
@@ -565,24 +584,24 @@ const AnnotationCanvas = ({
     const imageY = (screenY - imagePosition.y) / scale;
     return { x: imageX, y: imageY };
   };
-  
+
   // Check if a point is inside a polygon using ray casting algorithm
   const isPointInPolygon = (point, polygon) => {
     if (!polygon || polygon.length < 3) return false;
-    
+
     let inside = false;
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
       const xi = polygon[i].x;
       const yi = polygon[i].y;
       const xj = polygon[j].x;
       const yj = polygon[j].y;
-      
+
       const intersect = ((yi > point.y) !== (yj > point.y)) &&
         (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
-        
+
       if (intersect) inside = !inside;
     }
-    
+
     return inside;
   };
 
@@ -599,12 +618,12 @@ const AnnotationCanvas = ({
   // Helper function to check if click is near first polygon point
   const isNearFirstPoint = useCallback((mousePos) => {
     if (polygonPoints.length < 3) return false;
-    
+
     const firstPoint = polygonPoints[0];
     const distance = Math.sqrt(
       Math.pow(mousePos.x - firstPoint.x, 2) + Math.pow(mousePos.y - firstPoint.y, 2)
     );
-    
+
     return distance <= 12; // 12 pixel threshold for first point detection
   }, [polygonPoints]);
 
@@ -622,7 +641,7 @@ const AnnotationCanvas = ({
 
     const mousePos = getMousePos(e);
     console.log('Mouse down position:', mousePos);
-    
+
     if (activeTool === 'smart_polygon') {
       // Handle smart polygon tool
       smartPolygonTool.handleCanvasClick(e);
@@ -658,23 +677,23 @@ const AnnotationCanvas = ({
             pointsCount: polygonPoints.length,
             zoomLevel
           });
-          
+
           // Complete polygon
           const imagePoints = polygonPoints.map(point => screenToImageCoords(point.x, point.y));
-          
+
           const shape = {
             type: 'polygon',
             points: imagePoints
           };
 
           onShapeComplete?.(shape);
-          
+
           logInfo('app.frontend.interactions', 'polygon_on_shape_complete_called', 'onShapeComplete called for polygon via first point click', {
             imageId,
             shapeType: shape.type,
             pointsCount: imagePoints.length
           });
-          
+
           // Clear polygon points and history
           setPolygonPoints([]);
           setPolygonPointsHistory([]);
@@ -683,7 +702,7 @@ const AnnotationCanvas = ({
           return;
         }
       }
-      
+
       // Add new point with history management
       logUserClick('AnnotationCanvas', 'polygon_point_added', {
         imageId,
@@ -699,11 +718,11 @@ const AnnotationCanvas = ({
         zoomLevel,
         totalPoints: polygonPoints.length + 1
       });
-      
+
       // Save current state to history before adding new point
       setPolygonPointsHistory(prev => [...prev, polygonPoints]);
       setPolygonPointsFuture([]); // Clear future when new action is performed
-      
+
       const newPoint = mousePos;
       setPolygonPoints(prev => [...prev, newPoint]);
     }
@@ -770,7 +789,7 @@ const AnnotationCanvas = ({
     }
 
     setIsDrawing(false);
-    
+
     // Only create shape if it has meaningful size (reduced minimum size)
     if (currentShape.width > 5 && currentShape.height > 5) {
       logUserClick('AnnotationCanvas', 'box_shape_completed', {
@@ -780,7 +799,7 @@ const AnnotationCanvas = ({
         zoomLevel,
         tool: activeTool
       });
-      
+
       logInfo('app.frontend.interactions', 'box_shape_completed', 'Box shape completed successfully', {
         imageId,
         shapeSize: { width: currentShape.width, height: currentShape.height },
@@ -789,7 +808,7 @@ const AnnotationCanvas = ({
         tool: activeTool,
         screenCoordinates: currentShape
       });
-      
+
       // Convert to image coordinates
       const imageCoords = screenToImageCoords(currentShape.x, currentShape.y);
       const imageWidth = currentShape.width / (zoomLevel / 100);
@@ -833,7 +852,7 @@ const AnnotationCanvas = ({
         minimumSize: 5,
         tool: activeTool
       });
-      
+
       logError('app.frontend.validation', 'box_shape_too_small', 'Box shape too small, not creating annotation', {
         imageId,
         shapeSize: { width: currentShape.width, height: currentShape.height },
@@ -855,23 +874,23 @@ const AnnotationCanvas = ({
         pointsCount: polygonPoints.length,
         zoomLevel
       });
-      
+
       // Complete polygon
       const imagePoints = polygonPoints.map(point => screenToImageCoords(point.x, point.y));
-      
+
       const shape = {
         type: 'polygon',
         points: imagePoints
       };
 
       onShapeComplete?.(shape);
-      
+
       logInfo('app.frontend.interactions', 'polygon_on_shape_complete_called', 'onShapeComplete called for polygon', {
         imageId,
         shapeType: shape.type,
         pointsCount: imagePoints.length
       });
-      
+
       // ALWAYS clear polygon points immediately after completion
       setPolygonPoints([]);
       redrawCanvas();
@@ -891,17 +910,17 @@ const AnnotationCanvas = ({
       // Find all annotations that contain the click point
       const matchingAnnotations = annotations.filter(ann => {
         const scale = zoomLevel / 100;
-        
+
         // For box annotations
         if (ann.type === 'box') {
           const x = imagePosition.x + (ann.x * scale);
           const y = imagePosition.y + (ann.y * scale);
           const width = ann.width * scale;
           const height = ann.height * scale;
-  
+
           return mousePos.x >= x && mousePos.x <= x + width &&
-                 mousePos.y >= y && mousePos.y <= y + height;
-        } 
+            mousePos.y >= y && mousePos.y <= y + height;
+        }
         // For polygon annotations
         else if (ann.type === 'polygon' && ann.points && ann.points.length > 0) {
           // Use point-in-polygon algorithm
@@ -909,13 +928,13 @@ const AnnotationCanvas = ({
             x: imagePosition.x + (point.x * scale),
             y: imagePosition.y + (point.y * scale)
           }));
-          
+
           return isPointInPolygon(mousePos, scaledPoints);
         }
-        
+
         return false;
       });
-      
+
       // Select the topmost annotation (last in array = most recently drawn)
       const clickedAnnotation = matchingAnnotations.length > 0 ? matchingAnnotations[matchingAnnotations.length - 1] : null;
 
@@ -935,6 +954,13 @@ const AnnotationCanvas = ({
         });
         onAnnotationSelect?.(null);
       }
+    } else if (activeTool === 'smart_polygon') {
+      logUserClick('AnnotationCanvas', 'smart_polygon_click', {
+        imageId,
+        zoomLevel,
+        isAltPressed: e.altKey
+      });
+      smartPolygonTool.handleCanvasClick(e);
     }
   }, [activeTool, annotations, onAnnotationSelect, zoomLevel, imagePosition, imageId, screenToImageCoords]);
 
@@ -965,17 +991,17 @@ const AnnotationCanvas = ({
       if (e.key === 'Backspace' && polygonPoints.length > 0) {
         e.preventDefault();
         e.stopPropagation(); // Prevent event from bubbling to parent handlers
-        
+
         logInfo('app.frontend.interactions', 'polygon_point_removed_backspace', 'Last polygon point removed with Backspace', {
           imageId,
           removedPointIndex: polygonPoints.length - 1,
           remainingPoints: polygonPoints.length - 1,
           zoomLevel
         });
-        
+
         // Save current state to future before undoing
         setPolygonPointsFuture(prev => [polygonPoints, ...prev]);
-        
+
         // Restore previous state from history or remove last point
         if (polygonPointsHistory.length > 0) {
           const previousState = polygonPointsHistory[polygonPointsHistory.length - 1];
@@ -985,55 +1011,55 @@ const AnnotationCanvas = ({
           // Fallback: just remove last point if no history
           setPolygonPoints(prev => prev.slice(0, -1));
         }
-        
+
         redrawCanvas();
         return;
       }
-      
+
       // Handle Shift+Y for polygon point redo
       if (e.shiftKey && e.key === 'Y' && polygonPointsFuture.length > 0) {
         e.preventDefault();
         e.stopPropagation();
-        
+
         logInfo('app.frontend.interactions', 'polygon_point_redo_shift_y', 'Polygon point redo with Shift+Y', {
           imageId,
           futureStatesCount: polygonPointsFuture.length,
           zoomLevel
         });
-        
+
         // Save current state to history before redoing
         setPolygonPointsHistory(prev => [...prev, polygonPoints]);
-        
+
         // Restore next state from future
         const nextState = polygonPointsFuture[0];
         setPolygonPoints(nextState);
         setPolygonPointsFuture(prev => prev.slice(1));
-        
+
         redrawCanvas();
         return;
       }
-      
+
       if (polygonPoints.length >= 3) {
         if (e.key === 'Enter' || e.key === 'Escape') {
           e.preventDefault();
-          
+
           if (e.key === 'Enter') {
             logInfo('app.frontend.interactions', 'polygon_completed_enter_key', 'Polygon completed with Enter key', {
               imageId,
               pointsCount: polygonPoints.length,
               zoomLevel
             });
-            
+
             // Complete polygon
             const imagePoints = polygonPoints.map(point => screenToImageCoords(point.x, point.y));
-            
+
             const shape = {
               type: 'polygon',
               points: imagePoints
             };
 
             onShapeComplete?.(shape);
-            
+
             logInfo('app.frontend.interactions', 'polygon_on_shape_complete_called', 'onShapeComplete called for polygon via Enter key', {
               imageId,
               shapeType: shape.type,
@@ -1045,7 +1071,7 @@ const AnnotationCanvas = ({
               pointsCount: polygonPoints.length
             });
           }
-          
+
           // Clear polygon points and history
           setPolygonPoints([]);
           setPolygonPointsHistory([]);
@@ -1159,111 +1185,152 @@ const AnnotationCanvas = ({
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        cursor: activeTool === 'box' ? 'crosshair' : 
-               activeTool === 'polygon' ? 'crosshair' :
-               activeTool === 'smart_polygon' ? 'crosshair' : 'default',
         ...style
       }}
     >
-      <canvas
-        ref={canvasRef}
+      <div
+        className="annotation-canvas-container"
         style={{
-          display: 'block',
-          width: canvasSize.width,
-          height: canvasSize.height,
-          backgroundColor: '#001529',
-          margin: '0 auto'
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          overflow: 'auto', // Changed from 'hidden' to allow scrolling for large images
+          cursor: activeTool === 'smart_polygon' ? 'crosshair' : 'default'
         }}
-      />
-      
+      >
+        <canvas
+          ref={canvasRef}
+          onMouseMove={(e) => {
+            if (activeTool === 'smart_polygon') smartPolygonTool.handleMouseMove(e);
+            else handleMouseMove(e);
+          }}
+          onMouseUp={(e) => {
+            if (activeTool === 'smart_polygon') smartPolygonTool.handleMouseUp(e);
+            else handleMouseUp(e);
+          }}
+          onClick={(e) => {
+            if (activeTool === 'smart_polygon') smartPolygonTool.handleCanvasClick(e);
+            // Standard tool clicks handled by mouseUp or specific canvas hooks
+          }}
+          onMouseLeave={() => {
+            if (activeTool === 'smart_polygon') smartPolygonTool.handleMouseLeave();
+          }}
+          onContextMenu={activeTool === 'smart_polygon' ? smartPolygonTool.handleRightClick : undefined}
+          style={{ display: 'block' }}
+        />
+      </div>
+
       {/* Smart Polygon Processing Indicator */}
       <smartPolygonTool.ProcessingIndicator />
-      
+
       {/* Smart Polygon Controls */}
-      {activeTool === 'smart_polygon' && smartPolygonTool.editingMode && (
-        <div style={{
-          position: 'absolute',
-          bottom: 20,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          gap: '8px',
-          background: 'rgba(0, 0, 0, 0.8)',
-          padding: '8px 16px',
-          borderRadius: '8px',
-          zIndex: 1000
-        }}>
-          <button
-            onClick={() => {
-              logUserClick('AnnotationCanvas', 'smart_polygon_complete_button', {
-                imageId,
-                activeTool
-              });
-              smartPolygonTool.completePolygon();
-            }}
-            style={{
-              background: '#52c41a',
-              color: 'white',
-              border: 'none',
-              padding: '6px 12px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            ✓ Complete
-          </button>
-          <button
-            onClick={() => {
-              logUserClick('AnnotationCanvas', 'smart_polygon_cancel_button', {
-                imageId,
-                activeTool
-              });
-              smartPolygonTool.cancelPolygon();
-            }}
-            style={{
-              background: '#ff4d4f',
-              color: 'white',
-              border: 'none',
-              padding: '6px 12px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            ✕ Cancel
-          </button>
-        </div>
-      )}
+      {activeTool === 'smart_polygon' && smartPolygonTool.editingMode && smartPolygonTool.currentPolygon && (() => {
+        const points = smartPolygonTool.currentPolygon.points;
+        if (!points || points.length === 0) return null;
+
+        // Calculate bounding box in image coordinates
+        const minX = Math.min(...points.map(p => p.x));
+        const maxX = Math.max(...points.map(p => p.x));
+        const maxY = Math.max(...points.map(p => p.y));
+
+        // Convert to screen coordinates
+        const scale = zoomLevel / 100;
+        const screenMinX = imagePosition.x + (minX * scale);
+        const screenMaxX = imagePosition.x + (maxX * scale);
+        const screenMaxY = imagePosition.y + (maxY * scale);
+
+        // Position the dialog below the polygon
+        const centerX = (screenMinX + screenMaxX) / 2;
+        const dialogTop = screenMaxY + 20;
+
+        return (
+          <div style={{
+            position: 'absolute',
+            top: Math.min(dialogTop, (canvasSize.height || 600) - 60), // Keep on screen
+            left: Math.max(100, Math.min(centerX, (canvasSize.width || 800) - 100)), // Keep on screen
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            gap: '8px',
+            background: 'rgba(0, 0, 0, 0.85)',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            zIndex: 1000,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+
+            <button
+              onClick={() => {
+                logUserClick('AnnotationCanvas', 'smart_polygon_complete_button', {
+                  imageId,
+                  activeTool
+                });
+                smartPolygonTool.completePolygon();
+              }}
+              style={{
+                background: '#52c41a',
+                color: 'white',
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              ✓ Complete
+            </button>
+            <button
+              onClick={() => {
+                logUserClick('AnnotationCanvas', 'smart_polygon_cancel_button', {
+                  imageId,
+                  activeTool
+                });
+                smartPolygonTool.cancelPolygon();
+              }}
+              style={{
+                background: '#ff4d4f',
+                color: 'white',
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              ✕ Cancel
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Polygon drawing instructions */}
-       {activeTool === 'polygon' && polygonPoints.length > 0 && (() => {
-         // Calculate average Y position of polygon points to determine message placement
-         const avgY = polygonPoints.reduce((sum, point) => sum + point.y, 0) / polygonPoints.length;
-         const canvasHeight = canvasRef.current?.height || 600;
-         const isDrawingInTopHalf = avgY < canvasHeight / 2;
-         
-         return (
-           <div style={{
-             position: 'absolute',
-             ...(isDrawingInTopHalf ? { bottom: 20 } : { top: 50 }),
-             left: '50%',
-             transform: 'translateX(-50%)',
-             background: 'rgba(0, 0, 0, 0.8)',
-             color: 'white',
-             padding: '8px 16px',
-             borderRadius: '8px',
-             fontSize: '12px',
-             zIndex: 1000,
-             textAlign: 'center'
-           }}>
-             {polygonPoints.length >= 3 
-               ? 'Click first point, double-click, or press Enter to complete • Backspace to undo • Escape to cancel'
-               : `${polygonPoints.length} point${polygonPoints.length === 1 ? '' : 's'} added • Backspace to undo • Escape to cancel`
-             }
-           </div>
-         );
-       })()}
+      {activeTool === 'polygon' && polygonPoints.length > 0 && (() => {
+        // Calculate average Y position of polygon points to determine message placement
+        const avgY = polygonPoints.reduce((sum, point) => sum + point.y, 0) / polygonPoints.length;
+        const canvasHeight = canvasRef.current?.height || 600;
+        const isDrawingInTopHalf = avgY < canvasHeight / 2;
+
+        return (
+          <div style={{
+            position: 'absolute',
+            ...(isDrawingInTopHalf ? { bottom: 20 } : { top: 50 }),
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            zIndex: 1000,
+            textAlign: 'center'
+          }}>
+            {polygonPoints.length >= 3
+              ? 'Click first point, double-click, or press Enter to complete • Backspace to undo • Escape to cancel'
+              : `${polygonPoints.length} point${polygonPoints.length === 1 ? '' : 's'} added • Backspace to undo • Escape to cancel`
+            }
+          </div>
+        );
+      })()}
 
       {/* Debug info */}
       <div style={{
@@ -1280,6 +1347,27 @@ const AnnotationCanvas = ({
         Tool: {activeTool} | Zoom: {zoomLevel}% | Annotations: {annotations.length}
         {activeTool === 'polygon' && polygonPoints.length > 0 && ` | Points: ${polygonPoints.length}`}
       </div>
+
+      {/* Smart Polygon Tool processing indicator */}
+      {smartPolygonTool.ProcessingIndicator && smartPolygonTool.ProcessingIndicator()}
+
+      {activeTool === 'smart_polygon' && !smartPolygonTool.isProcessing && (
+        <div style={{
+          position: 'absolute',
+          top: 70,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0, 0, 0, 0.65)',
+          color: 'white',
+          padding: '6px 12px',
+          borderRadius: '20px',
+          fontSize: '11px',
+          zIndex: 1000,
+          pointerEvents: 'none'
+        }}>
+          💡 Click to add positive • Alt+Click for negative • Full vertex control enabled
+        </div>
+      )}
     </div>
   );
 };

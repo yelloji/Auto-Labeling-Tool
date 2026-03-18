@@ -56,6 +56,11 @@ class ModelInfo:
     file_size: int = 0  # in bytes
     is_ready: bool = False
     is_training: bool = False
+    # Training-specific metadata (optional, for deployed models)
+    source_type: str = "custom"  # "custom", "training", "default"
+    training_session_id: Optional[int] = None
+    description: str = ""  # Renamed from notes for consistency
+    is_best: bool = False
 
 
 class ModelManager:
@@ -84,18 +89,35 @@ class ModelManager:
             with open(self.models_config_file, 'r') as f:
                 config = json.load(f)
                 for model_id, model_data in config.items():
+                    # Backward compatibility: rename 'notes' to 'description' if present
+                    if 'notes' in model_data and 'description' not in model_data:
+                        model_data['description'] = model_data.pop('notes')
                     self.models_info[model_id] = ModelInfo(**model_data)
     
     def _save_models_config(self):
         """Save models configuration to JSON file"""
+        from core.config import settings
         config = {}
         for model_id, model_info in self.models_info.items():
+            # Convert absolute paths to relative for portability
+            path_to_save = model_info.path
+            try:
+                path_obj = Path(model_info.path)
+                if path_obj.is_absolute():
+                    base_dir = Path(settings.BASE_DIR).resolve()
+                    abs_path = path_obj.resolve()
+                    if str(abs_path).lower().startswith(str(base_dir).lower()):
+                        rel_path = abs_path.relative_to(base_dir)
+                        path_to_save = str(rel_path).replace('\\', '/')
+            except Exception:
+                pass
+            
             config[model_id] = {
                 "id": model_info.id,
                 "name": model_info.name,
                 "type": model_info.type,
                 "format": model_info.format,
-                "path": model_info.path,
+                "path": path_to_save,
                 "classes": model_info.classes,
                 "input_size": model_info.input_size,
                 "confidence_threshold": model_info.confidence_threshold,
@@ -105,7 +127,11 @@ class ModelManager:
                 "is_custom": model_info.is_custom,
                 "file_size": getattr(model_info, "file_size", 0),
                 "is_ready": getattr(model_info, "is_ready", False),
-                "is_training": getattr(model_info, "is_training", False)
+                "is_training": getattr(model_info, "is_training", False),
+                "source_type": getattr(model_info, "source_type", "custom"),
+                "training_session_id": getattr(model_info, "training_session_id", None),
+                "description": getattr(model_info, "description", ""),
+                "is_best": getattr(model_info, "is_best", False)
             }
         
         with open(self.models_config_file, 'w') as f:
@@ -113,8 +139,12 @@ class ModelManager:
 
     def _refresh_model_metadata(self, model_info: ModelInfo) -> None:
         """Ensure runtime metadata fields like file_size, is_ready, and created_at are populated"""
+        from core.config import settings
         try:
+            # Support both relative and absolute paths
             path = Path(model_info.path)
+            if not path.is_absolute():
+                path = Path(settings.BASE_DIR) / model_info.path
             if path.exists():
                 # File exists => model is ready
                 model_info.is_ready = True
@@ -209,6 +239,53 @@ class ModelManager:
                     self.models_info[model_config["id"]] = model_info
                 except Exception as e:
                     print(f"Failed to download {model_config['name']}: {e}")
+
+        # Download SAM2 Base model for Smart Polygon tool (best overall)
+        sam_config = {
+            "id": "sam2_b",
+            "name": "SAM2 Base",
+            "type": ModelType.INSTANCE_SEGMENTATION,
+            "model_name": "sam2_b.pt",  # Better accuracy, good speed
+        }
+        
+        sam_dir = self.models_dir / "sam"
+        sam_dir.mkdir(parents=True, exist_ok=True)
+        
+        if sam_config["id"] not in self.models_info:
+            try:
+                print(f"Downloading {sam_config['name']}...")
+                from ultralytics import SAM
+                
+                # Trigger auto-download
+                model = SAM(sam_config["model_name"])
+                
+                # Copy to our local storage
+                model_path = sam_dir / sam_config["model_name"]
+                ckpt_path = getattr(model, 'ckpt_path', None)
+                if ckpt_path and os.path.exists(ckpt_path):
+                    shutil.copy2(ckpt_path, model_path)
+                    print(f"SAM model saved to {model_path}")
+                elif os.path.exists(sam_config["model_name"]):
+                    shutil.copy2(sam_config["model_name"], model_path)
+                
+                # Register SAM in model info
+                model_info = ModelInfo(
+                    id=sam_config["id"],
+                    name=sam_config["name"],
+                    type=sam_config["type"],
+                    format=ModelFormat.PYTORCH,
+                    path=str(model_path),
+                    classes=[],
+                    input_size=(1024, 1024),
+                    description="Segment Anything Model for Smart Polygon annotation",
+                    is_custom=False,
+                    created_at=datetime.now().isoformat(),
+                )
+                self._refresh_model_metadata(model_info)
+                self.models_info[sam_config["id"]] = model_info
+                print(f"✅ {sam_config['name']} ready!")
+            except Exception as e:
+                print(f"Failed to download {sam_config['name']}: {e}")
 
         self._save_models_config()
     
@@ -464,8 +541,11 @@ class ModelManager:
         if not model_info.is_custom:
             raise ValueError("Cannot delete pre-trained models")
         
-        # Remove model file
+        # Remove model file (handle both relative and absolute paths)
+        from core.config import settings
         model_path = Path(model_info.path)
+        if not model_path.is_absolute():
+            model_path = Path(settings.BASE_DIR) / model_info.path
         if model_path.exists():
             model_path.unlink()
         

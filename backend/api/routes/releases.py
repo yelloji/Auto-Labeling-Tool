@@ -30,17 +30,8 @@ from core.transformation_schema import generate_release_configurations
 # Import professional logging system
 from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
 
-# Import transformation debugger
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
-from TRANSFORMATION_DEBUG import TransformationDebugger
-
 # Initialize professional logger
 logger = get_professional_logger()
-
-# Initialize transformation debugger
-debug_logger = TransformationDebugger()
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -4161,7 +4152,7 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
     
     try:
         # Import the enhanced annotation transformer
-        from backend.core.annotation_transformer import update_annotations_for_transformations, BoundingBox, Polygon
+        from core.annotation_transformer import update_annotations_for_transformations, BoundingBox, Polygon
         
         # Convert DB annotations to BoundingBox/Polygon objects if needed
         # Use same conversion logic as create_yolo_label_content()

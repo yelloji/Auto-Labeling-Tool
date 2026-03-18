@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Button, Tooltip, Divider, InputNumber, Typography } from 'antd';
+import { Button, Tooltip, Divider, InputNumber, Typography, message } from 'antd';
 import {
   DragOutlined,
   BorderOutlined,
@@ -17,7 +17,8 @@ import {
   DeleteOutlined,
   ClearOutlined,
   ThunderboltOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  BlockOutlined
 } from '@ant-design/icons';
 import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 import { Modal } from 'antd';
@@ -37,6 +38,8 @@ const AnnotationToolbox = ({
   canUndo = false,
   canRedo = false,
   onDeleteImage,
+  onMarkAsNull,
+  isLabeledNull = false,
   annotations = []
 }) => {
   // One-time mount log to verify component is rendering
@@ -50,10 +53,11 @@ const AnnotationToolbox = ({
   }, [activeTool, zoomLevel, canUndo, canRedo]);
 
   const tools = [
-    { key: 'select', icon: DragOutlined, tooltip: 'Select & Move', label: 'Select' },
-    { key: 'box', icon: BorderOutlined, tooltip: 'Rectangle Tool', label: 'Box' },
-    { key: 'polygon', icon: ExpandOutlined, tooltip: 'Manual Polygon Tool', label: 'Polygon' },
-    { key: 'smart_polygon', icon: ThunderboltOutlined, tooltip: 'Smart Polygon - Click to auto-generate polygon around objects', label: 'Smart' }
+    { key: 'select', icon: DragOutlined, tooltip: 'Select & Edit: Click to select, move, or resize existing annotations on the canvas.', label: 'Select' },
+    { key: 'box', icon: BorderOutlined, tooltip: 'Bounding Box: Draw a rectangular area to define object boundaries for detection.', label: 'Box' },
+    { key: 'polygon', icon: ExpandOutlined, tooltip: 'Manual Polygon: Define precise object boundaries by placing sequential points.', label: 'Polygon' },
+    { key: 'smart_polygon', icon: ThunderboltOutlined, tooltip: 'Magic Wand: Leverages AI to automatically segment objects with a single click.', label: 'Smart' },
+    { key: 'null', icon: BlockOutlined, tooltip: isLabeledNull ? 'Remove Null: Click to unmark this image as background' : 'Mark as Null: Confirm this image contains no objects (works only on clean images)', label: 'Null' }
   ];
 
   const handleZoomIn = () => {
@@ -220,40 +224,41 @@ const AnnotationToolbox = ({
 
 
 
-  const ToolButton = ({ tool, isActive, onClick }) => {
-    const activatedRef = useRef(false);
-
+  const ToolButton = ({ tool, isActive, onClick, disabled = false }) => {
     const activate = () => {
-      if (activatedRef.current) return;
-      activatedRef.current = true;
-      try {
-        onClick();
-        logUserClick('AnnotationToolbox', `${tool.key}_tool_button`, {
-          toolKey: tool.key,
-          toolLabel: tool.label,
-          isActive: isActive,
-          tooltip: tool.tooltip
-        }).catch(() => {});
-      } catch (_) {}
-      // reset guard shortly after to allow next activations
-      setTimeout(() => { activatedRef.current = false; }, 200);
+      if (disabled) {
+        message.warning('Drawing tools are disabled when image is marked as null');
+        return;
+      }
+      logUserClick('AnnotationToolbox', `tool_${tool.key}_activated`, {
+        toolKey: tool.key,
+        toolLabel: tool.label,
+        wasActive: isActive,
+        timestamp: new Date().toISOString()
+      });
+      logInfo('app.frontend.interactions', 'tool_activated', `Tool activated: ${tool.label}`, {
+        toolKey: tool.key,
+        isActive,
+        timestamp: new Date().toISOString()
+      });
+      onClick();
     };
 
     return (
-      <Tooltip title={tool.tooltip} placement="left">
-        <div
-          data-tool-wrapper={tool.key}
-          onClick={(e) => {
-            console.log('🧩 Tool wrapper clicked:', tool.key);
-          }}
-          onMouseDown={(e) => {
-            console.log('🧩 Tool wrapper mousedown:', tool.key, 'button:', e.button);
-          }}
-          style={{ display: 'flex', userSelect: 'none' }}
+      <div
+        data-tool-wrapper={tool.key}
+        style={{ display: 'flex', userSelect: 'none', pointerEvents: 'auto' }}
+      >
+        <Tooltip
+          title={tool.tooltip}
+          placement="left"
+          mouseLeaveDelay={0.1}
+          overlayStyle={{ zIndex: 100000 }}
+          trigger="hover"
         >
           <Button
             type={isActive ? 'primary' : 'default'}
-            icon={<tool.icon style={{ fontSize: '14px' }} />}
+            icon={<tool.icon style={{ fontSize: '1rem' }} />}
             data-tool-key={tool.key}
             onMouseDown={(e) => {
               console.log('🖱️ onMouseDown: ToolButton', tool.key, { button: e.button });
@@ -267,55 +272,59 @@ const AnnotationToolbox = ({
               activate();
             }}
             style={{
-              width: '40px',
-              height: '40px',
+              width: '3rem',
+              height: '3.25rem',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '1px',
-              background: isActive ? '#3498db' : '#34495e',
-              borderColor: isActive ? '#3498db' : '#001529',
-              color: isActive ? '#fff' : '#bdc3c7',
-              borderRadius: '6px',
-              boxShadow: isActive ? '0 2px 6px rgba(52, 152, 219, 0.25)' : '0 1px 2px rgba(0,0,0,0.08)',
+              gap: '0.125rem',
+              padding: '0.25rem 0',
+              background: disabled ? '#2c3e50' : (isActive ? '#3498db' : '#34495e'),
+              borderColor: disabled ? '#1a252f' : (isActive ? '#3498db' : '#001529'),
+              color: disabled ? '#7f8c8d' : (isActive ? '#fff' : '#bdc3c7'),
+              borderRadius: '0.375rem',
+              boxShadow: isActive ? '0 0.125rem 0.375rem rgba(52, 152, 219, 0.25)' : '0 0.0625rem 0.125rem rgba(0,0,0,0.08)',
               transition: 'all 0.2s ease',
               pointerEvents: 'auto',
               zIndex: 2100,
-              cursor: 'pointer'
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled ? 0.5 : 1
             }}
             onMouseEnter={(e) => {
               const btn = e.currentTarget;
-              if (!isActive) {
+              if (!isActive && !disabled) {
                 btn.style.background = '#3498db';
                 btn.style.borderColor = '#3498db';
               }
             }}
             onMouseLeave={(e) => {
               const btn = e.currentTarget;
-              if (!isActive) {
+              if (!isActive && !disabled) {
                 btn.style.background = '#34495e';
                 btn.style.borderColor = '#001529';
               }
             }}
           >
-            <Text 
-              style={{ 
-                fontSize: '8px', 
+            <Text
+              style={{
+                fontSize: '0.6875rem',
                 color: isActive ? '#fff' : '#bdc3c7',
                 fontWeight: '500',
-                lineHeight: 1
+                lineHeight: 1,
+                whiteSpace: 'nowrap',
+                marginTop: 'auto'
               }}
             >
               {tool.label}
             </Text>
           </Button>
-        </div>
-      </Tooltip>
+        </Tooltip>
+      </div>
     );
   };
 
-  const ActionButton = ({ icon, tooltip, onClick, disabled = false, color = '#595959' }) => {
+  const ActionButton = ({ icon, tooltip, onClick, disabled = false, color = '#595959', label }) => {
     const activatedRef = useRef(false);
 
     const activate = () => {
@@ -332,7 +341,7 @@ const AnnotationToolbox = ({
           tooltip: tooltip,
           disabled: disabled,
           color: color
-        }).catch(() => {});
+        }).catch(() => { });
       } catch (e) {
         console.error('❌ ActionButton onClick error:', e);
       }
@@ -340,9 +349,14 @@ const AnnotationToolbox = ({
     };
 
     return (
-      <Tooltip title={tooltip} placement="left">
+      <Tooltip
+        title={tooltip}
+        placement="left"
+        mouseLeaveDelay={0.1}
+        overlayStyle={{ zIndex: 100000 }}
+        trigger="hover"
+      >
         <Button
-          icon={React.cloneElement(icon, { style: { fontSize: '12px' } })}
           onMouseDown={(e) => {
             console.log('🖱️ onMouseDown: ActionButton', tooltip, { button: e.button });
             e.preventDefault();
@@ -354,15 +368,22 @@ const AnnotationToolbox = ({
           }}
           disabled={disabled}
           style={{
-            width: '40px',
-            height: '32px',
+            width: label ? '3rem' : '2.5rem',
+            height: label ? '3.25rem' : '2rem',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: label ? '0.125rem' : '0',
+            padding: label ? '0.25rem 0' : '0',
             background: disabled ? '#2c3e50' : '#34495e',
             borderColor: '#001529',
             color: disabled ? '#7f8c8d' : '#bdc3c7',
-            borderRadius: '4px',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+            borderRadius: label ? '0.375rem' : '0.25rem',
+            boxShadow: '0 0.0625rem 0.125rem rgba(0,0,0,0.08)',
             transition: 'all 0.2s ease',
-            cursor: disabled ? 'not-allowed' : 'pointer'
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            paddingTop: label ? '0.25rem' : '0'
           }}
           onMouseEnter={(e) => {
             const btn = e.currentTarget;
@@ -381,7 +402,23 @@ const AnnotationToolbox = ({
               btn.style.borderColor = '#001529';
             }
           }}
-        />
+        >
+          {React.cloneElement(icon, { style: { fontSize: '1rem', marginBottom: label ? 'auto' : '0' } })}
+          {label && (
+            <Text
+              style={{
+                fontSize: '0.6875rem',
+                color: disabled ? '#7f8c8d' : '#bdc3c7',
+                fontWeight: '500',
+                lineHeight: 1,
+                whiteSpace: 'nowrap',
+                marginTop: 'auto'
+              }}
+            >
+              {label}
+            </Text>
+          )}
+        </Button>
       </Tooltip>
     );
   };
@@ -392,39 +429,42 @@ const AnnotationToolbox = ({
         width: '100%',
         height: '100%',
         background: '#001529',
-        padding: '8px 6px',
+        padding: '0.375rem 0.25rem',
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px',
-        borderLeft: '1px solid #34495e'
+        gap: '0.25rem',
+        borderLeft: '0.0625rem solid #34495e'
       }}
       onClick={() => {
         // Container click to detect if pointer events are reaching the toolbox at all
         console.log('AnnotationToolbox container clicked');
       }}
-     >
-      {/* Section: Drawing Tools */}
-      <div>
-        <Text 
-          style={{ 
-            fontSize: '9px', 
-            color: '#95a5a6', 
-            fontWeight: '600',
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Text
+          style={{
+            fontSize: '0.75rem',
+            color: '#95a5a6',
+            fontWeight: '700',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '4px',
-            display: 'block'
+            letterSpacing: '0.03125rem',
+            marginBottom: '0.25rem',
+            display: 'block',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textAlign: 'center'
           }}
         >
           TOOLS
         </Text>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
           {tools.map(tool => (
             <ToolButton
               key={tool.key}
               tool={tool}
-              isActive={activeTool === tool.key}
-              onClick={() => handleToolChange(tool.key)}
+              isActive={tool.key === 'null' ? isLabeledNull : (!isLabeledNull && activeTool === tool.key)}
+              onClick={() => tool.key === 'null' ? onMarkAsNull() : handleToolChange(tool.key)}
+              disabled={isLabeledNull && (tool.key === 'box' || tool.key === 'polygon' || tool.key === 'smart_polygon')}
             />
           ))}
         </div>
@@ -432,56 +472,65 @@ const AnnotationToolbox = ({
 
       <Divider style={{ margin: 0, borderColor: '#34495e' }} />
 
-      {/* Section: View Controls */}
-      <div>
-        <Text 
-          style={{ 
-            fontSize: '9px', 
-            color: '#95a5a6', 
-            fontWeight: '600',
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Text
+          style={{
+            fontSize: '0.75rem',
+            color: '#95a5a6',
+            fontWeight: '700',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '4px',
-            display: 'block'
+            letterSpacing: '0.03125rem',
+            marginBottom: '0.25rem',
+            display: 'block',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textAlign: 'center'
           }}
         >
           VIEW
         </Text>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
           <ActionButton
             icon={<ZoomInOutlined />}
-            tooltip="Zoom In"
+            tooltip="Increase view scale for closer inspection."
             onClick={handleZoomIn}
           />
-          
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
+
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             gap: '2px',
-            padding: '4px',
+            padding: '0.25rem 0.125rem',
             background: '#34495e',
-            borderRadius: '4px',
-            border: '1px solid #001529',
-            width: '40px'
+            borderRadius: '0.25rem',
+            border: '0.0625rem solid #001529',
+            width: '3rem'
           }}>
-            <InputNumber
-              value={zoomLevel}
-              onChange={handleZoomChange}
-              min={25}
-              max={500}
-              step={25}
-              size="small"
-              style={{ 
-                width: '32px',
-                textAlign: 'center',
-                fontSize: '10px'
-              }}
-              controls={false}
-            />
-            <Text style={{ 
-              color: '#bdc3c7', 
-              fontSize: '8px',
+            <Tooltip
+              title="Current magnification level. Enter a value or use step controls."
+              placement="left"
+              overlayStyle={{ zIndex: 100000 }}
+              trigger="hover"
+            >
+              <InputNumber
+                value={zoomLevel}
+                onChange={handleZoomChange}
+                min={25}
+                max={500}
+                step={25}
+                size="small"
+                style={{
+                  width: '2.75rem',
+                  textAlign: 'center',
+                  fontSize: '0.75rem'
+                }}
+                controls={false}
+              />
+            </Tooltip>
+            <Text style={{
+              color: '#bdc3c7',
+              fontSize: '0.875rem',
               fontWeight: '500'
             }}>
               %
@@ -490,7 +539,7 @@ const AnnotationToolbox = ({
 
           <ActionButton
             icon={<ZoomOutOutlined />}
-            tooltip="Zoom Out"
+            tooltip="Decrease view scale to see more of the image."
             onClick={handleZoomOut}
           />
         </div>
@@ -498,31 +547,33 @@ const AnnotationToolbox = ({
 
       <Divider style={{ margin: 0, borderColor: '#34495e' }} />
 
-      {/* Section: History */}
-      <div>
-        <Text 
-          style={{ 
-            fontSize: '9px', 
-            color: '#95a5a6', 
-            fontWeight: '600',
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Text
+          style={{
+            fontSize: '0.75rem',
+            color: '#95a5a6',
+            fontWeight: '700',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '4px',
-            display: 'block'
+            letterSpacing: '0.03125rem',
+            marginBottom: '0.25rem',
+            display: 'block',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textAlign: 'center'
           }}
         >
           HISTORY
         </Text>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
           <ActionButton
             icon={<UndoOutlined />}
-            tooltip="Undo"
+            tooltip="Undo: Revert the last change made to the annotations."
             onClick={handleUndo}
             disabled={!canUndo}
           />
           <ActionButton
             icon={<RedoOutlined />}
-            tooltip="Redo"
+            tooltip="Redo: Re-apply the last undone change."
             onClick={handleRedo}
             disabled={!canRedo}
           />
@@ -531,25 +582,27 @@ const AnnotationToolbox = ({
 
       <Divider style={{ margin: 0, borderColor: '#34495e' }} />
 
-      {/* Section: Actions */}
-      <div>
-        <Text 
-          style={{ 
-            fontSize: '9px', 
-            color: '#95a5a6', 
-            fontWeight: '600',
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Text
+          style={{
+            fontSize: '0.75rem',
+            color: '#95a5a6',
+            fontWeight: '700',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '4px',
-            display: 'block'
+            letterSpacing: '0.03125rem',
+            marginBottom: '0.25rem',
+            display: 'block',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textAlign: 'center'
           }}
         >
           ACTIONS
         </Text>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
           <ActionButton
             icon={<DeleteOutlined style={{ color: '#ff4d4f' }} />}
-            tooltip="Delete Image"
+            tooltip="Delete Image: Permanently remove this image and its annotations from the dataset."
             onClick={handleDeleteImage}
             disabled={false}
             color="#ff4d4f"
@@ -557,7 +610,7 @@ const AnnotationToolbox = ({
 
           <ActionButton
             icon={<ClearOutlined style={{ color: '#faad14' }} />}
-            tooltip="Clear All"
+            tooltip="Reset Annotations: Remove all current labels and shapes from this image."
             onClick={handleClear}
             disabled={annotations.length === 0}
             color="#faad14"

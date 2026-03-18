@@ -1,0 +1,99 @@
+.delta-gallery-modal .ant-modal-content {
+    background-color: #141414;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 85vh;
+}
+
+.delta-gallery-header {
+    padding: 16px 24px;
+    background: #1f1f1f;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.delta-gallery-body {
+    flex: 1;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #000;
+    overflow: hidden;
+}
+
+.delta-image-container {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.delta-svg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.delta-navigation {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 20px;
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.delta-navigation:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.delta-navigation.left {
+    left: 16px;
+}
+
+.delta-navigation.right {
+    right: 16px;
+}
+
+.delta-gallery-footer {
+    padding: 12px 24px;
+    background: #1f1f1f;
+    border-top: 1px solid #333;
+}
+
+.legend {
+    display: flex;
+    gap: 24px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-color {
+    display: inline-block;
+    width: 20px;
+    height: 12px;
+}

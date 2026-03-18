@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  Card, 
-  Button, 
-  Typography, 
-  Row, 
-  Col, 
+import {
+  Card,
+  Button,
+  Typography,
+  Row,
+  Col,
   Space,
   Spin,
   message,
@@ -121,33 +121,33 @@ const AnnotateLauncher = () => {
   const handleGoBack = () => {
     // Get the project ID from the dataset
     // If dataset has a project_id property, use it; otherwise try to extract from the ID
-    const projectId = dataset?.project_id || 
-                     (datasetId.includes('-') ? datasetId.split('-')[0] : '1');
-    
+    const projectId = dataset?.project_id ||
+      (datasetId.includes('-') ? datasetId.split('-')[0] : '1');
+
     logUserClick('AnnotateLauncher', 'go_back_button', {
       datasetId,
       projectId,
       datasetName: dataset?.name,
       timestamp: new Date().toISOString()
     });
-    
+
     logInfo('app.frontend.navigation', 'navigate_back_to_project', 'Navigating back to project workspace', {
       datasetId,
       projectId,
       targetUrl: `/projects/${projectId}/workspace?section=management`,
       timestamp: new Date().toISOString()
     });
-    
+
     console.log('Navigating back to project workspace:', {
       projectId,
       datasetId,
       dataset
     });
-    
+
     // Navigate to the project workspace with management section selected
     // Use both state and URL parameter for maximum compatibility
-    navigate(`/projects/${projectId}/workspace?section=management`, { 
-      state: { selectedSection: 'management' } 
+    navigate(`/projects/${projectId}/workspace?section=management`, {
+      state: { selectedSection: 'management' }
     });
   };
 
@@ -157,11 +157,11 @@ const AnnotateLauncher = () => {
       timestamp: new Date().toISOString()
     });
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh' 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh'
       }}>
         <Spin size="large" />
       </div>
@@ -169,21 +169,21 @@ const AnnotateLauncher = () => {
   }
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
+    <div style={{
+      minHeight: '100vh',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '40px 20px',
+      padding: '2.5rem 1.25rem',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center'
     }}>
-      <div style={{ maxWidth: 800, width: '100%' }}>
+      <div style={{ maxWidth: '50rem', width: '100%' }}>
         {/* Back Button */}
-        <Button 
-          icon={<ArrowLeftOutlined />} 
+        <Button
+          icon={<ArrowLeftOutlined />}
           onClick={handleGoBack}
-          style={{ 
-            marginBottom: 24,
+          style={{
+            marginBottom: '1.5rem',
             background: 'rgba(255, 255, 255, 0.2)',
             border: 'none',
             color: 'white'
@@ -196,27 +196,27 @@ const AnnotateLauncher = () => {
         {/* Main Card */}
         <Card
           style={{
-            borderRadius: 16,
-            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
+            borderRadius: '1rem',
+            boxShadow: '0 1.25rem 2.5rem rgba(0, 0, 0, 0.1)',
             border: 'none'
           }}
-          bodyStyle={{ padding: '48px 40px' }}
+          bodyStyle={{ padding: '3rem 2.5rem' }}
         >
           {/* Header */}
-          <div style={{ textAlign: 'center', marginBottom: 48 }}>
-            <Title level={1} style={{ 
-              fontSize: '2.5rem', 
+          <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+            <Title level={1} style={{
+              fontSize: '2.5rem',
               fontWeight: 'bold',
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
-              marginBottom: 16
+              marginBottom: '1rem'
             }}>
               🎯 How do you want to label your images?
             </Title>
-            
+
             {dataset && (
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: '1.5rem' }}>
                 <Title level={4} style={{ color: '#666', margin: 0 }}>
                   Dataset: {dataset.name}
                 </Title>
@@ -227,18 +227,18 @@ const AnnotateLauncher = () => {
                 )}
               </div>
             )}
-            
-            <Paragraph style={{ 
-              fontSize: '1.1rem', 
+
+            <Paragraph style={{
+              fontSize: '1.1rem',
               color: '#666',
-              maxWidth: 600,
+              maxWidth: '37.5rem',
               margin: '0 auto'
             }}>
               Choose your preferred annotation method to start labeling your dataset images.
             </Paragraph>
           </div>
 
-          <Divider style={{ margin: '32px 0' }} />
+          <Divider style={{ margin: '2rem 0' }} />
 
           {/* Annotation Options */}
           <Row gutter={[32, 32]} justify="center">
@@ -248,13 +248,13 @@ const AnnotateLauncher = () => {
                 hoverable
                 style={{
                   height: '100%',
-                  borderRadius: 12,
-                  border: '2px solid #f0f0f0',
+                  borderRadius: '0.75rem',
+                  border: '0.125rem solid #f0f0f0',
                   transition: 'all 0.3s ease',
                   cursor: 'pointer'
                 }}
-                bodyStyle={{ 
-                  padding: '32px 24px',
+                bodyStyle={{
+                  padding: '2rem 1.5rem',
                   textAlign: 'center',
                   height: '100%',
                   display: 'flex',
@@ -264,8 +264,8 @@ const AnnotateLauncher = () => {
                 onClick={handleManualLabeling}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = '#1890ff';
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(24, 144, 255, 0.2)';
+                  e.currentTarget.style.transform = 'translateY(-0.25rem)';
+                  e.currentTarget.style.boxShadow = '0 0.5rem 1.5rem rgba(24, 144, 255, 0.2)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.borderColor = '#f0f0f0';
@@ -274,20 +274,20 @@ const AnnotateLauncher = () => {
                 }}
               >
                 <div>
-                  <div style={{ 
-                    fontSize: '4rem', 
-                    marginBottom: 16,
+                  <div style={{
+                    fontSize: '4rem',
+                    marginBottom: '1rem',
                     background: 'linear-gradient(135deg, #1890ff, #40a9ff)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent'
                   }}>
                     📝
                   </div>
-                  <Title level={3} style={{ marginBottom: 16 }}>
+                  <Title level={3} style={{ marginBottom: '1rem' }}>
                     Manual Labeling
                   </Title>
-                  <Paragraph style={{ color: '#666', marginBottom: 24 }}>
-                    Draw bounding boxes and polygons manually with full control over every annotation. 
+                  <Paragraph style={{ color: '#666', marginBottom: '1.5rem' }}>
+                    Draw bounding boxes and polygons manually with full control over every annotation.
                     Perfect for precise labeling and quality assurance.
                   </Paragraph>
                   <Space direction="vertical" size="small">
@@ -296,14 +296,14 @@ const AnnotateLauncher = () => {
                     <div style={{ color: '#52c41a' }}>✓ Quality assurance</div>
                   </Space>
                 </div>
-                <Button 
-                  type="primary" 
-                  size="large" 
+                <Button
+                  type="primary"
+                  size="large"
                   icon={<UserOutlined />}
-                  style={{ 
-                    marginTop: 24,
-                    height: 48,
-                    borderRadius: 8,
+                  style={{
+                    marginTop: '1.5rem',
+                    height: '3rem',
+                    borderRadius: '0.5rem',
                     fontWeight: 'bold'
                   }}
                   block
@@ -319,13 +319,13 @@ const AnnotateLauncher = () => {
                 hoverable
                 style={{
                   height: '100%',
-                  borderRadius: 12,
-                  border: '2px solid #f0f0f0',
+                  borderRadius: '0.75rem',
+                  border: '0.125rem solid #f0f0f0',
                   transition: 'all 0.3s ease',
                   cursor: 'pointer'
                 }}
-                bodyStyle={{ 
-                  padding: '32px 24px',
+                bodyStyle={{
+                  padding: '2rem 1.5rem',
                   textAlign: 'center',
                   height: '100%',
                   display: 'flex',
@@ -335,8 +335,8 @@ const AnnotateLauncher = () => {
                 onClick={handleAutoLabeling}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = '#52c41a';
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(82, 196, 26, 0.2)';
+                  e.currentTarget.style.transform = 'translateY(-0.25rem)';
+                  e.currentTarget.style.boxShadow = '0 0.5rem 1.5rem rgba(82, 196, 26, 0.2)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.borderColor = '#f0f0f0';
@@ -345,20 +345,20 @@ const AnnotateLauncher = () => {
                 }}
               >
                 <div>
-                  <div style={{ 
-                    fontSize: '4rem', 
-                    marginBottom: 16,
+                  <div style={{
+                    fontSize: '4rem',
+                    marginBottom: '1rem',
                     background: 'linear-gradient(135deg, #52c41a, #73d13d)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent'
                   }}>
                     🤖
                   </div>
-                  <Title level={3} style={{ marginBottom: 16 }}>
+                  <Title level={3} style={{ marginBottom: '1rem' }}>
                     Auto Labeling
                   </Title>
-                  <Paragraph style={{ color: '#666', marginBottom: 24 }}>
-                    Let AI automatically detect and label objects in your images. 
+                  <Paragraph style={{ color: '#666', marginBottom: '1.5rem' }}>
+                    Let AI automatically detect and label objects in your images.
                     Fast and efficient for large datasets with manual review options.
                   </Paragraph>
                   <Space direction="vertical" size="small">
@@ -367,14 +367,14 @@ const AnnotateLauncher = () => {
                     <div style={{ color: '#52c41a' }}>✓ Manual refinement</div>
                   </Space>
                 </div>
-                <Button 
-                  type="primary" 
-                  size="large" 
+                <Button
+                  type="primary"
+                  size="large"
                   icon={<ThunderboltOutlined />}
-                  style={{ 
-                    marginTop: 24,
-                    height: 48,
-                    borderRadius: 8,
+                  style={{
+                    marginTop: '1.5rem',
+                    height: '3rem',
+                    borderRadius: '0.5rem',
                     fontWeight: 'bold',
                     background: 'linear-gradient(135deg, #52c41a, #73d13d)',
                     border: 'none'
@@ -388,12 +388,12 @@ const AnnotateLauncher = () => {
           </Row>
 
           {/* Additional Info */}
-          <div style={{ 
-            textAlign: 'center', 
-            marginTop: 48,
-            padding: '24px',
+          <div style={{
+            textAlign: 'center',
+            marginTop: '3rem',
+            padding: '1.5rem',
             background: '#f8f9fa',
-            borderRadius: 8
+            borderRadius: '0.5rem'
           }}>
             <Paragraph style={{ margin: 0, color: '#666' }}>
               💡 <strong>Tip:</strong> You can switch between manual and auto labeling modes at any time during the annotation process.

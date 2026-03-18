@@ -16,11 +16,11 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import ImportWithLabelsSection from './ImportWithLabelsSection';
 import {
   Typography,
   Card,
   Button,
-  Upload,
   Input,
   Select,
   Row,
@@ -29,11 +29,13 @@ import {
   Progress,
   message,
   Space,
-  Modal
+  Modal,
+  Tag,
+  Collapse,
+  Alert
 } from 'antd';
 import {
   UploadOutlined,
-  InboxOutlined,
   PictureOutlined,
   DatabaseOutlined,
   TagOutlined,
@@ -41,13 +43,14 @@ import {
   YoutubeOutlined,
   ApiOutlined,
   CloudOutlined,
-  SettingOutlined
+  SettingOutlined,
+  CheckCircleOutlined,
+  WarningOutlined
 } from '@ant-design/icons';
 import { projectsAPI, datasetsAPI, handleAPIError } from '../../../services/api';
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 
 const { Title, Text, Paragraph } = Typography;
-const { Dragger } = Upload;
 const { Option } = Select;
 
 /**
@@ -60,12 +63,10 @@ const UploadSection = ({ projectId }) => {
   // Batch naming and tagging
   const [batchName, setBatchName] = useState(''); // User-defined batch name for uploads
   const [tags, setTags] = useState([]); // Selected dataset tags for categorization
+  const [tagWarning, setTagWarning] = useState(null); // Warning when selected dataset is not in unassigned stage
 
   // Upload management
-  const [uploadedFiles, setUploadedFiles] = useState([]); // List of successfully uploaded files
   const [uploading, setUploading] = useState(false); // Upload in progress flag
-  const [uploadProgress, setUploadProgress] = useState(0); // Upload progress percentage (0-100)
-  const [uploadTimeout, setUploadTimeout] = useState(null); // Timeout for batch upload processing
 
   // Data and UI state
   const [availableDatasets, setAvailableDatasets] = useState([]); // Available datasets for tagging
@@ -74,7 +75,7 @@ const UploadSection = ({ projectId }) => {
 
   // Upload type and file handling
   const [uploadType, setUploadType] = useState('files'); // Current upload type: 'files' or 'folder'
-  const [pendingFiles, setPendingFiles] = useState([]); // Files waiting for batch name confirmation
+  const [uploadResult, setUploadResult] = useState(null); // Result of last bulk upload for inline display
 
   // Video upload state
   const [videoFile, setVideoFile] = useState(null); // Selected video file
@@ -86,6 +87,7 @@ const UploadSection = ({ projectId }) => {
   // ==================== REFS ====================
   const fileInputRef = useRef(null); // Reference to hidden file input element
   const folderInputRef = useRef(null); // Reference to hidden folder input element
+  const importLabelsRef = useRef(null); // Reference to ImportWithLabelsSection
 
   // ==================== COMPONENT INITIALIZATION ====================
 
@@ -126,7 +128,8 @@ const UploadSection = ({ projectId }) => {
       const datasets = response.datasets || response || [];
       const options = datasets.map(dataset => ({
         value: dataset.id,
-        label: dataset.name
+        label: dataset.name,
+        split_type: dataset.split_type
       }));
       setAvailableDatasets(options);
 
@@ -233,12 +236,11 @@ const UploadSection = ({ projectId }) => {
 
   /**
    * Handle batch name confirmation from modal
-   * Validates batch name and either opens file dialog or processes pending drag & drop files
+   * Validates batch name and opens file dialog
    */
   const handleBatchNameConfirm = () => {
     logUserClick('batch_name_confirm_button_clicked', 'User clicked batch name confirm button');
 
-    // Validate batch name
     if (!batchName.trim()) {
       logError('app.frontend.validation', 'batch_name_empty', 'Batch name validation failed: empty name', {
         timestamp: new Date().toISOString(),
@@ -253,124 +255,16 @@ const UploadSection = ({ projectId }) => {
     logInfo('app.frontend.interactions', 'batch_name_confirmed', 'Batch name confirmed', {
       timestamp: new Date().toISOString(),
       projectId: projectId,
-      batchName: batchName,
-      pendingFilesCount: pendingFiles.length
+      batchName: batchName
     });
 
     setBatchNameModalVisible(false);
 
-    // Check if we have pending files from drag & drop
-    if (pendingFiles.length > 0) {
-      // Process pending drag & drop files
-      const batchNameToUse = batchName;
-
-      pendingFiles.forEach(async ({ file, onSuccess, onError, onProgress }) => {
-        try {
-          // Simulate progress
-          let percent = 0;
-          const interval = setInterval(() => {
-            percent = Math.min(99, percent + 10);
-            onProgress({ percent });
-          }, 200);
-
-          // Upload the file
-          await uploadFile(file, batchNameToUse);
-
-          // Clear interval and set progress to 100%
-          clearInterval(interval);
-          onProgress({ percent: 100 });
-          onSuccess("ok", null);
-
-          // Reload recent images
-          loadRecentImages();
-        } catch (error) {
-          onError(error);
-        }
-      });
-
-      // Clear pending files
-      setPendingFiles([]);
-    } else {
-      // Regular file selection flow
-      if (fileInputRef.current) {
-        fileInputRef.current.click();
-      }
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
-  /**
-   * Handle drag and drop with batch name modal (UNUSED - kept for reference)
-   * This function is not currently used as drag & drop logic is handled in uploadProps
-   */
-  const handleDragDrop = (files) => {
-    if (tags.length === 0) {
-      // No tags selected, show batch name modal first
-      setPendingFiles(files);
-      setBatchNameModalVisible(true);
-    } else {
-      // Tags are selected, proceed directly with upload
-      processDragDropFiles(files);
-    }
-  };
-
-  /**
-   * Process drag and drop files after batch name is confirmed (UNUSED - kept for reference)
-   * This function is not currently used as drag & drop logic is handled in uploadProps
-   */
-  const processDragDropFiles = (files) => {
-    const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
-
-    // Process files using the existing upload logic
-    files.forEach(file => {
-      const fileObj = {
-        file,
-        onSuccess: () => { },
-        onError: () => { },
-        onProgress: () => { }
-      };
-
-      // Add to pending files for batch processing
-      setPendingFiles(prev => {
-        const newFiles = [...prev, fileObj];
-
-        // Clear existing timeout
-        if (uploadTimeout) {
-          clearTimeout(uploadTimeout);
-        }
-
-        // Set new timeout to upload after 500ms
-        const newTimeout = setTimeout(async () => {
-          try {
-            setUploading(true);
-            setUploadProgress(0);
-
-            const progressInterval = setInterval(() => {
-              setUploadProgress(prev => Math.min(prev + 10, 90));
-            }, 100);
-
-            const filesToUpload = newFiles.map(item => item.file);
-            const result = await uploadMultipleFiles(filesToUpload, batchNameToUse);
-
-            clearInterval(progressInterval);
-            setUploadProgress(100);
-
-            setUploadedFiles(prev => [...prev, ...newFiles.map(item => ({ ...result, file: item.file }))]);
-
-            loadRecentImages();
-            setPendingFiles([]);
-          } catch (error) {
-            console.error('Drag drop upload error:', error);
-          } finally {
-            setUploading(false);
-            setUploadProgress(0);
-          }
-        }, 500);
-
-        setUploadTimeout(newTimeout);
-        return newFiles;
-      });
-    });
-  };
 
   // ==================== EFFECTS ====================
 
@@ -424,7 +318,6 @@ const UploadSection = ({ projectId }) => {
 
     try {
       const result = await projectsAPI.uploadImagesToProject(projectId, formData);
-      message.success(`${file.name} uploaded successfully to "${batchNameToUse}"!`);
 
       logInfo('app.frontend.interactions', 'single_file_upload_success', 'Single file upload successful', {
         timestamp: new Date().toISOString(),
@@ -495,7 +388,6 @@ const UploadSection = ({ projectId }) => {
 
     try {
       const result = await projectsAPI.uploadMultipleImagesToProject(projectId, formData);
-      message.success(`${files.length} files uploaded successfully to "${batchNameToUse}"!`);
 
       logInfo('app.frontend.interactions', 'multiple_files_upload_success', 'Multiple files upload successful', {
         timestamp: new Date().toISOString(),
@@ -923,120 +815,6 @@ const UploadSection = ({ projectId }) => {
     }
   };
 
-  // ==================== UPLOAD CONFIGURATION ====================
-
-  /**
-   * Configuration object for Ant Design Dragger component
-   * Handles drag & drop uploads with batch name modal integration
-   */
-  const uploadProps = {
-    name: 'file',
-    multiple: true,
-
-    /**
-     * Custom upload handler for drag & drop files
-     * Shows batch name modal if no tags are selected and no batch name is set
-     */
-    customRequest: async ({ file, onSuccess, onError, onProgress }) => {
-      // Check if we need to show batch name modal for drag & drop
-      if (tags.length === 0 && !batchName.trim()) {
-        // Store the file and show batch name modal
-        setPendingFiles([{ file, onSuccess, onError, onProgress }]);
-        setBatchNameModalVisible(true);
-        return;
-      }
-
-      try {
-        // Create a batch name if not provided (fallback for tagged uploads)
-        const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
-
-        // Simulate progress for better UX
-        let percent = 0;
-        const interval = setInterval(() => {
-          percent = Math.min(99, percent + 10);
-          onProgress({ percent });
-        }, 200);
-
-        // Upload the file using our upload function
-        await uploadFile(file, batchNameToUse);
-
-        // Complete the progress and notify success
-        clearInterval(interval);
-        onProgress({ percent: 100 });
-        onSuccess("ok", null);
-
-        // Refresh recent images display
-        loadRecentImages();
-      } catch (error) {
-        onError(error);
-      }
-    },
-
-    /**
-     * Handle upload status changes and update UI accordingly
-     */
-    onChange(info) {
-      const { status } = info.file;
-
-      // Show success/error messages
-      if (status === 'done') {
-        message.success(`${info.file.name} file uploaded successfully.`);
-      } else if (status === 'error') {
-        message.error(`${info.file.name} file upload failed.`);
-      }
-
-      // Update uploaded files list for display
-      setUploadedFiles(prevFiles => {
-        const newFiles = [...prevFiles, { file: info.file, status }];
-
-        // Reset progress after a delay for visual feedback
-        if (uploadTimeout) {
-          clearTimeout(uploadTimeout);
-        }
-
-        const newTimeout = setTimeout(() => {
-          if (status === 'done' || status === 'error') {
-            setUploadProgress(0);
-          }
-        }, 500);
-
-        setUploadTimeout(newTimeout);
-        return newFiles;
-      });
-    },
-
-    // File type restrictions
-    accept: 'image/*,.jpg,.jpeg,.png,.bmp,.webp,.avif',
-
-    /**
-     * Validate files before upload
-     * Checks file type and size constraints
-     */
-    beforeUpload: (file) => {
-      // Check if file is an image
-      const isImage = file.type.startsWith('image/');
-      if (!isImage) {
-        message.error(`${file.name} is not an image file`);
-        return false;
-      }
-
-      // Check file size (20MB limit)
-      const isLt20M = file.size / 1024 / 1024 < 20;
-      if (!isLt20M) {
-        message.error(`${file.name} must be smaller than 20MB!`);
-        return false;
-      }
-
-      return true;
-    },
-
-    // Upload list display configuration
-    showUploadList: {
-      showPreviewIcon: true,
-      showRemoveIcon: true,
-      showDownloadIcon: false,
-    },
-  };
 
   // ==================== RENDER ====================
 
@@ -1050,25 +828,25 @@ const UploadSection = ({ projectId }) => {
   });
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: '1.5rem' }}>
       {/* ==================== HEADER SECTION ==================== */}
-      <div style={{ marginBottom: '24px' }}>
-        <Title level={2} style={{ margin: 0, marginBottom: '8px', background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', display: 'inline-block' }}>
-          <UploadOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+      <div style={{ marginBottom: '1.5rem' }}>
+        <Title level={2} style={{ margin: 0, marginBottom: '0.5rem', fontSize: '1.5rem', color: '#1890ff' }}>
+          <UploadOutlined style={{ marginRight: '0.5rem', fontSize: '1.5rem' }} />
           Upload
         </Title>
       </div>
 
       {/* ==================== BATCH NAME & TAGS CONFIGURATION ==================== */}
-      <Card style={{ marginBottom: '24px' }}>
-        <Row gutter={[16, 16]}>
+      <Card style={{ marginBottom: '1.5rem' }}>
+        <Row gutter={['1rem', '1rem']}>
           {/* Batch Name Input */}
           <Col span={12}>
-            <div style={{ marginBottom: '16px' }}>
-              <Text strong>Batch Name:</Text>
+            <div style={{ marginBottom: '1rem' }}>
+              <Text strong style={{ fontSize: '0.875rem' }}>Batch Name:</Text>
             </div>
             <Input
-              placeholder={`Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`}
+              placeholder={`Uploaded on ${new Date().toISOString().slice(0,10)}`}
               value={batchName}
               onChange={(e) => {
                 const newBatchName = e.target.value;
@@ -1093,17 +871,19 @@ const UploadSection = ({ projectId }) => {
               }}
               disabled={tags.length > 0} // Disabled when tags are selected
               style={{
-                marginBottom: '16px',
-                opacity: tags.length > 0 ? 0.6 : 1
+                marginBottom: '1rem',
+                opacity: tags.length > 0 ? 0.6 : 1,
+                fontSize: '0.875rem',
+                height: '2rem'
               }}
             />
           </Col>
 
           {/* Tags/Dataset Selection */}
           <Col span={12}>
-            <div style={{ marginBottom: '16px' }}>
-              <Text strong>Tags:</Text>
-              <Text type="secondary" style={{ marginLeft: '8px' }}>
+            <div style={{ marginBottom: '1rem' }}>
+              <Text strong style={{ fontSize: '0.875rem' }}>Tags:</Text>
+              <Text type="secondary" style={{ marginLeft: '0.5rem', fontSize: '0.875rem' }}>
                 <SettingOutlined />
               </Text>
             </div>
@@ -1111,12 +891,17 @@ const UploadSection = ({ projectId }) => {
               mode="multiple"
               style={{
                 width: '100%',
-                opacity: batchName.trim() ? 0.6 : 1
+                opacity: batchName.trim() ? 0.6 : 1,
+                minHeight: '2.25rem',
+                fontSize: '0.875rem'
               }}
+              className="vector-select"
+              popupClassName="vector-select-dropdown"
               placeholder="Select existing dataset or leave empty for new batch..."
               value={tags}
               onChange={(selectedTags) => {
                 setTags(selectedTags);
+                setTagWarning(null);
 
                 logInfo('app.frontend.ui', 'tags_selection_changed', 'Tags selection changed', {
                   timestamp: new Date().toISOString(),
@@ -1124,6 +909,14 @@ const UploadSection = ({ projectId }) => {
                   selectedTags: selectedTags,
                   previousBatchName: batchName
                 });
+
+                // Check if selected dataset is not in unassigned stage
+                if (selectedTags.length > 0) {
+                  const selectedDataset = availableDatasets.find(d => d.value === selectedTags[selectedTags.length - 1]);
+                  if (selectedDataset && selectedDataset.split_type && selectedDataset.split_type !== 'unassigned') {
+                    setTagWarning(`"${selectedDataset.label}" is currently in the "${selectedDataset.split_type}" stage. Move it back to Unassigned before adding new images.`);
+                  }
+                }
 
                 // Clear batch name when tags are selected (mutual exclusivity)
                 if (selectedTags.length > 0 && batchName.trim()) {
@@ -1144,24 +937,25 @@ const UploadSection = ({ projectId }) => {
         </Row>
       </Card>
 
+      {/* Tag stage warning */}
+      {tagWarning && (
+        <Alert
+          type="warning"
+          showIcon
+          message={tagWarning}
+          style={{ marginBottom: '1rem' }}
+        />
+      )}
+
       {/* ==================== UPLOAD AREA ==================== */}
       <Card>
-        {/* Drag & Drop Upload Area */}
-        <Dragger {...uploadProps} style={{ marginBottom: '16px' }}>
-          <p className="ant-upload-drag-icon">
-            <InboxOutlined style={{ fontSize: '48px', color: '#1890ff' }} />
-          </p>
-          <p className="ant-upload-text" style={{ fontSize: '18px', fontWeight: 500 }}>
-            Drag and drop file(s) to upload, or:
-          </p>
-        </Dragger>
-
         {/* Upload Buttons */}
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
           <Button
             type="primary"
-            icon={<FolderOutlined />}
-            style={{ marginRight: '8px' }}
+            icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
+            disabled={!!tagWarning}
+            style={{ marginRight: '0.5rem', height: '2.25rem', fontSize: '0.875rem' }}
             onClick={(e) => {
               e.stopPropagation();
               handleFileSelect(); // Shows batch name modal first if no tags
@@ -1170,8 +964,9 @@ const UploadSection = ({ projectId }) => {
             Select File(s)
           </Button>
           <Button
-            icon={<FolderOutlined />}
-            style={{ marginRight: '8px' }}
+            icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
+            disabled={!!tagWarning}
+            style={{ marginRight: '0.5rem', height: '2.25rem', fontSize: '0.875rem' }}
             onClick={(e) => {
               e.stopPropagation();
               handleFolderSelect(); // Uses folder name as batch name
@@ -1179,27 +974,77 @@ const UploadSection = ({ projectId }) => {
           >
             Select Folder
           </Button>
+          <Button
+            type="primary"
+            icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
+            disabled={!!tagWarning}
+            style={{ height: '2.25rem', fontSize: '0.875rem' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              importLabelsRef.current?.triggerFolderSelect();
+            }}
+          >
+            Select Folder (images + labels)
+          </Button>
         </div>
+
+        {/* Import with Labels status — shows below buttons when folder selected */}
+        <ImportWithLabelsSection ref={importLabelsRef} projectId={projectId} />
+
+        {/* Upload result — shown after file/folder select upload */}
+        {uploadResult && (
+          <div style={{
+            background: '#f5f5f5',
+            borderRadius: 8,
+            padding: '16px',
+            marginBottom: '1rem',
+            textAlign: 'center'
+          }}>
+            <div style={{ marginBottom: 8 }}>
+              {uploadResult.uploaded > 0 && (
+                <Text strong>{uploadResult.uploaded} image{uploadResult.uploaded !== 1 ? 's' : ''} uploaded to &ldquo;{uploadResult.batchName}&rdquo;</Text>
+              )}
+              {uploadResult.uploaded > 0 && uploadResult.skipped > 0 && <Text> — </Text>}
+              {uploadResult.skipped > 0 && (
+                <Text type="warning"><strong>{uploadResult.skipped}</strong> skipped</Text>
+              )}
+            </div>
+            {uploadResult.skipped > 0 && (
+              <Collapse ghost size="small" style={{ textAlign: 'left' }} items={[{
+                key: 'dup',
+                label: <Text type="secondary" style={{ fontSize: 12 }}><WarningOutlined style={{ color: '#faad14', marginRight: 4 }} />{uploadResult.skipped} image{uploadResult.skipped !== 1 ? 's' : ''} already exist in this project</Text>,
+                children: (
+                  <div style={{ maxHeight: 160, overflowY: 'auto', fontSize: 11 }}>
+                    {uploadResult.duplicateFiles.map(f => (
+                      <Tag key={f} color="orange" style={{ marginBottom: 2 }}>{f}</Tag>
+                    ))}
+                  </div>
+                )
+              }]} />
+            )}
+            <Button size="small" style={{ marginTop: 8 }} onClick={() => setUploadResult(null)}>Dismiss</Button>
+          </div>
+        )}
 
         {/* Video FPS Selection - Shows when video is selected */}
         {videoFile && Array.isArray(videoFile) && videoFile.length > 0 && (
           <div style={{
-            marginBottom: '24px',
-            padding: '16px',
+            marginBottom: '1.5rem',
+            padding: '1rem',
             backgroundColor: '#f6f6f6',
-            borderRadius: '8px',
-            border: '1px solid #d9d9d9'
+            borderRadius: '0.5rem',
+            border: '0.0625rem solid #d9d9d9'
           }}>
-            <div style={{ marginBottom: '12px' }}>
-              <Text strong>Selected Video{videoFile.length > 1 ? 's' : ''}: </Text>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <Text strong style={{ fontSize: '0.875rem' }}>Selected Video{videoFile.length > 1 ? 's' : ''}: </Text>
               {videoFile.length === 1 ? (
                 <Text>{videoFile[0].name}</Text>
               ) : (
-                <div style={{ marginTop: '8px' }}>
-                  <Text>{videoFile.length} videos selected</Text>
-                  <div style={{ marginTop: '4px', maxHeight: '100px', overflowY: 'auto' }}>
+                <div style={{ marginTop: '0.5rem' }}>
+                  <Text style={{ fontSize: '0.875rem' }}>{videoFile.length} videos selected</Text>
+                  <div style={{ marginTop: '0.25rem', maxHeight: '6.25rem', overflowY: 'auto' }}>
                     {videoFile.map((video, index) => (
-                      <div key={index} style={{ fontSize: '12px', color: '#666', marginBottom: '2px' }}>
+                      <div key={index} style={{ fontSize: '0.75rem', color: '#666', marginBottom: '0.125rem' }}>
                         {index + 1}. {video.name}
                       </div>
                     ))}
@@ -1208,10 +1053,10 @@ const UploadSection = ({ projectId }) => {
               )}
             </div>
 
-            <Row gutter={16} style={{ marginBottom: '12px' }}>
+            <Row gutter={['1rem', '1rem']} style={{ marginBottom: '0.75rem' }}>
               <Col span={12}>
-                <div style={{ marginBottom: '8px' }}>
-                  <Text strong>Extract frames every:</Text>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <Text strong style={{ fontSize: '0.875rem' }}>Extract frames every:</Text>
                 </div>
                 <Select
                   value={selectedFPS}
@@ -1224,7 +1069,9 @@ const UploadSection = ({ projectId }) => {
                     });
                     setSelectedFPS(fps);
                   }}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', height: '2.5rem' }}
+                  className="vector-select"
+                  popupClassName="vector-select-dropdown"
                   size="large"
                 >
                   <Option value={1}>1 frame per second (1 FPS)</Option>
@@ -1235,8 +1082,8 @@ const UploadSection = ({ projectId }) => {
                 </Select>
               </Col>
               <Col span={12}>
-                <div style={{ marginBottom: '8px' }}>
-                  <Text strong>Output image format:</Text>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <Text strong style={{ fontSize: '0.875rem' }}>Output image format:</Text>
                 </div>
                 <Select
                   value={selectedImageFormat}
@@ -1249,7 +1096,9 @@ const UploadSection = ({ projectId }) => {
                     });
                     setSelectedImageFormat(format);
                   }}
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', height: '2.5rem' }}
+                  className="vector-select"
+                  popupClassName="vector-select-dropdown"
                   size="large"
                 >
                   <Option value="jpeg">JPEG (.jpg) - Smaller size, good quality</Option>
@@ -1259,18 +1108,19 @@ const UploadSection = ({ projectId }) => {
               </Col>
             </Row>
 
-            <Row gutter={16} align="middle">
+            <Row gutter={['1rem', '1rem']} align="middle">
               <Col span={24} style={{ textAlign: 'center' }}>
-                <Space>
+                <Space size="0.5rem">
                   <Button
                     type="primary"
                     loading={videoProcessing}
                     onClick={processVideoUpload}
-                    style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
+                    style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', height: '2.5rem', padding: '0 1.5rem', fontSize: '0.875rem' }}
                   >
                     {videoProcessing ? 'Processing...' : 'Extract Frames'}
                   </Button>
                   <Button
+                    style={{ height: '2.5rem', padding: '0 1.5rem', fontSize: '0.875rem' }}
                     onClick={() => {
                       logUserClick('video_processing_cancel_button_clicked', 'User clicked video processing cancel button');
                       logInfo('app.frontend.ui', 'video_processing_cancelled', 'Video processing cancelled by user', {
@@ -1288,8 +1138,8 @@ const UploadSection = ({ projectId }) => {
               </Col>
             </Row>
 
-            <div style={{ marginTop: '12px' }}>
-              <Text type="secondary" style={{ fontSize: '12px' }}>
+            <div style={{ marginTop: '0.75rem' }}>
+              <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                 <strong>Note:</strong> Higher FPS will extract more frames. JPEG offers smaller files, PNG preserves quality, WebP provides modern compression. For most use cases, 2-5 FPS with JPEG format provides good coverage.
               </Text>
             </div>
@@ -1324,22 +1174,29 @@ const UploadSection = ({ projectId }) => {
             });
 
             setUploading(true);
-            const batchNameToUse = batchName || `Uploaded on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`;
+            const batchNameToUse = batchName || `Uploaded on ${new Date().toISOString().slice(0,10)}`;
 
             try {
-              // Use bulk upload for multiple files, single upload for one file
+              setUploadResult(null);
+              let result;
               if (files.length > 1) {
-                await uploadMultipleFiles(files, batchNameToUse);
+                result = await uploadMultipleFiles(files, batchNameToUse);
+                setUploadResult({
+                  uploaded: result.results?.successful_uploads ?? files.length,
+                  skipped: result.skipped_duplicates ?? 0,
+                  duplicateFiles: result.duplicate_files || [],
+                  batchName: result.dataset_name || batchNameToUse
+                });
               } else {
-                // For single file, use the uploadFile function
-                for (const file of files) {
-                  await uploadFile(file, batchNameToUse);
-                }
+                result = await uploadFile(files[0], batchNameToUse);
+                setUploadResult({
+                  uploaded: result?.duplicate ? 0 : 1,
+                  skipped: result?.duplicate ? 1 : 0,
+                  duplicateFiles: result?.duplicate ? [files[0].name] : [],
+                  batchName: result?.dataset_name || batchNameToUse
+                });
               }
-
-              // Refresh UI after successful upload
               loadRecentImages();
-              message.success(`${files.length} file(s) uploaded successfully to "${batchNameToUse}"!`);
             } catch (error) {
               logError('app.frontend.interactions', 'file_upload_error', 'File upload error via file input', {
                 timestamp: new Date().toISOString(),
@@ -1380,7 +1237,7 @@ const UploadSection = ({ projectId }) => {
             // Extract folder name from the first file's path
             const firstFile = files[0];
             const pathParts = firstFile.webkitRelativePath.split('/');
-            const folderName = pathParts[0] || `Folder_${new Date().toLocaleDateString()}`;
+            const folderName = pathParts[0] || `Folder_${new Date().toISOString().slice(0,10)}`;
 
             logInfo('app.frontend.interactions', 'folder_selected_for_upload', 'Folder selected for upload', {
               timestamp: new Date().toISOString(),
@@ -1393,14 +1250,15 @@ const UploadSection = ({ projectId }) => {
             setUploading(true);
 
             try {
-              // Upload all files in the folder using folder name as batch name
-              for (const file of files) {
-                await uploadFile(file, folderName);
-              }
-
-              // Refresh UI after successful upload
+              setUploadResult(null);
+              const result = await uploadMultipleFiles(files, folderName);
+              setUploadResult({
+                uploaded: result.results?.successful_uploads ?? files.length,
+                skipped: result.skipped_duplicates ?? 0,
+                duplicateFiles: result.duplicate_files || [],
+                batchName: folderName
+              });
               loadRecentImages();
-              message.success(`${files.length} file(s) uploaded successfully to "${folderName}"!`);
             } catch (error) {
               logError('app.frontend.interactions', 'folder_upload_error', 'Folder upload error', {
                 timestamp: new Date().toISOString(),
@@ -1419,21 +1277,21 @@ const UploadSection = ({ projectId }) => {
         />
 
         {/* ==================== SUPPORTED FORMATS SECTION ==================== */}
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <Title level={4} style={{ color: '#666' }}>Supported Formats</Title>
-          <Row gutter={[24, 16]} justify="center">
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          <Title level={4} style={{ color: '#666', fontSize: '1.25rem' }}>Supported Formats</Title>
+          <Row gutter={['1.5rem', '1rem']} justify="center">
             {/* Images Format */}
             <Col>
               <div style={{ textAlign: 'center' }}>
-                <PictureOutlined style={{ fontSize: '24px', color: '#1890ff' }} />
-                <div style={{ marginTop: '8px' }}>
-                  <Text strong>Images</Text>
+                <PictureOutlined style={{ fontSize: '1.5rem', color: '#1890ff' }} />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <Text strong style={{ fontSize: '0.875rem' }}>Images</Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                     .jpg, .jpeg, .png, .bmp, .webp, .avif
                   </Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '11px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
                     Common image formats
                   </Text>
                 </div>
@@ -1443,15 +1301,15 @@ const UploadSection = ({ projectId }) => {
             {/* Annotations Format */}
             <Col>
               <div style={{ textAlign: 'center' }}>
-                <TagOutlined style={{ fontSize: '24px', color: '#52c41a' }} />
-                <div style={{ marginTop: '8px' }}>
-                  <Text strong>Annotations</Text>
+                <TagOutlined style={{ fontSize: '1.5rem', color: '#52c41a' }} />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <Text strong style={{ fontSize: '0.875rem' }}>Annotations</Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                     .json, .xml, .txt
                   </Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '11px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
                     Label files
                   </Text>
                 </div>
@@ -1461,22 +1319,22 @@ const UploadSection = ({ projectId }) => {
             {/* Videos Format */}
             <Col>
               <div style={{ textAlign: 'center' }}>
-                <YoutubeOutlined style={{ fontSize: '24px', color: '#722ed1' }} />
-                <div style={{ marginTop: '8px' }}>
-                  <Text strong>Videos</Text>
+                <YoutubeOutlined style={{ fontSize: '1.5rem', color: '#722ed1' }} />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <Text strong style={{ fontSize: '0.875rem' }}>Videos</Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                     .mp4, .mov, .avi
                   </Text>
                   <br />
-                  <Text type="secondary" style={{ fontSize: '11px' }}>
+                  <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
                     Video files
                   </Text>
                 </div>
               </div>
             </Col>
           </Row>
-          <Text type="secondary" style={{ fontSize: '11px' }}>
+          <Text type="secondary" style={{ fontSize: '0.6875rem' }}>
             (Max size of 20MB and 16,000 pixels for images).
           </Text>
         </div>
@@ -1484,77 +1342,62 @@ const UploadSection = ({ projectId }) => {
         <Divider />
 
         {/* ==================== ADDITIONAL UPLOAD OPTIONS ==================== */}
-        <div style={{ marginBottom: '24px' }}>
-          <Title level={5}>Need images to get started? We've got you covered.</Title>
+        <div style={{ marginBottom: '1.5rem' }}>
+          <Title level={5} style={{ fontSize: '1rem', marginBottom: '1rem' }}>Need images to get started? We've got you covered.</Title>
 
           {/* Video Upload Section */}
-          <Card size="small" style={{ marginBottom: '16px' }}>
+          <Card size="small" style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <YoutubeOutlined style={{ fontSize: '20px', color: '#722ed1', marginRight: '12px' }} />
+              <YoutubeOutlined style={{ fontSize: '1.25rem', color: '#722ed1', marginRight: '0.75rem' }} />
               <div style={{ flex: 1 }}>
-                <Text strong>Upload Videos and Extract Frames</Text>
+                <Text strong style={{ fontSize: '0.875rem' }}>Upload Videos and Extract Frames</Text>
                 <br />
-                <Text type="secondary" style={{ fontSize: '12px' }}>
+                <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                   Upload single/multiple .mp4, .mov, or .avi files or select a folder containing videos
                 </Text>
               </div>
             </div>
-            <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <Button
                 type="primary"
-                icon={<YoutubeOutlined />}
+                icon={<YoutubeOutlined style={{ fontSize: '0.875rem' }} />}
                 loading={videoProcessing}
                 onClick={handleVideoSelect}
-                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
+                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', height: '2rem', fontSize: '0.8125rem' }}
               >
                 {videoProcessing ? 'Processing...' : 'Select Video File(s)'}
               </Button>
               <Button
-                icon={<FolderOutlined />}
+                icon={<FolderOutlined style={{ fontSize: '0.875rem' }} />}
                 loading={videoProcessing}
                 onClick={handleVideoFolderSelect}
-                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', color: 'white' }}
+                style={{ backgroundColor: '#722ed1', borderColor: '#722ed1', color: 'white', height: '2rem', fontSize: '0.8125rem' }}
               >
                 {videoProcessing ? 'Processing...' : 'Select Video Folder'}
               </Button>
               {videoFile && Array.isArray(videoFile) && videoFile.length > 0 && (
-                <Text type="secondary" style={{ fontSize: '12px' }}>
+                <Text type="secondary" style={{ fontSize: '0.75rem' }}>
                   Selected: {videoFile.length} video{videoFile.length > 1 ? 's' : ''}
                 </Text>
               )}
             </div>
           </Card>
 
-          {/* YouTube Video Import */}
-          <Card size="small" style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <YoutubeOutlined style={{ fontSize: '20px', color: '#ff4d4f', marginRight: '12px' }} />
-              <div style={{ flex: 1 }}>
-                <Text strong>Import YouTube Video</Text>
-              </div>
-            </div>
-            <Input
-              placeholder="e.g. https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-              suffix={<Button type="primary" size="small">→</Button>}
-              style={{ marginTop: '12px' }}
-            />
-          </Card>
-
           {/* API and Cloud Provider Options */}
-          <Row gutter={16}>
+          <Row gutter={['1rem', '1rem']}>
             <Col span={12}>
               <Card size="small">
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <ApiOutlined style={{ fontSize: '20px', color: '#1890ff', marginRight: '12px' }} />
-                  <Text strong>Collect Images via the Upload API</Text>
+                  <ApiOutlined style={{ fontSize: '1.25rem', color: '#1890ff', marginRight: '0.75rem' }} />
+                  <Text strong style={{ fontSize: '0.8125rem' }}>Collect Images via the Upload API</Text>
                 </div>
               </Card>
             </Col>
             <Col span={12}>
               <Card size="small">
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <CloudOutlined style={{ fontSize: '20px', color: '#52c41a', marginRight: '12px' }} />
-                  <Text strong>Import From Cloud Providers</Text>
+                  <CloudOutlined style={{ fontSize: '1.25rem', color: '#52c41a', marginRight: '0.75rem' }} />
+                  <Text strong style={{ fontSize: '0.8125rem' }}>Import From Cloud Providers</Text>
                 </div>
               </Card>
             </Col>
@@ -1563,92 +1406,71 @@ const UploadSection = ({ projectId }) => {
       </Card>
 
       {/* ==================== UPLOAD STATUS & PROGRESS ==================== */}
-      {(uploading || uploadedFiles.length > 0 || recentImages.length > 0) && (
-        <Card title="Upload Status" style={{ marginTop: '24px' }}>
-          {/* Upload Progress Bar */}
-          {uploading && (
-            <div style={{ marginBottom: '16px' }}>
-              <Text>Uploading files...</Text>
-              <Progress percent={uploadProgress} status="active" />
-            </div>
-          )}
-
-          {/* Recently Uploaded Files Display */}
-          {(uploadedFiles.length > 0 || recentImages.length > 0) && (
-            <div>
-              <Title level={5}>Recently Uploaded ({recentImages.length || uploadedFiles.length} files)</Title>
-              <Row gutter={[16, 16]}>
-                {/* Display recent images or uploaded files (max 6) */}
-                {(recentImages.length > 0 ? recentImages : uploadedFiles.slice(-6)).map((fileInfo, index) => (
-                  <Col span={4} key={index}>
-                    <Card
-                      size="small"
-                      cover={
-                        <div style={{
-                          height: '80px',
-                          background: '#f5f5f5',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          {/* Show thumbnail if available, otherwise show placeholder icon */}
-                          {fileInfo.thumbnail_url ? (
-                            <img
-                              src={fileInfo.thumbnail_url}
-                              alt={fileInfo.filename || 'Image'}
-                              style={{ maxHeight: '80px', maxWidth: '100%' }}
-                            />
-                          ) : (
-                            <PictureOutlined style={{ fontSize: '24px', color: '#999' }} />
-                          )}
-                        </div>
+      {recentImages.length > 0 && (
+        <Card title={<span style={{ fontSize: '1rem' }}>Upload Status</span>} style={{ marginTop: '1.5rem' }}>
+          <div>
+            <Title level={5} style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>Recently Uploaded ({recentImages.length} files)</Title>
+            <Row gutter={['1rem', '1rem']}>
+              {recentImages.map((fileInfo, index) => (
+                <Col span={4} key={index}>
+                  <Card
+                    size="small"
+                    cover={
+                      <div style={{
+                        height: '5rem',
+                        background: '#f5f5f5',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        {fileInfo.thumbnail_url ? (
+                          <img
+                            src={fileInfo.thumbnail_url}
+                            alt={fileInfo.filename || 'Image'}
+                            style={{ maxHeight: '5rem', maxWidth: '100%' }}
+                          />
+                        ) : (
+                          <PictureOutlined style={{ fontSize: '1.5rem', color: '#999' }} />
+                        )}
+                      </div>
+                    }
+                  >
+                    <Card.Meta
+                      title={
+                        <Text ellipsis style={{ fontSize: '0.75rem' }}>
+                          {fileInfo.filename || 'Unknown'}
+                        </Text>
                       }
-                    >
-                      <Card.Meta
-                        title={
-                          <Text ellipsis style={{ fontSize: '12px' }}>
-                            {fileInfo.filename || fileInfo.file?.name || 'Unknown'}
-                          </Text>
-                        }
-                        description={
-                          <Text type="secondary" style={{ fontSize: '11px' }}>
-                            {fileInfo.file?.size ? `${(fileInfo.file.size / 1024).toFixed(1)} KB` : ''}
-                          </Text>
-                        }
-                      />
-                    </Card>
-                  </Col>
-                ))}
-              </Row>
-
-              {/* Show "View all" button if more than 6 files */}
-              {(recentImages.length > 6 || uploadedFiles.length > 6) && (
-                <div style={{ textAlign: 'center', marginTop: '16px' }}>
-                  <Button type="link">
-                    View all {recentImages.length || uploadedFiles.length} uploaded files
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+                    />
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+            {recentImages.length > 6 && (
+              <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                <Button type="link" style={{ fontSize: '0.8125rem' }}>
+                  View all {recentImages.length} uploaded files
+                </Button>
+              </div>
+            )}
+          </div>
         </Card>
       )}
 
       {/* ==================== BATCH NAME MODAL ==================== */}
       <Modal
         title="Enter Batch Name"
+        width="25rem"
         open={batchNameModalVisible}
         onOk={handleBatchNameConfirm}
         onCancel={() => {
           logUserClick('batch_name_modal_cancel_button_clicked', 'User clicked batch name modal cancel button');
           logInfo('app.frontend.ui', 'batch_name_modal_cancelled', 'Batch name modal cancelled', {
             timestamp: new Date().toISOString(),
-            projectId: projectId,
-            pendingFilesCount: pendingFiles.length
+            projectId: projectId
           });
           setBatchNameModalVisible(false);
           setBatchName('');
-          setPendingFiles([]); // Clear any pending files
         }}
         okText="Continue"
         cancelText="Cancel"
@@ -1659,6 +1481,7 @@ const UploadSection = ({ projectId }) => {
           onChange={(e) => setBatchName(e.target.value)}
           onPressEnter={handleBatchNameConfirm} // Allow Enter key to confirm
           autoFocus // Auto-focus on modal open
+          style={{ fontSize: '0.875rem', height: '2.25rem' }}
         />
       </Modal>
     </div>

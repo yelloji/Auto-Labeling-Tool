@@ -4,6 +4,10 @@ import { Card, Typography, Table, Tag, Tooltip, Tabs } from 'antd';
 import AnalyticsView from '../AnalyticsView/AnalyticsView';
 import ViewConfig from '../ConfigurationView/ViewConfig';
 import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
+import ModelManagerView from '../ModelManagerView/ModelManagerView';
+import ValidationView from '../ValidationView/ValidationView';
+import PredictionView from '../PredictionView/PredictionView';
+import ComparisonEngineView from '../ComparisonEngine/ComparisonEngineView';
 import './OverviewView.css';
 
 const { Title, Text } = Typography;
@@ -467,14 +471,30 @@ const OverviewView = ({ training }) => {
                     )
                 },
                 {
+                    key: 'model-manager',
+                    label: 'Model Manager',
+                    children: (
+                        <ModelManagerView
+                            projectId={training.projectId}
+                            trainingId={training.id}
+                            sessionName={training.name}
+                        />
+                    )
+                },
+                {
                     key: 'validation',
                     label: 'Validation',
-                    children: (
-                        <div style={{ padding: '20px', textAlign: 'center' }}>
-                            <h3>Custom Validation</h3>
-                            <p>Coming soon...</p>
-                        </div>
-                    )
+                    children: <ValidationView training={training} />
+                },
+                {
+                    key: 'prediction',
+                    label: 'Prediction',
+                    children: <PredictionView training={training} />
+                },
+                {
+                    key: 'comparison',
+                    label: 'Comparison Engine',
+                    children: <ComparisonEngineView currentTraining={training} />
                 }
             ]} />
         </div>

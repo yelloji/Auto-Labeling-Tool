@@ -74,12 +74,15 @@ def get_labels(
                 })
                 db.commit()
     
-        # Get all labels for this project
+        # Get all labels for this project (excluding the reserved 'null' marker)
         logger.debug("app.database", f"Fetching labels for project", "labels_fetch", {
             "project_id": project_id
         })
         
-        labels = db.query(Label).filter(Label.project_id == project_id).all()
+        labels = db.query(Label).filter(
+            Label.project_id == project_id,
+            Label.name != 'null'  # Filter out reserved null label
+        ).all()
         
         logger.info("operations.operations", f"Labels retrieved successfully", "labels_retrieved", {
             "project_id": project_id,
@@ -104,7 +107,7 @@ def get_labels(
             Dataset.project_id == project_id
         ).all()
         
-        annotation_classes = set(ann[0] for ann in annotations_query if ann[0])
+        annotation_classes = set(ann[0] for ann in annotations_query if ann[0] and ann[0].lower() != 'null')
         
         logger.debug("operations.operations", f"Annotation classes analysis", "annotation_analysis", {
             "project_id": project_id,
@@ -203,6 +206,13 @@ def create_label(project_id: int, label: dict = Body(...), db: Session = Depends
                 "provided_data": label
             })
             raise HTTPException(status_code=400, detail="Label name is required")
+        
+        # Block manual creation of reserved 'null' label
+        if name.lower() == 'null':
+            logger.warning("errors.validation", f"Manual creation of reserved 'null' label blocked", "null_label_blocked", {
+                "project_id": project_id
+            })
+            raise HTTPException(status_code=400, detail="The 'null' label is reserved for system use")
         
         if not color:
             logger.warning("errors.validation", f"Label color is missing", "missing_label_color", {
@@ -318,6 +328,14 @@ def update_label(
         # Update fields
         if "name" in label:
             new_name = label["name"]
+            
+            # Block renaming to reserved 'null' label
+            if new_name.lower() == 'null':
+                logger.warning("errors.validation", f"Renaming to reserved 'null' label blocked", "null_label_rename_blocked", {
+                    "project_id": project_id,
+                    "label_id": label_id
+                })
+                raise HTTPException(status_code=400, detail="The 'null' label is reserved for system use")
             
             # Check if the new name conflicts with existing labels (excluding current label)
             logger.debug("app.database", f"Checking for name conflicts", "name_conflict_check", {

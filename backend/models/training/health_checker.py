@@ -14,7 +14,7 @@ def check_training_health():
     Periodically checks the health of running training sessions.
     If a process ID is no longer running, updates the session status.
     """
-    logger.info("system.startup", "Training health checker loop started", "health_checker_loop_start")
+    logger.info("app.startup", "Training health checker loop started", "health_checker_loop_start")
     
     while True:
         try:

@@ -1,11 +1,11 @@
 import React, { useEffect } from 'react';
-import { Select, Tag } from 'antd';
+import { Select, Tag, Tooltip } from 'antd';
 import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
 
 const { Option } = Select;
 
-const AnnotationSplitControl = ({ 
-  currentSplit = 'train', 
+const AnnotationSplitControl = ({
+  currentSplit = 'train',
   onSplitChange,
   style = {}
 }) => {
@@ -59,21 +59,32 @@ const AnnotationSplitControl = ({
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', ...style }}>
-      <Tag color={getSplitColor(currentSplit)} style={{ margin: 0 }}>
-        {getSplitLabel(currentSplit).toUpperCase()}
-      </Tag>
-      <Select
-        value={currentSplit}
-        onChange={handleSplitChange}
-        style={{ width: 120 }}
-        size="small"
-      >
-        <Option value="train">Training</Option>
-        <Option value="val">Validation</Option>
-        <Option value="test">Testing</Option>
-      </Select>
-    </div>
+    <Tooltip title="Dataset Split: Assign this image to the Training, Validation, or Testing subset." placement="bottomRight" overlayStyle={{ zIndex: 10000 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, ...style, cursor: 'help' }}>
+        <Tag color={getSplitColor(currentSplit)} style={{ margin: 0, padding: '0 0.5rem', fontSize: '0.8125rem', height: '1.625rem', lineHeight: '1.5rem' }}>
+          {getSplitLabel(currentSplit).toUpperCase()}
+        </Tag>
+        <Select
+          value={currentSplit}
+          onChange={handleSplitChange}
+          style={{
+            minWidth: '6rem',
+            flexShrink: 0,
+            fontSize: '0.8125rem'
+          }}
+          dropdownStyle={{
+            zIndex: 3100
+          }}
+          className="vector-select"
+          popupClassName="vector-select-dropdown"
+          size="small"
+        >
+          <Option value="train">Training</Option>
+          <Option value="val">Validation</Option>
+          <Option value="test">Testing</Option>
+        </Select>
+      </div>
+    </Tooltip>
   );
 };
 

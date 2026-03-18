@@ -85,7 +85,7 @@ async def assign_images_to_splits(
 
         # Fetch all labeled images
         logger.debug("app.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
-        labeled_images = ImageOperations.get_images_by_dataset(db, dataset_id, labeled_only=True)
+        labeled_images = ImageOperations.get_images_by_dataset(db, dataset_id, limit=99999, labeled_only=True)
         if not labeled_images:
             logger.warning("errors.validation", f"No labeled images found in dataset {dataset_id}", "no_labeled_images", {
                 "dataset_id": dataset_id
@@ -288,7 +288,7 @@ async def get_dataset_split_stats(
         # Get all labeled images for this dataset
         logger.debug("app.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
         labeled_images = ImageOperations.get_images_by_dataset(
-            db, dataset_id, labeled_only=True
+            db, dataset_id, limit=99999, labeled_only=True
         )
         
         # Count images in each split section
@@ -381,7 +381,7 @@ async def get_images_by_split(
         # Get all labeled images for this dataset
         logger.debug("app.database", f"Fetching labeled images for dataset {dataset_id}", "database_query")
         labeled_images = ImageOperations.get_images_by_dataset(
-            db, dataset_id, labeled_only=True
+            db, dataset_id, limit=99999, labeled_only=True
         )
         
         # Filter by split section if provided

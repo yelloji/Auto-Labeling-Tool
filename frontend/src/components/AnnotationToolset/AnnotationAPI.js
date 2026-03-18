@@ -22,7 +22,7 @@ class AnnotationAPI {
       });
 
       const response = await axios.get(`${API_BASE}/images/${imageId}/annotations`);
-      
+
       logInfo('app.frontend.interactions', 'get_image_annotations_success', 'Image annotations fetched successfully', {
         imageId,
         annotationCount: response.data?.length || 0
@@ -61,56 +61,56 @@ class AnnotationAPI {
         });
         throw new Error('image_id is required for creating annotations');
       }
-      
+
       console.log('CREATING ANNOTATION WITH TYPE:', annotation.type);
       console.log('FULL ANNOTATION DATA:', JSON.stringify(annotation));
-      
+
       // Convert annotation to the format expected by the backend
       const annotationData = {
         class_name: annotation.class_name || annotation.label,
         confidence: annotation.confidence || 1.0,
         image_id: annotation.image_id
       };
-      
+
       // Only include class_id if it's explicitly provided (should be rare)
       if (annotation.class_id !== undefined && annotation.class_id !== null) {
         annotationData.class_id = annotation.class_id;
       }
-      
+
       // CRITICAL FIX: Handle each type separately and explicitly
       if (annotation.type === 'polygon' && (Array.isArray(annotation.segmentation) || Array.isArray(annotation.points))) {
         // Use segmentation if available, otherwise use points
         const polygonPoints = annotation.segmentation || annotation.points;
-        
+
         logInfo('app.frontend.ui', 'polygon_annotation_processing', 'Processing polygon annotation', {
           segmentationPoints: polygonPoints.length,
           imageId: annotation.image_id
         });
 
         console.log('SAVING POLYGON WITH POINTS:', polygonPoints.length);
-        
+
         // CRITICAL: Set the type explicitly for the backend
         annotationData.type = 'polygon';
-        
+
         // For polygons, we MUST set the segmentation field
         // Make a deep copy to avoid reference issues
         annotationData.segmentation = JSON.parse(JSON.stringify(polygonPoints));
-        
+
         // Calculate bounding box from points
         const xs = polygonPoints.map(p => p.x);
         const ys = polygonPoints.map(p => p.y);
-        
+
         // Set both coordinate formats for compatibility
         annotationData.x = Math.min(...xs);
         annotationData.y = Math.min(...ys);
         annotationData.width = Math.max(...xs) - Math.min(...xs);
         annotationData.height = Math.max(...ys) - Math.min(...ys);
-        
+
         annotationData.x_min = Math.min(...xs);
         annotationData.y_min = Math.min(...ys);
         annotationData.x_max = Math.max(...xs);
         annotationData.y_max = Math.max(...ys);
-        
+
         console.log('POLYGON ANNOTATION DATA:', {
           type: annotationData.type,
           segmentation_points: annotationData.segmentation.length,
@@ -119,7 +119,7 @@ class AnnotationAPI {
           x_max: annotationData.x_max,
           y_max: annotationData.y_max
         });
-      } 
+      }
       // CRITICAL FIX: Only handle box type in the else if, not in a generic else
       else if (annotation.type === 'box') {
         logInfo('app.frontend.ui', 'box_annotation_processing', 'Processing box annotation', {
@@ -129,18 +129,18 @@ class AnnotationAPI {
 
         // CRITICAL: Set the type explicitly for the backend
         annotationData.type = 'box';
-        
+
         // For boxes, set both coordinate formats
         annotationData.x = annotation.x;
         annotationData.y = annotation.y;
         annotationData.width = annotation.width;
         annotationData.height = annotation.height;
-        
+
         annotationData.x_min = annotation.x;
         annotationData.y_min = annotation.y;
         annotationData.x_max = annotation.x + annotation.width;
         annotationData.y_max = annotation.y + annotation.height;
-        
+
         console.log('BOX ANNOTATION DATA:', {
           type: annotationData.type,
           x_min: annotationData.x_min,
@@ -159,11 +159,11 @@ class AnnotationAPI {
         throw new Error(`Unknown annotation type: ${annotation.type}`);
       }
 
-      
+
       const response = await axios.post(`${API_BASE}/images/${imageId}/annotations`, {
         annotations: [annotationData]
       });
-      
+
       logInfo('app.frontend.interactions', 'create_annotation_success', 'Annotation created successfully', {
         annotationType: annotation.type,
         imageId: annotation.image_id,
@@ -200,7 +200,7 @@ class AnnotationAPI {
       console.log('Updating annotation:', annotationId, updates);
       // Correct endpoint: annotations router mounted under /api/v1/images
       const response = await axios.put(`${API_BASE}/images/${annotationId}`, updates);
-      
+
       logInfo('app.frontend.interactions', 'update_annotation_success', 'Annotation updated successfully', {
         annotationId,
         responseData: response.data
@@ -230,29 +230,29 @@ class AnnotationAPI {
       console.error('No annotation ID provided for deletion');
       throw new Error('Annotation ID is required for deletion');
     }
-    
+
     try {
       logInfo('app.frontend.interactions', 'delete_annotation_started', 'Deleting annotation started', {
         annotationId
       });
 
       console.log('AnnotationAPI: Sending DELETE request for annotation:', annotationId);
-      
+
       // The annotations router is mounted at /api/v1/images
       // The delete endpoint is /annotations/{annotation_id}
       // So the full path is /api/v1/images/annotations/{annotation_id}
       const deleteUrl = `${API_BASE}/images/annotations/${annotationId}`;
       console.log('DELETE URL:', deleteUrl);
-      
+
       const response = await axios.delete(deleteUrl);
-      
+
       logInfo('app.frontend.interactions', 'delete_annotation_success', 'Annotation deleted successfully', {
         annotationId,
         responseStatus: response.status
       });
 
       console.log('Delete annotation response:', response);
-      
+
       return true;
     } catch (error) {
       logError('app.frontend.validation', 'delete_annotation_failed', 'Failed to delete annotation', {
@@ -279,7 +279,7 @@ class AnnotationAPI {
     });
 
     const labelMap = new Map();
-    
+
     annotations.forEach(annotation => {
       if (annotation.label_id) {
         labelMap.set(annotation.label_id, {
@@ -292,7 +292,7 @@ class AnnotationAPI {
     });
 
     const labels = Array.from(labelMap.values());
-    
+
     logInfo('app.frontend.ui', 'get_image_labels_completed', 'Image labels processed successfully', {
       uniqueLabelCount: labels.length,
       totalAnnotationCount: annotations?.length || 0
@@ -316,24 +316,24 @@ class AnnotationAPI {
       console.warn('Invalid label ID provided to generateLabelColor:', labelId);
       return '#CCCCCC'; // Default gray color
     }
-    
+
     const colors = [
       '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
       '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
     ];
-    
+
     let hash = 0;
     for (let i = 0; i < labelId.length; i++) {
       hash = labelId.charCodeAt(i) + ((hash << 5) - hash);
     }
-    
+
     const color = colors[Math.abs(hash) % colors.length];
-    
+
     logInfo('app.frontend.ui', 'label_color_generated', 'Label color generated successfully', {
       labelId,
       generatedColor: color
     });
-    
+
     return color;
   }
 
@@ -358,9 +358,9 @@ class AnnotationAPI {
     }
 
     if (annotation.type === 'box') {
-      const isValid = annotation.x !== undefined && annotation.y !== undefined && 
-             annotation.width !== undefined && annotation.height !== undefined;
-      
+      const isValid = annotation.x !== undefined && annotation.y !== undefined &&
+        annotation.width !== undefined && annotation.height !== undefined;
+
       if (!isValid) {
         logError('app.frontend.validation', 'annotation_validation_failed_box', 'Box annotation validation failed - missing coordinates', {
           hasX: annotation.x !== undefined,
@@ -369,20 +369,20 @@ class AnnotationAPI {
           hasHeight: annotation.height !== undefined
         });
       }
-      
+
       return isValid;
     }
 
     if (annotation.type === 'polygon') {
       const isValid = Array.isArray(annotation.coordinates) && annotation.coordinates.length >= 3;
-      
+
       if (!isValid) {
         logError('app.frontend.validation', 'annotation_validation_failed_polygon', 'Polygon annotation validation failed - insufficient coordinates', {
           coordinatesType: typeof annotation.coordinates,
           coordinatesLength: annotation.coordinates?.length || 0
         });
       }
-      
+
       return isValid;
     }
 
@@ -406,22 +406,22 @@ class AnnotationAPI {
       });
 
       console.log(`Fetching images for dataset ID: ${datasetId} with skip=${skip} limit=${limit}`);
-      
+
       // First, get the dataset information to determine which project it belongs to
       const datasetResponse = await axios.get(`${API_BASE}/datasets/${datasetId}`);
       const dataset = datasetResponse.data;
       const projectId = dataset.project_id;
-      
+
       logInfo('app.frontend.ui', 'dataset_project_mapping', 'Dataset project mapping found', {
         datasetId,
         projectId
       });
 
       console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
-      
+
       // Now fetch images for this specific dataset with parameters
       const response = await axios.get(`${API_BASE}/datasets/${datasetId}/images?skip=${skip}&limit=${limit}`);
-      
+
       const imageCount = response.data.images?.length || 0;
       logInfo('app.frontend.interactions', 'get_dataset_images_success', 'Dataset images fetched successfully', {
         datasetId,
@@ -430,7 +430,7 @@ class AnnotationAPI {
       });
 
       console.log(`Found ${imageCount} images for dataset ${datasetId}`);
-      
+
       return response.data;
     } catch (error) {
       logError('app.frontend.validation', 'get_dataset_images_failed', 'Failed to fetch dataset images', {
@@ -458,13 +458,17 @@ class AnnotationAPI {
 
       // First get the project ID from the dataset ID
       let projectId;
-      
+
       try {
         // Try to get the dataset info first to find its project
         console.log(`Getting dataset info for ID: ${datasetId}`);
         const datasetResponse = await axios.get(`${API_BASE}/datasets/${datasetId}`);
         projectId = datasetResponse.data.project_id;
-        
+
+        if (!projectId) {
+          throw new Error('Project ID not found in dataset response');
+        }
+
         logInfo('app.frontend.ui', 'project_id_resolved', 'Project ID resolved from dataset', {
           datasetId,
           projectId
@@ -472,24 +476,31 @@ class AnnotationAPI {
 
         console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
       } catch (e) {
-        // If dataset lookup fails, try using the datasetId as projectId directly
-        logInfo('app.frontend.ui', 'project_id_fallback', 'Using datasetId as projectId fallback', {
-          datasetId
-        });
-        console.log('Could not get dataset info, using datasetId as projectId');
-        projectId = parseInt(datasetId);
+        // Fallback: If dataset lookup fails, check if the datasetId itself is a number (it might be a projectId)
+        // DO NOT use parseInt on UUIDs as it returns NaN
+        if (!isNaN(datasetId) && !isNaN(parseFloat(datasetId))) {
+          projectId = datasetId;
+          console.log('Using datasetId as numeric projectId');
+        } else {
+          logError('app.frontend.validation', 'project_id_unresolved', 'Could not resolve Project ID from Dataset ID', {
+            datasetId,
+            error: e.message
+          });
+          console.error(`Could not resolve Project ID for dataset ${datasetId}. Aborting labels fetch.`);
+          return []; // Return empty labels instead of calling /projects/NaN/labels
+        }
       }
-      
+
       console.log(`Fetching project labels for project ID: ${projectId}`);
-      
+
       // Make the API call to get all labels for this project
       console.log(`GET ${API_BASE}/projects/${projectId}/labels`);
       const response = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
-      
+
       // The API returns an array directly, not wrapped in a 'labels' property
       const labels = Array.isArray(response.data) ? response.data : [];
       console.log('Raw labels from API:', labels);
-      
+
       if (labels.length === 0) {
         console.log('No labels found in database, checking local storage');
         // Try to get from local storage
@@ -498,7 +509,7 @@ class AnnotationAPI {
           try {
             const parsedLabels = JSON.parse(storedLabels);
             console.log('Found labels in local storage:', parsedLabels);
-            
+
             // CRITICAL: Save these labels to the database one by one
             for (const label of parsedLabels) {
               try {
@@ -511,15 +522,15 @@ class AnnotationAPI {
                 console.error(`Failed to save local label to database: ${label.name}`, e);
               }
             }
-            
+
             // After saving all labels, fetch them again from the API
             console.log('Fetching labels again after saving local labels');
             const refreshResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
             const refreshedLabels = Array.isArray(refreshResponse.data) ? refreshResponse.data : [];
-            
+
             if (refreshedLabels.length > 0) {
               console.log('Successfully saved labels to database:', refreshedLabels);
-              
+
               // Transform labels to the expected format
               const formattedLabels = refreshedLabels.map(label => ({
                 id: label.id,
@@ -528,20 +539,20 @@ class AnnotationAPI {
                 count: label.count || 0, // Use count from API if available
                 projectCount: label.count || 0 // Store project-wide count
               }));
-              
+
               // Store in local storage as backup
               localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
-              
+
               return formattedLabels;
             }
-            
+
             return parsedLabels;
           } catch (parseError) {
             console.error('Failed to parse stored labels:', parseError);
           }
         }
       }
-      
+
       // Transform labels to the expected format
       const formattedLabels = labels.map(label => ({
         id: label.id,
@@ -550,17 +561,17 @@ class AnnotationAPI {
         count: label.count || 0, // Use count from API if available
         projectCount: label.count || 0 // Store project-wide count
       }));
-      
+
       logInfo('app.frontend.interactions', 'get_project_labels_success', 'Project labels fetched and formatted successfully', {
         projectId,
         labelCount: formattedLabels.length
       });
 
       console.log('Formatted labels:', formattedLabels);
-      
+
       // Store in local storage as backup
       localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
-      
+
       return formattedLabels;
     } catch (error) {
       logError('app.frontend.validation', 'get_project_labels_failed', 'Failed to fetch project labels', {
@@ -570,7 +581,7 @@ class AnnotationAPI {
       });
       console.error('Failed to fetch project labels:', error);
       console.error('Error details:', error.response?.data || error.message);
-      
+
       // Fallback to local storage if API fails
       try {
         const storedLabels = localStorage.getItem(`project_labels_${datasetId}`);
@@ -581,11 +592,11 @@ class AnnotationAPI {
       } catch (e) {
         console.error('Failed to parse stored labels:', e);
       }
-      
+
       return [];
     }
   }
-  
+
   /**
    * Create or update a project label
    * @param {string} datasetId - Dataset ID (or project ID)
@@ -593,6 +604,7 @@ class AnnotationAPI {
    * @returns {Promise<Object>} Created or updated label
    */
   static async saveProjectLabel(datasetId, label) {
+    let projectId = null;
     try {
       logInfo('app.frontend.interactions', 'save_project_label_started', 'Saving project label started', {
         datasetId,
@@ -601,48 +613,58 @@ class AnnotationAPI {
       });
 
       console.log('Saving project label:', label, 'for dataset:', datasetId);
-      
+
       // Validate inputs
       if (!datasetId) {
         logError('app.frontend.validation', 'save_project_label_missing_dataset', 'Dataset ID is required for saving project label');
         throw new Error('Dataset ID is required');
       }
-      
+
       if (!label || !label.name) {
         logError('app.frontend.validation', 'save_project_label_missing_name', 'Label name is required for saving project label');
         throw new Error('Label name is required');
       }
-      
+
       // Generate color if not provided
       if (!label.color) {
         label.color = this.generateLabelColor(label.name);
       }
-      
+
       // First, get the project ID for this dataset
-      const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
-      const projectId = response.data.project_id;
-      console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
-      
+      try { // New try block for projectId retrieval
+        const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
+        projectId = response.data.project_id;
+        console.log(`Dataset ${datasetId} belongs to project ${projectId}`);
+      } catch (e) {
+        logError('app.frontend.validation', 'save_project_label_project_id_unresolved', 'Could not resolve Project ID from Dataset ID for saving label', {
+          datasetId,
+          error: e.message
+        });
+        console.error(`Could not resolve Project ID for dataset ${datasetId}. Aborting label save.`, e);
+        throw new Error(`Could not resolve Project ID for dataset ${datasetId}`);
+      }
+
+
       // Prepare the label data
       const labelData = {
         name: label.name.trim(),
         color: label.color,
-        project_id: parseInt(projectId)
+        project_id: projectId
       };
-      
+
       console.log('Prepared label data for API:', labelData);
-      
+
       // First check if we already have this label in local storage
       const storedLabelsStr = localStorage.getItem(`project_labels_${projectId}`);
       let existingLabel = null;
-      
+
       if (storedLabelsStr) {
         try {
           const storedLabels = JSON.parse(storedLabelsStr);
-          existingLabel = storedLabels.find(l => 
+          existingLabel = storedLabels.find(l =>
             l.name.toLowerCase() === label.name.toLowerCase()
           );
-          
+
           if (existingLabel) {
             console.log('Found existing label in local storage:', existingLabel);
           }
@@ -650,71 +672,71 @@ class AnnotationAPI {
           console.error('Failed to parse stored labels:', e);
         }
       }
-      
+
       // CRITICAL: Always check the API directly to ensure we have the latest data
       try {
         console.log(`Checking for existing label in API: GET ${API_BASE}/projects/${projectId}/labels`);
         const response = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
         const apiLabels = Array.isArray(response.data) ? response.data : [];
         console.log('API returned labels:', apiLabels);
-        
-        existingLabel = apiLabels.find(l => 
+
+        existingLabel = apiLabels.find(l =>
           l.name.toLowerCase() === label.name.toLowerCase()
         );
-        
+
         if (existingLabel) {
           console.log('Found existing label in API:', existingLabel);
         }
       } catch (e) {
         console.error('Failed to check existing labels from API:', e);
       }
-      
+
       let apiResponse;
-      
+
       if (existingLabel) {
         console.log('Label already exists, updating if needed:', existingLabel);
-        
+
         // Update existing label if color is different
         if (existingLabel.color !== labelData.color) {
           console.log(`Updating label: PUT ${API_BASE}/projects/${projectId}/labels/${existingLabel.id}`);
           apiResponse = await axios.put(
-            `${API_BASE}/projects/${projectId}/labels/${existingLabel.id}`, 
+            `${API_BASE}/projects/${projectId}/labels/${existingLabel.id}`,
             labelData
           );
-          
+
           console.log('Label update response:', apiResponse.data);
-          
+
           // Store in local storage as backup
           const updatedLabel = apiResponse.data;
           this.storeProjectLabelLocally(datasetId, updatedLabel);
-          
+
           return updatedLabel;
         }
-        
+
         // If no update needed, return existing label
         return existingLabel;
       } else {
         console.log(`Creating new label: POST ${API_BASE}/projects/${projectId}/labels`);
         console.log('Label data:', labelData);
-        
+
         // CRITICAL: Force create new label with direct API call
         try {
           // Create new label
           apiResponse = await axios.post(
-            `${API_BASE}/projects/${projectId}/labels`, 
+            `${API_BASE}/projects/${projectId}/labels`,
             labelData
           );
-          
+
           console.log('Label creation response:', apiResponse.data);
-          
+
           // Store in local storage as backup
           const newLabel = apiResponse.data;
           this.storeProjectLabelLocally(datasetId, newLabel);
-          
+
           // CRITICAL: Verify the label was created by fetching it again
           const verifyResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
           console.log('Verification response:', verifyResponse.data);
-          
+
           return newLabel;
         } catch (createError) {
           console.error('Error creating label:', createError);
@@ -724,24 +746,24 @@ class AnnotationAPI {
       }
     } catch (error) {
       console.error('Failed to save project label:', error);
-      
+
       // Create a local version of the label as fallback
       const localLabel = {
         id: Date.now(), // Use timestamp as temporary ID
         name: label.name,
         color: label.color || this.generateLabelColor(label.name),
-        project_id: parseInt(datasetId)
+        project_id: projectId
       };
-      
+
       console.log('Created local label as fallback:', localLabel);
-      
+
       // Store in local storage
       this.storeProjectLabelLocally(datasetId, localLabel);
-      
+
       return localLabel;
     }
   }
-  
+
   /**
    * Store a project label in local storage as backup
    * @param {string} datasetId - Dataset ID
@@ -759,20 +781,20 @@ class AnnotationAPI {
         console.error('Failed to get project ID for localStorage, using datasetId as fallback:', e);
         projectId = datasetId; // fallback
       }
-      
+
       // Get existing labels from local storage
       const storageKey = `project_labels_${projectId}`;
       console.log(`Using localStorage key: ${storageKey}`);
       const storedLabelsStr = localStorage.getItem(storageKey);
       let storedLabels = [];
-      
+
       if (storedLabelsStr) {
         storedLabels = JSON.parse(storedLabelsStr);
       }
-      
+
       // Check if label already exists
       const existingIndex = storedLabels.findIndex(l => l.name === label.name);
-      
+
       if (existingIndex >= 0) {
         // Update existing label
         storedLabels[existingIndex] = {
@@ -783,10 +805,10 @@ class AnnotationAPI {
         // Add new label
         storedLabels.push(label);
       }
-      
+
       // Save back to local storage
       localStorage.setItem(storageKey, JSON.stringify(storedLabels));
-      
+
       console.log(`Stored label in local storage with key ${storageKey}:`, label);
     } catch (error) {
       console.error('Failed to store label in local storage:', error);
@@ -807,14 +829,14 @@ class AnnotationAPI {
       // Get the image details directly by image ID
       const response = await axios.get(`${API_BASE}/datasets/images/${imageId}`);
       const image = response.data;
-      
+
       console.log('AnnotationAPI.getImageUrl - Image found:', image);
-      
+
       if (image && image.file_path) {
         // Backend already returns the correct web URL
         const baseUrl = API_BASE.replace('/api/v1', '');
         const imageUrl = `${baseUrl}${image.file_path}`;
-        
+
         logInfo('app.frontend.interactions', 'get_image_url_success', 'Image URL generated successfully', {
           imageId,
           imageUrl,
@@ -823,10 +845,10 @@ class AnnotationAPI {
 
         console.log('AnnotationAPI.getImageUrl - Generated URL:', imageUrl);
         console.log('AnnotationAPI.getImageUrl - Backend file_path:', image.file_path);
-        
+
         return imageUrl;
       }
-      
+
       logError('app.frontend.validation', 'get_image_url_no_file_path', 'No image or file_path found', {
         imageId,
         hasImage: !!image,
@@ -896,7 +918,7 @@ class AnnotationAPI {
       });
 
       await axios.patch(`${API_BASE}/images/${imageId}`, { split });
-      
+
       logInfo('app.frontend.interactions', 'update_image_split_success', 'Image split updated successfully', {
         imageId,
         split
@@ -931,7 +953,7 @@ class AnnotationAPI {
       // Use the correct endpoint for updating split_section
       // The endpoint is under the datasets router, not images
       await axios.put(`${API_BASE}/datasets/images/${imageId}/split-section`, { split_section: splitSection });
-      
+
       logInfo('app.frontend.interactions', 'update_image_split_section_success', 'Image split section updated successfully', {
         imageId,
         splitSection
@@ -951,7 +973,7 @@ class AnnotationAPI {
       return false;
     }
   }
-  
+
   /**
    * Delete an image by ID
    * @param {string} imageId - Image ID

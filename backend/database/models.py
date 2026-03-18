@@ -111,7 +111,11 @@ class Image(Base):
     # Train/Val/Test split section
     # Use nullable=True to handle cases where the column doesn't exist yet
     split_section = Column(String(10), default="train", nullable=True)  # train, val, test
-    
+
+    # Image identity hash — MD5 of raw image bytes (nullable for legacy records)
+    # Used for cross-experiment matching (import-with-labels, auto-verification)
+    image_hash_md5 = Column(String(32), nullable=True, index=True)
+
     # Timestamps
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -234,6 +238,12 @@ class AiModel(Base):
     # Input sizes
     training_input_size = Column(JSON, nullable=True)  # [w, h] if known
     input_size_default = Column(JSON, nullable=False, default=[640, 640])  # [w, h]
+
+    # Model source and training metadata
+    source_type = Column(String(20), nullable=True)  # 'default', 'custom', 'local', 'training'
+    training_session_id = Column(String, ForeignKey("training_sessions.id", ondelete="SET NULL"), nullable=True)
+    description = Column(Text, nullable=True)  # User description for the model
+    is_best = Column(Boolean, default=False)  # True for best.pt, False for last.pt
 
     # Timestamps
     created_at = Column(DateTime, default=func.now())
@@ -597,6 +607,121 @@ class TrainingSession(Base):
 
     def __repr__(self):
         return f"<TrainingSession(id='{self.id}', name='{self.name}', project='{self.project_name}', status='{self.status}')>"
+
+class ModelExperiment(Base):
+    """
+    Model for tracking validation and prediction experiments
+    """
+    __tablename__ = "model_experiments"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    training_id = Column(Integer, ForeignKey("training_sessions.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    
+    # Denormalized names for easier querying (no joins needed)
+    project_name = Column(String, nullable=True)
+    training_name = Column(String, nullable=True)
+    
+    name = Column(String, nullable=True)  # Custom experiment name
+    weights_type = Column(String, default="best") # 'best' or 'last'
+    
+    # Classification
+    experiment_type = Column(String, nullable=False)  # 'validation' or 'prediction'
+    framework = Column(String, nullable=False)        # 'ultralytics', 'mmdetection', etc.
+    task = Column(String, nullable=True)             # 'detect' or 'segment'
+    
+    # Dataset
+    dataset_source = Column(String, nullable=False)   # 'val', 'test', 'upload', 'filesystem'
+    dataset_path = Column(String, nullable=True)
+    image_count = Column(Integer, nullable=True)
+    
+    # Parameters
+    confidence = Column(Float, default=0.25)
+    iou_threshold = Column(Float, default=0.45)
+    imgsz = Column(Integer, default=640)
+    batch = Column(Integer, default=1)
+    half = Column(Boolean, default=False)
+    device = Column(String, default="0")
+    custom_params = Column(JSON, nullable=True)
+    
+    # Validation Results
+    max_detections = Column(Integer, default=300)
+    validation_metrics = Column(JSON, nullable=True)
+    per_class_metrics = Column(JSON, nullable=True)
+    confusion_matrix = Column(JSON, nullable=True)
+    
+    # Prediction Results
+    input_images = Column(JSON, nullable=True)
+    output_folder = Column(String, nullable=True)
+    predictions = Column(JSON, nullable=True)
+    analytics_summary = Column(JSON, nullable=True)  # Pre-computed prediction statistics
+    
+    # Execution Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    duration_sec = Column(Float, nullable=True)
+    
+    # Status
+    status = Column(String, default='pending')        # 'pending'/'queued', 'running', 'completed', 'failed'
+    process_pid = Column(Integer, nullable=True)     # Added for subprocess tracking
+    error_message = Column(Text, nullable=True)
+    
+    # Extra
+    user_notes = Column(Text, nullable=True)
+    is_default = Column(Boolean, default=False)
+
+    # Relationships
+    project = relationship("Project")
+    training = relationship("TrainingSession")
+
+    def __repr__(self):
+        return f"<ModelExperiment(id={self.id}, type={self.experiment_type}, status={self.status})>"
+
+
+
+class HumanVerification(Base):
+    """
+    Persists manual human feedback (Pass/Fail) across experiments in a project.
+    Used for cross-model consistency and ground truth verification.
+    """
+    __tablename__ = "human_verifications"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    
+    # Matching Keys
+    image_name = Column(String, nullable=False) # e.g. "0-1.png"
+    image_hash_md5 = Column(String(32), nullable=True, index=True) # Exact bit-match
+    image_hash_perceptual = Column(String(64), nullable=True, index=True) # Structural match
+    class_name = Column(String, nullable=False)
+    
+    # Bounding Box (Normalized) - used for spatial matching logic
+    x_min = Column(Float, nullable=False)
+    y_min = Column(Float, nullable=False)
+    x_max = Column(Float, nullable=False)
+    y_max = Column(Float, nullable=False)
+    
+    # Verification Data
+    status = Column(String(50), default="unverified") # 'pass', 'fail', 'unsure'
+    notes = Column(Text, nullable=True)
+    
+    # NEW: Missing Defect Tracking
+    is_manual = Column(Boolean, default=False) # True if the box was drawn manually by a human
+    
+    # Metadata
+    experiment_id = Column(String, nullable=True) # Which experiment was active when marked
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Indexes for fast spatial/image lookups
+    __table_args__ = (
+        sa.Index("ix_verification_project_image", "project_id", "image_name"),
+        sa.Index("ix_verification_project_hash", "project_id", "image_hash_md5"),
+    )
+
+    def __repr__(self):
+        return f"<HumanVerification(image={self.image_name}, class={self.class_name}, status={self.status})>"
 
 
 class DevModeSetting(Base):

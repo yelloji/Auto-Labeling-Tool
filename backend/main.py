@@ -21,6 +21,7 @@ import uvicorn
 from api.routes import labels
 
 from api.routes import projects, datasets, annotations, models, enhanced_export, releases
+from api.routes import import_labels
 from models.training import api_routes as training_api
 from api.routes import analytics, augmentation, dataset_management
 from api.routes import image_transformations, logs, frontend_logs, release_detail_view
@@ -125,6 +126,7 @@ app.include_router(labels.router, prefix="/api/v1/projects", tags=["labels"])
 # Include API routes
 app.include_router(projects.router, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(datasets.router, prefix="/api/v1/datasets", tags=["datasets"])
+app.include_router(import_labels.router, prefix="/api/v1", tags=["import-labels"])
 app.include_router(annotations.router, prefix="/api/v1/images", tags=["image-annotations"])
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 
@@ -136,6 +138,12 @@ app.include_router(enhanced_export.router, prefix="/api/v1/enhanced-export", tag
 app.include_router(releases.router, prefix="/api/v1", tags=["releases"])
 app.include_router(release_detail_view.router, prefix="/api/v1", tags=["release-details"])
 app.include_router(training_api.router, prefix="/api/v1", tags=["training"])
+
+# Include model lab routes
+# Include model lab routes
+from models.training import model_lab_model_router
+app.include_router(model_lab_model_router.router, prefix="/api/v1", tags=["model-lab"])
+
 app.include_router(dev_password.router, prefix="/api/v1", tags=["dev-auth"])
 
 # Include new feature routes
@@ -358,6 +366,53 @@ async def serve_image(image_id: str):
         raise HTTPException(status_code=404, detail="Image file not found")
 
     return FileResponse(str(absolute_path))
+
+@app.get("/api/v1/download-file")
+async def download_file_proxy(path: str):
+    """
+    RATIONALE:
+    This proxy endpoint was created to solve two critical frontend issues:
+    1. CORS Blocks: Browsers strictly block cross-origin 'fetch()' calls for images, making it 
+       difficult to convert an image URL into a 'Blob' for downloading.
+    2. Forced Downloads: Standard <a> tags often fail to trigger a download, instead opening 
+       the image in a new tab.
+
+    PURPOSE:
+    This endpoint takes a project-relative path, verifies it for safety, and serves the file 
+    with 'Content-Disposition: attachment'. This forces the user's browser to open a native 
+    "Save As" dialog regardless of browser settings or origin differences.
+    """
+    from fastapi.responses import FileResponse
+    from core.config import settings
+    from pathlib import Path
+    
+    projects_base = Path(settings.PROJECTS_DIR).resolve()
+    # Remove leading slash if present to prevent absolute path escapes
+    safe_path = path.lstrip("/").lstrip("\\")
+    
+    # If the path starts with 'projects/', strip it because projects_base already points there
+    if safe_path.startswith("projects/"):
+        safe_path = safe_path.replace("projects/", "", 1)
+    elif safe_path.startswith("projects\\"):
+        safe_path = safe_path.replace("projects\\", "", 1)
+
+    target_path = (projects_base / safe_path).resolve()
+    
+    # Security: Ensure the resolved path is still inside the projects base
+    if not str(target_path).startswith(str(projects_base)):
+        logger.error("security.access", f"Blocked attempted path traversal: {path}", "download_traversal_blocked")
+        raise HTTPException(status_code=403, detail="Access denied")
+        
+    if not target_path.exists() or not target_path.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {safe_path}")
+        
+    logger.info("operations.files", f"Serving file for download: {safe_path}", "file_download_proxy")
+    
+    return FileResponse(
+        path=str(target_path),
+        filename=target_path.name,
+        media_type='application/octet-stream'
+    )
 
 # Health check endpoint
 @app.get("/health")

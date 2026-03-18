@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { 
-  Layout, 
-  Button, 
-  Typography, 
+import {
+  Layout,
+  Button,
+  Typography,
   message,
   Space,
+  Modal,
   Progress,
   Divider,
   Tooltip
@@ -39,14 +40,14 @@ const ManualLabeling = () => {
   const searchParams = new URLSearchParams(location.search);
   const imageId = searchParams.get('imageId');
   const navigate = useNavigate();
-  
+
   // Core state
   const [imageList, setImageList] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [imageData, setImageData] = useState(null);
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(true);
-  
+
   // Image deletion handler
   const handleDeleteImage = async () => {
     if (!imageData || !imageData.id) {
@@ -59,12 +60,12 @@ const ManualLabeling = () => {
       console.log('Deleting image with ID:', imageData.id);
       await AnnotationAPI.deleteImage(imageData.id);
       message.success('Image deleted successfully');
-      
+
       // Trigger dataset refresh across all components
       window.dispatchEvent(new CustomEvent('datasetChanged', {
         detail: { projectId: datasetId, action: 'imageDeleted' }
       }));
-      
+
       const newImageList = imageList.filter(img => img.id !== imageData.id);
       setImageList(newImageList);
       if (newImageList.length === 0) {
@@ -80,7 +81,102 @@ const ManualLabeling = () => {
       console.error('Delete image error:', error);
     }
   };
-  
+
+  // Mark as Null handler
+  const handleMarkAsNull = async () => {
+    if (!imageData || !imageData.id) return;
+
+    // Check if null marker already exists (using full annotations, not filtered)
+    const allAnnotations = await AnnotationAPI.getImageAnnotations(imageData.id);
+    const existingNullMarker = allAnnotations.find(ann =>
+      (ann.class_name || ann.label || '').toLowerCase() === 'null'
+    );
+
+    // TOGGLE: If null marker exists, remove it (undo)
+    if (existingNullMarker) {
+      try {
+        logInfo('app.frontend.interactions', 'remove_null_started', 'Removing null marking', {
+          datasetId,
+          imageId: imageData.id,
+          nullAnnotationId: existingNullMarker.id
+        });
+
+        // Delete the null marker from database
+        await AnnotationAPI.deleteAnnotation(existingNullMarker.id);
+
+        // Sync everything: update memory list and re-load current image
+        const updatedImage = { ...imageData, is_labeled: false };
+        setImageList(prev => prev.map(img => img.id === imageData.id ? updatedImage : img));
+        setDatasetProgress(prev => ({
+          ...prev,
+          labeled: Math.max(0, prev.labeled - 1),
+          percentage: prev.total > 0 ? Math.round((Math.max(0, prev.labeled - 1) / prev.total) * 100) : 0
+        }));
+
+        await loadImageData(updatedImage);
+        message.success('Null marking removed');
+
+        logInfo('app.frontend.interactions', 'remove_null_success', 'Null marking removed successfully', {
+          datasetId,
+          imageId: imageData.id
+        });
+
+      } catch (error) {
+        logError('app.frontend.interactions', 'remove_null_failed', 'Failed to remove null marking', error);
+        message.error('Failed to remove null marking');
+      }
+      return;
+    }
+
+    // SAFETY: Block if regular annotations exist - null button has no deletion rights
+    if (annotations.length > 0) {
+      message.error('Please remove all existing annotations first');
+      return;
+    }
+
+    // CREATE: Add null marker for clean image
+    try {
+      logInfo('app.frontend.interactions', 'mark_as_null_started', 'Marking image as Null', {
+        datasetId,
+        imageId: imageData.id
+      });
+
+      // Create a specialized 'null' annotation marker (degenerate bbox)
+      // This marks is_labeled=true and results in empty export file
+      // Includes segmentation=[] for compatibility with both box and polygon exports
+      const createdAnnotation = await AnnotationAPI.createAnnotation({
+        image_id: imageData.id,
+        type: 'box',
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        class_name: 'null',
+        segmentation: []
+      });
+
+      // Sync everything: update memory list and re-load current image
+      const updatedImage = { ...imageData, is_labeled: true };
+      setImageList(prev => prev.map(img => img.id === imageData.id ? updatedImage : img));
+
+      if (!imageData.is_labeled) {
+        setDatasetProgress(prev => ({
+          ...prev,
+          labeled: prev.labeled + 1,
+          percentage: prev.total > 0 ? Math.round(((prev.labeled + 1) / prev.total) * 100) : 0
+        }));
+      }
+
+      await loadImageData(updatedImage);
+      setActiveTool('select');
+      message.success('Image marked as Background (Null)');
+
+    } catch (error) {
+      logError('app.frontend.interactions', 'mark_as_null_failed', 'Failed to mark as Null', error);
+      message.error('Failed to mark image as Null');
+    }
+  };
+
   // Annotation state
   const [annotations, setAnnotations] = useState([]);
   const [selectedAnnotation, setSelectedAnnotation] = useState(null);
@@ -108,7 +204,7 @@ const ManualLabeling = () => {
   }, []);
   const canUndo = historyPast.length > 0;
   const canRedo = historyFuture.length > 0;
-  
+
   // Debug: Log history state changes
   useEffect(() => {
     console.log('📊 History state updated:', {
@@ -119,18 +215,18 @@ const ManualLabeling = () => {
       annotationsLength: annotations.length
     });
   }, [canUndo, canRedo, historyPast.length, historyFuture.length, annotations.length]);
-  
+
   // Label management
   const [projectLabels, setProjectLabels] = useState([]);
   const [imageLabels, setImageLabels] = useState([]);
   const [selectedLabel, setSelectedLabel] = useState(null);
-  
+
   // UI state
   const [showLabelPopup, setShowLabelPopup] = useState(false);
   const [labelPopupPosition, setLabelPopupPosition] = useState({ x: 0, y: 0 });
   const [currentSplit, setCurrentSplit] = useState('train');
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
-  
+
   // Dataset progress
   const [datasetProgress, setDatasetProgress] = useState({
     total: 0,
@@ -177,9 +273,9 @@ const ManualLabeling = () => {
           console.error('Error details:', error.response?.data || error.message);
         }
       };
-      
+
       cleanupOrphanedLabels();
-      
+
       // Load dataset images and project labels
       logInfo('app.frontend.interactions', 'loading_initial_data', 'Loading initial dataset data', {
         datasetId,
@@ -187,7 +283,7 @@ const ManualLabeling = () => {
       });
       loadDatasetImages();
       loadProjectLabels(true); // Force refresh labels
-      
+
       // Set up periodic refresh of project labels
       const labelsRefreshInterval = setInterval(() => {
         logInfo('app.frontend.ui', 'periodic_labels_refresh', 'Refreshing project labels (periodic)', {
@@ -197,7 +293,7 @@ const ManualLabeling = () => {
         console.log('Refreshing project labels (periodic)');
         loadProjectLabels();
       }, 5000); // Refresh every 5 seconds
-      
+
       return () => {
         clearInterval(labelsRefreshInterval);
       };
@@ -219,7 +315,7 @@ const ManualLabeling = () => {
   useEffect(() => {
     if (imageList.length > 0 && currentImageIndex >= 0) {
       const currentImageId = imageList[currentImageIndex]?.id;
-      
+
       // Save current image's history before switching
       if (imageData?.id && imageData.id !== currentImageId) {
         setImageHistoryMap(prev => {
@@ -231,10 +327,10 @@ const ManualLabeling = () => {
           return newMap;
         });
       }
-      
+
       // Load new image data
       loadImageData(imageList[currentImageIndex]);
-      
+
       // Restore history for the new image
       if (currentImageId) {
         const savedHistory = imageHistoryMap.get(currentImageId);
@@ -253,33 +349,33 @@ const ManualLabeling = () => {
       console.log('🔄 Syncing annotations with database...');
       console.log('Current annotations:', currentAnnotations.length);
       console.log('Target annotations:', targetAnnotations.length);
-      
+
       // Filter out annotations without valid database IDs for comparison
       const currentWithIds = currentAnnotations.filter(ann => ann.id && typeof ann.id === 'string' && ann.id.length > 0);
       const targetWithIds = targetAnnotations.filter(ann => ann.id && typeof ann.id === 'string' && ann.id.length > 0);
-      
+
       console.log('Current annotations with valid IDs:', currentWithIds.length);
       console.log('Target annotations with valid IDs:', targetWithIds.length);
-      
+
       // Create maps for easier comparison using only annotations with valid IDs
       const currentMap = new Map(currentWithIds.map(ann => [ann.id, ann]));
       const targetMap = new Map(targetWithIds.map(ann => [ann.id, ann]));
-      
+
       // Find annotations to delete (in current but not in target)
       const toDelete = currentWithIds.filter(ann => !targetMap.has(ann.id));
-      
+
       // Find annotations to create (in target but not in current)
       // Only try to create annotations that don't already exist in the database
       const toCreate = targetWithIds.filter(ann => !currentMap.has(ann.id));
-      
+
       // Find annotations to update (in both but different)
       const toUpdate = targetWithIds.filter(ann => {
         const current = currentMap.get(ann.id);
         return current && JSON.stringify(current) !== JSON.stringify(ann);
       });
-      
+
       console.log(`Database sync plan: Delete ${toDelete.length}, Create ${toCreate.length}, Update ${toUpdate.length}`);
-      
+
       // Execute deletions
       for (const annotation of toDelete) {
         try {
@@ -289,14 +385,14 @@ const ManualLabeling = () => {
           console.error('❌ Failed to delete annotation:', annotation.id, error);
         }
       }
-      
+
       // Execute creations - but only for annotations that truly don't exist
       for (const annotation of toCreate) {
         try {
           // Double-check: fetch current annotations from database to avoid duplicates
           const currentDbAnnotations = await AnnotationAPI.getImageAnnotations(imageData.id);
           const existsInDb = currentDbAnnotations.some(dbAnn => dbAnn.id === annotation.id);
-          
+
           if (!existsInDb) {
             // Ensure the annotation has the correct image_id
             const annotationToCreate = {
@@ -312,7 +408,7 @@ const ManualLabeling = () => {
           console.error('❌ Failed to create annotation:', annotation.id, error);
         }
       }
-      
+
       // Execute updates
       for (const annotation of toUpdate) {
         try {
@@ -322,7 +418,7 @@ const ManualLabeling = () => {
           console.error('❌ Failed to update annotation:', annotation.id, error);
         }
       }
-      
+
       console.log('✅ Database synchronization completed');
     } catch (error) {
       console.error('❌ Database synchronization failed:', error);
@@ -334,7 +430,7 @@ const ManualLabeling = () => {
   const handleUndo = useCallback(async () => {
     console.log('🔄 ManualLabeling handleUndo called! canUndo:', canUndo, 'historyPast length:', historyPast.length);
     console.log('🎯 Polygon state:', { isPolygonDrawing, polygonPointsCount });
-    
+
     // If polygon is being drawn and has points, let AnnotationCanvas handle point-by-point undo
     if (isPolygonDrawing && polygonPointsCount > 0) {
       console.log('🎯 Polygon is being drawn - letting AnnotationCanvas handle point-by-point undo via Backspace');
@@ -342,23 +438,23 @@ const ManualLabeling = () => {
       // We don't interfere with polygon drawing here
       return;
     }
-    
+
     // Standard annotation-level undo
     if (!canUndo) {
       console.log('❌ Cannot undo - canUndo is false');
       return;
     }
-    
+
     try {
       const past = [...historyPast];
       const last = past.pop();
       console.log('✅ Undoing to previous state:', last);
-      
+
       // Sync with database FIRST, then update UI state
       try {
         await syncAnnotationsWithDatabase(last || [], annotations);
         console.log('✅ Database sync completed for undo');
-        
+
         // Only update UI state after successful database sync
         setHistoryPast(past);
         setHistoryFuture((f) => [annotations, ...f]);
@@ -382,18 +478,18 @@ const ManualLabeling = () => {
       console.log('❌ Cannot redo - canRedo is false');
       return;
     }
-    
+
     try {
       const future = [...historyFuture];
       const next = future.shift();
       if (next) {
         console.log('✅ Redoing to next state:', next);
-        
+
         // Sync with database FIRST, then update UI state
         try {
           await syncAnnotationsWithDatabase(next, annotations);
           console.log('✅ Database sync completed for redo');
-          
+
           // Only update UI state after successful database sync
           setHistoryPast((p) => [...p, annotations]);
           setHistoryFuture(future);
@@ -433,12 +529,12 @@ const ManualLabeling = () => {
       if (e.defaultPrevented) {
         return;
       }
-      
+
       // Skip if user is typing in an input field
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') {
         return;
       }
-      
+
       // Shift+Z for polygon point undo during polygon drawing
       if (e.shiftKey && e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.altKey && isPolygonDrawing) {
         e.preventDefault();
@@ -454,7 +550,7 @@ const ManualLabeling = () => {
         document.dispatchEvent(backspaceEvent);
         return;
       }
-      
+
       // Shift+Y for polygon point redo during polygon drawing
       if (e.shiftKey && e.key.toLowerCase() === 'y' && !e.ctrlKey && !e.altKey && isPolygonDrawing) {
         e.preventDefault();
@@ -470,7 +566,7 @@ const ManualLabeling = () => {
         document.dispatchEvent(shiftYEvent);
         return;
       }
-      
+
       // Ctrl+Z for annotation-level undo (only when not drawing polygon)
       if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey && !isPolygonDrawing) {
         e.preventDefault();
@@ -478,7 +574,7 @@ const ManualLabeling = () => {
         handleUndo();
         return;
       }
-      
+
       // Ctrl+Y or Ctrl+Shift+Z for annotation-level redo (only when not drawing polygon)
       if (((e.ctrlKey && e.key.toLowerCase() === 'y') || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z')) && !isPolygonDrawing) {
         e.preventDefault();
@@ -486,7 +582,7 @@ const ManualLabeling = () => {
         handleRedo();
         return;
       }
-      
+
       // L key for label popup
       if (e.key.toLowerCase() === 'l' && pendingShape && !showLabelPopup) {
         setShowLabelPopup(true);
@@ -509,14 +605,14 @@ const ManualLabeling = () => {
     try {
       const snapshot = JSON.parse(JSON.stringify(annotations));
       pushHistory(snapshot);
-      
+
       // Delete all annotations from database first
       let deletionErrors = 0;
       for (const ann of snapshot) {
-        try { 
-          await AnnotationAPI.deleteAnnotation(ann.id); 
+        try {
+          await AnnotationAPI.deleteAnnotation(ann.id);
           console.log('Successfully deleted annotation:', ann.id);
-        } catch (e) { 
+        } catch (e) {
           console.error('Failed to delete', ann.id, e);
           deletionErrors++;
         }
@@ -526,14 +622,14 @@ const ManualLabeling = () => {
       try {
         const refreshedAnnotations = await AnnotationAPI.getImageAnnotations(imageData.id);
         console.log('Refreshed annotations after clear all:', refreshedAnnotations);
-        
+
         // Transform refreshed annotations for UI display
         const transformedAnnotations = refreshedAnnotations.map(ann => {
           let annotationType = ann.type || 'box';
           if (ann.segmentation && Array.isArray(ann.segmentation) && ann.segmentation.length > 2) {
             annotationType = 'polygon';
           }
-          
+
           return {
             id: ann.id,
             type: annotationType,
@@ -547,17 +643,17 @@ const ManualLabeling = () => {
             segmentation: ann.segmentation || ann.points || []
           };
         });
-        
+
         setAnnotations(transformedAnnotations);
         setSelectedAnnotation(null);
         setEditingAnnotation(null);
-        
+
         // Update image labels based on remaining annotations
         const labelCounts = {};
         transformedAnnotations.forEach(ann => {
           labelCounts[ann.label] = (labelCounts[ann.label] || 0) + 1;
         });
-        
+
         const updatedImageLabels = Object.entries(labelCounts).map(([name, count]) => {
           const projectLabel = projectLabels.find(l => l.name === name);
           return {
@@ -566,9 +662,9 @@ const ManualLabeling = () => {
             color: projectLabel?.color || AnnotationAPI.generateLabelColor(name)
           };
         });
-        
+
         setImageLabels(updatedImageLabels);
-        
+
         // Update dataset progress and image status
         const hasAnnotations = transformedAnnotations.length > 0;
         if (imageData?.is_labeled && !hasAnnotations) {
@@ -578,14 +674,15 @@ const ManualLabeling = () => {
             percentage: prev.total > 0 ? Math.round(((Math.max(0, prev.labeled - 1)) / prev.total) * 100) : 0
           }));
           setImageData(prev => ({ ...prev, is_labeled: false }));
+          setImageList(prev => prev.map(img => img.id === imageData.id ? { ...img, is_labeled: false } : img));
         }
-        
+
         if (deletionErrors > 0) {
           message.warning(`Cleared annotations with ${deletionErrors} errors. Some annotations may still remain.`);
         } else {
           message.success('All annotations cleared successfully');
         }
-        
+
       } catch (refreshError) {
         console.error('Failed to refresh annotations after clear:', refreshError);
         // Fallback: clear UI state anyway
@@ -595,7 +692,7 @@ const ManualLabeling = () => {
         setImageLabels([]);
         message.warning('Annotations cleared but UI refresh failed. Please reload the page.');
       }
-      
+
     } catch (e) {
       console.error('Clear all failed', e);
       message.error('Failed to clear all annotations');
@@ -610,12 +707,24 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
       const response = await AnnotationAPI.getDatasetImages(datasetId, 0, 1000);
-      setImageList(response.images);
+      const allImages = response.images;
+
+      // If navigated from Dataset section with a filtered list, use that order/subset
+      const filteredIds = location.state?.filteredImageIds;
+      let imagesToShow = allImages;
+      if (filteredIds && filteredIds.length > 0) {
+        const ordered = filteredIds
+          .map(id => allImages.find(img => img.id === id))
+          .filter(Boolean);
+        if (ordered.length > 0) imagesToShow = ordered;
+      }
+
+      setImageList(imagesToShow);
       setDatasetProgress({
-        total: response.images.length,
-        labeled: response.images.filter(img => img.is_labeled).length,
-        percentage: response.images.length > 0 ? 
-          Math.round((response.images.filter(img => img.is_labeled).length / response.images.length) * 100) : 0
+        total: allImages.length,
+        labeled: allImages.filter(img => img.is_labeled).length,
+        percentage: allImages.length > 0 ?
+          Math.round((allImages.filter(img => img.is_labeled).length / allImages.length) * 100) : 0
       });
       logInfo('app.frontend.interactions', 'dataset_images_loaded_success', 'Dataset images loaded successfully', {
         datasetId,
@@ -644,26 +753,37 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
       console.log('🔍 LOADING PROJECT LABELS - Dataset ID:', datasetId);
-      
+
       // Get the project ID for this dataset to load labels
       const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
       const projectId = response.data.project_id;
-      
+
       console.log(`🔍 DATASET ${datasetId} belongs to PROJECT ${projectId}`);
+
+      // CRITICAL: Prevent 422 errors by checking for NaN project ID
+      if (!projectId || isNaN(projectId)) {
+        logError('app.frontend.validation', 'invalid_project_id', 'Cannot load labels for invalid project ID', {
+          datasetId,
+          projectId
+        });
+        console.error(`❌ INVALID PROJECT ID: ${projectId} for dataset ${datasetId}. Skipping labels fetch.`);
+        return;
+      }
+
       console.log('🔍 CURRENT PROJECT LABELS STATE:', projectLabels.length, 'labels');
-      
+
       // Now get the labels for this project
       // Add force_refresh parameter if needed to clean up orphaned labels
-      const url = forceRefresh 
+      const url = forceRefresh
         ? `${API_BASE}/projects/${projectId}/labels?force_refresh=true`
         : `${API_BASE}/projects/${projectId}/labels`;
-        
+
       console.log(`GET ${url}`);
       const labelResponse = await axios.get(url);
       const apiLabels = Array.isArray(labelResponse.data) ? labelResponse.data : [];
-      
+
       console.log('Loaded project labels from API:', apiLabels);
-      
+
       if (apiLabels && apiLabels.length > 0) {
         logInfo('app.frontend.interactions', 'project_labels_loaded_success', 'Project labels loaded successfully', {
           datasetId,
@@ -679,7 +799,7 @@ const ManualLabeling = () => {
           projectCount: label.count || 0, // Store project-wide count
           project_id: projectId // Store the project ID with each label
         }));
-        
+
         console.log('Formatted project labels:', formattedLabels);
         setProjectLabels(formattedLabels);
         logInfo('app.frontend.ui', 'project_labels_formatted', 'Project labels formatted and set', {
@@ -687,7 +807,7 @@ const ManualLabeling = () => {
           formattedLabelCount: formattedLabels.length,
           timestamp: new Date().toISOString()
         });
-        
+
         // Store in local storage as backup using both project ID and dataset ID for better availability
         localStorage.setItem(`project_labels_${projectId}`, JSON.stringify(formattedLabels));
         localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
@@ -698,9 +818,9 @@ const ManualLabeling = () => {
           timestamp: new Date().toISOString()
         });
         // If no labels from API, try to get from local storage (check both project and dataset ID)
-        const storedLabelsStr = localStorage.getItem(`project_labels_${projectId}`) || 
-                               localStorage.getItem(`project_labels_${datasetId}`);
-        
+        const storedLabelsStr = localStorage.getItem(`project_labels_${projectId}`) ||
+          localStorage.getItem(`project_labels_${datasetId}`);
+
         if (storedLabelsStr) {
           try {
             const storedLabels = JSON.parse(storedLabelsStr);
@@ -711,7 +831,7 @@ const ManualLabeling = () => {
               storedLabelCount: storedLabels.length,
               timestamp: new Date().toISOString()
             });
-            
+
             // CRITICAL: Save these labels to the database one by one
             for (const label of storedLabels) {
               try {
@@ -725,12 +845,12 @@ const ManualLabeling = () => {
                 console.error(`Failed to save local label to database: ${label.name}`, e);
               }
             }
-            
+
             // After saving all labels, refresh from server to get IDs
             try {
               const refreshResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
               const refreshedLabels = Array.isArray(refreshResponse.data) ? refreshResponse.data : [];
-              
+
               if (refreshedLabels.length > 0) {
                 const updatedLabels = refreshedLabels.map(label => ({
                   id: label.id,
@@ -740,7 +860,7 @@ const ManualLabeling = () => {
                   projectCount: label.count || 0,
                   project_id: projectId
                 }));
-                
+
                 setProjectLabels(updatedLabels);
                 localStorage.setItem(`project_labels_${projectId}`, JSON.stringify(updatedLabels));
                 localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(updatedLabels));
@@ -761,7 +881,7 @@ const ManualLabeling = () => {
       });
       console.error('Load project labels error:', error);
       console.error('Error details:', error.response?.data || error.message);
-      
+
       // Try to get project ID from error response if possible
       let projectId;
       try {
@@ -771,17 +891,17 @@ const ManualLabeling = () => {
       } catch (e) {
         console.log('Could not get project ID from error response');
       }
-      
+
       // Try to get from local storage as fallback, checking multiple possible keys
       const possibleKeys = [
         projectId ? `project_labels_${projectId}` : null,
         `project_labels_${datasetId}`
       ].filter(Boolean);
-      
+
       console.log('Trying local storage keys:', possibleKeys);
-      
+
       let storedLabels = null;
-      
+
       // Try each possible key until we find stored labels
       for (const key of possibleKeys) {
         const storedLabelsStr = localStorage.getItem(key);
@@ -795,7 +915,7 @@ const ManualLabeling = () => {
           }
         }
       }
-      
+
       if (storedLabels) {
         setProjectLabels(storedLabels);
       } else {
@@ -814,39 +934,47 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
       setImageData(image);
+      console.log('🔍 LOADED IMAGE DATA:', { filename: image.filename, is_labeled: image.is_labeled, id: image.id });
       // Use split_section instead of split_type for train/val/test
       setCurrentSplit(image.split_section || 'train');
-      
+
       // Load image URL
       const imageUrl = await AnnotationAPI.getImageUrl(image.id);
       setImageUrl(imageUrl);
-      
+
       // Load annotations
       const fetchedAnnotations = await AnnotationAPI.getImageAnnotations(image.id);
+
+      // DO NOT filter out 'null' markers here - they need to stay in state for button highlighting
+      // Filtering for display happens at render time in AnnotationCanvas
+      const physicalAnnotations = fetchedAnnotations;
+
       console.log('Fetched annotations:', fetchedAnnotations);
+      console.log('Physical annotations (filtered):', physicalAnnotations);
+
       logInfo('app.frontend.interactions', 'image_annotations_loaded', 'Image annotations loaded', {
         datasetId,
         imageId: image.id,
-        annotationCount: fetchedAnnotations.length,
+        annotationCount: physicalAnnotations.length,
         timestamp: new Date().toISOString()
       });
-      
+
       // Transform annotations for UI display
-      const transformedAnnotations = fetchedAnnotations.map(ann => {
+      const transformedAnnotations = physicalAnnotations.map(ann => {
         console.log('Processing annotation:', ann);
-        
+
         // CRITICAL: Determine the annotation type
         let annotationType = ann.type || 'box';
         if (ann.segmentation && Array.isArray(ann.segmentation) && ann.segmentation.length > 2) {
           annotationType = 'polygon';
           console.log('Detected polygon annotation with segmentation points:', ann.segmentation.length);
         }
-        
+
         // CRITICAL: Get the correct label color from project labels
         const labelName = ann.class_name || ann.label;
         const existingProjectLabel = projectLabels.find(l => l.name === labelName);
         const labelColor = existingProjectLabel?.color || AnnotationAPI.generateLabelColor(labelName);
-        
+
         // Create UI-friendly annotation object
         const uiAnnotation = {
           id: ann.id,
@@ -856,38 +984,38 @@ const ManualLabeling = () => {
           color: labelColor,
           type: annotationType
         };
-        
+
         console.log('Setting annotation type to:', annotationType);
-        
+
         // Handle box annotations
-        if (ann.x_min !== undefined && ann.y_min !== undefined && 
-            ann.x_max !== undefined && ann.y_max !== undefined) {
+        if (ann.x_min !== undefined && ann.y_min !== undefined &&
+          ann.x_max !== undefined && ann.y_max !== undefined) {
           uiAnnotation.x = ann.x_min;
           uiAnnotation.y = ann.y_min;
           uiAnnotation.width = ann.x_max - ann.x_min;
           uiAnnotation.height = ann.y_max - ann.y_min;
-        } else if (ann.x !== undefined && ann.y !== undefined && 
-                  ann.width !== undefined && ann.height !== undefined) {
+        } else if (ann.x !== undefined && ann.y !== undefined &&
+          ann.width !== undefined && ann.height !== undefined) {
           uiAnnotation.x = ann.x;
           uiAnnotation.y = ann.y;
           uiAnnotation.width = ann.width;
           uiAnnotation.height = ann.height;
         }
-        
+
         // CRITICAL: Handle polygon annotations
         if (annotationType === 'polygon' && ann.segmentation) {
           console.log('Setting polygon points:', ann.segmentation);
-          
+
           // Make a deep copy to avoid reference issues
           uiAnnotation.points = JSON.parse(JSON.stringify(ann.segmentation));
-          
+
           // Log the points to verify
           console.log('UI annotation points set to:', uiAnnotation.points);
         }
-        
+
         return uiAnnotation;
       });
-      
+
       console.log('Transformed annotations for UI:', transformedAnnotations);
       setAnnotations(transformedAnnotations);
       logInfo('app.frontend.ui', 'annotations_transformed', 'Annotations transformed for UI', {
@@ -896,10 +1024,10 @@ const ManualLabeling = () => {
         transformedAnnotationCount: transformedAnnotations.length,
         timestamp: new Date().toISOString()
       });
-      
-      // Extract unique labels from annotations
+
+      // Extract unique labels from annotations (exclude 'null' markers from UI list)
       const uniqueLabels = [...new Set(fetchedAnnotations.map(ann => ann.class_name || ann.label))]
-        .filter(labelName => labelName) // Remove null/undefined labels
+        .filter(labelName => labelName && labelName.toLowerCase() !== 'null')
         .map(labelName => {
           const existingLabel = projectLabels.find(l => l.name === labelName);
           return existingLabel || {
@@ -910,7 +1038,17 @@ const ManualLabeling = () => {
           };
         });
       setImageLabels(uniqueLabels);
-      
+
+      // CRITICAL: If image is marked as null, force the active tool to 'select'
+      // This prevents accidental drawing after a page reload or navigation
+      const hasNullMarker = fetchedAnnotations.some(ann =>
+        (ann.class_name || ann.label || '').toLowerCase() === 'null'
+      );
+      if (hasNullMarker) {
+        console.log('🔍 Null marker detected on load, forcing "select" tool');
+        setActiveTool('select');
+      }
+
     } catch (error) {
       logError('app.frontend.validation', 'image_data_load_failed', 'Failed to load image data', error, {
         datasetId,
@@ -929,45 +1067,62 @@ const ManualLabeling = () => {
     console.log('🎯 TOOL CHANGE REQUESTED:', tool);
     console.log('🎯 Current activeTool:', activeTool);
     console.log('🎯 handleToolChange function called with tool:', tool);
-    
+
+    // CRITICAL: If image is marked as null, only allow 'select' and 'null' tools
+    const isLabeledNull = annotations.some(ann => (ann.class_name || ann.label || '').toLowerCase() === 'null');
+    if (isLabeledNull && tool !== 'select' && tool !== 'null') {
+      message.warning('Drawing tools are disabled for Background (Null) images');
+      return;
+    }
+
     console.log('🎯 About to call setActiveTool with:', tool);
     // Set the tool immediately for UI responsiveness
     setActiveTool(tool);
     setSelectedAnnotation(null);
     console.log('🎯 Tool change completed. New activeTool will be:', tool);
-    
+
     // Log asynchronously without blocking UI
     logUserClick('ManualLabeling', 'tool_change', {
       datasetId,
       newTool: tool,
       timestamp: new Date().toISOString()
     }).catch(err => console.error('Logging error:', err));
-    
+
     logInfo('app.frontend.interactions', 'annotation_tool_changed', 'Annotation tool changed', {
       datasetId,
       newTool: tool,
       timestamp: new Date().toISOString()
     }).catch(err => console.error('Logging error:', err));
-  }, [datasetId, activeTool]);
+  }, [datasetId, activeTool, annotations]);
 
   const handleShapeComplete = useCallback(async (shape) => {
     console.log('🎯 handleShapeComplete called with shape:', shape);
-    
+
     logInfo('app.frontend.interactions', 'shape_completed', 'Annotation shape completed', {
       datasetId,
       imageId: imageData?.id,
       shapeType: shape.type,
       timestamp: new Date().toISOString()
     });
-    
+
+    // CRITICAL: Prevent saving boxes if image is marked as null
+    const isLabeledNull = annotations.some(ann => (ann.class_name || ann.label || '').toLowerCase() === 'null');
+    if (isLabeledNull) {
+      logInfo('app.frontend.interactions', 'shape_blocked_on_null', 'Shape completion blocked: image is marked as null', {
+        datasetId, imageId: imageData?.id
+      });
+      message.warning('Cannot add annotations to a Background (Null) image. Please remove null marking first.');
+      return;
+    }
+
     // Make a deep copy to avoid reference issues
     const shapeCopy = JSON.parse(JSON.stringify(shape));
-    
+
     // CRITICAL: Detect polygon shapes by checking for points array
     if (shapeCopy.points && Array.isArray(shapeCopy.points) && shapeCopy.points.length > 2) {
       console.log('🎯 POLYGON SHAPE DETECTED with points:', shapeCopy.points.length);
       shapeCopy.type = 'polygon';
-      
+
       // Calculate bounding box for the polygon
       const xs = shapeCopy.points.map(p => p.x);
       const ys = shapeCopy.points.map(p => p.y);
@@ -975,7 +1130,7 @@ const ManualLabeling = () => {
       shapeCopy.y = Math.min(...ys);
       shapeCopy.width = Math.max(...xs) - Math.min(...xs);
       shapeCopy.height = Math.max(...ys) - Math.min(...ys);
-      
+
       console.log('🎯 Calculated polygon bounding box:', {
         x: shapeCopy.x,
         y: shapeCopy.y,
@@ -986,7 +1141,7 @@ const ManualLabeling = () => {
       console.log('🎯 BOX SHAPE DETECTED');
       shapeCopy.type = 'box';
     }
-    
+
     console.log('🎯 Setting pending shape and showing label popup');
     setPendingShape(shapeCopy);
     logInfo('app.frontend.ui', 'label_popup_triggered', 'Label popup triggered for shape', {
@@ -995,47 +1150,47 @@ const ManualLabeling = () => {
       shapeType: shapeCopy.type,
       timestamp: new Date().toISOString()
     });
-    
+
     // Position the label popup appropriately based on shape type
     if (shapeCopy.type === 'polygon' && shapeCopy.points && shapeCopy.points.length > 0) {
       // For polygons, position near the first point
-      setLabelPopupPosition({ 
-        x: shapeCopy.points[0].x, 
-        y: shapeCopy.points[0].y - 20 
+      setLabelPopupPosition({
+        x: shapeCopy.points[0].x,
+        y: shapeCopy.points[0].y - 20
       });
     } else {
       // For boxes, position at the top center
-      setLabelPopupPosition({ 
-        x: shapeCopy.x + shapeCopy.width / 2, 
-        y: shapeCopy.y - 10 
+      setLabelPopupPosition({
+        x: shapeCopy.x + shapeCopy.width / 2,
+        y: shapeCopy.y - 10
       });
     }
-    
+
     // Force refresh ALL labels from the project when opening the popup
     try {
       // Use our loadProjectLabels function with forceRefresh=true
       console.log('FORCE REFRESHING ALL PROJECT LABELS');
       await loadProjectLabels(true);
-      
+
       // Get the current project ID for this dataset
       const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
       const currentProjectId = response.data.project_id;
-      
+
       // Also clean up unused labels for this project
       console.log('Cleaning up unused labels');
       if (currentProjectId) {
         await axios.delete(`${API_BASE}/projects/${currentProjectId}/labels/unused`);
-        
+
         // Refresh again after cleanup
         await loadProjectLabels(true);
       }
     } catch (error) {
       console.error('Error refreshing project labels:', error);
     }
-    
+
     // Automatically show the label popup when shape is completed
     setShowLabelPopup(true);
-    
+
     console.log('🎯 Shape completed with type:', shapeCopy.type);
     logInfo('app.frontend.ui', 'label_popup_shown', 'Label popup shown for shape', {
       datasetId,
@@ -1043,43 +1198,53 @@ const ManualLabeling = () => {
       shapeType: shapeCopy.type,
       timestamp: new Date().toISOString()
     });
-  }, [datasetId, imageData]);
+  }, [datasetId, imageData, annotations]);
 
   const handleLabelAssignment = useCallback(async (labelName) => {
-  // Check if we're editing an existing annotation or creating a new one
-  const isEditing = !!editingAnnotation;
-  
-  logInfo('app.frontend.interactions', 'label_assignment_started', 'Label assignment started', {
-    datasetId,
-    imageId: imageData?.id,
-    labelName,
-    isEditing,
-    hasPendingShape: !!pendingShape,
-    timestamp: new Date().toISOString()
-  });
-  
-  if (!isEditing && !pendingShape) {
-    logError('app.frontend.validation', 'no_pending_shape', 'No pending shape to label', null, {
-      datasetId,
-      imageId: imageData?.id,
-      timestamp: new Date().toISOString()
-    });
-    console.error('No pending shape to label');
-    return;
-  }
-  
-  if (!labelName || typeof labelName !== 'string') {
-    logError('app.frontend.validation', 'invalid_label_name', 'Invalid label name provided', null, {
+    // Check if we're editing an existing annotation or creating a new one
+    const isEditing = !!editingAnnotation;
+
+    logInfo('app.frontend.interactions', 'label_assignment_started', 'Label assignment started', {
       datasetId,
       imageId: imageData?.id,
       labelName,
+      isEditing,
+      hasPendingShape: !!pendingShape,
       timestamp: new Date().toISOString()
     });
-    console.error('Invalid label name:', labelName);
-    throw new Error('Invalid label name');
-  }
-  
-      if (isEditing) {
+
+    if (!isEditing && !pendingShape) {
+      logError('app.frontend.validation', 'no_pending_shape', 'No pending shape to label', null, {
+        datasetId,
+        imageId: imageData?.id,
+        timestamp: new Date().toISOString()
+      });
+      console.error('No pending shape to label');
+      return;
+    }
+
+    if (!labelName || typeof labelName !== 'string') {
+      logError('app.frontend.validation', 'invalid_label_name', 'Invalid label name provided', null, {
+        datasetId,
+        imageId: imageData?.id,
+        labelName,
+        timestamp: new Date().toISOString()
+      });
+      console.error('Invalid label name:', labelName);
+      throw new Error('Invalid label name');
+    }
+
+    // CRITICAL: Block any manual assignment of the reserved 'null' label
+    // Use lowercase check to be robust
+    if (labelName.trim().toLowerCase() === 'null') {
+      message.warning('The "null" label is reserved for system use. Please use a different name.');
+      logInfo('app.frontend.validation', 'null_label_assignment_blocked', 'Manual assignment of null label blocked', {
+        datasetId, imageId: imageData?.id
+      });
+      return;
+    }
+
+    if (isEditing) {
       logInfo('app.frontend.interactions', 'editing_existing_annotation', 'Editing existing annotation', {
         datasetId,
         imageId: imageData?.id,
@@ -1099,516 +1264,521 @@ const ManualLabeling = () => {
       });
       console.log('Assigning label:', labelName, 'to shape:', pendingShape);
     }
-  
-  try {
-    // First, ensure the label exists in the project labels
-    logInfo('app.frontend.interactions', 'saving_project_label', 'Saving project label', {
-      datasetId,
-      imageId: imageData?.id,
-      labelName,
-      timestamp: new Date().toISOString()
-    });
-    console.log(`Saving label "${labelName}" to dataset ${datasetId}`);
-    const savedLabel = await AnnotationAPI.saveProjectLabel(datasetId, {
-      name: labelName,
-      color: AnnotationAPI.generateLabelColor(labelName)
-    });
-    
-    console.log('Label saved to project:', savedLabel);
-    logInfo('app.frontend.interactions', 'project_label_saved_success', 'Project label saved successfully', {
-      datasetId,
-      imageId: imageData?.id,
-      labelName,
-      savedLabelId: savedLabel.id,
-      timestamp: new Date().toISOString()
-    });
-    
-    // Check if we're editing an existing annotation
-    if (isEditing) {
-      console.log('Updating existing annotation:', editingAnnotation);
-      
-      // Push current state to history before updating annotation
-      const currentSnapshot = JSON.parse(JSON.stringify(annotations));
-      pushHistory(currentSnapshot);
-      console.log('📚 History pushed before updating annotation. History length:', historyPast.length + 1);
-      
-      // Update the annotation in the UI immediately
-      setAnnotations(prev => prev.map(ann => 
-        ann.id === editingAnnotation.id ? {
-          ...ann,
-          label: labelName,
-          class_name: labelName,
-          color: savedLabel.color || AnnotationAPI.generateLabelColor(labelName)
-        } : ann
-      ));
-      
-      // Send update to API
-      try {
-        logInfo('app.frontend.interactions', 'updating_annotation_api', 'Updating annotation via API', {
-          datasetId,
-          imageId: imageData?.id,
-          annotationId: editingAnnotation.id,
-          newLabel: labelName,
-          timestamp: new Date().toISOString()
-        });
-        await AnnotationAPI.updateAnnotation(editingAnnotation.id, {
-          class_name: labelName
-        });
-        
-        message.success(`Annotation updated to "${labelName}"`);
-        logInfo('app.frontend.interactions', 'annotation_update_success', 'Annotation updated successfully', {
-          datasetId,
-          imageId: imageData?.id,
-          annotationId: editingAnnotation.id,
-          newLabel: labelName,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        logError('app.frontend.validation', 'annotation_update_failed', 'Failed to update annotation', error, {
-          datasetId,
-          imageId: imageData?.id,
-          annotationId: editingAnnotation.id,
-          newLabel: labelName,
-          errorMessage: error.message,
-          timestamp: new Date().toISOString()
-        });
-        console.error('Failed to update annotation:', error);
-        message.error('Failed to update annotation');
-      }
-      
-      // Clear editing state
-      setEditingAnnotation(null);
-      setShowLabelPopup(false);
-      return;
-    }
-    
-    // If we get here, we're creating a new annotation
-    // Make a deep copy of the pending shape to avoid reference issues
-    const shapeCopy = JSON.parse(JSON.stringify(pendingShape));
-    
-    // Now create the annotation
-    const annotation = {
-      image_id: imageData.id,
-      class_name: labelName,
-      label: labelName,
-      confidence: 1.0
-    };
-    
-    // CRITICAL: Set the type explicitly and handle each type differently
-    if (shapeCopy.points && Array.isArray(shapeCopy.points) && shapeCopy.points.length > 2) {
-      // This is definitely a polygon
-      annotation.type = 'polygon';
-      
-      console.log('POLYGON SHAPE DETECTED with points:', shapeCopy.points.length);
-      
-      // For polygons, preserve the original points exactly
-      annotation.segmentation = JSON.parse(JSON.stringify(shapeCopy.points));
-      
-      // Calculate bounding box from points
-      const xs = shapeCopy.points.map(p => p.x);
-      const ys = shapeCopy.points.map(p => p.y);
-      
-      // Set bounding box coordinates
-      annotation.x = Math.min(...xs);
-      annotation.y = Math.min(...ys);
-      annotation.width = Math.max(...xs) - Math.min(...xs);
-      annotation.height = Math.max(...ys) - Math.min(...ys);
-      
-      // Convert to x_min, y_min, x_max, y_max format for API
-      annotation.x_min = annotation.x;
-      annotation.y_min = annotation.y;
-      annotation.x_max = annotation.x + annotation.width;
-      annotation.y_max = annotation.y + annotation.height;
-      
-      console.log('POLYGON ANNOTATION CREATED:', {
-        type: annotation.type,
-        points: annotation.segmentation.length,
-        x: annotation.x,
-        y: annotation.y,
-        width: annotation.width,
-        height: annotation.height
-      });
-    } else {
-      // This is a box
-      annotation.type = 'box';
-      
-      // Preserve original coordinates exactly
-      annotation.x = shapeCopy.x;
-      annotation.y = shapeCopy.y;
-      annotation.width = shapeCopy.width;
-      annotation.height = shapeCopy.height;
-      
-      // Convert to x_min, y_min, x_max, y_max format for API
-      annotation.x_min = shapeCopy.x;
-      annotation.y_min = shapeCopy.y;
-      annotation.x_max = shapeCopy.x + shapeCopy.width;
-      annotation.y_max = shapeCopy.y + shapeCopy.height;
-      
-      console.log('BOX ANNOTATION CREATED:', {
-        type: annotation.type,
-        x: annotation.x,
-        y: annotation.y,
-        width: annotation.width,
-        height: annotation.height
-      });
-    }
-    logInfo('app.frontend.interactions', 'saving_annotation_api', 'Saving annotation via API', {
-      datasetId,
-      imageId: imageData?.id,
-      annotationType: annotation.type,
-      labelName,
-      timestamp: new Date().toISOString()
-    });
-    console.log('Saving annotation:', annotation);
-    const response = await AnnotationAPI.saveAnnotation(annotation);
-    console.log('Saved annotation response:', response);
-    logInfo('app.frontend.interactions', 'annotation_saved_success', 'Annotation saved successfully', {
-      datasetId,
-      imageId: imageData?.id,
-      annotationId: response.annotation?.id || response.id,
-      annotationType: annotation.type,
-      labelName,
-      timestamp: new Date().toISOString()
-    });
-    const savedAnnotation = response.annotation || response;
-    // Create UI-friendly annotation object
-    const uiAnnotation = {
-      id: savedAnnotation.id,
-      class_name: savedAnnotation.class_name || savedAnnotation.label,
-      label: savedAnnotation.class_name || savedAnnotation.label,
-      confidence: savedAnnotation.confidence || 1.0,
-      color: savedLabel.color || AnnotationAPI.generateLabelColor(labelName)
-    };
-    
-    // CRITICAL: Set the type explicitly based on the annotation we just created
-    if (annotation.type === 'polygon') {
-      // This is a polygon annotation
-      uiAnnotation.type = 'polygon';
-      
-      console.log('CREATING UI POLYGON ANNOTATION');
-      
-      // CRITICAL: Always use the original points from the shape we drew
-      if (shapeCopy.points && Array.isArray(shapeCopy.points) && shapeCopy.points.length > 2) {
-        console.log('Using original polygon points from shapeCopy');
-        // Deep copy to avoid reference issues
-        uiAnnotation.points = JSON.parse(JSON.stringify(shapeCopy.points));
-        
-        // Calculate bounding box from original points
-        const xs = shapeCopy.points.map(p => p.x);
-        const ys = shapeCopy.points.map(p => p.y);
-        uiAnnotation.x = Math.min(...xs);
-        uiAnnotation.y = Math.min(...ys);
-        uiAnnotation.width = Math.max(...xs) - Math.min(...xs);
-        uiAnnotation.height = Math.max(...ys) - Math.min(...ys);
-        
-        console.log('UI POLYGON POINTS:', uiAnnotation.points);
-      }
-      // Fallback to segmentation from server response
-      else if (savedAnnotation.segmentation && Array.isArray(savedAnnotation.segmentation) && savedAnnotation.segmentation.length > 2) {
-        console.log('Using server polygon points');
-        // Deep copy to avoid reference issues
-        uiAnnotation.points = JSON.parse(JSON.stringify(savedAnnotation.segmentation));
-        
-        // Calculate bounding box from server points
-        const xs = savedAnnotation.segmentation.map(p => p.x);
-        const ys = savedAnnotation.segmentation.map(p => p.y);
-        uiAnnotation.x = Math.min(...xs);
-        uiAnnotation.y = Math.min(...ys);
-        uiAnnotation.width = Math.max(...xs) - Math.min(...xs);
-        uiAnnotation.height = Math.max(...ys) - Math.min(...ys);
-        
-        console.log('UI POLYGON POINTS FROM SERVER:', uiAnnotation.points);
-      }
-      // Last resort fallback
-      else if (annotation.segmentation && Array.isArray(annotation.segmentation) && annotation.segmentation.length > 2) {
-        console.log('Using annotation segmentation as last resort');
-        // Deep copy to avoid reference issues
-        uiAnnotation.points = JSON.parse(JSON.stringify(annotation.segmentation));
-        uiAnnotation.x = annotation.x;
-        uiAnnotation.y = annotation.y;
-        uiAnnotation.width = annotation.width;
-        uiAnnotation.height = annotation.height;
-        
-        console.log('UI POLYGON POINTS FROM ANNOTATION:', uiAnnotation.points);
-      }
-      else {
-        console.error('CRITICAL ERROR: No valid polygon points found!');
-        console.error('shapeCopy:', shapeCopy);
-        console.error('savedAnnotation:', savedAnnotation);
-        console.error('annotation:', annotation);
-      }
-      
-      console.log('CREATED UI POLYGON:', {
-        type: uiAnnotation.type,
-        points: uiAnnotation.points ? uiAnnotation.points.length : 0,
-        x: uiAnnotation.x,
-        y: uiAnnotation.y,
-        width: uiAnnotation.width,
-        height: uiAnnotation.height
-      });
-    }
-    else {
-      // This is a box annotation
-      uiAnnotation.type = 'box';
-      
-      // For boxes, use the server response coordinates if available
-      if (savedAnnotation.x_min !== undefined && savedAnnotation.y_min !== undefined && 
-          savedAnnotation.x_max !== undefined && savedAnnotation.y_max !== undefined) {
-        uiAnnotation.x = savedAnnotation.x_min;
-        uiAnnotation.y = savedAnnotation.y_min;
-        uiAnnotation.width = savedAnnotation.x_max - savedAnnotation.x_min;
-        uiAnnotation.height = savedAnnotation.y_max - savedAnnotation.y_min;
-      } 
-      else if (savedAnnotation.x !== undefined && savedAnnotation.y !== undefined && 
-                savedAnnotation.width !== undefined && savedAnnotation.height !== undefined) {
-        uiAnnotation.x = savedAnnotation.x;
-        uiAnnotation.y = savedAnnotation.y;
-        uiAnnotation.width = savedAnnotation.width;
-        uiAnnotation.height = savedAnnotation.height;
-      } 
-      // Fallback to original shape coordinates
-      else {
-        uiAnnotation.x = shapeCopy.x;
-        uiAnnotation.y = shapeCopy.y;
-        uiAnnotation.width = shapeCopy.width;
-        uiAnnotation.height = shapeCopy.height;
-      }
-      
-      console.log('CREATED UI BOX:', {
-        type: uiAnnotation.type,
-        x: uiAnnotation.x,
-        y: uiAnnotation.y,
-        width: uiAnnotation.width,
-        height: uiAnnotation.height
-      });
-    }
-    
-    console.log('Created UI annotation:', uiAnnotation);
-    
-    // Push current state to history before adding new annotation
-    const currentSnapshot = JSON.parse(JSON.stringify(annotations));
-    pushHistory(currentSnapshot);
-    console.log('📚 History pushed before adding annotation. History length:', historyPast.length + 1);
-    
-    // Add the annotation with proper database ID to the state
-    setAnnotations(prev => {
-      const newAnnotations = [...prev, uiAnnotation];
-      console.log('✅ Added annotation with database ID:', uiAnnotation.id);
-      return newAnnotations;
-    });
-    // Check if the label already exists in the project
-    const existingProjectLabel = projectLabels.find(l => l.name === labelName);
-    
-    // Check if the label already exists in the image
-    const existingImageLabel = imageLabels.find(l => l.name === labelName);
-    
-    // Generate a consistent color for the label
-    const labelColor = existingProjectLabel?.color || 
-                      AnnotationAPI.generateLabelColor(labelName);
-    
-    // Update image labels
-    if (existingImageLabel) {
-      // Update the count for the existing label
-      setImageLabels(prev => prev.map(l => 
-        l.name === labelName ? { ...l, count: l.count + 1 } : l
-      ));
-    } else {
-      const newImageLabel = {
-        id: existingProjectLabel?.id || labelName,
-        name: labelName,
-        color: labelColor,
-        count: 1
-      };
-      setImageLabels(prev => [...prev, newImageLabel]);
-    }
-    
-    // Update project labels if needed
-    if (!existingProjectLabel) {
-      const newProjectLabel = {
-        id: labelName,
-        name: labelName,
-        color: labelColor,
-        count: 1,
-        projectCount: 1
-      };
-      setProjectLabels(prev => [...prev, newProjectLabel]);
-      
-      // Also update local storage as backup
-      const updatedLabels = [...projectLabels, newProjectLabel];
-      localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(updatedLabels));
-    } else {
-      // Update the project-wide count
-      setProjectLabels(prev => prev.map(l => 
-        l.name === labelName ? { ...l, count: l.count + 1, projectCount: (l.projectCount || 0) + 1 } : l
-      ));
-    }
-    
-    // CRITICAL: Make sure the label is saved to the database and updated in UI
+
     try {
-      console.log('UPDATING PROJECT LABELS with label:', labelName);
-      
-      // CRITICAL: Get the project ID from the dataset ID
-      // In this application, datasetId is actually the project ID
-      const projectId = parseInt(datasetId);
-      
-      // Force save the label to the database again to ensure it's there
-      const projectLabel = {
-        name: labelName,
-        color: labelColor, // Use the labelColor we defined earlier
-        project_id: parseInt(projectId)
-      };
-      
-      // Save to database with direct API call
-      console.log(`FORCE SAVING LABEL TO DATABASE: POST ${API_BASE}/projects/${projectId}/labels`);
-      console.log('Label data:', projectLabel);
-      
-      let savedLabelFromDb = null;
-      try {
-        const labelResponse = await axios.post(`${API_BASE}/projects/${projectId}/labels`, projectLabel);
-        console.log('Label save response:', labelResponse.data);
-        savedLabelFromDb = labelResponse.data;
-      } catch (labelError) {
-        console.error('Error saving label to database:', labelError);
-        console.error('Error response:', labelError.response?.data);
-      }
-      
-      // Case-insensitive search for existing label in UI state
-      const existingProjectLabel = projectLabels.find(l => 
-        l.name.toLowerCase() === labelName.toLowerCase()
-      );
-      
-      if (!existingProjectLabel) {
-        // Add the new label to project labels UI state
-        const newProjectLabel = {
-          id: (savedLabelFromDb && savedLabelFromDb.id) || Date.now(),
-          name: labelName,
-          color: (savedLabelFromDb && savedLabelFromDb.color) || labelColor,
-          count: 1
-        };
-        
-        console.log('ADDING NEW PROJECT LABEL TO UI STATE:', newProjectLabel);
-        setProjectLabels(prev => [...prev, newProjectLabel]);
-      } else {
-        // Update existing label count
-        console.log('UPDATING EXISTING PROJECT LABEL COUNT:', existingProjectLabel);
-        setProjectLabels(prev => prev.map(l => 
-          l.name.toLowerCase() === labelName.toLowerCase() 
-            ? { ...l, count: (l.count || 0) + 1 } 
-            : l
-        ));
-      }
-      
-      // CRITICAL: Force refresh project labels from server immediately
-      console.log(`FORCE REFRESHING PROJECT LABELS FROM SERVER: GET ${API_BASE}/projects/${projectId}/labels`);
-      
-      try {
-        const labelsResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
-        const freshLabels = Array.isArray(labelsResponse.data) ? labelsResponse.data : [];
-        
-        console.log('RECEIVED FRESH PROJECT LABELS:', freshLabels);
-        
-        if (freshLabels && freshLabels.length > 0) {
-          // Transform to UI format
-          const formattedLabels = freshLabels.map(label => {
-            // Find existing label to preserve count
-            const existingLabel = projectLabels.find(l => 
-              l.name.toLowerCase() === label.name.toLowerCase()
-            );
-            
-            return {
-              id: label.id,
-              name: label.name,
-              color: label.color || AnnotationAPI.generateLabelColor(label.name),
-              count: existingLabel ? (existingLabel.count || 1) : 1
-            };
-          });
-          
-          console.log('SETTING FORMATTED PROJECT LABELS:', formattedLabels);
-          setProjectLabels(formattedLabels);
-          
-          // Also update local storage as backup
-          localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
-        }
-      } catch (refreshError) {
-        console.error('Error refreshing labels from server:', refreshError);
-      }
-      
-      // CRITICAL: Force reload project labels using our improved function
-      setTimeout(() => {
-        console.log('Delayed refresh of project labels');
-        loadProjectLabels();
-      }, 1000);
-      
-    } catch (error) {
-      console.error('FAILED TO UPDATE PROJECT LABELS:', error);
-      
-      // Even if updating the database fails, ensure the label is in the UI
-      const existingProjectLabel = projectLabels.find(l => 
-        l.name.toLowerCase() === labelName.toLowerCase()
-      );
-      
-      if (!existingProjectLabel) {
-        // Add the new label to project labels
-        const newProjectLabel = {
-          id: savedLabel.id || Date.now(),
-          name: labelName,
-          color: savedLabel.color || AnnotationAPI.generateLabelColor(labelName),
-          count: 1
-        };
-        
-        console.log('ADDING NEW PROJECT LABEL TO UI STATE (FALLBACK):', newProjectLabel);
-        setProjectLabels(prev => [...prev, newProjectLabel]);
-        
-        // Store in local storage as backup
-        const updatedLabels = [...projectLabels, newProjectLabel];
-        localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(updatedLabels));
-      }
-    }
-    if (!imageData.is_labeled) {
-      logInfo('app.frontend.ui', 'image_marked_as_labeled', 'Image marked as labeled', {
+      // First, ensure the label exists in the project labels
+      logInfo('app.frontend.interactions', 'saving_project_label', 'Saving project label', {
         datasetId,
         imageId: imageData?.id,
+        labelName,
         timestamp: new Date().toISOString()
       });
-      setDatasetProgress(prev => ({
-        ...prev,
-        labeled: prev.labeled + 1,
-        percentage: Math.round(((prev.labeled + 1) / prev.total) * 100)
-      }));
-      setImageData(prev => ({ ...prev, is_labeled: true }));
+      console.log(`Saving label "${labelName}" to dataset ${datasetId}`);
+      const savedLabel = await AnnotationAPI.saveProjectLabel(datasetId, {
+        name: labelName,
+        color: AnnotationAPI.generateLabelColor(labelName)
+      });
+
+      console.log('Label saved to project:', savedLabel);
+      logInfo('app.frontend.interactions', 'project_label_saved_success', 'Project label saved successfully', {
+        datasetId,
+        imageId: imageData?.id,
+        labelName,
+        savedLabelId: savedLabel.id,
+        timestamp: new Date().toISOString()
+      });
+
+      // Check if we're editing an existing annotation
+      if (isEditing) {
+        console.log('Updating existing annotation:', editingAnnotation);
+
+        // Push current state to history before updating annotation
+        const currentSnapshot = JSON.parse(JSON.stringify(annotations));
+        pushHistory(currentSnapshot);
+        console.log('📚 History pushed before updating annotation. History length:', historyPast.length + 1);
+
+        // Update the annotation in the UI immediately
+        setAnnotations(prev => prev.map(ann =>
+          ann.id === editingAnnotation.id ? {
+            ...ann,
+            label: labelName,
+            class_name: labelName,
+            color: savedLabel.color || AnnotationAPI.generateLabelColor(labelName)
+          } : ann
+        ));
+
+        // Send update to API
+        try {
+          logInfo('app.frontend.interactions', 'updating_annotation_api', 'Updating annotation via API', {
+            datasetId,
+            imageId: imageData?.id,
+            annotationId: editingAnnotation.id,
+            newLabel: labelName,
+            timestamp: new Date().toISOString()
+          });
+          await AnnotationAPI.updateAnnotation(editingAnnotation.id, {
+            class_name: labelName
+          });
+
+          message.success(`Annotation updated to "${labelName}"`);
+          logInfo('app.frontend.interactions', 'annotation_update_success', 'Annotation updated successfully', {
+            datasetId,
+            imageId: imageData?.id,
+            annotationId: editingAnnotation.id,
+            newLabel: labelName,
+            timestamp: new Date().toISOString()
+          });
+        } catch (error) {
+          logError('app.frontend.validation', 'annotation_update_failed', 'Failed to update annotation', error, {
+            datasetId,
+            imageId: imageData?.id,
+            annotationId: editingAnnotation.id,
+            newLabel: labelName,
+            errorMessage: error.message,
+            timestamp: new Date().toISOString()
+          });
+          console.error('Failed to update annotation:', error);
+          message.error('Failed to update annotation');
+        }
+
+        // Clear editing state
+        setEditingAnnotation(null);
+        setShowLabelPopup(false);
+        return;
+      }
+
+      // If we get here, we're creating a new annotation
+      // Make a deep copy of the pending shape to avoid reference issues
+      const shapeCopy = JSON.parse(JSON.stringify(pendingShape));
+
+      // Now create the annotation
+      const annotation = {
+        image_id: imageData.id,
+        class_name: labelName,
+        label: labelName,
+        confidence: 1.0
+      };
+
+      // CRITICAL: Set the type explicitly and handle each type differently
+      if (shapeCopy.points && Array.isArray(shapeCopy.points) && shapeCopy.points.length > 2) {
+        // This is definitely a polygon
+        annotation.type = 'polygon';
+
+        console.log('POLYGON SHAPE DETECTED with points:', shapeCopy.points.length);
+
+        // For polygons, preserve the original points exactly
+        annotation.segmentation = JSON.parse(JSON.stringify(shapeCopy.points));
+
+        // Calculate bounding box from points
+        const xs = shapeCopy.points.map(p => p.x);
+        const ys = shapeCopy.points.map(p => p.y);
+
+        // Set bounding box coordinates
+        annotation.x = Math.min(...xs);
+        annotation.y = Math.min(...ys);
+        annotation.width = Math.max(...xs) - Math.min(...xs);
+        annotation.height = Math.max(...ys) - Math.min(...ys);
+
+        // Convert to x_min, y_min, x_max, y_max format for API
+        annotation.x_min = annotation.x;
+        annotation.y_min = annotation.y;
+        annotation.x_max = annotation.x + annotation.width;
+        annotation.y_max = annotation.y + annotation.height;
+
+        console.log('POLYGON ANNOTATION CREATED:', {
+          type: annotation.type,
+          points: annotation.segmentation.length,
+          x: annotation.x,
+          y: annotation.y,
+          width: annotation.width,
+          height: annotation.height
+        });
+      } else {
+        // This is a box
+        annotation.type = 'box';
+
+        // Preserve original coordinates exactly
+        annotation.x = shapeCopy.x;
+        annotation.y = shapeCopy.y;
+        annotation.width = shapeCopy.width;
+        annotation.height = shapeCopy.height;
+
+        // Convert to x_min, y_min, x_max, y_max format for API
+        annotation.x_min = shapeCopy.x;
+        annotation.y_min = shapeCopy.y;
+        annotation.x_max = shapeCopy.x + shapeCopy.width;
+        annotation.y_max = shapeCopy.y + shapeCopy.height;
+
+        console.log('BOX ANNOTATION CREATED:', {
+          type: annotation.type,
+          x: annotation.x,
+          y: annotation.y,
+          width: annotation.width,
+          height: annotation.height
+        });
+      }
+      logInfo('app.frontend.interactions', 'saving_annotation_api', 'Saving annotation via API', {
+        datasetId,
+        imageId: imageData?.id,
+        annotationType: annotation.type,
+        labelName,
+        timestamp: new Date().toISOString()
+      });
+      console.log('Saving annotation:', annotation);
+      const response = await AnnotationAPI.saveAnnotation(annotation);
+      console.log('Saved annotation response:', response);
+      logInfo('app.frontend.interactions', 'annotation_saved_success', 'Annotation saved successfully', {
+        datasetId,
+        imageId: imageData?.id,
+        annotationId: response.annotation?.id || response.id,
+        annotationType: annotation.type,
+        labelName,
+        timestamp: new Date().toISOString()
+      });
+      const savedAnnotation = response.annotation || response;
+      // Create UI-friendly annotation object
+      const uiAnnotation = {
+        id: savedAnnotation.id,
+        class_name: savedAnnotation.class_name || savedAnnotation.label,
+        label: savedAnnotation.class_name || savedAnnotation.label,
+        confidence: savedAnnotation.confidence || 1.0,
+        color: savedLabel.color || AnnotationAPI.generateLabelColor(labelName)
+      };
+
+      // CRITICAL: Set the type explicitly based on the annotation we just created
+      if (annotation.type === 'polygon') {
+        // This is a polygon annotation
+        uiAnnotation.type = 'polygon';
+
+        console.log('CREATING UI POLYGON ANNOTATION');
+
+        // CRITICAL: Always use the original points from the shape we drew
+        if (shapeCopy.points && Array.isArray(shapeCopy.points) && shapeCopy.points.length > 2) {
+          console.log('Using original polygon points from shapeCopy');
+          // Deep copy to avoid reference issues
+          uiAnnotation.points = JSON.parse(JSON.stringify(shapeCopy.points));
+
+          // Calculate bounding box from original points
+          const xs = shapeCopy.points.map(p => p.x);
+          const ys = shapeCopy.points.map(p => p.y);
+          uiAnnotation.x = Math.min(...xs);
+          uiAnnotation.y = Math.min(...ys);
+          uiAnnotation.width = Math.max(...xs) - Math.min(...xs);
+          uiAnnotation.height = Math.max(...ys) - Math.min(...ys);
+
+          console.log('UI POLYGON POINTS:', uiAnnotation.points);
+        }
+        // Fallback to segmentation from server response
+        else if (savedAnnotation.segmentation && Array.isArray(savedAnnotation.segmentation) && savedAnnotation.segmentation.length > 2) {
+          console.log('Using server polygon points');
+          // Deep copy to avoid reference issues
+          uiAnnotation.points = JSON.parse(JSON.stringify(savedAnnotation.segmentation));
+
+          // Calculate bounding box from server points
+          const xs = savedAnnotation.segmentation.map(p => p.x);
+          const ys = savedAnnotation.segmentation.map(p => p.y);
+          uiAnnotation.x = Math.min(...xs);
+          uiAnnotation.y = Math.min(...ys);
+          uiAnnotation.width = Math.max(...xs) - Math.min(...xs);
+          uiAnnotation.height = Math.max(...ys) - Math.min(...ys);
+
+          console.log('UI POLYGON POINTS FROM SERVER:', uiAnnotation.points);
+        }
+        // Last resort fallback
+        else if (annotation.segmentation && Array.isArray(annotation.segmentation) && annotation.segmentation.length > 2) {
+          console.log('Using annotation segmentation as last resort');
+          // Deep copy to avoid reference issues
+          uiAnnotation.points = JSON.parse(JSON.stringify(annotation.segmentation));
+          uiAnnotation.x = annotation.x;
+          uiAnnotation.y = annotation.y;
+          uiAnnotation.width = annotation.width;
+          uiAnnotation.height = annotation.height;
+
+          console.log('UI POLYGON POINTS FROM ANNOTATION:', uiAnnotation.points);
+        }
+        else {
+          console.error('CRITICAL ERROR: No valid polygon points found!');
+          console.error('shapeCopy:', shapeCopy);
+          console.error('savedAnnotation:', savedAnnotation);
+          console.error('annotation:', annotation);
+        }
+
+        console.log('CREATED UI POLYGON:', {
+          type: uiAnnotation.type,
+          points: uiAnnotation.points ? uiAnnotation.points.length : 0,
+          x: uiAnnotation.x,
+          y: uiAnnotation.y,
+          width: uiAnnotation.width,
+          height: uiAnnotation.height
+        });
+      }
+      else {
+        // This is a box annotation
+        uiAnnotation.type = 'box';
+
+        // For boxes, use the server response coordinates if available
+        if (savedAnnotation.x_min !== undefined && savedAnnotation.y_min !== undefined &&
+          savedAnnotation.x_max !== undefined && savedAnnotation.y_max !== undefined) {
+          uiAnnotation.x = savedAnnotation.x_min;
+          uiAnnotation.y = savedAnnotation.y_min;
+          uiAnnotation.width = savedAnnotation.x_max - savedAnnotation.x_min;
+          uiAnnotation.height = savedAnnotation.y_max - savedAnnotation.y_min;
+        }
+        else if (savedAnnotation.x !== undefined && savedAnnotation.y !== undefined &&
+          savedAnnotation.width !== undefined && savedAnnotation.height !== undefined) {
+          uiAnnotation.x = savedAnnotation.x;
+          uiAnnotation.y = savedAnnotation.y;
+          uiAnnotation.width = savedAnnotation.width;
+          uiAnnotation.height = savedAnnotation.height;
+        }
+        // Fallback to original shape coordinates
+        else {
+          uiAnnotation.x = shapeCopy.x;
+          uiAnnotation.y = shapeCopy.y;
+          uiAnnotation.width = shapeCopy.width;
+          uiAnnotation.height = shapeCopy.height;
+        }
+
+        console.log('CREATED UI BOX:', {
+          type: uiAnnotation.type,
+          x: uiAnnotation.x,
+          y: uiAnnotation.y,
+          width: uiAnnotation.width,
+          height: uiAnnotation.height
+        });
+      }
+
+      console.log('Created UI annotation:', uiAnnotation);
+
+      // Push current state to history before adding new annotation
+      const currentSnapshot = JSON.parse(JSON.stringify(annotations));
+      pushHistory(currentSnapshot);
+      console.log('📚 History pushed before adding annotation. History length:', historyPast.length + 1);
+
+      // Add the annotation with proper database ID to the state
+      setAnnotations(prev => {
+        const newAnnotations = [...prev, uiAnnotation];
+        console.log('✅ Added annotation with database ID:', uiAnnotation.id);
+        return newAnnotations;
+      });
+      // Check if the label already exists in the project
+      const existingProjectLabel = projectLabels.find(l => l.name === labelName);
+
+      // Check if the label already exists in the image
+      const existingImageLabel = imageLabels.find(l => l.name === labelName);
+
+      // Generate a consistent color for the label
+      const labelColor = existingProjectLabel?.color ||
+        AnnotationAPI.generateLabelColor(labelName);
+
+      // Update image labels
+      if (existingImageLabel) {
+        // Update the count for the existing label
+        setImageLabels(prev => prev.map(l =>
+          l.name === labelName ? { ...l, count: l.count + 1 } : l
+        ));
+      } else {
+        const newImageLabel = {
+          id: existingProjectLabel?.id || labelName,
+          name: labelName,
+          color: labelColor,
+          count: 1
+        };
+        setImageLabels(prev => [...prev, newImageLabel]);
+      }
+
+      // Update project labels if needed
+      if (!existingProjectLabel) {
+        const newProjectLabel = {
+          id: labelName,
+          name: labelName,
+          color: labelColor,
+          count: 1,
+          projectCount: 1
+        };
+        setProjectLabels(prev => [...prev, newProjectLabel]);
+
+        // Also update local storage as backup
+        const updatedLabels = [...projectLabels, newProjectLabel];
+        localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(updatedLabels));
+      } else {
+        // Update the project-wide count
+        setProjectLabels(prev => prev.map(l =>
+          l.name === labelName ? { ...l, count: l.count + 1, projectCount: (l.projectCount || 0) + 1 } : l
+        ));
+      }
+
+      // CRITICAL: Make sure the label is saved to the database and updated in UI
+      try {
+        console.log('UPDATING PROJECT LABELS with label:', labelName);
+
+        // CRITICAL: Use the project ID resolved by the API service
+        const projectId = savedLabel?.project_id;
+
+        if (!projectId || isNaN(projectId)) {
+          console.warn('Skipping redundant label save: No valid project ID available');
+          return;
+        }
+
+        // Force save the label to the database again to ensure it's there
+        const projectLabel = {
+          name: labelName,
+          color: labelColor, // Use the labelColor we defined earlier
+          project_id: projectId
+        };
+
+        // Save to database with direct API call
+        console.log(`FORCE SAVING LABEL TO DATABASE: POST ${API_BASE}/projects/${projectId}/labels`);
+        console.log('Label data:', projectLabel);
+
+        let savedLabelFromDb = null;
+        try {
+          const labelResponse = await axios.post(`${API_BASE}/projects/${projectId}/labels`, projectLabel);
+          console.log('Label save response:', labelResponse.data);
+          savedLabelFromDb = labelResponse.data;
+        } catch (labelError) {
+          console.error('Error saving label to database:', labelError);
+          console.error('Error response:', labelError.response?.data);
+        }
+
+        // Case-insensitive search for existing label in UI state
+        const existingProjectLabel = projectLabels.find(l =>
+          l.name.toLowerCase() === labelName.toLowerCase()
+        );
+
+        if (!existingProjectLabel) {
+          // Add the new label to project labels UI state
+          const newProjectLabel = {
+            id: (savedLabelFromDb && savedLabelFromDb.id) || Date.now(),
+            name: labelName,
+            color: (savedLabelFromDb && savedLabelFromDb.color) || labelColor,
+            count: 1
+          };
+
+          console.log('ADDING NEW PROJECT LABEL TO UI STATE:', newProjectLabel);
+          setProjectLabels(prev => [...prev, newProjectLabel]);
+        } else {
+          // Update existing label count
+          console.log('UPDATING EXISTING PROJECT LABEL COUNT:', existingProjectLabel);
+          setProjectLabels(prev => prev.map(l =>
+            l.name.toLowerCase() === labelName.toLowerCase()
+              ? { ...l, count: (l.count || 0) + 1 }
+              : l
+          ));
+        }
+
+        // CRITICAL: Force refresh project labels from server immediately
+        console.log(`FORCE REFRESHING PROJECT LABELS FROM SERVER: GET ${API_BASE}/projects/${projectId}/labels`);
+
+        try {
+          const labelsResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
+          const freshLabels = Array.isArray(labelsResponse.data) ? labelsResponse.data : [];
+
+          console.log('RECEIVED FRESH PROJECT LABELS:', freshLabels);
+
+          if (freshLabels && freshLabels.length > 0) {
+            // Transform to UI format
+            const formattedLabels = freshLabels.map(label => {
+              // Find existing label to preserve count
+              const existingLabel = projectLabels.find(l =>
+                l.name.toLowerCase() === label.name.toLowerCase()
+              );
+
+              return {
+                id: label.id,
+                name: label.name,
+                color: label.color || AnnotationAPI.generateLabelColor(label.name),
+                count: existingLabel ? (existingLabel.count || 1) : 1
+              };
+            });
+
+            console.log('SETTING FORMATTED PROJECT LABELS:', formattedLabels);
+            setProjectLabels(formattedLabels);
+
+            // Also update local storage as backup
+            localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing labels from server:', refreshError);
+        }
+
+        // CRITICAL: Force reload project labels using our improved function
+        setTimeout(() => {
+          console.log('Delayed refresh of project labels');
+          loadProjectLabels();
+        }, 1000);
+
+      } catch (error) {
+        console.error('FAILED TO UPDATE PROJECT LABELS:', error);
+
+        // Even if updating the database fails, ensure the label is in the UI
+        const existingProjectLabel = projectLabels.find(l =>
+          l.name.toLowerCase() === labelName.toLowerCase()
+        );
+
+        if (!existingProjectLabel) {
+          // Add the new label to project labels
+          const newProjectLabel = {
+            id: savedLabel.id || Date.now(),
+            name: labelName,
+            color: savedLabel.color || AnnotationAPI.generateLabelColor(labelName),
+            count: 1
+          };
+
+          console.log('ADDING NEW PROJECT LABEL TO UI STATE (FALLBACK):', newProjectLabel);
+          setProjectLabels(prev => [...prev, newProjectLabel]);
+
+          // Store in local storage as backup
+          const updatedLabels = [...projectLabels, newProjectLabel];
+          localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(updatedLabels));
+        }
+      }
+      if (!imageData.is_labeled) {
+        logInfo('app.frontend.ui', 'image_marked_as_labeled', 'Image marked as labeled', {
+          datasetId,
+          imageId: imageData?.id,
+          timestamp: new Date().toISOString()
+        });
+        setDatasetProgress(prev => ({
+          ...prev,
+          labeled: prev.labeled + 1,
+          percentage: Math.round(((prev.labeled + 1) / prev.total) * 100)
+        }));
+        setImageData(prev => ({ ...prev, is_labeled: true }));
+        setImageList(prev => prev.map(img => img.id === imageData.id ? { ...img, is_labeled: true } : img));
+      }
+      message.success(`Annotation saved with label "${labelName}"`);
+      logInfo('app.frontend.interactions', 'annotation_complete', 'Annotation process completed', {
+        datasetId,
+        imageId: imageData?.id,
+        labelName,
+        annotationType: pendingShape?.type,
+        timestamp: new Date().toISOString()
+      });
+
+      // Note: Removed server refresh that was breaking undo/redo history chain
+      // The annotation is already added to UI state above, no need to refresh from server
+
+    } catch (error) {
+      logError('app.frontend.validation', 'annotation_save_failed', 'Failed to save annotation', error, {
+        datasetId,
+        imageId: imageData?.id,
+        labelName,
+        errorMessage: error.message,
+        timestamp: new Date().toISOString()
+      });
+      message.error(`Failed to save annotation: ${error.message}`);
+      console.error('Save annotation error:', error);
+    } finally {
+      setShowLabelPopup(false);
+      // Clear editing state
+      setEditingAnnotation(null);
+      // ✅ Delay clearing to allow canvas redraw to complete
+      setTimeout(() => {
+        setPendingShape(null);
+      }, 100); // short delay is enough
     }
-    message.success(`Annotation saved with label "${labelName}"`);
-    logInfo('app.frontend.interactions', 'annotation_complete', 'Annotation process completed', {
-      datasetId,
-      imageId: imageData?.id,
-      labelName,
-      annotationType: pendingShape?.type,
-      timestamp: new Date().toISOString()
-    });
-    
-    // Note: Removed server refresh that was breaking undo/redo history chain
-    // The annotation is already added to UI state above, no need to refresh from server
-    
-  } catch (error) {
-    logError('app.frontend.validation', 'annotation_save_failed', 'Failed to save annotation', error, {
-      datasetId,
-      imageId: imageData?.id,
-      labelName,
-      errorMessage: error.message,
-      timestamp: new Date().toISOString()
-    });
-    message.error(`Failed to save annotation: ${error.message}`);
-    console.error('Save annotation error:', error);
-  } finally {
-    setShowLabelPopup(false);
-    // Clear editing state
-    setEditingAnnotation(null);
-    // ✅ Delay clearing to allow canvas redraw to complete
-    setTimeout(() => {
-      setPendingShape(null);
-    }, 100); // short delay is enough
-  }
-}, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation, annotations, pushHistory, historyPast]);
+  }, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation, annotations, pushHistory, historyPast]);
 
   const handleAnnotationSelect = useCallback((annotation) => {
     logUserClick('ManualLabeling', 'annotation_select', {
@@ -1628,7 +1798,7 @@ const ManualLabeling = () => {
       timestamp: new Date().toISOString()
     });
     setSelectedAnnotation(annotation);
-    
+
     // If we're in select mode and clicked on an annotation, open label editor
     if (activeTool === 'select' && annotation) {
       logInfo('app.frontend.ui', 'annotation_edit_mode_activated', 'Annotation edit mode activated', {
@@ -1652,20 +1822,20 @@ const ManualLabeling = () => {
         timestamp: new Date().toISOString()
       });
       console.log('Deleting annotation with ID:', annotationId);
-      
+
       // Push current state to history before deleting annotation
       const currentSnapshot = JSON.parse(JSON.stringify(annotations));
       pushHistory(currentSnapshot);
       console.log('📚 History pushed before deleting annotation. History length:', historyPast.length + 1);
-      
+
       await AnnotationAPI.deleteAnnotation(annotationId);
-      
+
       // Update UI state
       setAnnotations(prev => prev.filter(ann => ann.id !== annotationId));
       setSelectedAnnotation(null);
       setEditingAnnotation(null);
       setShowLabelPopup(false);
-      
+
       message.success('Annotation deleted');
       logInfo('app.frontend.interactions', 'annotation_delete_success', 'Annotation deleted successfully', {
         datasetId,
@@ -1673,13 +1843,26 @@ const ManualLabeling = () => {
         annotationId,
         timestamp: new Date().toISOString()
       });
-      
+
       // Update label counts
       const deletedAnnotation = annotations.find(ann => ann.id === annotationId);
       if (deletedAnnotation) {
-        setImageLabels(prev => prev.map(l => 
+        setImageLabels(prev => prev.map(l =>
           l.name === deletedAnnotation.label ? { ...l, count: Math.max(0, l.count - 1) } : l
         ).filter(l => l.count > 0));
+      }
+
+      // Sync progress if this was the last annotation
+      // Check length - 1 because we haven't updated annotations state yet with setAnnotations (which is async)
+      // or check the current annotations array directly
+      if (annotations.length === 1 && imageData?.is_labeled) {
+        setDatasetProgress(prev => ({
+          ...prev,
+          labeled: Math.max(0, prev.labeled - 1),
+          percentage: prev.total > 0 ? Math.round((Math.max(0, prev.labeled - 1) / prev.total) * 100) : 0
+        }));
+        setImageData(prev => ({ ...prev, is_labeled: false }));
+        setImageList(prev => prev.map(img => img.id === imageData.id ? { ...img, is_labeled: false } : img));
       }
     } catch (error) {
       logError('app.frontend.validation', 'annotation_delete_failed', 'Failed to delete annotation', error, {
@@ -1700,14 +1883,14 @@ const ManualLabeling = () => {
       message.info('No annotation selected');
       return;
     }
-    
+
     logInfo('app.frontend.interactions', 'delete_selected_started', 'Delete selected annotation started', {
       datasetId,
       imageId: imageData?.id,
       annotationId: selectedAnnotation.id,
       timestamp: new Date().toISOString()
     });
-    
+
     handleAnnotationDelete(selectedAnnotation.id);
   }, [selectedAnnotation, handleAnnotationDelete, datasetId, imageData]);
 
@@ -1761,11 +1944,11 @@ const ManualLabeling = () => {
       direction,
       timestamp: new Date().toISOString()
     });
-    
-    const newIndex = direction === 'next' ? 
+
+    const newIndex = direction === 'next' ?
       Math.min(currentImageIndex + 1, imageList.length - 1) :
       Math.max(currentImageIndex - 1, 0);
-    
+
     if (newIndex !== currentImageIndex) {
       setCurrentImageIndex(newIndex);
       const newImage = imageList[newIndex];
@@ -1811,90 +1994,113 @@ const ManualLabeling = () => {
       {/* Top Header */}
       <div style={{
         background: '#001529',
-        padding: '12px 24px',
+        padding: '0 1.5rem',
         display: 'flex',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        zIndex: 1000,
+        justifyContent: 'space-between',
+        height: '4rem',
+        borderBottom: '0.0625rem solid #002140',
+        width: '100%',
+        gap: '2rem',
+        zIndex: 3000,
         flexShrink: 0
       }}>
-        {/* Left: Back button and navigation */}
-        <Space size="large">
-          <Button 
-            icon={<ArrowLeftOutlined />} 
+        {/* Left Side: Navigation */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 }}>
+          <Button
+            icon={<ArrowLeftOutlined />}
             onClick={handleBack}
             type="text"
-            size="large"
-            style={{ color: '#bdc3c7' }}
+            size="middle"
+            style={{ color: '#bdc3c7', fontSize: '1rem', flexShrink: 0 }}
           >
             Back
           </Button>
-          
-          <Divider type="vertical" style={{ height: '32px' }} />
-          
-          <Space>
-            <Text strong style={{ fontSize: '16px', color: '#bdc3c7' }}>
-              {currentImageIndex + 1} / {imageList.length}
-            </Text>
-            <Space>
-              <Button
-                icon={<LeftOutlined />}
-                onClick={() => navigateToImage('prev')}
-                disabled={currentImageIndex === 0}
-                size="small"
-                type="text"
-                style={{ color: '#bdc3c7', border: 'none' }}
-              >
-                Previous
-              </Button>
-              <Button
-                icon={<RightOutlined />}
-                onClick={() => navigateToImage('next')}
-                disabled={currentImageIndex === imageList.length - 1}
-                size="small"
-                type="text"
-                style={{ color: '#bdc3c7', border: 'none' }}
-              >
-                Next
-              </Button>
-            </Space>
-          </Space>
-        </Space>
-
-        {/* Center: Image name */}
-        <div style={{ textAlign: 'center' }}>
-          <Title level={4} style={{ margin: 0, color: '#bdc3c7' }}>
-            {imageData?.filename || 'Loading...'}
-          </Title>
+          <Divider type="vertical" style={{ height: '1.5rem', margin: 0, flexShrink: 0 }} />
+          <Text strong style={{ fontSize: '1.125rem', color: '#bdc3c7', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {currentImageIndex + 1} / {imageList.length}
+          </Text>
         </div>
 
-        {/* Right: Split control and progress */}
-        <Space size="large">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <InfoCircleOutlined style={{ color: '#3498db' }} />
-            <div>
-              <Text style={{ fontSize: '12px', color: '#95a5a6' }}>Dataset Progress</Text>
-              <Progress
-                percent={datasetProgress.percentage}
-                size="small"
-                style={{ width: '120px', margin: 0 }}
-                format={() => `${datasetProgress.labeled}/${datasetProgress.total}`}
-              />
-            </div>
+        {/* Center Side: Image Navigation (Flexible) */}
+        <div style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '1rem'
+        }}>
+          <Button
+            icon={<LeftOutlined />}
+            onClick={() => navigateToImage('prev')}
+            disabled={currentImageIndex === 0}
+            size="middle"
+            type="text"
+            style={{ color: '#bdc3c7', flexShrink: 0 }}
+          />
+
+          <div style={{ minWidth: 0, textAlign: 'center' }}>
+            <Text strong style={{
+              fontSize: '1.25rem',
+              color: '#fff',
+              whiteSpace: 'nowrap',
+              textOverflow: 'ellipsis',
+              overflow: 'hidden',
+              display: 'block'
+            }}>
+              {imageData?.filename || 'Loading...'}
+            </Text>
           </div>
-          
+
+          <Button
+            icon={<RightOutlined />}
+            onClick={() => navigateToImage('next')}
+            disabled={currentImageIndex === imageList.length - 1}
+            size="middle"
+            type="text"
+            style={{ color: '#bdc3c7', flexShrink: 0 }}
+          />
+        </div>
+
+        {/* Right Side: Status & Controls */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: '1.5rem',
+          flexShrink: 0
+        }}>
+          <Tooltip title={`Dataset Progress: ${datasetProgress.labeled} of ${datasetProgress.total} images labeled.`} placement="bottom">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, cursor: 'help' }}>
+              <InfoCircleOutlined style={{ color: '#3498db', fontSize: '1rem', flexShrink: 0 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                <Text style={{ fontSize: '0.8125rem', color: '#95a5a6', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Progress</Text>
+                <Progress
+                  percent={datasetProgress.percentage}
+                  size="small"
+                  style={{ width: '5rem', margin: 0 }}
+                  showInfo={false}
+                />
+              </div>
+              <Text style={{ fontSize: '0.875rem', color: '#bdc3c7', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {datasetProgress.labeled}/{datasetProgress.total}
+              </Text>
+            </div>
+          </Tooltip>
+
           <AnnotationSplitControl
             currentSplit={currentSplit}
             onSplitChange={handleSplitChange}
           />
-        </Space>
+        </div>
       </div>
 
       <Layout style={{ background: '#001529', flex: 1, overflow: 'hidden' }}>
         {/* Left Sidebar - Labels */}
-        <Sider 
-          width={220} 
-          style={{ 
+        <Sider
+          width="13.75rem"
+          style={{
             background: '#001529',
             borderRight: '1px solid #002140',
             overflow: 'auto',
@@ -1902,8 +2108,8 @@ const ManualLabeling = () => {
           }}
         >
           <LabelSidebar
-            projectLabels={projectLabels} 
-            imageAnnotations={annotations}
+            projectLabels={projectLabels}
+            imageAnnotations={annotations.filter(ann => (ann.class_name || ann.label || '').toLowerCase() !== 'null')}
             selectedLabel={selectedLabel}
             onLabelSelect={setSelectedLabel}
             onLabelHighlight={(labelName) => {
@@ -1914,7 +2120,7 @@ const ManualLabeling = () => {
         </Sider>
 
         {/* Main Content - Canvas */}
-        <Content style={{ 
+        <Content style={{
           position: 'relative',
           background: '#1a1a1a',
           display: 'flex !important',
@@ -1938,7 +2144,7 @@ const ManualLabeling = () => {
               <AnnotationCanvas
                 imageUrl={imageUrl}
                 imageId={imageData?.id}
-                annotations={annotations}
+                annotations={annotations.filter(ann => (ann.class_name || ann.label || '').toLowerCase() !== 'null')}
                 selectedAnnotation={selectedAnnotation}
                 activeTool={activeTool}
                 zoomLevel={zoomLevel}
@@ -1947,7 +2153,8 @@ const ManualLabeling = () => {
                 onAnnotationDelete={handleAnnotationDelete}
                 onImagePositionChange={setImagePosition}
                 onPolygonStateChange={handlePolygonStateChange}
-                style={{ 
+                onToolChange={setActiveTool}
+                style={{
                   maxWidth: '100%',
                   maxHeight: '100%',
                   objectFit: 'contain',
@@ -1960,9 +2167,9 @@ const ManualLabeling = () => {
         </Content>
 
         {/* Right Sidebar - Tools */}
-        <Sider 
-          width={60} 
-          style={{ 
+        <Sider
+          width="4.25rem"
+          style={{
             background: '#001529',
             borderLeft: '1px solid #002140',
             padding: '8px 0',
@@ -1983,6 +2190,8 @@ const ManualLabeling = () => {
             canUndo={canUndo}
             canRedo={canRedo}
             onDeleteImage={handleDeleteImage}
+            onMarkAsNull={handleMarkAsNull}
+            isLabeledNull={annotations.some(ann => (ann.class_name || ann.label || '').toLowerCase() === 'null')}
             onDeleteSelected={handleDeleteSelected}
             selectedAnnotation={selectedAnnotation}
             annotations={annotations}

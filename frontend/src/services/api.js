@@ -463,11 +463,14 @@ export const projectsAPI = {
   // Get recent images for project (placeholder - implement if backend supports it)
   getRecentImages: async (projectId, limit = 6) => {
     try {
-      // This endpoint might not exist yet, so we'll return empty array for now
-      // const response = await api.get(`/api/v1/projects/${projectId}/recent-images`, {
-      //   params: { limit }
-      // });
-      // return response.data;
+      // NOTE: This endpoint is currently a placeholder.
+      // When the backend is ready, uncomment the lines below:
+      /*
+      const response = await api.get(`/api/v1/projects/${projectId}/recent-images`, {
+        params: { limit }
+      });
+      return response.data;
+      */
       return [];
     } catch (error) {
       console.warn('Recent images endpoint not available:', error);
@@ -497,6 +500,18 @@ export const projectsAPI = {
     }
   },
 
+  // --- Human Verification API ---
+  verifyDetection: async (payload) => {
+    const response = await api.post('/api/v1/experiments/verify-detection', payload);
+    return response.data;
+  },
+
+  getProjectVerifications: async (projectId, imageName = null) => {
+    const params = imageName ? { image_name: imageName } : {};
+    const response = await api.get(`/api/v1/projects/${projectId}/verifications`, { params });
+    return response.data;
+  },
+
   // Get project labels
   getProjectLabels: async (projectId) => {
     const response = await api.get(`/api/v1/projects/${projectId}/labels`);
@@ -518,6 +533,136 @@ export const projectsAPI = {
   // Delete project label
   deleteProjectLabel: async (projectId, labelId) => {
     const response = await api.delete(`/api/v1/projects/${projectId}/labels/${labelId}`);
+    return response.data;
+  },
+
+  // Get all experiments for a training session
+  getTrainingExperiments: async (trainingId) => {
+    const response = await api.get(`/api/v1/training/${trainingId}/experiments`);
+    return response.data;
+  },
+
+  // Start validation
+  validateTraining: async (trainingId, payload) => {
+    const response = await api.post(`/api/v1/training/${trainingId}/validate`, payload);
+    return response.data;
+  },
+
+  // Get active queued draft for a model
+  getQueuedValidation: async (trainingId) => {
+    try {
+      const response = await api.get(`/api/v1/training/${trainingId}/validation/queued`);
+      return response.data;
+    } catch (error) {
+      if (error.response && error.response.status === 404) return null;
+      throw error;
+    }
+  },
+
+  // Initialize a validation draft
+  initValidation: async (trainingId, payload) => {
+    const response = await api.post(`/api/v1/training/${trainingId}/validation/init`, payload);
+    return response.data;
+  },
+
+  // Sync draft settings to DB (real-time)
+  updateValidationDraft: async (experimentId, payload) => {
+    const response = await api.patch(`/api/v1/experiments/${experimentId}`, payload);
+    return response.data;
+  },
+
+  // Delete an experiment
+  deleteExperiment: async (experimentId) => {
+    const response = await api.delete(`/api/v1/experiments/${experimentId}`);
+    return response.data;
+  },
+
+  // Delete manual verification
+  deleteManualVerification: async (verificationId) => {
+    const response = await api.delete(`/api/v1/experiments/manual-verification/${verificationId}`);
+    return response.data;
+  },
+
+  // --- Prediction API ---
+
+  // Get active queued prediction draft for a model
+  getQueuedPrediction: async (trainingId) => {
+    try {
+      const response = await api.get(`/api/v1/training/${trainingId}/prediction/queued`);
+      return response.data;
+    } catch (error) {
+      if (error.response && error.response.status === 404) return null;
+      throw error;
+    }
+  },
+
+  // Initialize a prediction draft
+  initPrediction: async (trainingId, payload) => {
+    const response = await api.post(`/api/v1/training/${trainingId}/prediction/init`, payload);
+    return response.data;
+  },
+
+  // Sync prediction draft settings to DB
+  updatePredictionDraft: async (experimentId, payload) => {
+    const response = await api.patch(`/api/v1/experiments/${experimentId}/prediction`, payload);
+    return response.data;
+  },
+
+  // Upload images for a specific prediction experiment
+  uploadPredictionImages: async (trainingId, experimentId, formData) => {
+    const response = await api.post(
+      `/api/v1/training/${trainingId}/prediction/upload-images?experiment_id=${experimentId}`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 120000, // 2 minutes for bulk uploads
+      }
+    );
+    return response.data;
+  },
+
+  // Start prediction subprocess
+  triggerPrediction: async (trainingId, payload) => {
+    const response = await api.post(`/api/v1/training/${trainingId}/predict`, payload);
+    return response.data;
+  },
+
+  // List images in an experiment output folder
+  getExperimentImages: async (experimentId) => {
+    const response = await api.get(`/api/v1/experiments/${experimentId}/images`);
+    return response.data;
+  },
+
+  // Get quality stats for an experiment
+  getQualityStats: async (experimentId) => {
+    const response = await api.get(`/api/v1/experiments/${experimentId}/quality-stats`);
+    return response.data;
+  },
+
+  // Download experiment results as ZIP
+  downloadExperimentResults: async (experimentId) => {
+    const response = await api.get(`/api/v1/experiments/${experimentId}/download`, {
+      responseType: 'blob'
+    });
+    // Try to extract filename from Content-Disposition
+    const contentDisposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+    let filename = `prediction_${experimentId}.zip`;
+    if (contentDisposition) {
+      const match = /filename="?([^";]+)"?/i.exec(contentDisposition);
+      if (match && match[1]) {
+        filename = match[1];
+      }
+    }
+    return { blob: response.data, filename };
+  },
+
+  // Compare two or three experiments (Global Comparison Engine)
+  compareExperiments: async (projectId, baselineId, challengerId, challengerCId = null) => {
+    const params = { project_id: projectId, baseline_id: baselineId, challenger_id: challengerId };
+    if (challengerCId) params.challenger_c_id = challengerCId;
+    const response = await api.get(`/api/v1/experiments/compare`, { params });
     return response.data;
   },
 };
@@ -738,7 +883,7 @@ export const releasesAPI = {
       handleAPIError(error, 'Failed to get download information');
       throw error;
     }
-  }
+  },
 };
 
 // ==================== TRAINING API ====================
@@ -1044,6 +1189,19 @@ export const datasetsAPI = {
     return response.data;
   },
 
+  // Import images with label files (YOLO or COCO format)
+  importWithLabels: async (projectId, name, files, onUploadProgress) => {
+    const formData = new FormData();
+    formData.append('project_id', projectId);
+    formData.append('name', name);
+    files.forEach(file => formData.append('files', file));
+    const response = await api.post('/api/v1/datasets/import-with-labels', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress,
+    });
+    return response.data;
+  },
+
   // Get specific dataset
   getDataset: async (datasetId) => {
     const response = await api.get(`/api/v1/datasets/${datasetId}`);
@@ -1269,6 +1427,21 @@ export const systemAPI = {
     } catch (error) {
       handleAPIError(error, 'Failed to get hardware info');
       throw error;
+    }
+  }
+};
+
+// Phase 7.1: Missed Ground Truth Detections
+export const missedDetectionsAPI = {
+  getMissedDetections: async (experimentId, imageName, iouThreshold = 0.3) => {
+    try {
+      const response = await api.get(`/api/v1/experiments/${experimentId}/missed-detections/${imageName}`, {
+        params: { iou_threshold: iouThreshold }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to get missed detections:', error);
+      return [];
     }
   }
 };

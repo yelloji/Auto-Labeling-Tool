@@ -125,7 +125,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
         setForm((prev) => ({ ...prev, imgSize: datasetSummary.image_size }));
       }
     }
-  }, [form.resume, selectedModelInfo, datasetSummary, form.imgSize]);
+  }, [form.resume, selectedModelInfo, datasetSummary]);
 
   useEffect(() => {
     const resumeActive = async () => {
@@ -798,6 +798,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
             <Card size="small" title="Dataset" bodyStyle={{ padding: 12 }} style={{ marginTop: 12 }}>
               <TrainingDatasetSection
                 projectId={project?.id || projectId || form.projectId}
+                taskType={form.taskType}
                 datasetSource={form.datasetSource}
                 datasetReleaseId={form.datasetReleaseId}
                 datasetZipPath={form.datasetZipPath}
@@ -806,6 +807,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 isDeveloper={isDeveloper}
                 hydratedIdentity={form.hydratedIdentity}
                 onChange={(patch) => handleChange(patch)}
+                disabled={isTraining}
               />
             </Card>
 

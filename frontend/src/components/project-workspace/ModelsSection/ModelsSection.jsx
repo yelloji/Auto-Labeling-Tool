@@ -56,11 +56,8 @@ const ModelsSection = ({ projectId, project }) => {
   const [models, setModels] = useState([]);
   const [filteredModels, setFilteredModels] = useState([]);
 
-  // Align status mapping with Global Models UI: trust backend flags
+  // Status shows file availability, not source (badge shows source)
   const getModelStatus = (model) => {
-    if (model?.is_training) {
-      return { status: 'processing', text: 'Trained' };
-    }
     if (model?.is_ready) {
       return { status: 'success', text: 'Ready' };
     }
@@ -132,17 +129,18 @@ const ModelsSection = ({ projectId, project }) => {
     }
     if (filterType !== 'all') {
       if (filterType === 'custom_local') {
-        // Only project-scoped custom models
+        // Only project-scoped custom models (exclude trained)
         filtered = filtered.filter(model => {
           const scope = String(model?.scope || '').toLowerCase();
           const isProjectScoped = String(model?.project_id || '') === String(projectId);
           const isPretrained = typeof model?.is_pretrained !== 'undefined' ? Boolean(model?.is_pretrained) : null;
+          const isTrained = model?.source_type === 'training';  // Exclude trained models
           const isCustomLocal = Boolean(model?.is_custom_local) || ((scope === 'project' || isProjectScoped) && (isPretrained === false || typeof isPretrained === 'undefined'));
-          return isCustomLocal;
+          return isCustomLocal && !isTrained;  // Exclude trained models
         });
       } else if (filterType === 'trained') {
-        // Show models currently marked as Trained (in-progress per requested label change)
-        filtered = filtered.filter(model => getModelStatus(model).text === 'Trained');
+        // Show models deployed from training
+        filtered = filtered.filter(model => model?.source_type === 'training');
       } else {
         filtered = filtered.filter(model => model.type === filterType);
       }
@@ -408,6 +406,17 @@ const ModelsSection = ({ projectId, project }) => {
                 const isPretrained = typeof model?.is_pretrained !== 'undefined' ? Boolean(model?.is_pretrained) : null;
                 const isLocal = Boolean(model?.is_custom_local) || ((scope === 'project' || isProjectScoped) && (isPretrained === false || typeof isPretrained === 'undefined'));
                 const isGlobal = Boolean(model?.is_custom_global) || ((Boolean(model?.is_custom) || src === 'custom') && scope === 'global' && (isPretrained === false || typeof isPretrained === 'undefined'));
+
+                // Check if model was deployed from training
+                const isTrained = model?.source_type === 'training';
+
+                if (isTrained) {
+                  return (
+                    <Tag color="green" style={{ marginBottom: '8px', marginLeft: '8px', fontSize: '11px', fontWeight: 500, border: 'none' }}>
+                      Trained
+                    </Tag>
+                  );
+                }
                 if (isLocal) {
                   return (
                     <Tag color="cyan" style={{ marginBottom: '8px', marginLeft: '8px', fontSize: '11px', fontWeight: 500, border: 'none' }}>
@@ -537,12 +546,12 @@ const ModelsSection = ({ projectId, project }) => {
         </Col>
         <Col xs={24} sm={6}>
           <Card>
-            <Statistic title="Ready" value={filteredModels.filter(m => getModelStatus(m).text === 'Ready').length} prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />} />
+            <Statistic title="Ready" value={filteredModels.filter(m => m?.is_ready).length} prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />} />
           </Card>
         </Col>
         <Col xs={24} sm={6}>
           <Card>
-            <Statistic title="Trained" value={filteredModels.filter(m => getModelStatus(m).text === 'Trained').length} prefix={<ExperimentOutlined style={{ color: '#faad14' }} />} />
+            <Statistic title="Trained" value={filteredModels.filter(m => m?.source_type === 'training').length} prefix={<ExperimentOutlined style={{ color: '#faad14' }} />} />
           </Card>
         </Col>
         <Col xs={24} sm={6}>
@@ -553,8 +562,9 @@ const ModelsSection = ({ projectId, project }) => {
                   const scope = String(m?.scope || '').toLowerCase();
                   const isProjectScoped = String(m?.project_id || '') === String(projectId);
                   const isPretrained = typeof m?.is_pretrained !== 'undefined' ? Boolean(m?.is_pretrained) : null;
+                  const isTrained = m?.source_type === 'training'; // Exclude trained models
                   const isCustomLocal = Boolean(m?.is_custom_local) || ((scope === 'project' || isProjectScoped) && (isPretrained === false || typeof isPretrained === 'undefined'));
-                  return isCustomLocal;
+                  return isCustomLocal && !isTrained; // Exclude trained models from Custom (Local)
                 }).length} prefix={<SettingOutlined style={{ color: '#13c2c2' }} />} />
               </Col>
               {/* Removed Custom (Global) statistic per requirement */}

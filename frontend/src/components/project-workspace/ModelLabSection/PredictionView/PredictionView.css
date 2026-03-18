@@ -1,0 +1,991 @@
+.prediction-view-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0 !important;
+    overflow: hidden;
+    background: #f0f2f5;
+}
+
+/* Layout Structure */
+.prediction-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    height: 100%;
+}
+
+/* Left Column: History Sidebar */
+.prediction-left-col {
+    width: 20rem;
+    /* Fixed width sidebar */
+    background: #ffffff;
+    /* Pure white sidebar */
+    border-right: 1px solid #d9d9d9;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    z-index: 10;
+}
+
+.history-card {
+    border: 1px solid #e8e8e8 !important;
+    /* Subtle gray border */
+    margin: 0.5rem;
+    /* Gap from sidebar edges */
+    border-radius: 8px !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    /* Soft shadow */
+    /* Keep the height calculated by JS */
+}
+
+/* Premium Gradient Header for History Sidebar */
+.history-card .ant-card-head {
+    background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+    color: white;
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+    border-bottom: none !important;
+}
+
+.history-card .ant-card-head-title {
+    color: white !important;
+}
+
+.history-card .ant-card-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 !important;
+}
+
+/* Filters Card (New!) */
+.filters-card {
+    border: 1px solid #e8e8e8 !important;
+    /* Subtle gray border */
+    margin: 0.5rem;
+    margin-top: 0.5rem;
+    /* Align header with gallery: right-col has 1rem padding, we have 0.5rem margin = perfect alignment */
+    border-radius: 8px !important;
+    flex: 1;
+    /* Fill the rest of the vertical sidebar */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    /* Soft shadow */
+}
+
+.filters-card .ant-card-head {
+    background: linear-gradient(135deg, #722ed1 0%, #1890ff 100%);
+    color: white;
+    padding: 0.75rem 1rem;
+    /* Match gallery header padding */
+    font-size: 0.875rem;
+    font-weight: 600;
+    /* Match gallery header weight */
+    flex-shrink: 0;
+    border-bottom: none !important;
+}
+
+.filters-card .ant-card-head-title {
+    color: white !important;
+}
+
+.filters-card .ant-card-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.75rem !important;
+}
+
+/* Right Column: Main Content Area */
+.prediction-right-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 1rem;
+    gap: 1rem;
+    min-width: 0;
+}
+
+/* Section Containers */
+.config-section-container,
+.filter-section-container,
+.gallery-section-container {
+    background: #fff;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.config-section-container {
+    padding: 1rem;
+}
+
+.filter-section-container {
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.gallery-section-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+}
+
+.gallery-header {
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    font-size: 0.875rem;
+    /* Match filter header size */
+}
+
+/* Dynamic Detection Overlays */
+.prediction-image-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.prediction-image-container.drawing-active {
+    cursor: crosshair !important;
+}
+
+.detection-overlay-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    /* Let clicks pass through to the image */
+    z-index: 5;
+}
+
+.detection-highlight-rect {
+    fill: rgba(255, 77, 79, 0.15);
+    /* Very light red fill */
+    stroke: #ff4d4f;
+    /* Bright Red */
+    stroke-width: 2.5;
+    vector-effect: non-scaling-stroke;
+    /* Keep stroke thin regardless of zoom */
+    paint-order: stroke;
+}
+
+/* New: Manual Drawing "Ghost" Box */
+.manual-drawing-box {
+    fill: rgba(24, 144, 255, 0.1);
+    stroke: #1890ff;
+    stroke-width: 2;
+    stroke-dasharray: 4, 4;
+    vector-effect: non-scaling-stroke;
+    animation: dashLoop 0.5s linear infinite;
+}
+
+@keyframes dashLoop {
+    from {
+        stroke-dashoffset: 0;
+    }
+
+    to {
+        stroke-dashoffset: 8;
+    }
+}
+
+.detection-highlight-rect.medium-risk {
+    stroke: #faad14;
+    /* Orange/Yellow */
+    fill: rgba(250, 173, 20, 0.1);
+}
+
+.detection-highlight-rect.low-risk {
+    stroke: #52c41a;
+    /* Green */
+    fill: rgba(82, 196, 26, 0.05);
+}
+
+/* Download button - always visible */
+.gallery-header .ant-btn {
+    background: white;
+    color: #1890ff;
+    border: none;
+    font-weight: 500;
+}
+
+.gallery-header .ant-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.9);
+    color: #722ed1;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.gallery-header .ant-btn:disabled {
+    background: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Section Headers (Configuration, etc.) */
+.section-header {
+    background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+    color: white;
+    padding: 0.75rem 1rem;
+    margin: -1rem -1rem 1rem -1rem;
+    border-radius: 0.5rem 0.5rem 0 0;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Component Styles */
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+}
+
+.config-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+/* Senior UX: Ultra-Compact Card UI */
+.source-selection-list {
+    margin: 0.25rem 0;
+}
+
+.source-card-radio {
+    display: flex !important;
+    align-items: center;
+    width: 100%;
+    margin: 0 !important;
+    padding: 4px 8px !important;
+    border-radius: 4px;
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    transition: all 0.1s ease;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.source-card-radio:hover {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+}
+
+.source-card-radio.ant-radio-wrapper-checked {
+    background: #eff6ff;
+    border-color: #dbeafe;
+}
+
+/* Fix Ant Design Radio circle and label span */
+.source-card-radio .ant-radio {
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.source-card-radio>span:last-child {
+    flex: 1;
+    display: flex !important;
+    align-items: center;
+    padding-inline-start: 8px !important;
+    width: 100%;
+    overflow: hidden;
+}
+
+.source-card-radio .radio-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.source-label {
+    font-size: 0.725rem;
+    font-weight: 500;
+    color: #475569;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.source-card-radio.ant-radio-wrapper-checked .source-label {
+    color: #1d4ed8;
+}
+
+.source-badge .ant-scroll-number {
+    font-size: 8px !important;
+    height: 14px !important;
+    line-height: 14px !important;
+    min-width: 14px !important;
+    padding: 0 4px !important;
+    background: #e2e8f0 !important;
+    color: #64748b !important;
+    box-shadow: none !important;
+}
+
+/* Professional Inline Uploader */
+.inline-uploader-row {
+    margin-top: 10px;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: center;
+    /* PERFECT CENTERING */
+    width: 100%;
+    animation: fadeInCompact 0.2s ease-out;
+}
+
+.compact-upload-btn {
+    font-size: 0.75rem !important;
+    height: 30px !important;
+    padding: 0 18px !important;
+    border-radius: 15px !important;
+    background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.25) !important;
+    transition: all 0.3s ease !important;
+}
+
+.compact-upload-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(114, 46, 209, 0.35) !important;
+    opacity: 0.95;
+    color: #ffffff !important;
+}
+
+
+
+@keyframes fadeInCompact {
+    from {
+        opacity: 0;
+        transform: translateY(-2px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+@keyframes slideInDownTiny {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+
+@keyframes slideInDownTiny {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+
+
+.config-actions {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 0.75rem;
+    border-top: 1px dashed #f0f0f0;
+}
+
+/* KPI Grid (Vibrant Metrics) */
+.p-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.p-stat-card {
+    border-radius: 0.75rem;
+    border: 1px solid #eef0f2;
+    background: white;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+}
+
+.p-stat-card .ant-card-body {
+    padding: 0.75rem 0.25rem !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.p-stat-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+}
+
+.p-stat-icon-circle {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(24, 144, 255, 0.1) 0%, rgba(114, 46, 209, 0.1) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+    position: relative;
+    border: 2px solid transparent;
+}
+
+.p-stat-icon-circle::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    padding: 2px;
+    background: linear-gradient(135deg, var(--gradient-start, #1890ff) 0%, #722ed1 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    opacity: 0.6;
+}
+
+.p-stat-card:hover .p-stat-icon-circle::after {
+    opacity: 1;
+}
+
+.p-stat-icon {
+    font-size: 1.5rem;
+}
+
+.p-stat-value {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 2px;
+}
+
+.p-stat-label {
+    font-size: 0.625rem;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.0625rem;
+    font-weight: 600;
+}
+
+.prediction-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: 1rem;
+    overflow-y: auto;
+    padding: 1rem;
+    flex: 1;
+}
+
+.prediction-gallery-item-wrapper {
+    display: flex;
+    flex-direction: column;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    border: 1px solid #f0f0f0;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.prediction-gallery-item-wrapper:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.prediction-gallery-item {
+    position: relative;
+    aspect-ratio: 1;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+
+
+.prediction-gallery-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #fafafa;
+}
+
+.image-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(24, 144, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.prediction-gallery-item:hover .image-overlay {
+    opacity: 1;
+}
+
+.detection-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 5;
+}
+
+.image-name-label {
+    padding: 0.5rem 0.75rem;
+    background: #fafafa;
+    border-top: 1px solid #f0f0f0;
+    font-size: 0.75rem;
+    color: #595959;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.prediction-gallery-item-wrapper:hover .image-name-label {
+    background: #e6f7ff;
+    color: #1890ff;
+}
+
+
+/* History Sidebar List */
+.exp-list-item {
+    padding: 0.75rem 1rem !important;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 1px solid #f0f0f0;
+    border-left: 3px solid transparent;
+}
+
+.exp-list-item:hover {
+    background: linear-gradient(to right, rgba(24, 144, 255, 0.05), transparent);
+}
+
+.exp-list-item.active {
+    background: linear-gradient(to right, rgba(24, 144, 255, 0.1), transparent);
+    border-left: 3px solid #1890ff;
+}
+
+.history-item-meta {
+    width: 100%;
+}
+
+.history-item-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+}
+
+/* Typography & Titles */
+.section-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #262626;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Modal Styling */
+.prediction-preview-modal .ant-modal-content {
+    background: #000 !important;
+    box-shadow: none;
+}
+
+.prediction-preview-modal .ant-modal-close {
+    color: #fff;
+}
+
+/* Navigation Modal Styles */
+.image-viewer-modal .ant-modal-content {
+    background: #000 !important;
+}
+
+.nav-btn {
+    position: absolute;
+    z-index: 20;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: none !important;
+    color: #fff !important;
+    height: 3.5rem !important;
+    width: 3.5rem !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: all 0.2s !important;
+}
+
+.nav-btn:hover {
+    background: rgba(255, 255, 255, 0.25) !important;
+    transform: scale(1.1);
+}
+
+.nav-btn:disabled {
+    opacity: 0.2;
+    cursor: not-allowed;
+}
+
+.image-viewer-modal .ant-modal-close {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 50%;
+    margin: 1rem;
+    color: #fff;
+    transition: background 0.2s;
+}
+
+.image-viewer-modal .ant-modal-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+    .prediction-left-col {
+        width: 15rem;
+    }
+}
+
+/* Custom Premium Animations */
+@keyframes tooltipFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes popupAppear {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -95%) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, -105%) scale(1);
+    }
+}
+
+/* ============================================================
+   STRATEGIC INTELLIGENCE DOSSIER (GPT-5.2 AESTHETIC)
+   ============================================================ */
+
+.report-dossier {
+    padding: 1.5rem;
+    background: #fdfdfd;
+    /* High-quality paper white */
+    min-height: 100%;
+}
+
+.dossier-paper {
+    background: #ffffff !important;
+    border: 1px solid #e7eaed !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03) !important;
+    border-radius: 4px !important;
+    /* Industrial sharp edges */
+    position: relative;
+    overflow: hidden;
+}
+
+.dossier-paper::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, #1890ff, transparent);
+    opacity: 0.6;
+}
+
+.dossier-section-title {
+    font-family: 'Inter', -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+    font-weight: 700 !important;
+    color: #1d1d1f !important;
+    margin: 0 !important;
+}
+
+.refined-typography {
+    line-height: 1.8;
+    color: #434343;
+    font-size: 15px;
+}
+
+.mono-value {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    color: #1890ff;
+}
+
+/* Page 1: Heritage List */
+.dna-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dna-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #f0f0f0;
+}
+
+/* Page 2: Spatial Failure */
+.spatial-failure-visualizer {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    background: #fff;
+    padding: 8px;
+    border: 1px solid #f0f0f0;
+}
+
+/* Page 3: Roadmap Dots */
+.roadmap-path {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding-left: 32px;
+    position: relative;
+}
+
+.roadmap-path::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #f0f0f0;
+}
+
+.roadmap-step-premium {
+    position: relative;
+}
+
+.step-num {
+    position: absolute;
+    left: -32px;
+    width: 24px;
+    height: 24px;
+    background: #1890ff;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 1px #1890ff;
+    z-index: 2;
+}
+
+/* ROI Matrix */
+.roi-matrix-card {
+    padding: 1.5rem;
+    background: #f9fbff;
+    border: 1px solid #e6f7ff;
+    border-radius: 8px;
+}
+
+.roi-stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.accent-blue {
+    background: #e6f7ff;
+}
+
+.accent-orange {
+    background: #fff7e6;
+}
+
+.accent-green {
+    background: #f6ffed;
+}
+
+/* Dashboard Layout Overrides */
+.analytics-tab-content.report-dossier {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+/* ============================================================
+   REPORT HUD STICKY LOGIC
+   ============================================================ */
+.sticky-report-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* ============================================================
+   PRINT ENGINE (SIMPLIFIED INDUSTRIAL CLEAN-ROOM)
+   ============================================================ */
+@media print {
+
+    /* 1. Global Reset */
+    html,
+    body {
+        height: auto !important;
+        overflow: visible !important;
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* 2. Hide Screen-Only UI (The Background App) */
+    #root,
+    .ant-modal-mask,
+    .ant-modal-close,
+    .ant-modal-header,
+    .ant-tabs-nav,
+    .sticky-report-header,
+    .report-footer-attribution,
+    .dossier-section-divider,
+    .ant-btn {
+        display: none !important;
+    }
+
+    /* 3. Unlock Modal Containers (PORTAL AWARE) */
+    .ant-modal-root,
+    .ant-modal-wrap,
+    .ant-modal {
+        display: block !important;
+        position: static !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+        background: white !important;
+        box-shadow: none !important;
+    }
+
+    .ant-modal-content,
+    .ant-modal-body,
+    .analytics-tabs,
+    .ant-tabs-content-holder,
+    .ant-tabs-content {
+        display: block !important;
+        overflow: visible !important;
+        height: auto !important;
+        min-height: auto !important;
+        max-height: none !important;
+        position: static !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        background: white !important;
+    }
+
+    /* 4. Tab Pane Isolation (THE LEAK FIX) */
+    /* Only allow the ACTIVE tab to be visible in print */
+    .ant-tabs-tabpane:not(.ant-tabs-tabpane-active) {
+        display: none !important;
+    }
+
+    .ant-tabs-tabpane-active {
+        display: block !important;
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
+        opacity: 1 !important;
+    }
+
+    /* 5. Report Structure & Flow */
+    .report-dossier,
+    .report-main-content {
+        display: block !important;
+        width: 100% !important;
+        color: #000 !important;
+    }
+
+    .dossier-section-wrapper {
+        display: block !important;
+        margin-bottom: 3rem !important;
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+
+    .dossier-paper {
+        border: 1px solid #eee !important;
+        box-shadow: none !important;
+        margin-bottom: 2rem !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    /* Print Standards */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+
+/* Screen View Visibility Reset */
+@media screen {
+    .dossier-section-wrapper.is-hidden {
+        display: none !important;
+    }
+}

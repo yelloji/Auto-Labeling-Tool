@@ -1404,6 +1404,7 @@ class AiModelOperations:
         classes: Optional[List[str]] = None,
         input_size_default: Optional[List[int]] = None,
         training_input_size: Optional[List[int]] = None,
+        description: Optional[str] = None,  # Add description parameter
     ) -> AiModel:
         """Create or update an AiModel by name.
 
@@ -1455,6 +1456,8 @@ class AiModelOperations:
                 existing.classes = classes or []
                 existing.input_size_default = input_size_default
                 existing.training_input_size = training_input_size
+                if description is not None:
+                    existing.description = description
                 existing.updated_at = datetime.utcnow()
                 # project_id remains the same scope
                 db.commit()
@@ -1479,6 +1482,7 @@ class AiModelOperations:
                     classes=classes or [],
                     input_size_default=input_size_default,
                     training_input_size=training_input_size,
+                    description=description or "",
                     created_at=datetime.utcnow(),
                 )
                 if hasattr(ai, "project_name"):

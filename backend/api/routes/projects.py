@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from datetime import datetime
+import hashlib
 import os
 import shutil
 import json
@@ -17,6 +18,7 @@ import io
 from pathlib import Path
 
 from database.database import get_db
+from database.models import Image as ImageModel, Dataset as DatasetModel
 from database.operations import ProjectOperations, DatasetOperations, ImageOperations, AnnotationOperations
 from database.operations import AiModelOperations
 from api.services.model_serialization import serialize_ai_model
@@ -687,6 +689,10 @@ async def get_project_datasets(project_id: str, db: Session = Depends(get_db)):
                 })
                 continue
                 
+            # Derive current stage from images (split_type lives on Image, not Dataset)
+            first_image = db.query(ImageModel).filter(ImageModel.dataset_id == dataset.id).first()
+            dataset_stage = first_image.split_type if first_image else 'unassigned'
+
             dataset_response = {
                 "id": dataset.id,
                 "name": dataset.name,
@@ -696,6 +702,7 @@ async def get_project_datasets(project_id: str, db: Session = Depends(get_db)):
                 "unlabeled_images": dataset.unlabeled_images,
                 "auto_label_enabled": dataset.auto_label_enabled,
                 "model_id": dataset.model_id,
+                "split_type": dataset_stage,
                 "created_at": dataset.created_at,
                 "updated_at": dataset.updated_at
             }
@@ -2344,7 +2351,7 @@ async def upload_images_to_project(
     project_id: str,
     file: UploadFile = File(...),
     batch_name: str = Form(None),
-    tags: str = Form("[]"),
+    dataset_ids: str = Form("[]"),
     db: Session = Depends(get_db)
 ):
     """Upload images directly to a project"""
@@ -2353,7 +2360,7 @@ async def upload_images_to_project(
         "filename": file.filename,
         "content_type": file.content_type,
         "batch_name": batch_name,
-        "tags": tags,
+        "dataset_ids": dataset_ids,
         "endpoint": f"/projects/{project_id}/upload"
     })
     
@@ -2387,33 +2394,38 @@ async def upload_images_to_project(
             })
             raise HTTPException(status_code=400, detail="File must be an image")
         
-        # Parse tags
-        logger.debug("operations.operations", f"Parsing tags for dataset selection", "tags_parsing", {
-            "tags": tags
+        # Parse dataset_ids (tags = existing datasets selected by user)
+        logger.debug("operations.operations", f"Parsing dataset_ids for dataset selection", "dataset_ids_parsing", {
+            "dataset_ids": dataset_ids
         })
-        
+
         try:
-            tags_list = json.loads(tags) if tags else []
+            dataset_ids_list = json.loads(dataset_ids) if dataset_ids else []
         except json.JSONDecodeError:
-            logger.warning("errors.validation", f"Failed to parse tags JSON", "tags_json_parse_error", {
-                "tags": tags
+            logger.warning("errors.validation", f"Failed to parse dataset_ids JSON", "dataset_ids_json_parse_error", {
+                "dataset_ids": dataset_ids
             })
-            tags_list = []
-        
-        # Determine dataset name: use selected tag (existing dataset) or batch_name (new dataset)
-        if tags_list and len(tags_list) > 0:
-            # User selected existing dataset from tags dropdown
-            default_dataset_name = tags_list[0]  # Use first selected tag as dataset name
-            logger.debug("operations.datasets", f"Using existing dataset from tags", "existing_dataset_selected", {
-                "dataset_name": default_dataset_name,
-                "tags_list": tags_list
+            dataset_ids_list = []
+
+        # Resolve target dataset by ID (tags) or batch name (new dataset)
+        target_dataset_from_id = None
+        if dataset_ids_list:
+            target_dataset_from_id = db.query(DatasetModel).filter(
+                DatasetModel.id == dataset_ids_list[0],
+                DatasetModel.project_id == project_id
+            ).first()
+            if not target_dataset_from_id:
+                raise HTTPException(status_code=404, detail="Selected dataset not found")
+            default_dataset_name = target_dataset_from_id.name
+            logger.debug("operations.datasets", f"Using existing dataset resolved by dataset_id", "existing_dataset_selected", {
+                "dataset_id": dataset_ids_list[0],
+                "dataset_name": default_dataset_name
             })
         else:
-            # User entered new batch name - require it to be provided
             if not batch_name or not batch_name.strip():
                 logger.warning("errors.validation", f"Batch name required but not provided", "batch_name_missing", {
                     "batch_name": batch_name,
-                    "tags_list": tags_list
+                    "dataset_ids_list": dataset_ids_list
                 })
                 raise HTTPException(status_code=400, detail="Batch name is required when not using existing dataset")
             default_dataset_name = batch_name.strip()
@@ -2421,10 +2433,10 @@ async def upload_images_to_project(
                 "dataset_name": default_dataset_name,
                 "batch_name": batch_name
             })
-        
+
         logger.info("operations.datasets", f"Dataset name determined for upload", "dataset_name_determined", {
             "dataset_name": default_dataset_name,
-            "source": "tags" if tags_list else "batch_name"
+            "source": "dataset_ids" if dataset_ids_list else "batch_name"
         })
         
         # Use path_manager for consistent path handling
@@ -2476,7 +2488,7 @@ async def upload_images_to_project(
             image = Image.open(io.BytesIO(contents))
             width, height = image.size
             image_format = image.format
-            
+
             logger.debug("operations.images", f"Image validation successful", "image_validation_success", {
                 "width": width,
                 "height": height,
@@ -2489,7 +2501,26 @@ async def upload_images_to_project(
                 "error": str(e)
             })
             raise HTTPException(status_code=400, detail=f"Invalid image file: {str(e)}")
-        
+
+        # Duplicate check — skip if same MD5 already exists in this project
+        md5 = hashlib.md5(contents).hexdigest()
+        existing = (
+            db.query(ImageModel)
+            .join(DatasetModel, ImageModel.dataset_id == DatasetModel.id)
+            .filter(
+                DatasetModel.project_id == project_id,
+                ImageModel.image_hash_md5 == md5
+            )
+            .first()
+        )
+        if existing:
+            return {
+                "success": False,
+                "duplicate": True,
+                "message": f"{Path(file.filename).name} already exists in this project — skipped",
+                "filename": Path(file.filename).name,
+            }
+
         # Save file
         logger.debug("operations.images", f"Saving image file to storage", "image_save_start", {
             "file_path": str(file_path),
@@ -2509,39 +2540,47 @@ async def upload_images_to_project(
             "project_id": project_id,
             "dataset_name": default_dataset_name
         })
-        
-        existing_datasets = DatasetOperations.get_datasets_by_project(db, project_id)
-        target_dataset = None
-        for dataset in existing_datasets:
-            if dataset.name == default_dataset_name:
-                target_dataset = dataset
-                break
-        
-        # Create new dataset if not found
-        if not target_dataset:
-            logger.info("operations.datasets", f"Creating new dataset for upload", "new_dataset_creation", {
-                "dataset_name": default_dataset_name,
-                "project_id": project_id,
-                "project_name": project.name
-            })
-            
-            target_dataset = DatasetOperations.create_dataset(
-                db=db,
-                name=default_dataset_name,
-                description=f"Images uploaded to {project.name}",
-                project_id=project_id
-            )
-            
-            logger.info("operations.datasets", f"New dataset created successfully", "new_dataset_created", {
-                "dataset_id": target_dataset.id,
-                "dataset_name": target_dataset.name,
-                "project_id": project_id
-            })
-        else:
-            logger.debug("operations.datasets", f"Using existing dataset for upload", "existing_dataset_used", {
+
+        # If we already resolved the dataset by ID (tags path), use it directly
+        if target_dataset_from_id:
+            target_dataset = target_dataset_from_id
+            logger.debug("operations.datasets", f"Using existing dataset resolved by ID", "existing_dataset_used_by_id", {
                 "dataset_id": target_dataset.id,
                 "dataset_name": target_dataset.name
             })
+        else:
+            existing_datasets = DatasetOperations.get_datasets_by_project(db, project_id)
+            target_dataset = None
+            for dataset in existing_datasets:
+                if dataset.name == default_dataset_name:
+                    target_dataset = dataset
+                    break
+
+            # Create new dataset if not found
+            if not target_dataset:
+                logger.info("operations.datasets", f"Creating new dataset for upload", "new_dataset_creation", {
+                    "dataset_name": default_dataset_name,
+                    "project_id": project_id,
+                    "project_name": project.name
+                })
+
+                target_dataset = DatasetOperations.create_dataset(
+                    db=db,
+                    name=default_dataset_name,
+                    description=f"Images uploaded to {project.name}",
+                    project_id=project_id
+                )
+
+                logger.info("operations.datasets", f"New dataset created successfully", "new_dataset_created", {
+                    "dataset_id": target_dataset.id,
+                    "dataset_name": target_dataset.name,
+                    "project_id": project_id
+                })
+            else:
+                logger.debug("operations.datasets", f"Using existing dataset for upload", "existing_dataset_used", {
+                    "dataset_id": target_dataset.id,
+                    "dataset_name": target_dataset.name
+                })
         
         # Create image record in database with RELATIVE path for static serving
         logger.debug("app.database", f"Creating image record in database", "image_record_creation", {
@@ -2561,7 +2600,9 @@ async def upload_images_to_project(
             file_size=len(contents),
             format=image_format
         )
-        
+        image_record.image_hash_md5 = md5
+        db.commit()
+
         logger.info("operations.images", f"Image record created successfully in database", "image_record_created", {
             "image_id": image_record.id,
             "filename": safe_filename,
@@ -2599,7 +2640,7 @@ async def upload_images_to_project(
             "dataset_id": target_dataset.id,
             "dataset_name": target_dataset.name,
             "file_path": file_path,
-            "tags": tags_list,
+            "tags": dataset_ids_list,
             "batch_name": default_dataset_name,
             "image_info": {
                 "width": width,
@@ -2638,7 +2679,7 @@ async def upload_multiple_images_to_project(
     project_id: str,
     files: List[UploadFile] = File(...),
     batch_name: str = Form(None),
-    tags: str = Form("[]"),
+    dataset_ids: str = Form("[]"),
     db: Session = Depends(get_db)
 ):
     """Upload multiple images to a project"""
@@ -2646,7 +2687,7 @@ async def upload_multiple_images_to_project(
         "project_id": project_id,
         "file_count": len(files),
         "batch_name": batch_name,
-        "tags": tags,
+        "dataset_ids": dataset_ids,
         "endpoint": f"/projects/{project_id}/upload-bulk"
     })
     
@@ -2668,33 +2709,38 @@ async def upload_multiple_images_to_project(
             "file_count": len(files)
         })
         
-        # Parse tags
-        logger.debug("operations.operations", f"Parsing tags for dataset selection", "tags_parsing", {
-            "tags": tags
+        # Parse dataset_ids (tags = existing datasets selected by user)
+        logger.debug("operations.operations", f"Parsing dataset_ids for dataset selection", "dataset_ids_parsing", {
+            "dataset_ids": dataset_ids
         })
-        
+
         try:
-            tags_list = json.loads(tags) if tags else []
+            dataset_ids_list = json.loads(dataset_ids) if dataset_ids else []
         except json.JSONDecodeError:
-            logger.warning("errors.validation", f"Failed to parse tags JSON", "tags_json_parse_error", {
-                "tags": tags
+            logger.warning("errors.validation", f"Failed to parse dataset_ids JSON", "dataset_ids_json_parse_error", {
+                "dataset_ids": dataset_ids
             })
-            tags_list = []
-        
-        # Determine dataset name: use selected tag (existing dataset) or batch_name (new dataset)
-        if tags_list and len(tags_list) > 0:
-            # User selected existing dataset from tags dropdown
-            default_dataset_name = tags_list[0]  # Use first selected tag as dataset name
-            logger.debug("operations.datasets", f"Using existing dataset from tags", "existing_dataset_selected", {
-                "dataset_name": default_dataset_name,
-                "tags_list": tags_list
+            dataset_ids_list = []
+
+        # Resolve target dataset by ID (tags) or batch name (new dataset)
+        target_dataset_from_id = None
+        if dataset_ids_list:
+            target_dataset_from_id = db.query(DatasetModel).filter(
+                DatasetModel.id == dataset_ids_list[0],
+                DatasetModel.project_id == project_id
+            ).first()
+            if not target_dataset_from_id:
+                raise HTTPException(status_code=404, detail="Selected dataset not found")
+            default_dataset_name = target_dataset_from_id.name
+            logger.debug("operations.datasets", f"Using existing dataset resolved by dataset_id", "existing_dataset_selected", {
+                "dataset_id": dataset_ids_list[0],
+                "dataset_name": default_dataset_name
             })
         else:
-            # User entered new batch name - require it to be provided
             if not batch_name or not batch_name.strip():
                 logger.warning("errors.validation", f"Batch name required but not provided", "batch_name_missing", {
                     "batch_name": batch_name,
-                    "tags_list": tags_list
+                    "dataset_ids_list": dataset_ids_list
                 })
                 raise HTTPException(status_code=400, detail="Batch name is required when not using existing dataset")
             default_dataset_name = batch_name.strip()
@@ -2702,10 +2748,10 @@ async def upload_multiple_images_to_project(
                 "dataset_name": default_dataset_name,
                 "batch_name": batch_name
             })
-        
+
         logger.info("operations.datasets", f"Dataset name determined for bulk upload", "dataset_name_determined", {
             "dataset_name": default_dataset_name,
-            "source": "tags" if tags_list else "batch_name"
+            "source": "dataset_ids" if dataset_ids_list else "batch_name"
         })
         
         # Create project and dataset upload directories
@@ -2728,39 +2774,47 @@ async def upload_multiple_images_to_project(
             "project_id": project_id,
             "dataset_name": default_dataset_name
         })
-        
-        existing_datasets = DatasetOperations.get_datasets_by_project(db, project_id)
-        target_dataset = None
-        for dataset in existing_datasets:
-            if dataset.name == default_dataset_name:
-                target_dataset = dataset
-                break
-        
-        # Create new dataset if not found
-        if not target_dataset:
-            logger.info("operations.datasets", f"Creating new dataset for bulk upload", "new_dataset_creation", {
-                "dataset_name": default_dataset_name,
-                "project_id": project_id,
-                "project_name": project.name
-            })
-            
-            target_dataset = DatasetOperations.create_dataset(
-                db=db,
-                name=default_dataset_name,
-                description=f"Images uploaded to {project.name}",
-                project_id=project_id
-            )
-            
-            logger.info("operations.datasets", f"New dataset created successfully for bulk upload", "new_dataset_created", {
-                "dataset_id": target_dataset.id,
-                "dataset_name": target_dataset.name,
-                "project_id": project_id
-            })
-        else:
-            logger.debug("operations.datasets", f"Using existing dataset for bulk upload", "existing_dataset_used", {
+
+        # If we already resolved the dataset by ID (tags path), use it directly
+        if target_dataset_from_id:
+            target_dataset = target_dataset_from_id
+            logger.debug("operations.datasets", f"Using existing dataset resolved by ID for bulk upload", "existing_dataset_used_by_id", {
                 "dataset_id": target_dataset.id,
                 "dataset_name": target_dataset.name
             })
+        else:
+            existing_datasets = DatasetOperations.get_datasets_by_project(db, project_id)
+            target_dataset = None
+            for dataset in existing_datasets:
+                if dataset.name == default_dataset_name:
+                    target_dataset = dataset
+                    break
+
+            # Create new dataset if not found
+            if not target_dataset:
+                logger.info("operations.datasets", f"Creating new dataset for bulk upload", "new_dataset_creation", {
+                    "dataset_name": default_dataset_name,
+                    "project_id": project_id,
+                    "project_name": project.name
+                })
+
+                target_dataset = DatasetOperations.create_dataset(
+                    db=db,
+                    name=default_dataset_name,
+                    description=f"Images uploaded to {project.name}",
+                    project_id=project_id
+                )
+
+                logger.info("operations.datasets", f"New dataset created successfully for bulk upload", "new_dataset_created", {
+                    "dataset_id": target_dataset.id,
+                    "dataset_name": target_dataset.name,
+                    "project_id": project_id
+                })
+            else:
+                logger.debug("operations.datasets", f"Using existing dataset for bulk upload", "existing_dataset_used", {
+                    "dataset_id": target_dataset.id,
+                    "dataset_name": target_dataset.name
+                })
         
         # Process all files
         logger.info("operations.images", f"Starting bulk image processing", "bulk_image_processing_start", {
@@ -2773,10 +2827,12 @@ async def upload_multiple_images_to_project(
             'total_files': len(files),
             'successful_uploads': 0,
             'failed_uploads': 0,
+            'skipped_duplicates': 0,
+            'duplicate_files': [],
             'uploaded_images': [],
             'errors': []
         }
-        
+
         for index, file in enumerate(files):
             logger.debug("operations.images", f"Processing file {index + 1}/{len(files)}", "individual_file_processing", {
                 "file_index": index + 1,
@@ -2831,7 +2887,7 @@ async def upload_multiple_images_to_project(
                     image = Image.open(io.BytesIO(contents))
                     width, height = image.size
                     image_format = image.format
-                    
+
                     logger.debug("operations.images", f"Image validation successful", "image_validation_success", {
                         "filename": file.filename,
                         "width": width,
@@ -2844,14 +2900,30 @@ async def upload_multiple_images_to_project(
                     error_msg = f"Invalid image file {file.filename}: {str(e)}"
                     results['errors'].append(error_msg)
                     results['failed_uploads'] += 1
-                    
+
                     logger.error("errors.validation", f"Image validation failed for bulk upload", "image_validation_failure", {
                         "filename": file.filename,
                         "error": str(e),
                         "file_index": index + 1
                     })
                     continue
-                
+
+                # Duplicate check — skip if same MD5 already exists in this project
+                md5 = hashlib.md5(contents).hexdigest()
+                existing = (
+                    db.query(ImageModel)
+                    .join(DatasetModel, ImageModel.dataset_id == DatasetModel.id)
+                    .filter(
+                        DatasetModel.project_id == project_id,
+                        ImageModel.image_hash_md5 == md5
+                    )
+                    .first()
+                )
+                if existing:
+                    results['skipped_duplicates'] += 1
+                    results['duplicate_files'].append(Path(file.filename).name)
+                    continue
+
                 # Save file
                 logger.debug("operations.images", f"Saving image file to storage", "image_save_start", {
                     "file_path": file_path,
@@ -2887,7 +2959,9 @@ async def upload_multiple_images_to_project(
                     file_size=len(contents),
                     format=image_format
                 )
-                
+                image_record.image_hash_md5 = md5
+                db.commit()
+
                 logger.debug("operations.images", f"Image record created successfully", "image_record_created", {
                     "image_id": image_record.id,
                     "filename": safe_filename,
@@ -2949,8 +3023,10 @@ async def upload_multiple_images_to_project(
             "message": f"Successfully uploaded {results['successful_uploads']} of {results['total_files']} files",
             "dataset_id": target_dataset.id,
             "dataset_name": target_dataset.name,
-            "tags": tags_list,
+            "tags": dataset_ids_list,
             "batch_name": default_dataset_name,
+            "skipped_duplicates": results['skipped_duplicates'],
+            "duplicate_files": results['duplicate_files'],
             "results": results
         }
         
@@ -3029,8 +3105,8 @@ async def get_project_images(
                 "total_datasets": len(datasets)
             })
             
-            images = ImageOperations.get_images_by_dataset(db, dataset.id)
-            
+            images = ImageOperations.get_images_by_dataset(db, dataset.id, limit=99999)
+
             # Skip datasets with no images to prevent empty folders in frontend
             if len(images) == 0:
                 logger.debug("operations.datasets", f"Skipping empty dataset", "empty_dataset_skipped", {

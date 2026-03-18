@@ -1,7 +1,10 @@
-from typing import Optional, Dict, Any
-from fastapi import APIRouter, Depends, Query, HTTPException
+from typing import Optional, List, Any, Dict
+from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks, File, UploadFile
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 from database.models import TrainingSession
 from database.database import get_db, SessionLocal
@@ -14,10 +17,7 @@ from models.training.yaml_generator import generate_ultralytics_training_yaml
 from models.training.executor import start_ultralytics_training
 import json
 from pathlib import Path
-from sqlalchemy import and_
-from database.models import Release
-from database.models import Project
-from database.models import DevModeSetting
+from database.models import Release, Project, DevModeSetting, HumanVerification
 from datetime import datetime, timedelta
 import uuid
 import asyncio
@@ -25,7 +25,19 @@ import os
 import hashlib
 import yaml
 import shutil
+import subprocess
+import sys
 from core.config import settings
+from database.models import ModelExperiment, Project
+from models.training.validator import ValidatorRegistry
+from models.training.predictor import PredictorRegistry
+from utils.analytics_engine import calculate_experiment_quality
+import re
+import psutil
+import signal
+from logging_system.professional_logger import get_professional_logger
+
+logger = get_professional_logger()
 
 router = APIRouter()
 
@@ -184,6 +196,306 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+def get_image_md5(file_path: Path) -> Optional[str]:
+    """Calculate MD5 hash of a file."""
+    if not file_path.exists():
+        return None
+    hash_md5 = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
+class VerificationRequest(BaseModel):
+    project_id: int
+    image_name: str
+    class_name: str
+    bbox: List[float] # [x1, y1, x2, y2]
+    status: str
+    notes: Optional[str] = None
+    experiment_id: Optional[str] = None
+    is_manual: bool = False
+
+class ManualVerificationRequest(BaseModel):
+    project_id: int
+    image_name: str
+    class_name: str
+    bbox: List[float] # [x1, y1, x2, y2]
+    experiment_id: Optional[str] = None
+    notes: Optional[str] = None
+
+@router.post("/experiments/verify-detection")
+async def verify_detection(payload: VerificationRequest, db: Session = Depends(get_db)):
+    """Upsert a human verification for a specific detection area."""
+    try:
+        x_min, y_min, x_max, y_max = payload.bbox
+        
+        # 1. Resolve Image Hash (MD5)
+        image_md5 = None
+        if payload.experiment_id:
+            exp = db.query(ModelExperiment).get(payload.experiment_id)
+            if exp:
+                # FIRST: Check if hash is already stored in experiment metadata
+                if exp.input_images:
+                    try:
+                        # input_images can be JSON string or dict: {"filename.png": "md5hash", ...}
+                        img_metadata = json.loads(exp.input_images) if isinstance(exp.input_images, str) else exp.input_images
+                        if isinstance(img_metadata, dict):
+                            image_md5 = img_metadata.get(payload.image_name)
+                    except:
+                        pass  # If parsing fails, continue to disk fallback
+                
+                # FALLBACK: Calculate from disk if not found in metadata
+                if not image_md5 and exp.output_folder:
+                    # First check input_images folder (Stage 1/2 persistence)
+                    input_path = Path(exp.output_folder).parent / "input_images" / payload.image_name
+                    if input_path.exists():
+                        image_md5 = get_image_md5(input_path)
+                    else:
+                        # Fallback to scanning dataset path if upload persistence wasn't used
+                        if exp.dataset_path:
+                            ds_path = Path(exp.dataset_path)
+                            # Scan recursively for the file
+                            matches = list(ds_path.rglob(payload.image_name))
+                            if matches:
+                                image_md5 = get_image_md5(matches[0])
+
+        # 2. Try to find existing verification in the CURRENT experiment only
+        eps = 0.0001
+        query = db.query(HumanVerification).filter(
+            HumanVerification.project_id == payload.project_id,
+            HumanVerification.experiment_id == payload.experiment_id, # Strict Isolation
+            HumanVerification.class_name == payload.class_name,
+            HumanVerification.x_min >= x_min - eps,
+            HumanVerification.x_min <= x_min + eps,
+            HumanVerification.y_min >= y_min - eps,
+            HumanVerification.y_min <= y_min + eps,
+            HumanVerification.x_max >= x_max - eps,
+            HumanVerification.x_max <= x_max + eps,
+            HumanVerification.y_max >= y_max - eps,
+            HumanVerification.y_max <= y_max + eps
+        )
+        
+        # Identity match logic within that experiment
+        existing = None
+        if image_md5:
+            existing = query.filter(HumanVerification.image_hash_md5 == image_md5).first()
+        
+        if not existing:
+            existing = query.filter(HumanVerification.image_name == payload.image_name).first()
+        
+        # 3. Upsert or Delete
+        if payload.status == 'unverified':
+            if existing:
+                db.delete(existing)
+                db.commit()
+            return {"status": "unverified", "action": "deleted", "image_hash": image_md5}
+
+        if existing:
+            existing.status = payload.status
+            existing.notes = payload.notes
+            existing.experiment_id = payload.experiment_id
+            # If specifically provided as manual, or if it's a 'missing' defect, set is_manual
+            if payload.is_manual or payload.status == 'missing':
+                existing.is_manual = True
+            existing.updated_at = datetime.utcnow()
+            # Backfill hash if missing
+            if image_md5 and not existing.image_hash_md5:
+                existing.image_hash_md5 = image_md5
+        else:
+            new_v = HumanVerification(
+                project_id=payload.project_id,
+                image_name=payload.image_name,
+                image_hash_md5=image_md5,
+                class_name=payload.class_name,
+                x_min=x_min,
+                y_min=y_min,
+                x_max=x_max,
+                y_max=y_max,
+                status=payload.status,
+                notes=payload.notes,
+                experiment_id=payload.experiment_id,
+                is_manual=payload.is_manual or (payload.status == 'missing')
+            )
+            db.add(new_v)
+            
+        db.commit()
+        return {"status": "success", "image_hash": image_md5}
+    except Exception as e:
+        logger.error("errors.system", f"Failed to save verification: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/projects/{project_id}/verifications")
+async def get_project_verifications(project_id: int, image_name: Optional[str] = None, db: Session = Depends(get_db)):
+    """Retrieve all human verifications for a project or specific image."""
+    query = db.query(
+        HumanVerification,
+        ModelExperiment.name.label("experiment_name"),
+        TrainingSession.name.label("training_name")
+    ).outerjoin(
+        ModelExperiment, HumanVerification.experiment_id == ModelExperiment.id
+    ).outerjoin(
+        TrainingSession, ModelExperiment.training_id == TrainingSession.id
+    ).filter(
+        HumanVerification.project_id == project_id
+    ).order_by(
+        HumanVerification.updated_at.desc()
+    )
+
+    if image_name:
+        query = query.filter(HumanVerification.image_name == image_name)
+    
+    results = query.all()
+    
+    return [{
+        "id": row.HumanVerification.id,
+        "image_name": row.HumanVerification.image_name,
+        "class_name": row.HumanVerification.class_name,
+        "bbox": [row.HumanVerification.x_min, row.HumanVerification.y_min, row.HumanVerification.x_max, row.HumanVerification.y_max],
+        "status": row.HumanVerification.status,
+        "notes": row.HumanVerification.notes,
+        "image_hash_md5": row.HumanVerification.image_hash_md5,
+        "experiment_id": row.HumanVerification.experiment_id,
+        "experiment_name": row.experiment_name,
+        "training_name": row.training_name,
+        "is_manual": row.HumanVerification.is_manual,
+        "updated_at": row.HumanVerification.updated_at
+    } for row in results]
+
+@router.post("/experiments/manual-verification")
+async def save_manual_verification(payload: ManualVerificationRequest, db: Session = Depends(get_db)):
+    """Save a manually drawn box as a 'Missing Defect' verification."""
+    try:
+        x_min, y_min, x_max, y_max = payload.bbox
+        
+        # 1. Resolve Image Hash (MD5)
+        image_md5 = None
+        if payload.experiment_id:
+            exp = db.query(ModelExperiment).get(payload.experiment_id)
+            if exp:
+                if exp.input_images:
+                    try:
+                        img_metadata = json.loads(exp.input_images) if isinstance(exp.input_images, str) else exp.input_images
+                        if isinstance(img_metadata, dict):
+                            image_md5 = img_metadata.get(payload.image_name)
+                    except: pass
+                
+                if not image_md5 and exp.output_folder:
+                    input_path = Path(exp.output_folder).parent / "input_images" / payload.image_name
+                    if input_path.exists():
+                        image_md5 = get_image_md5(input_path)
+                    elif exp.dataset_path:
+                        ds_path = Path(exp.dataset_path)
+                        matches = list(ds_path.rglob(payload.image_name))
+                        if matches:
+                            image_md5 = get_image_md5(matches[0])
+
+        # 2. Manual boxes are status='missing' (AI missed it) + is_manual=True
+        new_v = HumanVerification(
+            project_id=payload.project_id,
+            image_name=payload.image_name,
+            image_hash_md5=image_md5,
+            class_name=payload.class_name,
+            x_min=x_min,
+            y_min=y_min,
+            x_max=x_max,
+            y_max=y_max,
+            status='missing', 
+            is_manual=True,
+            notes=payload.notes,
+            experiment_id=payload.experiment_id
+        )
+        db.add(new_v)
+        db.commit()
+        return {"status": "success", "id": new_v.id, "image_hash": image_md5}
+    except Exception as e:
+        logger.error("errors.system", f"Failed to save manual verification: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/projects/{project_id}/manual-verifications")
+async def get_manual_verifications(project_id: int, image_name: Optional[str] = None, db: Session = Depends(get_db)):
+    """Retrieve only manually drawn verifications."""
+    query = db.query(HumanVerification).filter(
+        HumanVerification.project_id == project_id,
+        HumanVerification.is_manual == True
+    )
+    if image_name:
+        query = query.filter(HumanVerification.image_name == image_name)
+    
+    results = query.all()
+    return [{
+        "id": v.id,
+        "image_name": v.image_name,
+        "class_name": v.class_name,
+        "bbox": [v.x_min, v.y_min, v.x_max, v.y_max],
+        "status": v.status,
+        "notes": v.notes,
+        "image_hash_md5": v.image_hash_md5,
+        "experiment_id": v.experiment_id,
+        "updated_at": v.updated_at
+    } for v in results]
+
+@router.delete("/experiments/manual-verification/{verification_id}")
+async def delete_manual_verification(verification_id: str, db: Session = Depends(get_db)):
+    """Delete a manual verification."""
+    try:
+        v = db.query(HumanVerification).get(verification_id)
+        if not v:
+            raise HTTPException(status_code=404, detail="Manual verification not found")
+        db.delete(v)
+        db.commit()
+        return {"status": "success", "action": "deleted"}
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+from utils.comparison_engine import calculate_model_delta, calculate_three_way_delta, calculate_split_comparison, calculate_upload_comparison
+
+@router.get("/experiments/compare")
+async def compare_experiments(
+    project_id: int,
+    baseline_id: str,
+    challenger_id: str,
+    challenger_c_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Compare two or three prediction experiments.
+
+    Auto-detects mode:
+    - SPLIT: both experiments used a dataset split (real GT) → returns side-by-side metrics.
+    - UPLOAD: experiments used uploaded images → uses human verifications as pseudo-GT.
+    """
+    try:
+        baseline_exp   = db.query(ModelExperiment).filter(ModelExperiment.id == baseline_id).first()
+        challenger_exp = db.query(ModelExperiment).filter(ModelExperiment.id == challenger_id).first()
+
+        if not baseline_exp or not challenger_exp:
+            raise HTTPException(status_code=404, detail="One or both experiments not found.")
+
+        both_are_split  = (
+            baseline_exp.dataset_source not in (None, 'upload') and
+            challenger_exp.dataset_source not in (None, 'upload')
+        )
+        both_are_upload = (
+            baseline_exp.dataset_source in (None, 'upload') and
+            challenger_exp.dataset_source in (None, 'upload')
+        )
+
+        if both_are_split:
+            result = calculate_split_comparison(db, baseline_id, challenger_id, challenger_c_id)
+        elif both_are_upload:
+            result = calculate_upload_comparison(db, project_id, baseline_id, challenger_id, challenger_c_id)
+        else:
+            result = {"error": "Mixed mode (split + upload) is not supported. Please compare two split experiments or two upload experiments."}
+
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        return result
+    except HTTPException: raise
+    except Exception as e:
+        logger.error("api.compare", f"Failed to compare experiments: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Training session upsert/get (identity fields)
 class SessionUpsert(BaseModel):
@@ -780,13 +1092,15 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
                         found_sessions.append({
                             "id": s.id,
                             "name": s.name,
+                            "training_uid": s.training_uid,
                             "task": s.task,
                             "status": s.status,
                             "created_at": s.created_at,
                             "is_managed": True,
                             "metrics": json.dumps(metrics_data),
                             "training_config_snapshot": s.training_config_snapshot,
-                            "resolved_config_json": s.resolved_config_json
+                            "resolved_config_json": s.resolved_config_json,
+                            "dataset_summary_json": s.dataset_summary_json
                         })
                     else:
                         # Unmanaged session
@@ -836,29 +1150,32 @@ async def get_project_training_sessions(project_id: int, db: Session = Depends(g
         # Add any DB sessions that weren't found on disk (e.g. queued but not started, or deleted manually)
         for s in db_sessions:
             if not any(fs['name'] == s.name for fs in found_sessions):
-                 # Parse and normalize metrics
-                 metrics_data = {}
-                 if s.metrics_json:
-                     try:
-                         metrics_data = json.loads(s.metrics_json)
-                     except:
-                         pass
-                 
-                 # Ensure epochs is present
-                 if 'epochs' not in metrics_data:
-                     if 'training' in metrics_data and 'total_epochs' in metrics_data['training']:
-                         metrics_data['epochs'] = metrics_data['training']['total_epochs']
-                     elif 'training' in metrics_data and 'epoch' in metrics_data['training']:
-                         metrics_data['epochs'] = metrics_data['training']['epoch']
+                # Parse and normalize metrics
+                metrics_data = {}
+                if s.metrics_json:
+                    try:
+                        metrics_data = json.loads(s.metrics_json)
+                    except:
+                        pass
+                
+                # Ensure epochs is present
+                if 'epochs' not in metrics_data:
+                    if 'training' in metrics_data and 'total_epochs' in metrics_data['training']:
+                        metrics_data['epochs'] = metrics_data['training']['total_epochs']
+                    elif 'training' in metrics_data and 'epoch' in metrics_data['training']:
+                        metrics_data['epochs'] = metrics_data['training']['epoch']
 
-                 found_sessions.append({
+                found_sessions.append({
                     "id": s.id,
                     "name": s.name,
                     "task": s.task,
                     "status": s.status,
                     "created_at": s.created_at,
                     "is_managed": True,
-                    "metrics": json.dumps(metrics_data)
+                    "metrics": json.dumps(metrics_data),
+                    "training_config_snapshot": s.training_config_snapshot,
+                    "resolved_config_json": s.resolved_config_json,
+                    "dataset_summary_json": s.dataset_summary_json
                 })
 
         # Sort by created_at desc
@@ -1210,3 +1527,1158 @@ async def acknowledge_training_completion(
     db.commit()
     
     return {"success": True, "session_id": session_id}
+
+# --- Validation  API ---
+
+class ValidationRequest(BaseModel):
+    name: Optional[str] = None
+    dataset_source: str = "val"  # 'val' or 'test'
+    confidence: float = 0.25
+    iou_threshold: float = 0.45
+    imgsz: int = 640
+    batch: int = 16
+    device: str = "0"
+    max_detections: int = 300
+    weights_type: str = "best"
+    task: str = "detection"
+    custom_params: Optional[Dict[str, Any]] = None
+
+class ValidationUpdate(BaseModel):
+    name: Optional[str] = None
+    dataset_source: Optional[str] = None
+    confidence: Optional[float] = None
+    iou_threshold: Optional[float] = None
+    imgsz: Optional[int] = None
+    weights_type: Optional[str] = None
+    task: Optional[str] = None
+    max_detections: Optional[int] = None
+    custom_params: Optional[Dict[str, Any]] = None
+
+@router.get("/training/{training_id}/validation/queued")
+async def get_queued_validation(training_id: int, db: Session = Depends(get_db)):
+    """Find existing queued validation experiment for a model."""
+    exp = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.status == "queued",
+            ModelExperiment.experiment_type == "validation"  # Only return validation experiments
+        )
+        .first()
+    )
+    return exp
+
+@router.patch("/experiments/{experiment_id}")
+async def update_experiment(experiment_id: str, payload: ValidationUpdate, db: Session = Depends(get_db)):
+    """Update specific fields of an experiment (real-time sync)."""
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    update_data = payload.dict(exclude_unset=True)
+    
+    # If dataset_source changed, recalculate image_count
+    if 'dataset_source' in update_data:
+        ts = db.query(TrainingSession).filter(TrainingSession.id == exp.training_id).first()
+        if ts and ts.dataset_summary_json:
+            try:
+                summary = json.loads(ts.dataset_summary_json) if isinstance(ts.dataset_summary_json, str) else ts.dataset_summary_json
+                splits = summary.get('splits', {})
+                new_count = splits.get(update_data['dataset_source'], None)
+                if new_count is not None:
+                    exp.image_count = new_count
+            except Exception as e:
+                logger.warning("errors.system", f"Failed to recalculate image_count: {e}", "update_experiment_image_count_failed")
+    
+    for key, value in update_data.items():
+        setattr(exp, key, value)
+        
+    db.commit()
+    db.refresh(exp)
+    return exp
+
+# Removed run_validation_task (Legacy Thread-based logic)
+# This has been replaced by models.training.validation_executor and subprocess calls.
+
+@router.post("/training/{training_id}/validation/init")
+async def init_validation(training_id: int, payload: ValidationRequest, db: Session = Depends(get_db)):
+    """Initialize a new validation record or return existing queued one."""
+    existing = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.experiment_type == "validation",  # Only check for validation experiments
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+    if existing:
+        return existing
+        
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+    
+    # Get project for denormalized name
+    project = db.query(Project).filter(Project.id == ts.project_id).first()
+    
+    # Calculate image_count from dataset_summary_json
+    image_count = None
+    if ts.dataset_summary_json:
+        try:
+            summary = json.loads(ts.dataset_summary_json) if isinstance(ts.dataset_summary_json, str) else ts.dataset_summary_json
+            splits = summary.get('splits', {})
+            image_count = splits.get(payload.dataset_source, None)
+        except Exception as e:
+            logger.warning("errors.system", f"Failed to parse dataset_summary_json: {e}", "init_validation_summary_parse_failed")
+        
+    exp = ModelExperiment(
+        id=str(uuid.uuid4()),
+        training_id=ts.id,
+        project_id=ts.project_id,
+        project_name=project.name if project else None,
+        training_name=ts.name,
+        name=payload.name or "",
+        experiment_type="validation",
+        framework=ts.framework or "ultralytics",
+        task=ts.task,
+        dataset_source=payload.dataset_source,
+        dataset_path=ts.dataset_release_dir,
+        image_count=image_count,
+        confidence=payload.confidence,
+        iou_threshold=payload.iou_threshold,
+        imgsz=payload.imgsz,
+        weights_type=payload.weights_type,
+        status="queued"
+    )
+    
+    db.add(exp)
+    db.commit()
+    db.refresh(exp)
+    return exp
+
+@router.post("/training/{training_id}/validate")
+async def trigger_validation(
+    training_id: int, 
+    payload: ValidationRequest, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    # Resume existing draft if available
+    experiment = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+    
+    if experiment:
+        # Finalize settings from UI
+        experiment.name = payload.name
+        experiment.dataset_source = payload.dataset_source
+        experiment.confidence = payload.confidence
+        experiment.iou_threshold = payload.iou_threshold
+        experiment.imgsz = payload.imgsz
+        experiment.weights_type = payload.weights_type
+        experiment.custom_params = payload.custom_params
+    else:
+        # Fallback if UI somehow triggered without init
+        # Get project for denormalized name
+        project = db.query(Project).filter(Project.id == ts.project_id).first()
+        
+        experiment = ModelExperiment(
+            id=str(uuid.uuid4()),
+            training_id=ts.id,
+            project_id=ts.project_id,
+            project_name=project.name if project else None,
+            training_name=ts.name,
+            name=payload.name,
+            experiment_type="validation",
+            framework=ts.framework or "ultralytics",
+            task=ts.task,
+            dataset_source=payload.dataset_source,
+            dataset_path=ts.dataset_release_dir,
+            confidence=payload.confidence,
+            iou_threshold=payload.iou_threshold,
+            imgsz=payload.imgsz,
+            weights_type=payload.weights_type,
+            status="queued"
+        )
+        db.add(experiment)
+    
+    db.commit()
+    db.refresh(experiment)
+
+    # --- Start Validation Subprocess ---
+    try:
+        # Resolve paths (Moved from run_validation_task)
+        current_file = Path(__file__).resolve()
+        backend_dir = next(p for p in current_file.parents if p.name == "backend")
+        project_root = backend_dir.parent
+        
+        # 1. Weights Path
+        weights_filename = "best.pt"
+        if payload.weights_type == 'last':
+            weights_filename = "last.pt"
+
+        weights_path = None
+        candidates = []
+        if ts.weights_dir:
+            candidates.append(project_root / ts.weights_dir / weights_filename)
+        if ts.run_dir:
+            candidates.append(project_root / ts.run_dir / "weights" / weights_filename)
+            
+        for c in candidates:
+            if c.exists():
+                weights_path = c.as_posix()
+                break
+        
+        if not weights_path:
+            raise FileNotFoundError(f"Weights {weights_filename} not found in {candidates}")
+
+        # 2. Dataset YAML Path
+        dataset_yaml = None
+        if ts.dataset_release_dir:
+            y_path = project_root / ts.dataset_release_dir / "data.yaml"
+            if y_path.exists():
+                dataset_yaml = y_path.as_posix()
+        
+        if not dataset_yaml:
+            raise FileNotFoundError(f"data.yaml not found for training {ts.name}")
+
+        # 3. Output Folder Path
+        safe_name = re.sub(r'[^\w\-_]', '_', experiment.name or 'unnamed')
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        folder_name = f"{safe_name}_{timestamp}"
+        
+        rel_output_dir = Path(ts.run_dir) / "experiments" / folder_name
+        abs_output_dir = project_root / rel_output_dir
+        
+        # Ensure directory exists for logger/PID files
+        os.makedirs(abs_output_dir, exist_ok=True)
+
+        # 4. Launch Subprocess
+        executor_path = (backend_dir / "models" / "training" / "validation_executor.py").as_posix()
+        params_json = json.dumps(payload.dict())
+        
+        log_file_path = abs_output_dir / "validation.log"
+        log_file = open(log_file_path, "w", encoding="utf-8")
+        
+        # Set environment for unbuffered logging and UTF-8 encoding
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        
+        command = [
+            sys.executable,
+            executor_path,
+            "--experiment_id", str(experiment.id),
+            "--weights_path", weights_path,
+            "--dataset_yaml", dataset_yaml,
+            "--output_folder", abs_output_dir.as_posix(),
+            "--params_json", params_json
+        ]
+
+        # Use CREATE_NEW_PROCESS_GROUP on Windows to avoid orphan processes if server dies
+        creation_flags = 0
+        if os.name == 'nt':
+            creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
+
+        process = subprocess.Popen(
+            command,
+            cwd=project_root.as_posix(),
+            creationflags=creation_flags,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            env=env
+        )
+        
+        # Record the PID immediately
+        experiment.process_pid = process.pid
+        experiment.status = "running"
+        db.commit()
+        
+        logger.info("operations.training", f"Started validation subprocess PID {process.pid}", "validation_subprocess_started")
+
+    except Exception as e:
+        logger.error("errors.system", f"Failed to launch validation subprocess: {str(e)}", "validation_launch_failure")
+        experiment.status = "failed"
+        experiment.error_message = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to start validation: {str(e)}")
+
+    return {"experiment_id": experiment.id, "status": "running"}
+
+@router.get("/experiments/{experiment_id}")
+async def get_experiment_details(experiment_id: str, db: Session = Depends(get_db)):
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    return exp
+
+@router.get("/training/{training_id}/experiments")
+async def list_training_experiments(training_id: int, db: Session = Depends(get_db)):
+    exps = db.query(ModelExperiment).filter(ModelExperiment.training_id == training_id).order_by(ModelExperiment.created_at.desc()).all()
+    return exps
+
+
+@router.get("/experiments/{experiment_id}/images")
+async def list_experiment_images(experiment_id: str, db: Session = Depends(get_db)):
+    """List result images (filenames) in an experiment."""
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    # NEW ELITE STRATEGY: Use the Database as the source of truth
+    # This restores images in the UI even if the output_folder is empty (zero-copy mode)
+    image_files = []
+    if exp.predictions:
+        try:
+            # predictions is stored as a JSON dict {filename: detections}
+            preds = json.loads(exp.predictions) if isinstance(exp.predictions, str) else exp.predictions
+            if preds and isinstance(preds, dict):
+                image_files = sorted(list(preds.keys()))
+                if image_files:
+                    return image_files
+        except Exception as e:
+            logger.warning("errors.system", f"Failed to parse predictions for {experiment_id}: {e}", "list_experiment_images_db_failed")
+    
+    # FALLBACK: Traditional folder scan (for legacy experiments or local uploads)
+    if not exp.output_folder:
+        return []
+    
+    # Resolve project root
+    current_file = Path(__file__).resolve()
+    backend_dir = next(p for p in current_file.parents if p.name == "backend")
+    project_root = backend_dir.parent
+    
+    full_path = (project_root / exp.output_folder).resolve()
+    if not full_path.exists() or not full_path.is_dir():
+        return []
+    
+    valid_exts = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+    for f in full_path.rglob('*'):
+        if f.is_file() and f.suffix.lower() in valid_exts:
+            rel_path = f.relative_to(full_path)
+            image_files.append(rel_path.as_posix())
+            
+    image_files.sort()
+    return image_files
+
+
+@router.get("/experiments/{experiment_id}/original-image/{filename:path}")
+async def get_experiment_original_image(
+    experiment_id: str, 
+    filename: str, 
+    download: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Serve the clean, un-annotated original image for a prediction result.
+    If download=True, force a 'Save As' dialog.
+    """
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    # Resolve project root
+    current_file = Path(__file__).resolve()
+    backend_dir = next(p for p in current_file.parents if p.name == "backend")
+    project_root = backend_dir.parent
+    
+    original_path = None
+    
+    # 1. Handle dataset sources (train/val/test)
+    if exp.dataset_source in ['train', 'val', 'test']:
+        if not exp.dataset_path:
+            raise HTTPException(status_code=400, detail="Experiment has no dataset path")
+            
+        # SMART PATH RESOLUTION:
+        # Check if dataset_path already includes the split (Phase 2.3 granularity)
+        base_path = project_root / exp.dataset_path
+        if f"images/{exp.dataset_source}" in exp.dataset_path.replace('\\', '/'):
+            # Already granular!
+            potential_path = base_path / filename
+        else:
+            # Standard root path logic
+            potential_path = base_path / "images" / exp.dataset_source / filename
+            
+        if potential_path.exists():
+            original_path = potential_path
+        else:
+            # Fallback search
+            stem = Path(filename).stem
+            search_dir = potential_path.parent
+            for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff']:
+                p = search_dir / f"{stem}{ext}"
+                if p.exists():
+                    original_path = p
+                    break
+                    
+    # 2. Handle uploaded source
+    elif exp.dataset_source == 'upload':
+        if not exp.dataset_path:
+            raise HTTPException(status_code=400, detail="Experiment has no upload path")
+            
+        potential_path = project_root / exp.dataset_path / filename
+        if potential_path.exists():
+            original_path = potential_path
+        else:
+            # Fallback search
+            stem = Path(filename).stem
+            for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff']:
+                p = project_root / exp.dataset_path / f"{stem}{ext}"
+                if p.exists():
+                    original_path = p
+                    break
+    
+    if not original_path or not original_path.exists():
+        logger.warning("errors.system", f"Original source image not found for {filename} in {exp.dataset_source}", "original_image_not_found")
+        raise HTTPException(status_code=404, detail="Original image not found on disk")
+        
+    if download:
+        return FileResponse(
+            str(original_path), 
+            media_type='application/octet-stream',
+            filename=filename,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    return FileResponse(str(original_path))
+
+
+@router.delete("/experiments/{experiment_id}")
+async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
+    """Delete an experiment record (DB only for now, filesystem cleanup TODO)."""
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    # 1. Handle active processes safely
+    if exp.status == "running" and exp.process_pid:
+        try:
+            process = psutil.Process(exp.process_pid)
+            if process.is_running():
+                logger.info("operations.validation", f"Terminating active process {exp.process_pid} before deletion", "experiment_process_termination")
+                process.terminate()
+                process.wait(timeout=3)
+        except (Exception):
+            # Fallback to os.kill if psutil fails
+            try:
+                os.kill(exp.process_pid, signal.SIGTERM)
+            except Exception:
+                pass
+
+    # 2. Resolve project root for safe path calculation
+    current_file = Path(__file__).resolve()
+    backend_dir = next(p for p in current_file.parents if p.name == "backend")
+    project_root = backend_dir.parent
+
+    # 3. Safe Filesystem Cleanup
+    if exp.output_folder:
+        # Convert to Path object for validation
+        output_rel_path = Path(exp.output_folder)
+        
+        # SAFETY CHECK 1: Ensure it's not an absolute path pointing to system folders
+        if output_rel_path.is_absolute():
+            logger.warning("errors.validation", f"Blocked absolute path deletion: {exp.output_folder}", "unsafe_deletion_blocked")
+        else:
+            # SAFETY CHECK 2: Ensure it is inside a 'projects' and 'experiments' hierarchy
+            # This prevents someone from putting '../../' in the DB to delete the whole repo
+            full_path = (project_root / output_rel_path).resolve()
+            
+            # Must be inside project_root/projects
+            is_inside_projects = str(full_path.as_posix()).startswith((project_root / "projects").as_posix())
+            is_in_experiments = "experiments" in str(full_path.as_posix())
+            
+            if is_inside_projects and is_in_experiments and full_path.exists() and full_path.is_dir():
+                try:
+                    logger.info("operations.validation", f"Deleting experiment folder: {full_path}", "experiment_folder_deleted")
+                    shutil.rmtree(full_path)
+                except Exception as e:
+                    logger.error("errors.system", f"Failed to delete experiment folder: {str(e)}", "experiment_folder_delete_failure")
+            else:
+                logger.warning("errors.validation", f"Blocked unsafe/non-existent path deletion: {full_path}", "unsafe_deletion_blocked")
+
+    # 4. NEW: Cleanup Temporary Dataset Path (if it's an upload)
+    if exp.dataset_path and "prediction_temp" in str(exp.dataset_path):
+        temp_rel_path = Path(exp.dataset_path)
+        if not temp_rel_path.is_absolute():
+            full_temp_path = (project_root / temp_rel_path).resolve()
+            # Safety check: must be inside prediction_temp
+            if "prediction_temp" in str(full_temp_path.as_posix()) and full_temp_path.exists() and full_temp_path.is_dir():
+                try:
+                    logger.info("operations.validation", f"Deleting temporary source folder: {full_temp_path}", "temp_source_deleted")
+                    shutil.rmtree(full_temp_path)
+                except Exception as e:
+                    logger.error("errors.system", f"Failed to delete temp source: {str(e)}", "temp_source_delete_failure")
+
+    # 4. Delete associated Human Verifications (cleanup matching records)
+    db.query(HumanVerification).filter(HumanVerification.experiment_id == experiment_id).delete()
+
+    # 5. Delete the database record
+    db.delete(exp)
+    db.commit()
+    
+    logger.info("operations.validation", f"Deleted experiment {experiment_id}", "experiment_deleted", {
+        "experiment_id": experiment_id,
+        "training_id": exp.training_id,
+        "status": exp.status
+    })
+    
+    return {"success": True, "message": "Experiment deleted successfully"}
+
+
+@router.get("/experiments/{experiment_id}/download")
+async def download_experiment_results(experiment_id: str, db: Session = Depends(get_db)):
+    """Zip and download the annotated images and predictions.json."""
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    
+    if not exp.output_folder:
+        raise HTTPException(status_code=400, detail="Experiment has no output files")
+
+    # Resolve project root
+    current_file = Path(__file__).resolve()
+    backend_dir = next(p for p in current_file.parents if p.name == "backend")
+    project_root = backend_dir.parent
+    
+    abs_output_dir = (project_root / exp.output_folder).resolve()
+    if not abs_output_dir.exists():
+        raise HTTPException(status_code=404, detail="Result folder not found on disk")
+
+    # Create a temporary ZIP file path
+    zip_filename = f"prediction_{exp.name or exp.id}.zip"
+    temp_zip_path = Path(abs_output_dir).parent / f"{exp.id}_download.zip"
+    
+    # Use shutil to create the archive
+    # base_name is the archive name without .zip
+    try:
+        shutil.make_archive(str(temp_zip_path.with_suffix('')), 'zip', abs_output_dir)
+    except Exception as e:
+        logger.error("errors.system", f"Failed to create ZIP archive: {e}", "zip_creation_failed")
+        raise HTTPException(status_code=500, detail="Failed to create result archive")
+
+    def cleanup_temp_file():
+        if temp_zip_path.exists():
+            try:
+                os.remove(temp_zip_path)
+            except Exception:
+                pass
+
+    return FileResponse(
+        path=str(temp_zip_path), 
+        filename=zip_filename, 
+        media_type="application/zip",
+        background=BackgroundTask(cleanup_temp_file)
+    )
+
+
+@router.get("/experiments/{experiment_id}/quality-stats")
+async def get_experiment_quality_stats(experiment_id: str, db: Session = Depends(get_db)):
+    """
+    Calculate and return real-time quality metrics for an experiment.
+    Compares predictions with ground truth from annotations.json.
+    """
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    # Resolve project root (portable logic)
+    current_file = Path(__file__).resolve()
+    backend_dir = next(p for p in current_file.parents if p.name == "backend")
+    project_root = backend_dir.parent
+    
+    stats = calculate_experiment_quality(exp, project_root)
+    return stats
+
+
+# =============================================================================
+# PREDICTION API ENDPOINTS
+# =============================================================================
+
+class PredictionRequest(BaseModel):
+    """Request model for prediction experiments"""
+    name: str
+    dataset_source: str = "test"  # 'test', 'val', 'train', 'upload'
+    confidence: float = 0.25
+    iou_threshold: float = 0.45
+    imgsz: int = 640
+    batch: int = 1  # Standard default for best accuracy
+    half: bool = False # Standard default for compatibility
+    weights_type: str = "best"  # 'best' or 'last'
+    task: str = "detect"  # 'detect' or 'segment'
+    max_det: int = 300
+    device: str = "0"
+    custom_params: Optional[Dict[str, Any]] = None
+    # For upload source
+    uploaded_images: Optional[List[str]] = None  # List of image paths for upload source
+
+
+class PredictionUpdate(BaseModel):
+    """Update model for prediction experiments"""
+    name: Optional[str] = None
+    dataset_source: Optional[str] = None
+    confidence: Optional[float] = None
+    iou_threshold: Optional[float] = None
+    imgsz: Optional[int] = None
+    batch: Optional[int] = None
+    half: Optional[bool] = None
+    weights_type: Optional[str] = None
+    task: Optional[str] = None
+    max_det: Optional[int] = None
+    device: Optional[str] = None
+    custom_params: Optional[Dict[str, Any]] = None
+    uploaded_images: Optional[List[str]] = None
+
+
+@router.get("/training/{training_id}/prediction/queued")
+async def get_queued_prediction(training_id: int, db: Session = Depends(get_db)):
+    """Find existing queued prediction experiment for a model."""
+    exp = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.experiment_type == "prediction",
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+    return exp
+
+
+@router.post("/training/{training_id}/prediction/init")
+async def init_prediction(training_id: int, payload: PredictionRequest, db: Session = Depends(get_db)):
+    """Initialize a new prediction record or return existing queued one."""
+    # Check for existing queued prediction
+    existing = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.experiment_type == "prediction",
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+    if existing:
+        return existing
+        
+    # Get training session
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+    
+    # Get project for denormalized name
+    project = db.query(Project).filter(Project.id == ts.project_id).first()
+    
+    # Calculate image_count from dataset_summary_json for dataset sources
+    image_count = None
+    if payload.dataset_source in ['test', 'val', 'train']:
+        if ts.dataset_summary_json:
+            try:
+                summary = json.loads(ts.dataset_summary_json) if isinstance(ts.dataset_summary_json, str) else ts.dataset_summary_json
+                splits = summary.get('splits', {})
+                image_count = splits.get(payload.dataset_source, None)
+            except Exception as e:
+                logger.warning("errors.system", f"Failed to parse dataset_summary_json: {e}", "init_prediction_summary_parse_failed")
+    elif payload.dataset_source == 'upload' and payload.uploaded_images:
+        image_count = len(payload.uploaded_images)
+        
+    # Create prediction experiment
+    exp = ModelExperiment(
+        id=str(uuid.uuid4()),
+        training_id=ts.id,
+        project_id=ts.project_id,
+        project_name=project.name if project else None,
+        training_name=ts.name,
+        name=payload.name or "",
+        experiment_type="prediction",
+        framework=ts.framework or "ultralytics",
+        task=payload.task or ts.task,
+        dataset_source=payload.dataset_source,
+        dataset_path=ts.dataset_release_dir if payload.dataset_source in ['test', 'val', 'train'] else None,
+        image_count=image_count,
+        confidence=payload.confidence,
+        iou_threshold=payload.iou_threshold,
+        imgsz=payload.imgsz,
+        batch=payload.batch,
+        half=payload.half,
+        weights_type=payload.weights_type,
+        input_images=payload.uploaded_images,  # Store uploaded image paths
+        status="queued"
+    )
+    
+    db.add(exp)
+    db.commit()
+    db.refresh(exp)
+    return exp
+
+
+@router.post("/training/{training_id}/prediction/upload-images")
+async def upload_prediction_images(
+    training_id: int,
+    experiment_id: str = Query(...),
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload multiple images for a specific prediction experiment.
+    Images are saved to a temporary 'prediction_temp' folder in the project.
+    """
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+        
+    exp = db.query(ModelExperiment).filter(
+        ModelExperiment.id == experiment_id,
+        ModelExperiment.training_id == training_id
+    ).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+
+    project = db.query(Project).filter(Project.id == ts.project_id).first()
+    project_name = project.name if project else "unknown"
+    
+    # Resolve Project Root (portable logic)
+    current_file = Path(__file__).resolve()
+    backend_dir = current_file.parent
+    while backend_dir.name != "backend" and backend_dir.parent != backend_dir:
+        backend_dir = backend_dir.parent
+    project_root = backend_dir.parent
+
+    # Define and create temp storage directory
+    # Standard: projects/{project_name}/model/prediction_temp/{experiment_id}/
+    rel_temp_dir = Path("projects") / project_name / "model" / "prediction_temp" / experiment_id
+    abs_temp_dir = project_root / rel_temp_dir
+    abs_temp_dir.mkdir(parents=True, exist_ok=True)
+    
+    saved_files = []
+    
+    for file in files:
+        # Avoid directory traversal by using only the filename
+        safe_filename = Path(file.filename).name
+        target_path = abs_temp_dir / safe_filename
+        
+        try:
+            with target_path.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            saved_files.append((rel_temp_dir / safe_filename).as_posix())
+        except Exception as e:
+            logger.error("errors.system", f"Failed to save uploaded file {safe_filename}: {e}", "upload_prediction_save_failed")
+            
+    # Update Experiment Record
+    exp.input_images = saved_files
+    exp.image_count = len(saved_files)
+    # Point dataset_path to the folder so prediction_executor knows where to look
+    exp.dataset_path = rel_temp_dir.as_posix()
+    
+    db.commit()
+    db.refresh(exp)
+    
+    return {
+        "ok": True, 
+        "experiment_id": experiment_id, 
+        "count": len(saved_files), 
+        "path": rel_temp_dir.as_posix()
+    }
+
+
+
+
+@router.patch("/experiments/{experiment_id}/prediction")
+async def update_prediction(experiment_id: str, payload: PredictionUpdate, db: Session = Depends(get_db)):
+    """Update specific fields of a prediction experiment (real-time sync)."""
+    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+        
+    update_data = payload.dict(exclude_unset=True)
+    
+    # If dataset_source changed, recalculate image_count
+    if 'dataset_source' in update_data:
+        new_source = update_data['dataset_source']
+        if new_source in ['test', 'val', 'train']:
+            ts = db.query(TrainingSession).filter(TrainingSession.id == exp.training_id).first()
+            if ts and ts.dataset_summary_json:
+                try:
+                    summary = json.loads(ts.dataset_summary_json) if isinstance(ts.dataset_summary_json, str) else ts.dataset_summary_json
+                    splits = summary.get('splits', {})
+                    new_count = splits.get(new_source, None)
+                    if new_count is not None:
+                        exp.image_count = new_count
+                except Exception as e:
+                    logger.warning("errors.system", f"Failed to recalculate image_count: {e}", "update_prediction_image_count_failed")
+        elif new_source == 'upload' and 'uploaded_images' in update_data:
+            exp.image_count = len(update_data['uploaded_images']) if update_data['uploaded_images'] else None
+    
+    for key, value in update_data.items():
+        setattr(exp, key, value)
+        
+    db.commit()
+    db.refresh(exp)
+    return exp
+
+
+@router.post("/training/{training_id}/predict")
+async def trigger_prediction(
+    training_id: int, 
+    payload: PredictionRequest, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Start a prediction experiment in a subprocess."""
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    # Resume existing draft if available
+    experiment = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.experiment_type == "prediction",
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+    
+    if experiment:
+        # Finalize settings from UI
+        experiment.name = payload.name
+        experiment.dataset_source = payload.dataset_source
+        experiment.confidence = payload.confidence
+        experiment.iou_threshold = payload.iou_threshold
+        experiment.imgsz = payload.imgsz
+        experiment.batch = payload.batch
+        experiment.half = payload.half
+        experiment.weights_type = payload.weights_type
+        experiment.task = payload.task
+        experiment.max_detections = payload.max_det
+        experiment.device = payload.device
+        experiment.custom_params = payload.custom_params
+        
+        # Ensure path is granular even if resumed from draft
+        if payload.dataset_source in ['test', 'val', 'train']:
+            experiment.dataset_path = (Path(ts.dataset_release_dir) / "images" / payload.dataset_source).as_posix()
+        # For upload source, preserve the existing dataset_path (set during upload)
+        
+        # SAFE MERGE: Only overwrite if payload explicitly provides images
+        if payload.uploaded_images:
+            experiment.input_images = payload.uploaded_images
+            experiment.image_count = len(payload.uploaded_images)
+        elif experiment.input_images:
+            # If no new images in payload, but we have staged ones, ensure count is correct
+            experiment.image_count = len(experiment.input_images)
+    else:
+        # Fallback if UI somehow triggered without init
+        project = db.query(Project).filter(Project.id == ts.project_id).first()
+        
+        # Calculate image_count
+        image_count = None
+        if payload.dataset_source in ['test', 'val', 'train']:
+            if ts.dataset_summary_json:
+                try:
+                    summary = json.loads(ts.dataset_summary_json) if isinstance(ts.dataset_summary_json, str) else ts.dataset_summary_json
+                    splits = summary.get('splits', {})
+                    image_count = splits.get(payload.dataset_source, None)
+                except Exception:
+                    pass
+        elif payload.dataset_source == 'upload' and payload.uploaded_images:
+            image_count = len(payload.uploaded_images)
+        
+        experiment = ModelExperiment(
+            id=str(uuid.uuid4()),
+            training_id=ts.id,
+            project_id=ts.project_id,
+            project_name=project.name if project else None,
+            training_name=ts.name,
+            name=payload.name,
+            experiment_type="prediction",
+            framework=ts.framework or "ultralytics",
+            task=payload.task or ts.task,
+            dataset_source=payload.dataset_source,
+            dataset_path=(Path(ts.dataset_release_dir) / "images" / payload.dataset_source).as_posix() if payload.dataset_source in ['test', 'val', 'train'] else None,
+            image_count=image_count,
+            confidence=payload.confidence,
+            iou_threshold=payload.iou_threshold,
+            imgsz=payload.imgsz,
+            weights_type=payload.weights_type,
+            max_detections=payload.max_det,
+            device=payload.device,
+            input_images=payload.uploaded_images,
+            status="queued"
+        )
+        db.add(experiment)
+    
+    db.commit()
+    db.refresh(experiment)
+
+    # --- Start Prediction Subprocess ---
+    try:
+        # Resolve paths
+        current_file = Path(__file__).resolve()
+        backend_dir = next(p for p in current_file.parents if p.name == "backend")
+        project_root = backend_dir.parent
+        
+        # 1. Weights Path
+        weights_filename = "best.pt" if payload.weights_type == 'best' else "last.pt"
+
+        weights_path = None
+        candidates = []
+        if ts.weights_dir:
+            candidates.append(project_root / ts.weights_dir / weights_filename)
+        if ts.run_dir:
+            candidates.append(project_root / ts.run_dir / "weights" / weights_filename)
+            
+        for c in candidates:
+            if c.exists():
+                weights_path = c.as_posix()
+                break
+        
+        if not weights_path:
+            raise FileNotFoundError(f"Weights {weights_filename} not found in {candidates}")
+
+        # 2. Resolve image sources
+        images_list = []
+        if payload.dataset_source in ['test', 'val', 'train']:
+            # Use dataset images
+            if not ts.dataset_release_dir:
+                raise ValueError(f"No dataset found for training {ts.name}")
+            
+            images_dir = project_root / ts.dataset_release_dir / "images" / payload.dataset_source
+            if not images_dir.exists():
+                raise FileNotFoundError(f"Images folder not found: {images_dir}")
+            
+            # Collect unique image files (deduplicate for Windows case-insensitivity)
+            images_set = set()
+            for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif']:
+                # On Windows, glob is case-insensitive, so we deduplicate using a set
+                images_set.update([str(p).replace('\\', '/') for p in images_dir.glob(f'*{ext}')])
+                images_set.update([str(p).replace('\\', '/') for p in images_dir.glob(f'*{ext.upper()}')])
+            
+            images_list = sorted(list(images_set))
+            
+            if not images_list:
+                raise FileNotFoundError(f"No images found in {images_dir}")
+                
+        elif payload.dataset_source == 'upload':
+            # Use uploaded images: Priority given to experiment.input_images (the staged files)
+            images_list = payload.uploaded_images or experiment.input_images
+            
+            if not images_list:
+                raise ValueError("No uploaded images staged for this experiment. Please upload images first.")
+        
+            # Verify all uploaded images exist
+            for img_path in images_list:
+                full_path = project_root / img_path if not Path(img_path).is_absolute() else Path(img_path)
+                if not full_path.exists():
+                    raise FileNotFoundError(f"Uploaded image not found: {img_path}")
+        
+        # Update experiment with actual image count
+        experiment.image_count = len(images_list)
+
+        # 3. Output Folder Path
+        safe_name = re.sub(r'[^\w\-_]', '_', experiment.name or 'unnamed')
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        folder_name = f"{safe_name}_{timestamp}"
+        
+        rel_output_dir = Path(ts.run_dir) / "experiments" / "prediction" / folder_name
+        abs_output_dir = project_root / rel_output_dir
+        
+        # Ensure directory exists
+        os.makedirs(abs_output_dir, exist_ok=True)
+
+        # 4. Launch Subprocess
+        executor_path = (backend_dir / "models" / "training" / "prediction_executor.py").as_posix()
+        
+        # Build params dict
+        params = {
+            'confidence': payload.confidence,
+            'iou_threshold': payload.iou_threshold,
+            'imgsz': payload.imgsz,
+            'task': payload.task or ts.task or 'detect',
+            'device': '0'  # GPU by default
+        }
+        if payload.custom_params:
+            params.update(payload.custom_params)
+        
+        params_json = json.dumps(params)
+        images_json = json.dumps(images_list)
+        
+        log_file_path = abs_output_dir / "prediction.log"
+        log_file = open(log_file_path, "w", encoding="utf-8")
+        
+        # Set environment for unbuffered logging and UTF-8 encoding
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        
+        command = [
+            sys.executable,
+            executor_path,
+            "--experiment_id", str(experiment.id),
+            "--weights_path", weights_path,
+            "--images_json", images_json,
+            "--output_folder", abs_output_dir.as_posix(),
+            "--params_json", params_json
+        ]
+
+        # Use CREATE_NEW_PROCESS_GROUP on Windows to avoid orphan processes
+        creation_flags = 0
+        if os.name == 'nt':
+            creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
+
+        process = subprocess.Popen(
+            command,
+            cwd=project_root.as_posix(),
+            creationflags=creation_flags,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            env=env
+        )
+        
+        # Record the PID immediately
+        experiment.process_pid = process.pid
+        experiment.status = "running"
+        db.commit()
+        
+        logger.info("operations.training", f"Started prediction subprocess PID {process.pid}", "prediction_subprocess_started")
+
+    except Exception as e:
+        logger.error("errors.system", f"Failed to launch prediction subprocess: {str(e)}", "prediction_launch_failure")
+        experiment.status = "failed"
+        experiment.error_message = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to start prediction: {str(e)}")
+
+    return {"experiment_id": experiment.id, "status": "running"}
+
+
+# Phase 7.1: Get missed ground truth detections
+@router.get("/experiments/{experiment_id}/missed-detections/{image_name}")
+async def get_missed_ground_truth(
+    experiment_id: str,
+    image_name: str,
+    iou_threshold: float = Query(0.3, ge=0.1, le=0.9),
+    db: Session = Depends(get_db)
+):
+    """Get ground truth objects that the model failed to detect."""
+    from utils.ground_truth_loader import load_split_annotations, get_missed_detections
+    
+    # Get experiment
+    experiment = db.get(ModelExperiment, experiment_id)
+    if not experiment:
+        raise HTTPException(404, "Experiment not found")
+    
+    if not experiment.dataset_path or not experiment.dataset_source:
+        return []
+    
+    try:
+        from pathlib import Path
+        # Resolve absolute path to dataset base
+        # dataset_path is like "projects/.../images/train"
+        # We need "projects/.../"
+        rel_path = experiment.dataset_path
+        if "images" in rel_path:
+            # Get everything before "images"
+            base_rel_path = rel_path.split("images")[0].rstrip("/\\")
+        else:
+            base_rel_path = rel_path
+            
+        # Project root is 3 levels up from backend/models/training/api_routes.py
+        # Project root is 3 levels up from backend/models/training/api_routes.py
+        project_root = Path(__file__).resolve().parents[3]
+        abs_dataset_path = (project_root / base_rel_path).resolve()
+        
+        # Load annotations for this split
+        annotations = load_split_annotations(str(abs_dataset_path), experiment.dataset_source)
+        
+        # Get predictions for this image
+        if isinstance(experiment.predictions, str):
+            predictions = json.loads(experiment.predictions)
+        else:
+            predictions = experiment.predictions or {}
+        
+        image_name = Path(image_name).name # Ensure we have just the filename
+        image_predictions = predictions.get(image_name, [])
+        
+        # Get image dimensions
+        if isinstance(experiment.input_images, str):
+            input_images = json.loads(experiment.input_images)
+        else:
+            input_images = experiment.input_images or {}
+        
+        img_metadata = input_images.get(image_name, {})
+        
+        # Handle case where metadata might be a JSON string
+        if isinstance(img_metadata, str):
+            try:
+                img_metadata = json.loads(img_metadata)
+            except (json.JSONDecodeError, ValueError):
+                # If parsing fails, treat as empty metadata
+                img_metadata = {}
+        
+        # Safely extract dimensions with fallback
+        if isinstance(img_metadata, dict):
+            img_width = img_metadata.get('width', 640)
+            img_height = img_metadata.get('height', 640)
+        else:
+            img_width = 640
+            img_height = 640
+        
+        # Build label mapping
+        label_mapping = {}
+        data_yaml_path = abs_dataset_path / "data.yaml"
+        if data_yaml_path.exists():
+            try:
+                import yaml
+                with open(data_yaml_path, 'r') as f:
+                    data_yaml = yaml.safe_load(f)
+                    if 'names' in data_yaml:
+                        names = data_yaml['names']
+                        if isinstance(names, list):
+                            # index is class_id
+                            label_mapping = {i: name for i, name in enumerate(names)}
+                        elif isinstance(names, dict):
+                            label_mapping = {int(k): v for k, v in names.items()}
+            except Exception as e:
+                logger.error("errors.system", f"Error loading data.yaml for labels: {e}", "data_yaml_error")
+
+        if not label_mapping:
+            # Fallback to project labels - Use alphabetical order as YOLO usually does this if not specified
+            project = db.get(Project, experiment.project_id)
+            if project and project.labels:
+                sorted_labels = sorted(project.labels, key=lambda l: l.name)
+                label_mapping = {i: label.name for i, label in enumerate(sorted_labels)}
+        
+        # Construct image key using forward slashes (normalized)
+        image_key = f"images/{experiment.dataset_source}/{image_name}"
+        
+        # Find missed detections and false positives
+        result = get_missed_detections(
+            annotations,
+            image_key,
+            image_predictions,
+            img_width,
+            img_height,
+            label_mapping,
+            iou_threshold
+        )
+        
+        return result
+    
+    except FileNotFoundError:
+        # No annotations.json file
+        return []
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error("errors.system", f"Error loading missed detections: {e}\n{error_details}", "missed_detections_error")
+        raise HTTPException(status_code=500, detail=str(e))

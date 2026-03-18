@@ -110,14 +110,10 @@ def serialize_ai_model(db: Session, m: AiModel) -> Dict[str, Any]:
     except Exception:
         file_size = None
 
-    # Provide a user-friendly description for pretrained models when none exists
-    # AiModel does not have a description field; we synthesize one for UI parity
-    synthesized_description: Optional[str] = None
-    try:
-        if source == "pretrained":
-            synthesized_description = f"Pre-trained {m.name} model"
-    except Exception:
-        synthesized_description = None
+    # Get description from database (trained/uploaded models) or synthesize for pretrained
+    description: Optional[str] = getattr(m, 'description', None)
+    if not description and source == "pretrained":
+        description = f"Pre-trained {m.name} model"
 
     # Map DB model to runtime ModelManager id so frontend actions (delete/download)
     # can call the correct endpoints. Prefer exact file path match, fall back to name.
@@ -172,11 +168,12 @@ def serialize_ai_model(db: Session, m: AiModel) -> Dict[str, Any]:
         "scope": scope,
         # Authoritative flags for UI
         "source": source,
+        "source_type": getattr(m, 'source_type', None),  # Add source_type for trained models
         "is_custom": is_custom,
         "is_pretrained": is_pretrained,
         "is_ready": is_ready,
         "is_training": is_training,
         # UI-friendly extras to align project-scoped view with global model view
-        "description": synthesized_description,
+        "description": description,
         "created_at": m.created_at.isoformat() if getattr(m, "created_at", None) else None,
     }

@@ -3,6 +3,7 @@ File upload and processing utilities
 Handles image uploads, validation, and storage with cross-platform compatibility
 """
 
+import hashlib
 import os
 import uuid
 import shutil
@@ -15,6 +16,7 @@ from fastapi import UploadFile, HTTPException
 from core.config import settings
 from database.operations import ImageOperations, DatasetOperations
 from database.database import SessionLocal
+from database.models import Dataset as DatasetModel, Image as ImageModel
 from utils.path_utils import path_manager
 
 # Import professional logging system - CORRECT UNIFORM PATTERN
@@ -319,21 +321,49 @@ class FileHandler:
                 'total_files': len(files),
                 'successful_uploads': 0,
                 'failed_uploads': 0,
+                'skipped_duplicates': 0,
+                'duplicate_files': [],
                 'uploaded_images': [],
                 'errors': []
             }
-            
+
             for file in files:
                 try:
+                    # Compute MD5 from upload bytes before stream is consumed
+                    try:
+                        raw_bytes = await file.read()
+                        md5 = hashlib.md5(raw_bytes).hexdigest()
+                        await file.seek(0)
+                    except Exception:
+                        md5 = None
+
+                    # Duplicate check — skip if same MD5 already exists in this project
+                    if md5:
+                        existing = (
+                            db.query(ImageModel)
+                            .join(DatasetModel, ImageModel.dataset_id == DatasetModel.id)
+                            .filter(
+                                DatasetModel.project_id == dataset.project_id,
+                                ImageModel.image_hash_md5 == md5
+                            )
+                            .first()
+                        )
+                        if existing:
+                            results['skipped_duplicates'] += 1
+                            results['duplicate_files'].append(
+                                Path(file.filename or '').name
+                            )
+                            continue
+
                     # Save file with standardized path
                     relative_path, image_info = await self.save_uploaded_file(
                         file, dataset_id, project_name, dataset_name, split_type
                     )
-                    
+
                     # Create database record with relative path
                     # Extract clean filename without any project/dataset prefixes
                     clean_filename = self.extract_clean_filename(file.filename)
-                    
+
                     image_record = ImageOperations.create_image(
                         db=db,
                         filename=clean_filename,  # Use clean filename without prefixes
@@ -346,7 +376,12 @@ class FileHandler:
                         format=image_info['format'],
                         split_type=split_type
                     )
-                    
+
+                    # Store MD5 hash on the image record
+                    if md5:
+                        image_record.image_hash_md5 = md5
+                        db.commit()
+
                     results['uploaded_images'].append({
                         'id': image_record.id,
                         'filename': image_record.filename,
@@ -356,9 +391,9 @@ class FileHandler:
                         'file_size': image_record.file_size,
                         'split_type': image_record.split_type
                     })
-                    
+
                     results['successful_uploads'] += 1
-                    
+
                 except Exception as e:
                     error_msg = f"Failed to upload {file.filename}: {str(e)}"
                     logger.error("errors.system", error_msg, "file_upload_failed", {

@@ -1,5 +1,5 @@
 {
-  "export_timestamp": "2025-12-11T16:52:05.414969",
+  "export_timestamp": "2026-02-26T09:03:06.076436",
   "database_path": "V:\\stage-1-labeling-app\\app-3-fix-release-system-422-error\\database.db",
   "projects": [
     {
@@ -10,11 +10,11 @@
       "created_at": "2025-06-17 12:00:38",
       "updated_at": "2025-06-17 12:00:38",
       "statistics": {
-        "datasets": 2,
-        "total_images": 4,
-        "labeled_images": 4,
+        "datasets": 3,
+        "total_images": 7,
+        "labeled_images": 7,
         "unlabeled_images": 0,
-        "annotations": 10
+        "annotations": 15
       },
       "datasets": [
         {
@@ -22,7 +22,7 @@
           "name": "animal",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-21 16:42:50",
-          "updated_at": "2025-12-11 11:22:38.621843",
+          "updated_at": "2026-01-20 11:11:39.459946",
           "statistics": {
             "total_images": 3,
             "labeled_images": 3,
@@ -46,37 +46,18 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-12-11 11:22:38.578200",
+              "updated_at": "2026-01-20 11:11:39.422116",
               "file_exists": false
             },
             {
               "id": "333c172a-6e96-4e6d-88b6-c20c11fa83d5",
               "filename": "cat.jpg",
               "original_filename": "cat.jpg",
-              "file_path": "projects/gevis/dataset/animal/val/cat.jpg",
+              "file_path": "projects/gevis/dataset/animal/train/cat.jpg",
               "width": 800,
               "height": 600,
               "format": "JPEG",
               "file_size": 54749,
-              "split_type": "dataset",
-              "split_section": "val",
-              "is_labeled": true,
-              "is_auto_labeled": false,
-              "is_verified": false,
-              "annotation_count": 1,
-              "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-12-11 11:22:38.594711",
-              "file_exists": false
-            },
-            {
-              "id": "94e66fc7-b4be-4a9a-af15-756985ef9b73",
-              "filename": "dog.jpg",
-              "original_filename": "dog.jpg",
-              "file_path": "projects/gevis/dataset/animal/train/dog.jpg",
-              "width": 800,
-              "height": 600,
-              "format": "JPEG",
-              "file_size": 76182,
               "split_type": "dataset",
               "split_section": "train",
               "is_labeled": true,
@@ -84,7 +65,26 @@
               "is_verified": false,
               "annotation_count": 1,
               "created_at": "2025-09-21 16:42:50",
-              "updated_at": "2025-12-11 11:22:38.608119",
+              "updated_at": "2026-01-20 11:11:39.434212",
+              "file_exists": false
+            },
+            {
+              "id": "94e66fc7-b4be-4a9a-af15-756985ef9b73",
+              "filename": "dog.jpg",
+              "original_filename": "dog.jpg",
+              "file_path": "projects/gevis/dataset/animal/test/dog.jpg",
+              "width": 800,
+              "height": 600,
+              "format": "JPEG",
+              "file_size": 76182,
+              "split_type": "dataset",
+              "split_section": "test",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2025-09-21 16:42:50",
+              "updated_at": "2026-01-20 11:11:39.446864",
               "file_exists": false
             }
           ]
@@ -94,12 +94,12 @@
           "name": "Reject",
           "description": "Images uploaded to gevis",
           "created_at": "2025-09-22 07:07:14",
-          "updated_at": "2025-12-09 11:01:57.180568",
+          "updated_at": "2026-01-20 11:11:36.672216",
           "statistics": {
             "total_images": 1,
             "labeled_images": 1,
             "unlabeled_images": 0,
-            "annotations": 7
+            "annotations": 9
           },
           "images": [
             {
@@ -116,9 +116,81 @@
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
-              "annotation_count": 7,
+              "annotation_count": 9,
               "created_at": "2025-09-22 07:07:14",
-              "updated_at": "2025-12-09 11:01:57.159281",
+              "updated_at": "2026-01-20 11:11:36.655522",
+              "file_exists": false
+            }
+          ]
+        },
+        {
+          "id": "86451fe3-1dff-4290-adfb-e4bc03b1d2be",
+          "name": "bread_dataset",
+          "description": "Images uploaded to gevis",
+          "created_at": "2026-01-20 10:03:43",
+          "updated_at": "2026-01-21 07:48:37.395183",
+          "statistics": {
+            "total_images": 3,
+            "labeled_images": 3,
+            "unlabeled_images": 0,
+            "annotations": 3
+          },
+          "images": [
+            {
+              "id": "a9a4f7f8-288e-467b-83ba-5a08f0997024",
+              "filename": "155.png",
+              "original_filename": "155.png",
+              "file_path": "projects/gevis/dataset/bread_dataset/train/155.png",
+              "width": 164,
+              "height": 164,
+              "format": "PNG",
+              "file_size": 44275,
+              "split_type": "dataset",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2026-01-20 10:03:43",
+              "updated_at": "2026-01-21 07:48:37.356761",
+              "file_exists": false
+            },
+            {
+              "id": "332ba365-6b88-4255-83fb-85a9d286ee88",
+              "filename": "347.png",
+              "original_filename": "347.png",
+              "file_path": "projects/gevis/dataset/bread_dataset/train/347.png",
+              "width": 150,
+              "height": 142,
+              "format": "PNG",
+              "file_size": 35736,
+              "split_type": "dataset",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2026-01-20 10:03:43",
+              "updated_at": "2026-01-21 07:48:37.369942",
+              "file_exists": false
+            },
+            {
+              "id": "1a0918bd-4c7e-450b-a245-6b6af2503b30",
+              "filename": "386.png",
+              "original_filename": "386.png",
+              "file_path": "projects/gevis/dataset/bread_dataset/train/386.png",
+              "width": 148,
+              "height": 142,
+              "format": "PNG",
+              "file_size": 33723,
+              "split_type": "dataset",
+              "split_section": "train",
+              "is_labeled": true,
+              "is_auto_labeled": false,
+              "is_verified": false,
+              "annotation_count": 1,
+              "created_at": "2026-01-20 10:03:43",
+              "updated_at": "2026-01-21 07:48:37.382614",
               "file_exists": false
             }
           ]
@@ -632,7 +704,7 @@
         "total_images": 22,
         "labeled_images": 22,
         "unlabeled_images": 0,
-        "annotations": 97
+        "annotations": 98
       },
       "datasets": [
         {
@@ -640,12 +712,12 @@
           "name": "external_square",
           "description": "Images uploaded to Sensore di Forza external",
           "created_at": "2025-09-30 09:08:38",
-          "updated_at": "2025-11-10 10:22:21.127966",
+          "updated_at": "2025-12-29 14:46:20.065475",
           "statistics": {
             "total_images": 12,
             "labeled_images": 12,
             "unlabeled_images": 0,
-            "annotations": 87
+            "annotations": 88
           },
           "images": [
             {
@@ -664,7 +736,7 @@
               "is_verified": false,
               "annotation_count": 8,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:20.939652",
+              "updated_at": "2025-12-29 14:46:19.715137",
               "file_exists": false
             },
             {
@@ -683,7 +755,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:20.961496",
+              "updated_at": "2025-12-29 14:46:19.733909",
               "file_exists": false
             },
             {
@@ -702,7 +774,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:20.973353",
+              "updated_at": "2025-12-29 14:46:19.762052",
               "file_exists": false
             },
             {
@@ -721,7 +793,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:21.001903",
+              "updated_at": "2025-12-29 14:46:19.773273",
               "file_exists": false
             },
             {
@@ -740,7 +812,7 @@
               "is_verified": false,
               "annotation_count": 8,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:21.014477",
+              "updated_at": "2025-12-29 14:46:19.786437",
               "file_exists": false
             },
             {
@@ -759,7 +831,7 @@
               "is_verified": false,
               "annotation_count": 9,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:21.028622",
+              "updated_at": "2025-12-29 14:46:19.806117",
               "file_exists": false
             },
             {
@@ -778,7 +850,7 @@
               "is_verified": false,
               "annotation_count": 8,
               "created_at": "2025-09-30 09:08:38",
-              "updated_at": "2025-11-10 10:22:21.039860",
+              "updated_at": "2025-12-29 14:46:19.821607",
               "file_exists": false
             },
             {
@@ -795,9 +867,9 @@
               "is_labeled": true,
               "is_auto_labeled": false,
               "is_verified": false,
-              "annotation_count": 9,
+              "annotation_count": 10,
               "created_at": "2025-09-30 09:08:39",
-              "updated_at": "2025-11-10 10:22:21.052690",
+              "updated_at": "2025-12-29 14:46:19.860379",
               "file_exists": false
             },
             {
@@ -816,7 +888,7 @@
               "is_verified": false,
               "annotation_count": 6,
               "created_at": "2025-09-30 09:08:39",
-              "updated_at": "2025-11-10 10:22:21.064599",
+              "updated_at": "2025-12-29 14:46:19.880979",
               "file_exists": false
             },
             {
@@ -835,7 +907,7 @@
               "is_verified": false,
               "annotation_count": 6,
               "created_at": "2025-09-30 09:08:39",
-              "updated_at": "2025-11-10 10:22:21.076147",
+              "updated_at": "2025-12-29 14:46:20.025966",
               "file_exists": false
             },
             {
@@ -854,7 +926,7 @@
               "is_verified": false,
               "annotation_count": 6,
               "created_at": "2025-09-30 09:08:39",
-              "updated_at": "2025-11-10 10:22:21.088017",
+              "updated_at": "2025-12-29 14:46:20.038659",
               "file_exists": false
             },
             {
@@ -873,7 +945,7 @@
               "is_verified": false,
               "annotation_count": 6,
               "created_at": "2025-09-30 09:08:39",
-              "updated_at": "2025-11-10 10:22:21.114226",
+              "updated_at": "2025-12-29 14:46:20.050693",
               "file_exists": false
             }
           ]
@@ -1105,7 +1177,7 @@
           "name": "internal_square",
           "description": "Images uploaded to Sensore di Forza internal",
           "created_at": "2025-09-29 13:27:16",
-          "updated_at": "2025-09-30 08:14:14.520208",
+          "updated_at": "2025-12-29 14:36:12.283644",
           "statistics": {
             "total_images": 4,
             "labeled_images": 4,
@@ -1129,7 +1201,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-29 13:27:16",
-              "updated_at": "2025-09-30 08:14:14.479211",
+              "updated_at": "2025-12-29 14:36:12.213034",
               "file_exists": false
             },
             {
@@ -1148,7 +1220,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-29 13:27:16",
-              "updated_at": "2025-09-30 08:14:14.490207",
+              "updated_at": "2025-12-29 14:36:12.227684",
               "file_exists": false
             },
             {
@@ -1167,7 +1239,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-29 13:27:16",
-              "updated_at": "2025-09-30 08:14:14.500208",
+              "updated_at": "2025-12-29 14:36:12.247254",
               "file_exists": false
             },
             {
@@ -1186,7 +1258,7 @@
               "is_verified": false,
               "annotation_count": 7,
               "created_at": "2025-09-29 13:27:16",
-              "updated_at": "2025-09-30 08:14:14.510208",
+              "updated_at": "2025-12-29 14:36:12.264912",
               "file_exists": false
             }
           ]
@@ -1568,10 +1640,10 @@
   ],
   "summary": {
     "total_projects": 6,
-    "total_datasets": 10,
-    "total_images": 69,
-    "total_annotations": 347,
-    "labeled_images": 69,
+    "total_datasets": 11,
+    "total_images": 72,
+    "total_annotations": 353,
+    "labeled_images": 72,
     "unlabeled_images": 0
   }
 }

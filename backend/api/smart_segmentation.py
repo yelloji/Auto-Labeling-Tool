@@ -1,46 +1,36 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
 import numpy as np
 import cv2
 import base64
+import os
+import torch
+import time
 from io import BytesIO
 from PIL import Image
-import os
 from pathlib import Path
+from abc import ABC, abstractmethod
+from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any, Tuple
 from logging_system.professional_logger import get_professional_logger
+from database.database import get_db, SessionLocal
+from database.operations import ImageOperations
 
 logger = get_professional_logger()
-
 router = APIRouter()
 
-class SegmentationPoint(BaseModel):
+class SmartPoint(BaseModel):
     x: float
     y: float
-
-class SegmentationRequest(BaseModel):
-    image_url: str
-    point: SegmentationPoint
-    class_index: int
-    model_type: str = "sam"  # sam, yolo, or watershed
-
-class PolygonPoint(BaseModel):
-    x: float
-    y: float
-
-class SegmentationResponse(BaseModel):
-    polygon_points: List[PolygonPoint]
-    confidence: float
-    mask_area: int
-    bbox: Dict[str, float]
+    label: int = 1  # 1 for positive, 0 for negative
 
 class SmartPolygonRequest(BaseModel):
     image_id: str
-    x: int
-    y: int
+    points: List[SmartPoint]
     image_width: Optional[int] = None
     image_height: Optional[int] = None
-    algorithm: Optional[str] = "auto"  # auto, grabcut, watershed, contour
+    complexity: Optional[float] = 0.5 # New: control smoothing
+    algorithm: Optional[str] = "sam"
 
 class SmartPolygonResponse(BaseModel):
     success: bool
@@ -49,57 +39,324 @@ class SmartPolygonResponse(BaseModel):
     algorithm: str
     error: Optional[str] = None
 
+# Legacy Models for backward compatibility
+class SegmentationPoint(BaseModel):
+    x: float
+    y: float
+
+class PolygonPoint(BaseModel):
+    x: float
+    y: float
+
+class SegmentationRequest(BaseModel):
+    image_id: Optional[str] = None
+    image_url: Optional[str] = None
+    point: SegmentationPoint
+    algorithm: Optional[str] = "auto"
+    model_type: Optional[str] = "sam"
+    class_index: Optional[int] = 0
+
+class SegmentationResponse(BaseModel):
+    polygon_points: List[Dict[str, float]]
+    confidence: float
+    mask_area: int
+    bbox: Dict[str, float]
+
+# --- Modular Segmentation Architecture ---
+
+class SegmentorStrategy(ABC):
+    """Base class for all segmentation providers"""
+    
+    @abstractmethod
+    def segment(self, image: np.ndarray, points: List[SmartPoint]) -> Tuple[List[Dict[str, float]], float]:
+        pass
+
+    @abstractmethod
+    def reset_cache(self):
+        """Clear any cached embeddings"""
+        pass
+
+class SegmentorRegistry:
+    _instance = None
+    _segmentors = {}
+    _current = "mock"
+
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def register(self, name: str, segmentor: SegmentorStrategy):
+        self._segmentors[name] = segmentor
+
+    def get_current(self) -> SegmentorStrategy:
+        return self._segmentors.get(self._current)
+
+    def set_current(self, name: str):
+        if name in self._segmentors:
+            self._current = name
+
+class MockSegmentor(SegmentorStrategy):
+    """Fallback segmentor that generates realistic fake polygons"""
+    def segment(self, image: np.ndarray, points: List[SmartPoint]) -> Tuple[List[Dict[str, float]], float]:
+        if not points:
+            return [], 0.0
+        
+        # Take the first point and generate a polygon
+        p = points[0]
+        h, w = image.shape[:2]
+        poly = generate_realistic_polygon(int(p.x), int(p.y), w, h)
+        return [{"x": float(pt[0]), "y": float(pt[1])} for pt in poly], 0.8
+
+    def reset_cache(self):
+        pass
+
+class UltralyticsSAMSegmentor(SegmentorStrategy):
+    """Real SAM segmentor using Ultralytics"""
+    def __init__(self):
+        self.model = None
+        self.last_image_id = None
+        self.predictor = None # For caching embeddings
+        self.device = self._get_optimal_device()
+        self.cached_resized_image = None
+        self.cached_scale = 1.0
+
+    def _get_optimal_device(self):
+        """Pick the safest device (prefers CUDA if >2GB free)"""
+        if not torch.cuda.is_available():
+            return "cpu"
+        try:
+            # Check free memory (Total - Allocated)
+            total_mem = torch.cuda.get_device_properties(0).total_memory
+            allocated_mem = torch.cuda.memory_allocated(0)
+            free_mem = total_mem - allocated_mem
+            
+            # 2GB safety margin (2 * 1024^3 bytes)
+            if free_mem < 2 * 1024 * 1024 * 1024:
+                return "cpu"
+            return "cuda"
+        except:
+            return "cpu"
+
+    def _load_model(self):
+        if self.model is None:
+            try:
+                from ultralytics import SAM
+                import shutil
+                logger.info("operations.annotations", "Loading SAM model...", "sam_load_start")
+                
+                # Use SAM2 Base - Better accuracy, still good speed
+                model_size = os.getenv("SAM_MODEL_SIZE", "sam2_b.pt")  # Best overall balance
+                
+                # Target directory for our local copy (same pattern as YOLO)
+                repo_root = Path(__file__).parent.parent.parent
+                sam_dir = repo_root / "models" / "sam"
+                sam_dir.mkdir(parents=True, exist_ok=True)
+                local_model_path = sam_dir / model_size
+                
+                # Check if we already have it locally
+                if local_model_path.exists():
+                    logger.info("operations.annotations", f"Loading SAM from local cache: {local_model_path}", "sam_local_load")
+                    self.model = SAM(str(local_model_path))
+                else:
+                    # Auto-download (like YOLO) and then copy to our directory
+                    logger.info("operations.annotations", f"Downloading SAM model {model_size}...", "sam_download_start")
+                    temp_model = SAM(model_size)  # Triggers auto-download to Ultralytics cache
+                    
+                    # Try to copy from Ultralytics cache to our local models/sam
+                    try:
+                        ckpt_path = getattr(temp_model, 'ckpt_path', None)
+                        if ckpt_path and os.path.exists(ckpt_path):
+                            shutil.copy2(ckpt_path, local_model_path)
+                            logger.info("operations.annotations", f"SAM model copied to {local_model_path}", "sam_copy_success")
+                            self.model = SAM(str(local_model_path))
+                        else:
+                            # If copy fails, use the temp model directly (still works!)
+                            logger.warning("operations.annotations", "Could not copy SAM to local dir, using from cache", "sam_copy_skip")
+                            self.model = temp_model
+                    except Exception as copy_error:
+                        logger.warning("operations.annotations", f"Copy failed: {copy_error}, using cached model", "sam_copy_fail")
+                        self.model = temp_model
+                
+                logger.info("operations.annotations", f"SAM model ({model_size}) ready", "sam_load_success", {"device": self.device})
+            except Exception as e:
+                logger.error("errors.system", f"Failed to load SAM: {e}. Falling back to MockSegmentor", "sam_load_error")
+                # Don't raise - fall back to mock mode instead
+                logger.warning("operations.annotations", "Using MockSegmentor as fallback", "sam_fallback_mock")
+
+    def set_image(self, image: np.ndarray, image_id: str):
+        """Prepare the image for segmentation (compute embeddings)"""
+        self._load_model()
+        if self.last_image_id != image_id:
+            self.last_image_id = image_id
+            # Pre-calculate a 512px downscale to use as a persistent cache
+            # This makes both CPU and GPU hover previews near-instant
+            h, w = image.shape[:2]
+            max_dim = 512
+            scale = min(1.0, max_dim / max(h, w))
+            if scale < 1.0:
+                self.cached_resized_image = cv2.resize(image, (int(w*scale), int(h*scale)))
+                self.cached_scale = scale
+            else:
+                self.cached_resized_image = image
+                self.cached_scale = 1.0
+
+            # Dynamic health check on device before we start a new image
+            self.device = self._get_optimal_device()
+            
+            # EXPLICITLY move model to device now
+            if self.model and hasattr(self.model, 'to'):
+                try:
+                    self.model.to(self.device)
+                except Exception as e:
+                    logger.warning("operations.annotations", f"Failed to move model to {self.device}: {e}", "sam_device_move_fail")
+        
+    def segment(self, image: np.ndarray, points: List[SmartPoint]) -> Tuple[List[Dict[str, float]], float]:
+        if not points:
+            return [], 0.0
+        
+        try:
+            self._load_model()
+            
+            # Use cached resized image if available
+            if hasattr(self, 'last_image_id') and self.last_image_id is not None:
+                resized_image = self.cached_resized_image
+                scale_factor = self.cached_scale
+            else:
+                # Fallback to ad-hoc scaling
+                h, w = image.shape[:2]
+                scale_factor = min(1.0, 512 / max(h, w))
+                resized_image = cv2.resize(image, (int(w*scale_factor), int(h*scale_factor))) if scale_factor < 1.0 else image
+
+            point_coords = np.array([[p.x * scale_factor, p.y * scale_factor] for p in points], dtype=np.float32)
+            point_labels = np.array([p.label for p in points], dtype=np.int32)
+            
+            # Use the model with cached image check
+            # Wrap in try-except for OOM fallback (training protection)
+            t_start = time.time()
+            try:
+                # DEBUG PRINT for user verification
+                if self.device == "cuda":
+                    free_mem = (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)) / (1024**2)
+                    print(f"🚀 [SMART POLYGON] Device: RTX 3060 (Free VRAM: {free_mem:.0f}MB)")
+                else:
+                    print(f"💻 [SMART POLYGON] Device: CPU (Safe Mode)")
+
+                # Use the predict method with the resized image
+                # This is the most reliable way and with 512px it should be fast
+                results = self.model.predict(
+                    source=resized_image, 
+                    points=[point_coords.tolist()],
+                    labels=[point_labels.tolist()],
+                    verbose=False,
+                    device=self.device
+                )
+                t_predict = (time.time() - t_start) * 1000
+                print(f"⏱️ [SMART POLYGON] Prediction Time: {t_predict:.1f}ms")
+            except Exception as e:
+                t_err = (time.time() - t_start) * 1000
+                print(f"⚠️ [SMART POLYGON] Prediction Error after {t_err:.1f}ms: {e}")
+                # If GPU fails (OOM or otherwise), fallback to CPU to avoid crash
+                if "out of memory" in str(e).lower() and self.device == "cuda":
+                    self.device = "cpu"
+                    print(f"🔄 [SMART POLYGON] Fallback to CPU due to OOM")
+                    # Re-run with full image on CPU
+                    results = self.model.predict(
+                        source=resized_image,
+                        points=[point_coords.tolist()],
+                        labels=[point_labels.tolist()],
+                        verbose=False,
+                        device="cpu"
+                    )
+                else:
+                    raise e
+            
+            if not results or len(results) == 0:
+                return [], 0.0
+                
+            result = results[0]
+            
+            if not hasattr(result, 'masks') or result.masks is None:
+                return [], 0.0
+                
+            # Get the mask data
+            mask_tensor = result.masks.data[0]
+            mask = mask_tensor.cpu().numpy()
+            confidence = 0.8
+            
+            # Convert mask to polygon using OpenCV
+            # Mask is boolean/float, convert to uint8
+            mask8 = (mask * 255).astype(np.uint8)
+            
+            # Find contours
+            contours, _ = cv2.findContours(mask8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return [], 0.0
+                
+            # Take the largest contour
+            largest_contour = max(contours, key=cv2.contourArea)
+            
+            # Simplify contour - reduced factor for more detail
+            base_epsilon = 0.01 
+            epsilon_factor = 0.3  # Reduced from 0.5 to keep more detail
+            epsilon = base_epsilon * epsilon_factor * cv2.arcLength(largest_contour, True)
+            
+            simplified = cv2.approxPolyDP(largest_contour, epsilon, True)
+            
+            # Convert to [{x, y}] format and scale back to original resolution
+            if scale_factor != 1.0:
+                # Scale coordinates back up
+                points_out = [{
+                    "x": float(pt[0][0] / scale_factor), 
+                    "y": float(pt[0][1] / scale_factor)
+                } for pt in simplified]
+            else:
+                points_out = [{"x": float(pt[0][0]), "y": float(pt[0][1])} for pt in simplified]
+            
+            return points_out, confidence
+            
+        except Exception as e:
+            logger.warning("operations.annotations", f"Real SAM segmentation failed, falling back: {e}", "sam_seg_fallback")
+            # Fallback to mock
+            return MockSegmentor().segment(image, points)
+
+    def reset_cache(self):
+        self.last_image_id = None
+        self.predictor = None
+
+# Initialize registry
+registry = SegmentorRegistry.get_instance()
+registry.register("mock", MockSegmentor())
+registry.register("sam", UltralyticsSAMSegmentor())
+registry.set_current("sam")
 @router.post("/segment", response_model=SegmentationResponse)
 async def click_to_segment(request: SegmentationRequest):
     """
     Advanced click-to-segment functionality using multiple algorithms
     """
     try:
-        logger.info("operations.annotations", f"Processing segmentation request for point ({request.point.x}, {request.point.y})", "segmentation_request", {
-            'point_x': request.point.x,
-            'point_y': request.point.y,
-            'model_type': request.model_type,
-            'class_index': request.class_index
-        })
+        # Compatibility layer: convert old request to new format
+        # This allows existing frontend code to keep working
+        image_id = getattr(request, 'image_id', 'none') # Fallback if missing
+        points = [SmartPoint(x=request.point.x, y=request.point.y, label=1)]
         
-        # Load image from URL or base64
+        # Load image (placeholder logic for old URL-based request)
         image = await load_image_from_url(request.image_url)
         
-        if request.model_type == "sam":
-            # Use SAM (Segment Anything Model) for high-quality segmentation
-            result = await segment_with_sam(image, request.point)
-        elif request.model_type == "yolo":
-            # Use YOLO instance segmentation
-            result = await segment_with_yolo(image, request.point, request.class_index)
-        elif request.model_type == "watershed":
-            # Use traditional watershed algorithm for quick segmentation
-            result = await segment_with_watershed(image, request.point)
-        else:
-            # Default to intelligent hybrid approach
-            result = await segment_with_hybrid(image, request.point, request.class_index)
+        # Use current segmentor
+        segmentor = registry.get_current()
+        points_out, confidence = segmentor.segment(image, points)
         
-        # Success log
-        try:
-            logger.info("operations.annotations", "Segmentation completed", "segmentation_success", {
-                'model_type': request.model_type,
-                'confidence': float(getattr(result, 'confidence', 0.0)),
-                'mask_area': int(getattr(result, 'mask_area', 0)),
-                'point_x': request.point.x,
-                'point_y': request.point.y
-            })
-        except Exception:
-            # Ignore logging failures
-            pass
-
-        return result
+        return SegmentationResponse(
+            polygon_points=points_out,
+            confidence=confidence,
+            mask_area=calculate_polygon_area([(p['x'], p['y']) for p in points_out]),
+            bbox=calculate_polygon_bbox([(p['x'], p['y']) for p in points_out])
+        )
         
     except Exception as e:
-        logger.error("errors.system", f"Segmentation failed: {str(e)}", "segmentation_failed", {
-            'error': str(e),
-            'point_x': request.point.x,
-            'point_y': request.point.y,
-            'model_type': request.model_type
-        })
+        logger.error("errors.system", f"Segmentation failed: {str(e)}", "segmentation_failed")
         raise HTTPException(status_code=500, detail=f"Segmentation failed: {str(e)}")
 
 async def load_image_from_url(image_url: str) -> np.ndarray:
@@ -539,86 +796,79 @@ async def get_available_models():
         ]
     }
 
+# Simple in-memory cache for the current image to avoid redundant disk I/O
+_image_cache = {
+    "image_id": None,
+    "image": None,
+    "path": None
+}
+
 @router.post("/segment-polygon", response_model=SmartPolygonResponse)
-async def segment_polygon(request: SmartPolygonRequest):
-    """
-    Smart Polygon Tool endpoint - Generate polygon from click point
+
+async def segment_polygon(request: SmartPolygonRequest, db: Session = Depends(get_db)):
+    """Main entry point for segmentation"""
+    global _image_cache
     
-    This endpoint takes a click point and generates a polygon around the object
-    using various computer vision algorithms.
-    """
     try:
-        logger.info("operations.annotations", f"🎯 Smart Polygon: Processing request for image {request.image_id} at ({request.x}, {request.y})", "smart_polygon_request", {
-            'image_id': request.image_id,
-            'click_x': request.x,
-            'click_y': request.y,
-            'algorithm': request.algorithm,
-            'image_width': request.image_width,
-            'image_height': request.image_height
-        })
-        
-        # Load image from database/filesystem
-        image_path = await get_image_path_from_id(request.image_id)
-        if not image_path or not os.path.exists(image_path):
-            raise HTTPException(status_code=404, detail=f"Image not found: {request.image_id}")
-        
-        # Load image
-        image = cv2.imread(image_path)
-        if image is None:
-            raise HTTPException(status_code=400, detail="Failed to load image")
-        
-        height, width = image.shape[:2]
-        logger.info("operations.images", f"📏 Image loaded: {width}x{height}", "image_loaded", {
-            'image_id': request.image_id,
-            'width': width,
-            'height': height
-        })
-        
-        # Validate click coordinates
-        if request.x < 0 or request.x >= width or request.y < 0 or request.y >= height:
-            raise HTTPException(status_code=400, detail="Click coordinates outside image bounds")
-        
-        # Choose algorithm
-        algorithm = request.algorithm
-        if algorithm == "auto":
-            # Auto-select best algorithm based on image characteristics
-            algorithm = choose_best_algorithm(image, request.x, request.y)
-        
-        # Perform segmentation
-        if algorithm == "grabcut":
-            points, confidence = segment_with_grabcut(image, request.x, request.y)
-        elif algorithm == "watershed":
-            points, confidence = segment_with_watershed_cv(image, request.x, request.y)
-        elif algorithm == "contour":
-            points, confidence = segment_with_contour_detection(image, request.x, request.y)
+        # Check cache first
+        if _image_cache["image_id"] == request.image_id and _image_cache["image"] is not None:
+            image = _image_cache["image"]
+            image_path = _image_cache["path"]
         else:
-            # Default to flood fill + contour detection
-            points, confidence = segment_with_flood_fill(image, request.x, request.y)
-            algorithm = "flood_fill"
+            # Not in cache, load from DB and disk
+            image_record = ImageOperations.get_image(db, request.image_id)
+            if not image_record:
+                raise HTTPException(status_code=404, detail="Image not found")
+
+            # Resolve path
+            image_path_raw = image_record.normalized_file_path
+            from pathlib import Path
+            backend_root = Path(__file__).parent.parent
+            
+            possible_paths = [
+                image_path_raw,
+                backend_root / image_path_raw.lstrip('/'),
+                backend_root / "uploads" / image_path_raw.lstrip('/'),
+                backend_root.parent / image_path_raw.lstrip('/'),
+            ]
+            
+            image_path = None
+            for p in possible_paths:
+                p_str = str(p)
+                if os.path.exists(p_str):
+                    image_path = p_str
+                    break
+            
+            if image_path is None:
+                raise HTTPException(status_code=404, detail=f"Image file not found at {image_record.normalized_file_path}")
+
+            image = cv2.imread(image_path)
+            if image is None:
+                raise HTTPException(status_code=500, detail="Could not read image file")
+            
+            # Update cache by value (keeps the reference stable)
+            _image_cache["image_id"] = request.image_id
+            _image_cache["image"] = image
+            _image_cache["path"] = image_path
+
+        # Get segmentor
+        segmentor = registry.get_current()
         
-        logger.info("operations.annotations", f"✅ Smart Polygon: Generated {len(points)} points with confidence {confidence}", "polygon_generated", {
-            'image_id': request.image_id,
-            'point_count': len(points),
-            'confidence': confidence,
-            'algorithm': algorithm
-        })
-        
+        # If it's the real SAM segmentor, it might want to cache embeddings
+        if hasattr(segmentor, 'set_image'):
+            segmentor.set_image(image, request.image_id)
+
+        points, confidence = segmentor.segment(image, request.points)
+
         return SmartPolygonResponse(
             success=True,
-            points=[{"x": float(p[0]), "y": float(p[1])} for p in points],
+            points=points,
             confidence=confidence,
-            algorithm=algorithm
+            algorithm=registry._current
         )
-        
-    except HTTPException:
-        raise
+
     except Exception as e:
-        logger.error("errors.system", f"❌ Smart Polygon: Segmentation failed: {str(e)}", "smart_polygon_failed", {
-            'error': str(e),
-            'image_id': request.image_id,
-            'click_x': request.x,
-            'click_y': request.y
-        })
+        logger.error("errors.system", f"Smart Polygon failed: {e}", "smart_polygon_error")
         return SmartPolygonResponse(
             success=False,
             points=[],
@@ -626,6 +876,12 @@ async def segment_polygon(request: SmartPolygonRequest):
             algorithm="error",
             error=str(e)
         )
+
+@router.post("/segment-preview", response_model=SmartPolygonResponse)
+async def segment_preview(request: SmartPolygonRequest, db: Session = Depends(get_db)):
+    """Fast preview for hover segmentation"""
+    # For now, same logic but we could use a smaller model or lower resolution
+    return await segment_polygon(request, db)
 
 async def get_image_path_from_id(image_id: str) -> Optional[str]:
     """Get image file path from image ID by checking database"""

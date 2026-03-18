@@ -60,12 +60,13 @@ const Navbar = () => {
         });
         return null;
       })()}
-      <div style={{ 
-        color: 'white', 
-        fontSize: '20px', 
-        fontWeight: 'bold', 
-        marginRight: '40px',
-        marginLeft: '24px'
+      <div style={{
+        color: 'white',
+        fontSize: '1.25rem',
+        fontWeight: 'bold',
+        marginRight: '2.5rem',
+        marginLeft: '1.5rem',
+        whiteSpace: 'nowrap'
       }}>
         🏷️ Auto-Labeling-Tool
       </div>

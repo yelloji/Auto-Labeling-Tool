@@ -509,6 +509,7 @@ async def import_custom_model(
                         classes=model_info.classes,
                         input_size_default=list(model_info.input_size) if isinstance(model_info.input_size, tuple) else model_info.input_size,
                         training_input_size=training_size_list,
+                        description=model_info.description,  # Save description to database
                     )
                     try:
                         from sqlalchemy import text as sql_text
@@ -965,6 +966,9 @@ async def download_model(model_id: str):
 
         model_info = model_manager.models_info[model_id]
         file_path = Path(model_info.path)
+        # Handle relative paths
+        if not file_path.is_absolute():
+            file_path = Path(settings.BASE_DIR) / model_info.path
 
         # Ensure file exists
         logger.debug("operations.operations", f"Validating model file path", "model_file_path_validation", {
