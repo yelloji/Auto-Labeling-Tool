@@ -399,6 +399,16 @@ async def import_with_labels(
 
         warnings.extend(parse_warnings)
 
+        # Refine YOLO fmt: distinguish detection vs segmentation
+        if fmt == "yolo":
+            has_seg = any(
+                ann.get("segmentation") is not None
+                for anns in annotations_map.values()
+                for ann in anns
+            )
+            if has_seg:
+                fmt = "yolo_seg"
+
         # ── 7. Write Annotation records ────────────────────────────────────
         classes_created: list[str] = []
         classes_reused:  list[str] = []

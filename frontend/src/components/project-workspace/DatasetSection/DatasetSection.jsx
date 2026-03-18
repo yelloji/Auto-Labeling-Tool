@@ -674,7 +674,9 @@ const DatasetImageCard = ({ image, onClick }) => {
     loadAnnotations();
   }, [image.id]);
 
-  const imageUrl = `http://localhost:12000/api/images/${image.id}`;
+  const imageUrl = image.url
+    ? `http://localhost:12000${image.url}`
+    : `http://localhost:12000/api/images/${image.id}`;
 
   // Get split section display name and color
   const getSplitInfo = (splitSection) => {

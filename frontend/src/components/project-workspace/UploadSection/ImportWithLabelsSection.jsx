@@ -133,12 +133,20 @@ const ImportWithLabelsSection = forwardRef(({ projectId }, ref) => {
   };
 
   // ── Format badge ────────────────────────────────────────────────────────────
+  const FORMAT_LABELS = {
+    yolo:             'YOLO',
+    yolo_seg:         'YOLO Segmentation',
+    coco:             'COCO',
+  };
+
+  const formatLabel = (fmt) => FORMAT_LABELS[fmt] || fmt?.toUpperCase() || '';
+
   const FormatBadge = () => {
     if (!format) return null;
-    if (format === 'yolo')             return <Tag color="blue">YOLO detected</Tag>;
-    if (format === 'coco')             return <Tag color="green">COCO detected</Tag>;
+    if (format === 'yolo')              return <Tag color="blue">YOLO</Tag>;
+    if (format === 'coco')              return <Tag color="green">COCO</Tag>;
     if (format === 'yolo_missing_yaml') return <Tag color="red">YOLO — data.yaml missing</Tag>;
-    if (format === 'no_labels')        return <Tag color="orange">No label files found</Tag>;
+    if (format === 'no_labels')         return <Tag color="orange">No label files found</Tag>;
     return null;
   };
 
@@ -235,7 +243,7 @@ const ImportWithLabelsSection = forwardRef(({ projectId }, ref) => {
               <span>
                 Import complete — <strong>{result.total_images}</strong> images,{' '}
                 <strong>{result.total_annotations}</strong> annotations
-                {' '}(<Tag color="blue" style={{ margin: 0 }}>{result.format_detected?.toUpperCase()}</Tag>)
+                {' '}(<Tag color="blue" style={{ margin: 0 }}>{formatLabel(result.format_detected)}</Tag>)
               </span>
             }
             description={

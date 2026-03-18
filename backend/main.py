@@ -61,6 +61,10 @@ class CacheControlMiddleware(BaseHTTPMiddleware):
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
 
+        # Allow browser to cache static project images for 1 hour
+        if request.url.path.startswith("/projects/"):
+            response.headers["Cache-Control"] = "public, max-age=3600"
+
         return response
 
 # Logging Middleware
