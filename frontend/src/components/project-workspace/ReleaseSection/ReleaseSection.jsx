@@ -87,8 +87,9 @@ const AnnotatedImageCard = ({ image }) => {
         <img
           src={imageUrl}
           alt={image.filename || image.name}
-          style={{ 
-            width: '100%', 
+          loading="lazy"
+          style={{
+            width: '100%',
             height: '120px',
             objectFit: 'cover',
             borderRadius: '6px',

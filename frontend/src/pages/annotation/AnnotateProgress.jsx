@@ -924,6 +924,7 @@ const AnnotateProgress = () => {
                             <img
                               src={image.thumbnail_url || image.url}
                               alt={image.filename}
+                              loading="lazy"
                               style={{
                                 width: '100%',
                                 height: '100%',

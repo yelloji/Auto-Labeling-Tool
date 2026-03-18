@@ -736,6 +736,7 @@ const DatasetImageCard = ({ image, onClick }) => {
         <img
           src={thumbnailUrl}
           alt={image.filename || image.name}
+          loading="lazy"
           style={{
             width: '100%',
             height: '100%',

@@ -509,10 +509,11 @@ useEffect(() => {
               <img
                 alt={filename}
                 src={`${thumbnailUrl}?v=${Date.now()}`}
-                style={{ 
-                  height: '100%', 
-                  width: '100%', 
-                  objectFit: 'contain', 
+                loading="lazy"
+                style={{
+                  height: '100%',
+                  width: '100%',
+                  objectFit: 'contain',
                   backgroundColor: '#f5f5f5'
                 }}
               onLoad={() => {
