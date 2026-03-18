@@ -379,6 +379,7 @@ async def import_with_labels(
                 split_section="train",
                 image_hash_md5=md5,
                 is_labeled=False,
+                thumbnail_path=image_info.get("thumbnail_path"),
             )
             db.add(image_rec)
             db.flush()

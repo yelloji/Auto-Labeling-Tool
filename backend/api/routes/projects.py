@@ -1478,12 +1478,20 @@ async def delete_dataset(project_id: str, dataset_id: str, db: Session = Depends
                         "location": location,
                         "folder_path": str(dataset_folder_path)
                     })
-                    
+
                     shutil.rmtree(str(dataset_folder_path))
                     logger.info("operations.operations", f"Dataset folder deleted successfully", "dataset_folder_deleted", {
                         "location": location,
                         "folder_path": str(dataset_folder_path)
                     })
+
+                    # Also delete thumbnail folder for this dataset
+                    thumb_folder = project_folder / "thumbnails" / dataset_name
+                    if thumb_folder.exists():
+                        shutil.rmtree(str(thumb_folder))
+                        logger.info("operations.operations", f"Thumbnail folder deleted", "thumbnail_folder_deleted", {
+                            "thumb_folder": str(thumb_folder)
+                        })
                     break
             else:
                 logger.debug("operations.operations", f"Dataset folder not found in any location", "dataset_folder_not_found", {
@@ -2529,12 +2537,31 @@ async def upload_images_to_project(
         
         with open(str(file_path), "wb") as f:
             f.write(contents)
-        
+
         logger.info("operations.images", f"Image file saved successfully", "image_save_success", {
             "file_path": str(file_path),
             "file_size": len(contents)
         })
-        
+
+        # Generate thumbnail — save beside main folders under thumbnails/
+        thumbnail_relative_path = None
+        try:
+            safe_project = path_manager.sanitize_filename(project.name)
+            safe_dataset = path_manager.sanitize_filename(default_dataset_name)
+            thumb_dir = settings.PROJECTS_DIR / safe_project / "thumbnails" / safe_dataset
+            thumb_dir.mkdir(parents=True, exist_ok=True)
+            thumb_img = image.copy()
+            thumb_img.thumbnail((300, 300), Image.Resampling.LANCZOS)
+            thumb_img.save(str(thumb_dir / safe_filename))
+            thumbnail_relative_path = f"projects/{safe_project}/thumbnails/{safe_dataset}/{safe_filename}"
+            logger.info("operations.images", f"Thumbnail created for single upload", "thumbnail_created", {
+                "thumbnail_path": thumbnail_relative_path
+            })
+        except Exception as thumb_err:
+            logger.warning("operations.images", f"Thumbnail generation failed (upload still saved): {thumb_err}", "thumbnail_failed", {
+                "filename": file.filename
+            })
+
         # Check if dataset with this name already exists
         logger.debug("app.database", f"Checking for existing dataset", "existing_dataset_check", {
             "project_id": project_id,
@@ -2601,6 +2628,7 @@ async def upload_images_to_project(
             format=image_format
         )
         image_record.image_hash_md5 = md5
+        image_record.thumbnail_path = thumbnail_relative_path
         db.commit()
 
         logger.info("operations.images", f"Image record created successfully in database", "image_record_created", {
@@ -2933,13 +2961,32 @@ async def upload_multiple_images_to_project(
                 
                 with open(file_path, "wb") as f:
                     f.write(contents)
-                
+
                 logger.debug("operations.images", f"Image file saved successfully", "image_save_success", {
                     "file_path": file_path,
                     "file_size": len(contents),
                     "file_index": index + 1
                 })
-                
+
+                # Generate thumbnail for bulk upload
+                bulk_thumbnail_path = None
+                try:
+                    _safe_proj = path_manager.sanitize_filename(project.name)
+                    _safe_ds = path_manager.sanitize_filename(default_dataset_name)
+                    _thumb_dir = settings.PROJECTS_DIR / _safe_proj / "thumbnails" / _safe_ds
+                    _thumb_dir.mkdir(parents=True, exist_ok=True)
+                    _thumb_img = image.copy()
+                    _thumb_img.thumbnail((300, 300), Image.Resampling.LANCZOS)
+                    _thumb_img.save(str(_thumb_dir / safe_filename))
+                    bulk_thumbnail_path = f"projects/{_safe_proj}/thumbnails/{_safe_ds}/{safe_filename}"
+                    logger.info("operations.images", f"Thumbnail created for bulk upload", "thumbnail_created", {
+                        "thumbnail_path": bulk_thumbnail_path, "file_index": index + 1
+                    })
+                except Exception as thumb_err:
+                    logger.warning("operations.images", f"Thumbnail generation failed for bulk upload: {thumb_err}", "thumbnail_failed", {
+                        "filename": file.filename
+                    })
+
                 # Create image record in database
                 logger.debug("app.database", f"Creating image record in database", "image_record_creation", {
                     "filename": safe_filename,
@@ -2960,6 +3007,7 @@ async def upload_multiple_images_to_project(
                     format=image_format
                 )
                 image_record.image_hash_md5 = md5
+                image_record.thumbnail_path = bulk_thumbnail_path
                 db.commit()
 
                 logger.debug("operations.images", f"Image record created successfully", "image_record_created", {

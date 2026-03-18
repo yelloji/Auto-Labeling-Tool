@@ -623,7 +623,8 @@ async def get_dataset_images(
                 "is_auto_labeled": image.is_auto_labeled,
                 "is_verified": image.is_verified,
                 "created_at": image.created_at,
-                "url": file_handler.get_image_url(image.id)
+                "url": file_handler.get_image_url(image.id),
+                "thumbnail_url": f"/{image.thumbnail_path}" if image.thumbnail_path else None
             }
             image_list.append(image_data)
         

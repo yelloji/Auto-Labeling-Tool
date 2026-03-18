@@ -254,14 +254,36 @@ class FileHandler:
             relative_path = path_manager.get_relative_image_path(
                 project_name, dataset_name, unique_filename, split_type
             )
-            
+
+            # Generate thumbnail — saved beside main folders under thumbnails/
+            thumbnail_relative_path = None
+            try:
+                thumb_dir = settings.PROJECTS_DIR / path_manager.sanitize_filename(project_name) / "thumbnails" / path_manager.sanitize_filename(dataset_name)
+                thumb_dir.mkdir(parents=True, exist_ok=True)
+                thumb_path = thumb_dir / unique_filename
+                with Image.open(file_path) as img:
+                    img.thumbnail((300, 300), Image.Resampling.LANCZOS)
+                    img.save(str(thumb_path))
+                # Store as relative path — same rule as file_path (never absolute)
+                thumbnail_relative_path = f"projects/{path_manager.sanitize_filename(project_name)}/thumbnails/{path_manager.sanitize_filename(dataset_name)}/{unique_filename}"
+                logger.info("operations.operations", f"Thumbnail created: {thumb_path}", "thumbnail_created", {
+                    'thumbnail_path': str(thumb_path)
+                })
+            except Exception as thumb_err:
+                logger.warning("operations.operations", f"Thumbnail generation failed (upload still saved): {thumb_err}", "thumbnail_failed", {
+                    'filename': file.filename,
+                    'error': str(thumb_err)
+                })
+
+            image_info['thumbnail_path'] = thumbnail_relative_path
+
             logger.info("operations.operations", f"File upload completed: {file.filename}", "file_upload_complete", {
                 'filename': file.filename,
                 'relative_path': relative_path,
                 'file_size': image_info['file_size'],
                 'image_dimensions': f"{image_info['width']}x{image_info['height']}"
             })
-            
+
             return relative_path, image_info
             
         except Exception as e:
@@ -550,12 +572,20 @@ class FileHandler:
                 logger.info("operations.operations", f"Dataset folder deleted successfully", "dataset_cleanup_success", {
                     'dataset_dir': str(dataset_dir)
                 })
-                return True
             else:
                 logger.warning("operations.operations", f"Dataset folder not found: {dataset_dir}", "dataset_folder_not_found", {
                     'dataset_dir': str(dataset_dir)
                 })
-                return True  # Return True since there's nothing to clean up
+
+            # Also delete thumbnail folder for this dataset
+            thumb_dir = Path(settings.PROJECTS_DIR) / project_name / "thumbnails" / dataset_name
+            if thumb_dir.exists():
+                shutil.rmtree(thumb_dir)
+                logger.info("operations.operations", f"Thumbnail folder deleted successfully", "thumbnail_cleanup_success", {
+                    'thumb_dir': str(thumb_dir)
+                })
+
+            return True
         except Exception as e:
             logger.error("errors.system", f"Error cleaning up dataset folder: {e}", "dataset_cleanup_failed", {
                 'project_name': project_name,

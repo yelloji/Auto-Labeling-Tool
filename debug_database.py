@@ -587,6 +587,15 @@ class DatabaseDebugger:
             file_exists = os.path.exists(image['file_path'])
             print(f"      🔑 MD5 Hash: {image['image_hash_md5'] or '❌ Not set'}")
             print(f"      💾 Physical File: {'✅ Exists' if file_exists else '❌ Missing'}")
+            try:
+                thumb_path = image['thumbnail_path']
+                if thumb_path:
+                    thumb_exists = os.path.exists(thumb_path)
+                    print(f"      🖼️  Thumbnail Path: {thumb_path} {'✅' if thumb_exists else '❌ Missing'}")
+                else:
+                    print(f"      🖼️  Thumbnail Path: ❌ Not generated")
+            except:
+                print(f"      🖼️  Thumbnail Path: Column not found in database")
             
             # Get annotations count
             cursor.execute("SELECT COUNT(*) FROM annotations WHERE image_id = ?", (image['id'],))

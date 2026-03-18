@@ -89,6 +89,7 @@ class Image(Base):
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)
+    thumbnail_path = Column(String(500), nullable=True)  # relative path to 300x300 thumbnail
     file_size = Column(Integer)  # in bytes
     
     # Image properties
