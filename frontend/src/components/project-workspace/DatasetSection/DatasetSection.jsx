@@ -677,6 +677,9 @@ const DatasetImageCard = ({ image, onClick }) => {
   const imageUrl = image.url
     ? `http://localhost:12000${image.url}`
     : `http://localhost:12000/api/images/${image.id}`;
+  const thumbnailUrl = image.thumbnail_url
+    ? `http://localhost:12000${image.thumbnail_url}`
+    : imageUrl;
 
   // Get split section display name and color
   const getSplitInfo = (splitSection) => {
@@ -731,7 +734,7 @@ const DatasetImageCard = ({ image, onClick }) => {
 
       <div style={{ position: 'relative', width: '100%', height: '10.75rem', display: 'flex', justifyContent: 'center', overflow: 'hidden', borderRadius: '0.375rem', background: '#f5f5f5' }}>
         <img
-          src={imageUrl}
+          src={thumbnailUrl}
           alt={image.filename || image.name}
           style={{
             width: '100%',
