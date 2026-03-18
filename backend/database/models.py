@@ -55,7 +55,7 @@ class Dataset(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False)
     description = Column(Text)
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
@@ -98,7 +98,7 @@ class Image(Base):
     format = Column(String(10))  # jpg, png, etc.
     
     # Dataset relationship
-    dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
+    dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False, index=True)
     dataset = relationship("Dataset", back_populates="images")
     
     # Status tracking
@@ -107,7 +107,7 @@ class Image(Base):
     is_verified = Column(Boolean, default=False)
     
     # Dataset section (workflow stage)
-    split_type = Column(String(10), default="unassigned")  # unassigned, annotating, dataset
+    split_type = Column(String(10), default="unassigned", index=True)  # unassigned, annotating, dataset
     
     # Train/Val/Test split section
     # Use nullable=True to handle cases where the column doesn't exist yet
@@ -176,7 +176,7 @@ class Annotation(Base):
     __tablename__ = "annotations"
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    image_id = Column(String, ForeignKey("images.id"), nullable=False)
+    image_id = Column(String, ForeignKey("images.id"), nullable=False, index=True)
     
     # Annotation data
     class_name = Column(String(100), nullable=False)
