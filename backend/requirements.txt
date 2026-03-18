@@ -9,7 +9,7 @@ alembic==1.12.1
 # sqlite3 is built-in with Python
 
 # Computer Vision and ML - YOLO11 Latest
-ultralytics>=8.3.0  # YOLO11 support
+ultralytics>=8.4.0  # YOLO11 + YOLO26 support (update venv: pip install ultralytics==8.4.23)
 opencv-python>=4.8.0
 
 # PyTorch (CPU version - for CUDA see requirements-cuda.txt)

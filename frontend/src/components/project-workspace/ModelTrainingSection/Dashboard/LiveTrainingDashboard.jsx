@@ -12,6 +12,9 @@ const LiveTrainingDashboard = ({ metrics, status }) => {
     // Detect task type: segmentation has seg_loss and mask metrics, detection doesn't
     const isSegmentation = training.seg_loss !== undefined || validation.mask_p !== undefined;
 
+    // sem_loss is only meaningful for YOLO26 (non-zero). YOLO11 outputs 0, detection has none.
+    const hasSemLoss = isSegmentation && training.sem_loss !== undefined && training.sem_loss > 0;
+
     // Calculate F1 Scores
     const boxF1 = (validation.box_p && validation.box_r)
         ? (2 * validation.box_p * validation.box_r) / (validation.box_p + validation.box_r)
@@ -139,6 +142,22 @@ const LiveTrainingDashboard = ({ metrics, status }) => {
                         </Tooltip>
                     </Col>
                 </Row>
+
+                {/* Sem Loss Row — YOLO26 only (non-zero sem_loss) */}
+                {hasSemLoss && (
+                    <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
+                        <Col span={24}>
+                            <Tooltip title="Semantic Loss — auxiliary supervision signal used by YOLO26 for richer feature learning">
+                                <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 4, padding: 4, cursor: 'help' }}>
+                                    <div style={{ color: '#fff', fontSize: 10 }}>Sem Loss <span style={{ opacity: 0.7, fontSize: 9 }}>(YOLO26)</span></div>
+                                    <div style={{ color: '#faad14', fontWeight: 'bold', fontSize: 14, fontFamily: 'monospace' }}>
+                                        {training.sem_loss?.toFixed(3) || 'N/A'}
+                                    </div>
+                                </div>
+                            </Tooltip>
+                        </Col>
+                    </Row>
+                )}
 
                 {/* Instances & Size Row */}
                 <Row gutter={[8, 8]} style={{ marginTop: 8 }}>

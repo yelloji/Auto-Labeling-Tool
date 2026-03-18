@@ -34,46 +34,57 @@ def parse_training_log(log_file_path: Path, framework: str = None, task: str = N
         with open(log_file_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
             recent_lines = lines[-150:] if len(lines) > 150 else lines
-        
+
+        # Strip ANSI escape codes written by ultralytics 8.4.x terminal renderer
+        # e.g. \x1b[K (erase-line), \x1b[34m (color), \x1b[1m (bold)
+        ansi_escape = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+        recent_lines = [ansi_escape.sub('', line) for line in recent_lines]
+
         # Determine if this is segmentation or detection task
         is_segmentation = task == 'segmentation' if task else None
-        
-        # Auto-detect task type if not provided by checking for seg_loss in log
+
+        # Auto-detect task type if not provided
+        # Check both 8.3.x header ("Seg Loss") and 8.4.x header ("seg_loss")
         if is_segmentation is None:
             for line in recent_lines:
-                if 'Seg Loss' in line or re.search(r'\d+/\d+\s+[0-9.]+[A-Z]?\s+(?:[0-9.]+\s+){4}', line):
+                if 'seg_loss' in line or 'Seg Loss' in line or re.search(r'\d+/\d+\s+[0-9.]+[A-Z]?\s+(?:[0-9.]+\s+){4}', line):
                     is_segmentation = True
                     break
             if is_segmentation is None:
                 is_segmentation = False  # Default to detection
-        
-        # Regex patterns based on task type
+
+        # Regex patterns based on task type.
+        # sem_loss: added in ultralytics 8.4.x for segmentation tasks only.
+        # YOLO26 has real values; YOLO11 always shows 0.
+        # Made optional with (?:...)? so old 8.3.x logs (no sem_loss) still parse.
         if is_segmentation:
-            # Segmentation: 4 losses (box, seg, cls, dfl)
-            # "13/20  0.98G  0.7529  1.071  1.328  1.895  2  640:  10%|#"
+            # Segmentation: box, seg, cls, dfl + optional sem_loss (8.4.x+)
+            # 8.3.x: "13/20  0.98G  0.7529  1.071  1.328  1.895  2  640:  10%"
+            # 8.4.x: "1/5  1.74G  2.333  3.465  5.693  0.008  7.121  57  640: 0%"
             progress_pattern = re.compile(
-                r'\s*(\d+)/(\d+)\s+'  # Epoch (1/2)
-                r'([0-9.]+[A-Z]?)\s+'  # GPU (3)
-                r'([0-9.]+)\s+'  # Box Loss (4)
-                r'([0-9.]+)\s+'  # Seg Loss (5)
-                r'([0-9.]+)\s+'  # Cls Loss (6)
-                r'([0-9.]+)\s+'  # DFL Loss (7)
-                r'(\d+)\s+'  # Instances (8)
-                r'(\d+):\s+'  # Size (9)
-                r'(\d+)%'  # Progress % (10)
+                r'\s*(\d+)/(\d+)\s+'       # Epoch (1/2)
+                r'([0-9.]+[A-Z]?)\s+'      # GPU (3)
+                r'([0-9.]+)\s+'            # Box Loss (4)
+                r'([0-9.]+)\s+'            # Seg Loss (5)
+                r'([0-9.]+)\s+'            # Cls Loss (6)
+                r'([0-9.]+)\s+'            # DFL Loss (7)
+                r'(?:([0-9.]+)\s+)?'       # Sem Loss optional (8) — 8.4.x segmentation
+                r'(\d+)\s+'                # Instances (9)
+                r'(\d+):\s*'               # Size (10)
+                r'(\d+)%'                  # Progress % (11)
             )
         else:
-            # Object Detection: 3 losses (box, cls, dfl) - NO seg_loss
-            # "18/20  0.387G  1.262  0.8437  1.591  7  640:  71%|#"
+            # Object Detection: box, cls, dfl — no sem_loss (confirmed in 8.4.x)
+            # "18/20  0.387G  1.262  0.8437  1.591  7  640:  71%"
             progress_pattern = re.compile(
-                r'\s*(\d+)/(\d+)\s+'  # Epoch (1/2)
-                r'([0-9.]+[A-Z]?)\s+'  # GPU (3)
-                r'([0-9.]+)\s+'  # Box Loss (4)
-                r'([0-9.]+)\s+'  # Cls Loss (5)
-                r'([0-9.]+)\s+'  # DFL Loss (6)
-                r'(\d+)\s+'  # Instances (7)
-                r'(\d+):\s+'  # Size (8)
-                r'(\d+)%'  # Progress % (9)
+                r'\s*(\d+)/(\d+)\s+'       # Epoch (1/2)
+                r'([0-9.]+[A-Z]?)\s+'      # GPU (3)
+                r'([0-9.]+)\s+'            # Box Loss (4)
+                r'([0-9.]+)\s+'            # Cls Loss (5)
+                r'([0-9.]+)\s+'            # DFL Loss (6)
+                r'(\d+)\s+'                # Instances (7)
+                r'(\d+):\s*'               # Size (8)
+                r'(\d+)%'                  # Progress % (9)
             )
         
         # Batch progress: Must have "it/s" to distinguish from epoch "1/20"
@@ -118,7 +129,8 @@ def parse_training_log(log_file_path: Path, framework: str = None, task: str = N
             prog_match = progress_pattern.search(line)
             if prog_match:
                 if is_segmentation:
-                    # Segmentation: has seg_loss
+                    # Segmentation: box, seg, cls, dfl + optional sem_loss (group 8)
+                    # Groups shifted: instances=9, size=10, progress=11
                     metrics["training"] = {
                         "epoch": int(prog_match.group(1)),
                         "total_epochs": int(prog_match.group(2)),
@@ -127,12 +139,15 @@ def parse_training_log(log_file_path: Path, framework: str = None, task: str = N
                         "seg_loss": float(prog_match.group(5)),
                         "cls_loss": float(prog_match.group(6)),
                         "dfl_loss": float(prog_match.group(7)),
-                        "instances": int(prog_match.group(8)),
-                        "img_size": int(prog_match.group(9)),
-                        "progress_pct": int(prog_match.group(10))
+                        "instances": int(prog_match.group(9)),
+                        "img_size": int(prog_match.group(10)),
+                        "progress_pct": int(prog_match.group(11))
                     }
+                    # sem_loss present only in 8.4.x (YOLO26 has real value, YOLO11 has 0)
+                    if prog_match.group(8) is not None:
+                        metrics["training"]["sem_loss"] = float(prog_match.group(8))
                 else:
-                    # Object Detection: no seg_loss
+                    # Object Detection: box, cls, dfl — no sem_loss
                     metrics["training"] = {
                         "epoch": int(prog_match.group(1)),
                         "total_epochs": int(prog_match.group(2)),

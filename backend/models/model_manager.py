@@ -193,6 +193,30 @@ class ModelManager:
                 "type": ModelType.INSTANCE_SEGMENTATION,
                 "model_name": "yolo11s-seg.pt",
             },
+            {
+                "id": "yolo26n",
+                "name": "YOLO26 Nano",
+                "type": ModelType.OBJECT_DETECTION,
+                "model_name": "yolo26n.pt",
+            },
+            {
+                "id": "yolo26s",
+                "name": "YOLO26 Small",
+                "type": ModelType.OBJECT_DETECTION,
+                "model_name": "yolo26s.pt",
+            },
+            {
+                "id": "yolo26n-seg",
+                "name": "YOLO26 Nano Segmentation",
+                "type": ModelType.INSTANCE_SEGMENTATION,
+                "model_name": "yolo26n-seg.pt",
+            },
+            {
+                "id": "yolo26s-seg",
+                "name": "YOLO26 Small Segmentation",
+                "type": ModelType.INSTANCE_SEGMENTATION,
+                "model_name": "yolo26s-seg.pt",
+            },
         ]
 
         yolo_dir = self.models_dir / "yolo"

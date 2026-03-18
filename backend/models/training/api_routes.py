@@ -142,9 +142,10 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         if 'train' not in resolved_config:
             resolved_config['train'] = {}
             
-        # Use RELATIVE path for YOLO project dir
-        # Since executor runs with cwd=project_root, this works and keeps config portable
-        resolved_config['train']['project'] = str(rel_base_dir.parent)
+        # Use ABSOLUTE path for YOLO project dir (ultralytics 8.4.x breaking change:
+        # relative paths get prepended with runs/{task}/ internally, breaking our output dir)
+        # DB paths (ts.run_dir, ts.weights_dir etc.) remain relative for portability.
+        resolved_config['train']['project'] = str(abs_base_dir.parent)
         resolved_config['train']['name'] = ts.name
         
         # Generate temporary YAML config

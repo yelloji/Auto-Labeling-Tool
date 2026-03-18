@@ -51,6 +51,8 @@ export default function PretrainedModelSelect({ framework, taskType, projectId, 
     load();
   }, [framework, taskType, projectId]);
 
+  const isYolo26Selected = typeof value === 'string' && value.toLowerCase().includes('yolo26');
+
   return (
     <Form layout="vertical">
       <Form.Item label="Pretrained Model" required>
@@ -63,11 +65,16 @@ export default function PretrainedModelSelect({ framework, taskType, projectId, 
             options={modelOptions}
             onChange={(val) => {
               const selected = modelOptions.find(opt => opt.value === val);
-              onChange(val, selected?.modelInfo);  // Pass file path and model info
+              onChange(val, selected?.modelInfo);
             }}
             showSearch
             disabled={disabled || !modelOptions.length}
           />
+        )}
+        {isYolo26Selected && (
+          <div style={{ marginTop: 6, color: '#1677ff', fontSize: 12 }}>
+            YOLO26 detected — Smart Auto will use MuSGD optimizer for best results. You can also select MuSGD manually.
+          </div>
         )}
       </Form.Item>
     </Form>

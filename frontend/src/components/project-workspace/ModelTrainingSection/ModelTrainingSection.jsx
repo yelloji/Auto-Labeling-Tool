@@ -369,10 +369,23 @@ const ModelTrainingSection = ({ projectId, project }) => {
     prevPatience.current = form.patience;
   }, [form.patience, form.earlyStop, form.hydratedIdentity]);
 
-  // Auto-recalculate smart-auto optimizer when device or batch size changes
+  // Detect if selected model is YOLO26
+  const isYolo26 = typeof form.pretrainedModel === 'string' && form.pretrainedModel.toLowerCase().includes('yolo26');
+
+  // Auto-recalculate smart-auto optimizer when device, batch size, or model changes
   useEffect(() => {
     if (!form.hydratedIdentity) return; // Don't run during initial hydration
     if (form.optimizerMode !== 'smart-auto') return; // Only for smart-auto mode
+
+    // YOLO26: always use MuSGD — it's the model's native optimizer
+    if (isYolo26) {
+      const picked = 'MuSGD';
+      const rec = { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 };
+      if (form.optimizer !== picked) {
+        setForm(prev => ({ ...prev, optimizer: picked, ...rec }));
+      }
+      return;
+    }
 
     const isGPU = form.device === 'gpu';
     const bsz = typeof form.batchSize === 'number' ? form.batchSize : 0;
@@ -391,7 +404,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     if (form.optimizer !== picked) {
       setForm(prev => ({ ...prev, optimizer: picked, ...rec }));
     }
-  }, [form.device, form.batchSize, form.optimizerMode, form.optimizer, form.hydratedIdentity]);
+  }, [form.device, form.batchSize, form.optimizerMode, form.optimizer, form.hydratedIdentity, isYolo26]);
 
   // Auto-load resolved config and hydrate UI when returning (status=queued)
   useEffect(() => {

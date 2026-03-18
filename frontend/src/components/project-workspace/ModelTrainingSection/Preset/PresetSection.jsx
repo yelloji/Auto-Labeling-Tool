@@ -13,6 +13,7 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
     NAdam: { lr0: 0.002, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 },
     RAdam: { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 },
     RMSProp: { lr0: 0.01, lrf: 0.1, momentum: 0.9, weight_decay: 0.0005 },
+    MuSGD: { lr0: 0.001, lrf: 0.01, momentum: 0.9, weight_decay: 0.0005 },
     auto: {}
   };
   const [showDeviceModal, setShowDeviceModal] = useState(false);
@@ -199,10 +200,12 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                 >
                   <Select.Option value="smart-auto">smart auto</Select.Option>
                   <Select.Option value="AdamW">AdamW</Select.Option>
+                  <Select.Option value="MuSGD">MuSGD</Select.Option>
                   <Select.Option value="SGD">SGD</Select.Option>
                 </Select>
                 {optimizerMode === 'smart-auto' && (
                   (() => {
+                    if (optimizer === 'MuSGD') return <span style={{ marginLeft: 8, color: '#888' }}>(MuSGD)</span>;
                     const isGPU = device === 'gpu';
                     const bsz = typeof batchSize === 'number' ? batchSize : 0;
                     const resolved = !isGPU ? 'Adam' : (bsz >= 32) ? 'SGD' : 'AdamW';
@@ -266,10 +269,12 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                     <Select.Option value="NAdam">NAdam</Select.Option>
                     <Select.Option value="RAdam">RAdam</Select.Option>
                     <Select.Option value="RMSProp">RMSProp</Select.Option>
+                    <Select.Option value="MuSGD">MuSGD</Select.Option>
                     <Select.Option value="smart-auto">smart auto</Select.Option>
                   </Select>
                   {optimizerMode === 'smart-auto' && (
                     (() => {
+                      if (optimizer === 'MuSGD') return <span style={{ marginLeft: 8, color: '#888' }}>(MuSGD)</span>;
                       const isGPU = device === 'gpu';
                       const bsz = typeof batchSize === 'number' ? batchSize : 0;
                       const heavyAug = (Number(mosaic) || 0) >= 0.3 || (Number(mixup) || 0) >= 0.03;
