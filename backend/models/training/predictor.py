@@ -114,16 +114,20 @@ class UltralyticsPredictor(BasePredictor):
                 "0.8-1.0": 0
             }
 
+            # Auto-detect device: use GPU if CUDA is available, fall back to CPU.
+            # Device is not user-selectable for prediction (unlike training) — it's automatic.
+            device = '0' if torch.cuda.is_available() else 'cpu'
+
             # Strategy: Manual Batching to mimic Training behavior
             # Instead of 1-by-1 or tossing "Everything", we process in controlled chunks.
             batch_size = int(params.get('batch', 1))
             img_list = images if isinstance(images, list) else [images]
             processed_count = 0
-            
+
             # Divide image list into smaller batches manually
             for i in range(0, len(img_list), batch_size):
                 batch_chunk = img_list[i : i + batch_size]
-                
+
                 # Run prediction on the CURRENT batch only
                 results = model.predict(
                     source=batch_chunk,
@@ -132,7 +136,7 @@ class UltralyticsPredictor(BasePredictor):
                     conf=params.get('confidence', 0.25),
                     iou=params.get('iou_threshold', 0.45),
                     max_det=params.get('max_det', 300),
-                    device=params.get('device', '0'),
+                    device=device,
                     half=params.get('half', False),
                     project=output_folder,
                     name='',
@@ -144,10 +148,16 @@ class UltralyticsPredictor(BasePredictor):
                 )
                 
                 # Process results and move to CPU immediately
-                for result in results:
+                # FIX (ultralytics 8.4.x breaking change):
+                # In 8.3.x: result.path returned the real source filename (e.g. "0-1.png")
+                # In 8.4.x: result.path returns a generic index name (e.g. "image0.jpg")
+                #            because images are loaded into a numpy stream, losing path info.
+                # Solution: use batch_chunk[result_idx] — the original path we passed in.
+                #           ultralytics guarantees results come back in the same order as input.
+                for result_idx, result in enumerate(results):
                     result = result.cpu()
-                    
-                    image_name = Path(result.path).name
+
+                    image_name = Path(batch_chunk[result_idx]).name  # real filename, not "image0.jpg"
                     boxes = result.boxes
                     masks = result.masks
                     

@@ -2500,12 +2500,14 @@ async def trigger_prediction(
         executor_path = (backend_dir / "models" / "training" / "prediction_executor.py").as_posix()
         
         # Build params dict
+        # device is intentionally excluded — predictor.py auto-detects GPU vs CPU
+        # batch comes from the UI slider and must be forwarded so predictor respects it
         params = {
             'confidence': payload.confidence,
             'iou_threshold': payload.iou_threshold,
             'imgsz': payload.imgsz,
             'task': payload.task or ts.task or 'detect',
-            'device': '0'  # GPU by default
+            'batch': payload.batch,
         }
         if payload.custom_params:
             params.update(payload.custom_params)

@@ -3,6 +3,7 @@ import os
 import yaml
 import json
 import uuid
+import torch
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -96,7 +97,11 @@ class UltralyticsValidator(BaseValidator):
             })
             
             model = YOLO(model_path)
-            
+
+            # Auto-detect device: use GPU if CUDA is available, fall back to CPU.
+            # Device is not user-selectable for validation (unlike training) — it's automatic.
+            device = '0' if torch.cuda.is_available() else 'cpu'
+
             # Run the actual validation
             # name='' ensures results are saved DIRECTLY in output_folder, no /validation/ subfolder.
             try:
@@ -108,7 +113,7 @@ class UltralyticsValidator(BaseValidator):
                     conf=params.get('confidence', 0.25),
                     iou=params.get('iou_threshold', 0.45),
                     max_det=params.get('max_detections', 300),
-                    device=params.get('device', '0'),
+                    device=device,
                     project=output_folder,
                     name='', 
                     save=True,
