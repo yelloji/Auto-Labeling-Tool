@@ -2,9 +2,8 @@
 import { logInfo } from './utils/professional_logger';
 
 // API Configuration
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://work-1-digwbshcauwokcgm.prod-runtime.all-hands.dev'  // Backend on port 12000
-  : 'http://localhost:12000';  // Backend on port 12000 (correct port)
+// Always use localhost:12000 — works for dev, Electron window, and exe
+const API_BASE_URL = 'http://localhost:12000';
 
 // Log configuration loading
 logInfo('app.frontend.ui', 'config_loaded', 'Frontend configuration loaded', {

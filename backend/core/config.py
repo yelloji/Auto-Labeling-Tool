@@ -13,26 +13,50 @@ from logging_system.professional_logger import get_professional_logger
 # Initialize professional logger
 logger = get_professional_logger()
 
+
+def _get_base_dir() -> Path:
+    """
+    Determine the base data directory.
+
+    Exe mode  (GEVIS_EXE_MODE=1, set by electron/backend_runner.js):
+        → AppData\Local\Gevis AI Studio\
+        → database.db and projects\ live here (writable, user-owned)
+
+    Dev mode  (env var not set):
+        → repo root folder (same as before — no change to dev workflow)
+    """
+    if os.environ.get('GEVIS_EXE_MODE') == '1':
+        appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+        return Path(appdata) / 'Gevis AI Studio'
+    return Path(__file__).parent.parent.parent
+
+
+# Resolve once at import time — GEVIS_EXE_MODE must be set before backend starts
+_BASE_DIR = _get_base_dir()
+
+
 class Settings(BaseSettings):
     """Application settings"""
-    
+
     # Application
-    APP_NAME: str = "Auto-Labeling-Tool"
+    APP_NAME: str = "Gevis AI Studio"
     VERSION: str = "1.0.0"
     DEBUG: bool = True
-    
+
     # Paths
-    BASE_DIR: Path = Path(__file__).parent.parent.parent
-    DATA_DIR: Path = BASE_DIR / "datasets"
-    MODELS_DIR: Path = BASE_DIR / "models"
-    STATIC_FILES_DIR: Path = BASE_DIR / "static"
-    TEMP_DIR: Path = BASE_DIR / "temp"
-    #UPLOAD_DIR: Path = BASE_DIR / "uploads"  # legacy folder; can be disabled from auto-creation
-    PROJECTS_DIR: Path = BASE_DIR / "projects"
-    
+    # Dev mode:  all paths resolve to repo root (unchanged)
+    # Exe mode:  user data paths resolve to AppData\Local\Gevis AI Studio\
+    BASE_DIR: Path = _BASE_DIR
+    DATA_DIR: Path = _BASE_DIR / "datasets"
+    MODELS_DIR: Path = _BASE_DIR / "models"
+    STATIC_FILES_DIR: Path = _BASE_DIR / "static"
+    TEMP_DIR: Path = _BASE_DIR / "temp"
+    #UPLOAD_DIR: Path = _BASE_DIR / "uploads"  # legacy folder; can be disabled from auto-creation
+    PROJECTS_DIR: Path = _BASE_DIR / "projects"
+
     # Database
-    DATABASE_PATH: Path = BASE_DIR / "database.db"
-    DATABASE_URL: str = f"sqlite:///{DATABASE_PATH}"
+    DATABASE_PATH: Path = _BASE_DIR / "database.db"
+    DATABASE_URL: str = f"sqlite:///{_BASE_DIR / 'database.db'}"
     
     # Model settings
     DEFAULT_CONFIDENCE_THRESHOLD: float = 0.5

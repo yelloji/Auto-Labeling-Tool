@@ -426,13 +426,29 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    """Root endpoint with basic info"""
+    """Serve React frontend build at root. Falls back to JSON info if build not found."""
+    index = Path(__file__).parent.parent / "frontend" / "build" / "index.html"
+    if index.exists():
+        return FileResponse(str(index))
+    # Dev mode fallback — frontend not built yet
     return {
-        "message": "Welcome to Auto-Labeling-Tool API",
+        "message": "Welcome to Gevis AI Studio API",
         "version": "1.0.0",
         "docs": "/api/docs",
-        "health": "/health"
+        "health": "/health",
+        "note": "Frontend not built. Run: cd frontend && npm run build"
     }
+
+# Catch-all route: serve React frontend for any non-API path.
+# This enables React Router to handle client-side navigation (e.g. /projects, /datasets).
+# Must be registered LAST so all /api/ routes take priority.
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """Serve React frontend for all non-API routes (React Router support)."""
+    index = Path(__file__).parent.parent / "frontend" / "build" / "index.html"
+    if index.exists():
+        return FileResponse(str(index))
+    return {"message": "Frontend not built. Run: cd frontend && npm run build"}
 
 # Initialize database on startup
 @app.on_event("startup")
