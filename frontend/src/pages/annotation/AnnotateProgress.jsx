@@ -922,7 +922,7 @@ const AnnotateProgress = () => {
                         }}>
                           {image.url ? (
                             <img
-                              src={image.url}
+                              src={image.thumbnail_url || image.url}
                               alt={image.filename}
                               style={{
                                 width: '100%',

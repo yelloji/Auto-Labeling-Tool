@@ -3239,7 +3239,9 @@ async def get_project_images(
                     "annotations": annotation_data,
                     "class_names": class_names,
                     "created_at": image.created_at,
-                    "updated_at": image.updated_at
+                    "updated_at": image.updated_at,
+                    "url": image.normalized_file_path,
+                    "thumbnail_url": f"/{image.thumbnail_path}" if image.thumbnail_path else None
                 })
         
         logger.info("operations.images", f"Image collection completed", "image_collection_completed", {
