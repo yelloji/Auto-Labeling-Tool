@@ -10,8 +10,8 @@ python-multipart==0.0.6
 sqlalchemy==2.0.23
 alembic==1.12.1
 
-# Computer Vision and ML - YOLO11 Latest
-ultralytics>=8.3.0  # YOLO11 support
+# Computer Vision and ML - YOLO11 + YOLO26
+ultralytics>=8.4.0  # YOLO11 + YOLO26 support (update venv: pip install ultralytics==8.4.23)
 opencv-python>=4.8.0
 # Image processing for transformation preview
 opencv-contrib-python>=4.8.0  # Additional OpenCV modules for advanced transformations
