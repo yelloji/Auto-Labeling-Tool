@@ -64,6 +64,7 @@
     "appId": "com.gevis.ai-studio",
     "productName": "Gevis AI Studio",
     "copyright": "Copyright 2026 Gevis",
+    "extends": null,
     "directories": {
       "output": "../dist"
     },
@@ -81,7 +82,7 @@
       "!**/*.pyc"
     ],
     "extraMetadata": {
-      "main": "../electron/main.js"
+      "main": "electron/main.js"
     },
     "win": {
       "target": "nsis",
