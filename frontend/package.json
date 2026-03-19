@@ -32,7 +32,9 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "install:cross-env": "npm install cross-env"
+    "install:cross-env": "npm install cross-env",
+    "electron:dev": "electron ../electron/main.js --dev",
+    "electron:build": "electron-builder --win --config"
   },
   "eslintConfig": {
     "extends": [
@@ -54,6 +56,44 @@
   },
   "proxy": "http://localhost:12000",
   "devDependencies": {
-    "cross-env": "^7.0.3"
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.gevis.ai-studio",
+    "productName": "Gevis AI Studio",
+    "copyright": "Copyright 2026 Gevis",
+    "directories": {
+      "output": "../dist"
+    },
+    "files": [
+      "../electron/**/*",
+      "../backend/**/*",
+      "build/**/*",
+      "../requirements.txt",
+      "../backend/requirements.txt",
+      "../backend/requirements-cuda121.txt",
+      "!../backend/venv/**/*",
+      "!../frontend/src/**/*",
+      "!../frontend/node_modules/**/*",
+      "!../backend/__pycache__/**/*",
+      "!**/*.pyc"
+    ],
+    "extraMetadata": {
+      "main": "../electron/main.js"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "../electron/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerHeaderIcon": "../electron/icon.ico",
+      "license": null
+    }
   }
 }

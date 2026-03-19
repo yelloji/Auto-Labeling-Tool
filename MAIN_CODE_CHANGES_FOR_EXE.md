@@ -52,6 +52,49 @@ async def serve_frontend(full_path: str):
 
 ---
 
+### 4. frontend/package.json
+**What:** Added electron + electron-builder deps, scripts, and build config
+**Why:** Required to install Electron, run it in dev mode, and build the Windows exe
+**Added:**
+- `devDependencies`: electron ^33.0.0, electron-builder ^25.0.0
+- `scripts`: electron:dev (dev window mode), electron:build (build exe)
+- `build` block: appId, productName, files to include/exclude, Windows NSIS installer config
+**Impact:** Dev workflow unchanged. All existing scripts (start, build, test) untouched.
+
+---
+
+### 5. backend/main.py — React static asset mounts (blank screen fix)
+**What:** Added 3 StaticFiles mounts for React build's `/static/js/`, `/static/css/`, `/static/media/` — inserted BEFORE the existing `/static` mount
+**Why:** React build references `/static/js/main.xxx.js` and `/static/css/main.xxx.css`. FastAPI's existing `/static` mount points to the empty `backend/static/` folder, so those requests returned 404 → React never loaded → blank white screen in Electron window.
+**Root cause:** FastAPI route/mount priority — first matching mount wins. The general `/static` mount was stealing requests meant for the React build assets.
+**Added at line 341 (before existing /static mount):**
+```python
+frontend_static = Path(__file__).parent.parent / "frontend" / "build" / "static"
+if frontend_static.exists():
+    if (frontend_static / "js").exists():
+        app.mount("/static/js",    StaticFiles(directory=...), name="frontend-js")
+    if (frontend_static / "css").exists():
+        app.mount("/static/css",   StaticFiles(directory=...), name="frontend-css")
+    if (frontend_static / "media").exists():
+        app.mount("/static/media", StaticFiles(directory=...), name="frontend-media")
+```
+**Impact:** Dev browser mode (12001) — zero impact, build/ does not exist in dev. Electron/exe — React app now loads correctly.
+
+---
+
+### 6. backend/main.py — Skip logging for static file requests (thumbnail speed fix)
+**What:** Added early-return in `LoggingMiddleware.dispatch()` for `/static/`, `/projects/`, `/health` paths
+**Why:** In Electron mode every image request (gallery thumbnails) went through LoggingMiddleware — logging + timing added per-request overhead making thumbnails load noticeably slower than in web browser dev mode. Full images in annotation view loaded fast because they bypass this path. API routes still log as before.
+**Added at top of dispatch():**
+```python
+path = request.url.path
+if path.startswith(("/static/", "/projects/", "/health")):
+    return await call_next(request)
+```
+**Impact:** Gallery thumbnails load at same speed as web browser mode. All `/api/` logging unchanged.
+
+---
+
 ## Pending Changes (not done yet)
 
 None currently.

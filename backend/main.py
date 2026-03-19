@@ -13,7 +13,7 @@ sys.path.insert(0, str(backend_dir))
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 
@@ -70,8 +70,15 @@ class CacheControlMiddleware(BaseHTTPMiddleware):
 # Logging Middleware
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # Skip logging for static file requests — images, JS, CSS served as files.
+        # Logging overhead on these causes gallery thumbnails to load slowly.
+        # Only API endpoints need request/response logging.
+        path = request.url.path
+        if path.startswith(("/static/", "/projects/", "/health")):
+            return await call_next(request)
+
         start_time = time.time()
-        
+
         # Log request with professional logger
         logger.info("app.api", f"API Request: {request.method} {request.url.path}", "api_request", {
             "endpoint": str(request.url.path),
@@ -337,6 +344,21 @@ async def system_hardware():
 # Include Smart Segmentation routes
 from api import smart_segmentation
 app.include_router(smart_segmentation.router, prefix="/api", tags=["smart-segmentation"])
+
+# ── React build static assets ──────────────────────────────────────────────
+# React's build outputs files under /static/js/, /static/css/, /static/media/.
+# These mounts MUST be registered before the backend's /static mount below,
+# otherwise FastAPI's /static mount (pointing to the empty backend/static/ folder)
+# intercepts the requests first → 404 → blank screen in Electron.
+# The guards ensure this is a no-op in web-dev mode (build/ does not exist yet).
+frontend_static = Path(__file__).parent.parent / "frontend" / "build" / "static"
+if frontend_static.exists():
+    if (frontend_static / "js").exists():
+        app.mount("/static/js", StaticFiles(directory=str(frontend_static / "js")), name="frontend-js")
+    if (frontend_static / "css").exists():
+        app.mount("/static/css", StaticFiles(directory=str(frontend_static / "css")), name="frontend-css")
+    if (frontend_static / "media").exists():
+        app.mount("/static/media", StaticFiles(directory=str(frontend_static / "media")), name="frontend-media")
 
 # Serve static files (for uploaded images, etc.)
 static_dir = Path(settings.STATIC_FILES_DIR)
