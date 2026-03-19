@@ -736,63 +736,26 @@ const DatasetImageCard = ({ image, onClick }) => {
         <img
           src={thumbnailUrl}
           alt={image.filename || image.name}
-          loading="lazy"
           style={{
             width: '100%',
             height: '100%',
             objectFit: 'contain',
             borderRadius: '0.375rem',
-            display: imageLoaded ? 'block' : 'none'
           }}
           onLoad={(e) => {
+            // Capture rendered dimensions so the SVG annotation overlay can scale correctly
             setImageLoaded(true);
-            // Get actual rendered dimensions for proper SVG scaling
             setImageDimensions({
               width: e.target.clientWidth,
               height: e.target.clientHeight
-            });
-
-            logInfo('app.frontend.ui', 'image_loaded', 'Image loaded successfully', {
-              timestamp: new Date().toISOString(),
-              imageId: image.id,
-              imageName: image.filename || image.name,
-              dimensions: {
-                width: e.target.clientWidth,
-                height: e.target.clientHeight
-              }
             });
           }}
           onError={(e) => {
             e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgZmlsbD0iI2VlZSIvPjx0ZXh0IHg9IjEwMCIgeT0iNzUiIGZvbnQtc2l6ZT0iMTQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
             setImageLoaded(true);
             setImageDimensions({ width: 200, height: 150 });
-
-            logError('app.frontend.validation', 'image_load_failed', 'Image failed to load', {
-              timestamp: new Date().toISOString(),
-              imageId: image.id,
-              imageName: image.filename || image.name,
-              imageUrl: imageUrl
-            });
           }}
         />
-
-
-        {!imageLoaded && (
-          <div style={{
-            width: '100%',
-            height: '100%',
-            background: '#f5f5f5',
-            borderRadius: '0.375rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'absolute',
-            top: 0,
-            left: 0
-          }}>
-            <Spin size="small" />
-          </div>
-        )}
 
         {/* Annotation Overlay using SVG */}
         {imageLoaded && annotations.length > 0 && (
