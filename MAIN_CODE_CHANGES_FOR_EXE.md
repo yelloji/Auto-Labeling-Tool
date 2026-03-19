@@ -95,6 +95,21 @@ if path.startswith(("/static/", "/projects/", "/health")):
 
 ---
 
+### 7. frontend/public/index.html — Window title
+**What:** Changed `<title>` from `Auto-Labeling-Tool` to `Gevis AI Studio`
+**Why:** Electron uses the HTML page title for the window title bar. The old title showed "Auto-Labeling-Tool" in the Electron window instead of the product name.
+**Impact:** Web browser tab also shows "Gevis AI Studio". No functional change.
+
+---
+
+### 8. frontend/src/components/project-workspace/DatasetSection/DatasetSection.jsx — Remove spinner and lazy loading from gallery
+**What:** Removed `loading="lazy"`, removed `display: imageLoaded ? 'block' : 'none'` toggle, removed `<Spin>` placeholder from `DatasetImageCard`
+**Why:** Images in the dataset gallery were hidden behind a spinner until `onLoad` fired. This caused visible delay even with small thumbnails. AnnotateProgress never had this pattern — it just shows the `<img>` directly and it streams in. Applied the same approach here.
+**Kept:** `onLoad` handler and `imageLoaded` state — still needed so the SVG annotation overlay only renders after image dimensions are captured.
+**Impact:** Gallery images appear immediately as they load. No spinner. Consistent with AnnotateProgress behaviour.
+
+---
+
 ## Pending Changes (not done yet)
 
 None currently.
