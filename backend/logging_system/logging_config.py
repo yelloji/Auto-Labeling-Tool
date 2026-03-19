@@ -286,8 +286,13 @@ def validate_config(config: Dict[str, Any]) -> bool:
 # =============================================================================
 
 def get_log_directory() -> str:
-    """Get the log directory path."""
-    log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "logs"))
+    """Get the log directory path. In exe mode writes to AppData, not Program Files."""
+    import os as _os
+    if _os.environ.get('GEVIS_EXE_MODE') == '1':
+        app_data = _os.environ.get('LOCALAPPDATA', _os.path.expanduser('~'))
+        log_dir = _os.path.join(app_data, 'Gevis AI Studio', 'logs')
+    else:
+        log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "logs"))
     logger.debug("app.backend", "Retrieved log directory path", "log_directory_retrieved", {
         "log_directory": log_dir,
         "operation": "path_resolution"

@@ -121,7 +121,9 @@ app.whenReady().then(async () => {
       updateSplash(100, 'Ready');
     } else {
       // Exe mode: first-run setup if needed, then start backend
-      const appResourcesDir = path.join(__dirname, '..');
+      const appResourcesDir = IS_DEV
+        ? path.join(__dirname, '..')  // dev: repo root
+        : process.resourcesPath;      // exe: resources/ folder next to app.asar
 
       if (!isSetupComplete()) {
         await runSetup(appResourcesDir, (pct, msg) => updateSplash(pct, msg));

@@ -69,17 +69,31 @@
       "output": "../dist"
     },
     "files": [
-      "../electron/**/*",
-      "../backend/**/*",
-      "build/**/*",
-      "../requirements.txt",
-      "../backend/requirements.txt",
-      "../backend/requirements-cuda121.txt",
-      "!../backend/venv/**/*",
-      "!../frontend/src/**/*",
-      "!../frontend/node_modules/**/*",
-      "!../backend/__pycache__/**/*",
-      "!**/*.pyc"
+      {
+        "from": "../electron",
+        "to": "electron",
+        "filter": ["**/*"]
+      },
+      "!node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!venv/**/*",
+          "!__pycache__/**/*",
+          "!**/*.pyc",
+          "!**/*.pt",
+          "!**/*.pth"
+        ]
+      },
+      {
+        "from": "build",
+        "to": "frontend/build",
+        "filter": ["**/*"]
+      }
     ],
     "extraMetadata": {
       "main": "electron/main.js"

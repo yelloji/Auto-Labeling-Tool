@@ -7,6 +7,8 @@
  *
  * Progress is reported via onProgress(percent, message) callback
  * so main.js can update the splash screen.
+ *
+ * All steps are logged to AppData\Local\Gevis AI Studio\logs\setup.log
  */
 
 const https = require('https');
@@ -14,8 +16,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execFileSync } = require('child_process');
-const { createGunzip } = require('zlib');
+const { spawn } = require('child_process');
 
 // Python 3.11 embeddable package for Windows x64
 const PYTHON_VERSION = '3.11.9';
@@ -28,7 +29,16 @@ const { APP_DATA_DIR, PYTHON_DIR } = require('./backend_runner');
 
 const SETUP_FLAG = path.join(APP_DATA_DIR, '.setup_complete');
 const VERSION_FLAG = path.join(APP_DATA_DIR, '.version');
+const LOG_FILE = path.join(APP_DATA_DIR, 'logs', 'setup.log');
 const APP_VERSION = '1.0.0';
+
+/**
+ * Write a timestamped line to setup.log
+ */
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  try { fs.appendFileSync(LOG_FILE, line, 'utf8'); } catch (_) {}
+}
 
 /**
  * Check if first-run setup has already been completed.
@@ -76,10 +86,44 @@ function downloadFile(url, destPath, onProgress, label) {
 }
 
 /**
- * Unzip a .zip file using PowerShell (available on all Windows 10+ machines).
+ * Run a command asynchronously, log all output, hide the window.
+ * Returns a Promise that resolves on exit code 0, rejects otherwise.
+ */
+function runCommand(exe, args) {
+  return new Promise((resolve, reject) => {
+    log(`Running: ${exe} ${args.join(' ')}`);
+
+    const proc = spawn(exe, args, {
+      windowsHide: true,
+      env: Object.assign({}, process.env, { PYTHONIOENCODING: 'utf-8' })
+    });
+
+    proc.stdout.on('data', (data) => {
+      log(`[stdout] ${data.toString().trimEnd()}`);
+    });
+
+    proc.stderr.on('data', (data) => {
+      log(`[stderr] ${data.toString().trimEnd()}`);
+    });
+
+    proc.on('close', (code) => {
+      log(`Exit code: ${code}`);
+      if (code === 0) resolve();
+      else reject(new Error(`Command failed with exit code ${code}: ${exe} ${args.join(' ')}`));
+    });
+
+    proc.on('error', (err) => {
+      log(`Spawn error: ${err.message}`);
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Unzip using PowerShell — async, hidden window, logged.
  */
 function unzipWithPowershell(zipPath, destDir) {
-  execFileSync('powershell', [
+  return runCommand('powershell', [
     '-NoProfile', '-NonInteractive', '-Command',
     `Expand-Archive -Force -Path '${zipPath}' -DestinationPath '${destDir}'`
   ]);
@@ -91,7 +135,10 @@ function unzipWithPowershell(zipPath, destDir) {
  * @param {function} onProgress - (percent, message) callback for splash screen updates
  */
 async function runSetup(appResourcesDir, onProgress) {
-  const report = (pct, msg) => { if (onProgress) onProgress(pct, msg); };
+  const report = (pct, msg) => {
+    log(`[PROGRESS ${pct}%] ${msg}`);
+    if (onProgress) onProgress(pct, msg);
+  };
 
   // 1. Create AppData directories
   report(2, 'Creating data folders...');
@@ -100,55 +147,74 @@ async function runSetup(appResourcesDir, onProgress) {
   fs.mkdirSync(path.join(APP_DATA_DIR, 'projects'), { recursive: true });
   fs.mkdirSync(path.join(APP_DATA_DIR, 'logs'), { recursive: true });
 
+  log('=== Gevis AI Studio First-Run Setup ===');
+  log(`APP_DATA_DIR: ${APP_DATA_DIR}`);
+  log(`PYTHON_DIR: ${PYTHON_DIR}`);
+  log(`appResourcesDir: ${appResourcesDir}`);
+  log(`Platform: ${os.platform()} ${os.arch()}`);
+
   // 2. Download Python embeddable zip
   const zipPath = path.join(APP_DATA_DIR, 'python.zip');
   report(5, 'Downloading Python runtime...');
+  log(`Downloading Python from: ${PYTHON_ZIP_URL}`);
   await downloadFile(
     PYTHON_ZIP_URL,
     zipPath,
     (pct, msg) => report(5 + Math.round(pct * 0.25), `Downloading Python: ${msg}`),
     'Python runtime'
   );
+  log('Python download complete.');
   report(30, 'Extracting Python runtime...');
 
   // 3. Extract Python zip
-  unzipWithPowershell(zipPath, PYTHON_DIR);
-  fs.unlinkSync(zipPath); // clean up zip
+  log(`Extracting Python zip to: ${PYTHON_DIR}`);
+  await unzipWithPowershell(zipPath, PYTHON_DIR);
+  fs.unlinkSync(zipPath);
+  log('Python extracted.');
 
   // 4. Enable pip in embedded Python
-  // Embedded Python has a ._pth file that blocks site-packages — we must enable it
   report(35, 'Configuring Python...');
   const pthFiles = fs.readdirSync(PYTHON_DIR).filter(f => f.endsWith('._pth'));
+  log(`Found ._pth files: ${pthFiles.join(', ')}`);
   for (const pthFile of pthFiles) {
     const pthPath = path.join(PYTHON_DIR, pthFile);
     let content = fs.readFileSync(pthPath, 'utf8');
-    // Uncomment import site line to enable pip
     content = content.replace('#import site', 'import site');
     fs.writeFileSync(pthPath, content, 'utf8');
+    log(`Patched: ${pthFile}`);
   }
 
   // 5. Download get-pip.py
   report(38, 'Installing pip...');
   const getPipPath = path.join(PYTHON_DIR, 'get-pip.py');
+  log(`Downloading get-pip.py from: ${GET_PIP_URL}`);
   await downloadFile(GET_PIP_URL, getPipPath, null, 'pip');
+  log('get-pip.py downloaded.');
 
   // 6. Bootstrap pip
   const pythonExe = path.join(PYTHON_DIR, 'python.exe');
-  execFileSync(pythonExe, [getPipPath], { stdio: 'inherit' });
-  fs.unlinkSync(getPipPath); // clean up
+  log('Bootstrapping pip...');
+  await runCommand(pythonExe, [getPipPath]);
+  fs.unlinkSync(getPipPath);
+  log('pip installed.');
 
   // 7. Auto-detect CUDA and choose requirements file
   report(45, 'Detecting hardware...');
   let reqFile = path.join(appResourcesDir, 'backend', 'requirements.txt');
   const cudaReqFile = path.join(appResourcesDir, 'backend', 'requirements-cuda121.txt');
+  log(`CPU requirements: ${reqFile}`);
+  log(`CUDA requirements: ${cudaReqFile}`);
+  log(`requirements.txt exists: ${fs.existsSync(reqFile)}`);
+  log(`requirements-cuda121.txt exists: ${fs.existsSync(cudaReqFile)}`);
 
   let useCuda = false;
   try {
-    // Check if CUDA is available via nvidia-smi
-    execFileSync('nvidia-smi', [], { stdio: 'ignore' });
+    await runCommand('nvidia-smi', []);
     useCuda = true;
+    log('CUDA detected via nvidia-smi.');
   } catch (_) {
     useCuda = false;
+    log('No CUDA detected — using CPU requirements.');
   }
 
   if (useCuda && fs.existsSync(cudaReqFile)) {
@@ -160,17 +226,20 @@ async function runSetup(appResourcesDir, onProgress) {
 
   // 8. pip install requirements
   const pipExe = path.join(PYTHON_DIR, 'Scripts', 'pip.exe');
-  execFileSync(pipExe, ['install', '-r', reqFile], {
-    stdio: 'inherit',
-    env: Object.assign({}, process.env, { PYTHONIOENCODING: 'utf-8' })
-  });
+  log(`pip executable: ${pipExe}`);
+  log(`pip exists: ${fs.existsSync(pipExe)}`);
+  log(`Installing from: ${reqFile}`);
+  report(50, 'Installing packages (this takes 10-20 min)...');
+  await runCommand(pipExe, ['install', '-r', reqFile, '--no-warn-script-location']);
 
   // 9. Write setup complete flags
   report(98, 'Finalizing...');
   fs.writeFileSync(SETUP_FLAG, new Date().toISOString(), 'utf8');
   fs.writeFileSync(VERSION_FLAG, APP_VERSION, 'utf8');
+  log('Setup complete flag written.');
 
   report(100, 'Setup complete!');
+  log('=== Setup Finished Successfully ===');
 }
 
 module.exports = { isSetupComplete, runSetup };

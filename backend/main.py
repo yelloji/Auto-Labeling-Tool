@@ -526,11 +526,12 @@ async def shutdown_event():
     logger.info("app.startup", "🛑 SYA Backend shutting down", "shutdown")
 
 if __name__ == "__main__":
-    # Run the application
+    # Disable reload in exe mode — no file watcher, no subprocess spawning
+    is_exe_mode = os.environ.get('GEVIS_EXE_MODE') == '1'
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=12000,
-        reload=True,
+        reload=not is_exe_mode,
         log_level="info"
     )
