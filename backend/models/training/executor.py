@@ -12,6 +12,7 @@ from typing import Optional
 from database.models import TrainingSession
 from sqlalchemy.orm import Session
 from logging_system.professional_logger import get_professional_logger
+from core.config import settings
 
 logger = get_professional_logger()
 
@@ -50,13 +51,8 @@ def start_ultralytics_training(
         
 
         
-        # Find project root directory (where "projects" folder exists)
-        # This makes the code portable - works regardless of main folder name
-        project_root = Path(__file__).resolve()
-        while project_root.parent != project_root:
-            if (project_root / "projects").exists():
-                break
-            project_root = project_root.parent
+        # Find project root directory
+        project_root = settings.BASE_DIR
         
         # Start process from project root for relative paths to work
         cwd_path = str(project_root)

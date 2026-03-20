@@ -9,6 +9,7 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any
 from logging_system.professional_logger import get_professional_logger
+from core.config import settings
 
 logger = get_professional_logger()
 
@@ -64,9 +65,7 @@ def generate_ultralytics_training_yaml(resolved_config: Dict[str, Any], output_p
     flattened['exist_ok'] = True
     
     # Find Project Root (dynamically)
-    # .../backend/models/training/yaml_generator.py -> resolve -> parents[3] = ROOT
-    current_file = Path(__file__).resolve()
-    project_root = current_file.parents[3]
+    project_root = settings.BASE_DIR
 
     # Fix 'data' path: Resolve to absolute path
     # This fixes "Dataset images not found" because YOLO needs absolute path to data.yaml

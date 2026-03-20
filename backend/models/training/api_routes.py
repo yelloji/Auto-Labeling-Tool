@@ -98,13 +98,7 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
             raise HTTPException(status_code=404, detail="Project not found")
         project_name = project.name
         
-        # Find project root (up one level from backend)
-        # We assume backend is at {root}/backend
-        current_file = Path(__file__).resolve()
-        backend_dir = current_file.parent
-        while backend_dir.name != "backend" and backend_dir.parent != backend_dir:
-            backend_dir = backend_dir.parent
-        project_root = backend_dir.parent
+        project_root = settings.BASE_DIR
         
         # Define relative path for portability (DB storage & YOLO config)
         # projects/gevis/model/training/SESSION_NAME
@@ -927,11 +921,7 @@ async def training_terminal_logs(websocket: WebSocket, project_id: int, name: st
             return
 
         # Resolve project root dynamically (same logic as start_session)
-        current_file = Path(__file__).resolve()
-        backend_dir = current_file.parent
-        while backend_dir.name != "backend" and backend_dir.parent != backend_dir:
-            backend_dir = backend_dir.parent
-        project_root = backend_dir.parent
+        project_root = settings.BASE_DIR
 
         log_path = None
         if ts.logs_dir:
@@ -1719,9 +1709,7 @@ async def trigger_validation(
     # --- Start Validation Subprocess ---
     try:
         # Resolve paths (Moved from run_validation_task)
-        current_file = Path(__file__).resolve()
-        backend_dir = next(p for p in current_file.parents if p.name == "backend")
-        project_root = backend_dir.parent
+        project_root = settings.BASE_DIR
         
         # 1. Weights Path
         weights_filename = "best.pt"
@@ -1854,11 +1842,8 @@ async def list_experiment_images(experiment_id: str, db: Session = Depends(get_d
     if not exp.output_folder:
         return []
     
-    # Resolve project root
-    current_file = Path(__file__).resolve()
-    backend_dir = next(p for p in current_file.parents if p.name == "backend")
-    project_root = backend_dir.parent
-    
+    project_root = settings.BASE_DIR
+
     full_path = (project_root / exp.output_folder).resolve()
     if not full_path.exists() or not full_path.is_dir():
         return []
@@ -1888,11 +1873,8 @@ async def get_experiment_original_image(
     if not exp:
         raise HTTPException(status_code=404, detail="Experiment not found")
         
-    # Resolve project root
-    current_file = Path(__file__).resolve()
-    backend_dir = next(p for p in current_file.parents if p.name == "backend")
-    project_root = backend_dir.parent
-    
+    project_root = settings.BASE_DIR
+
     original_path = None
     
     # 1. Handle dataset sources (train/val/test)
@@ -1977,9 +1959,7 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
                 pass
 
     # 2. Resolve project root for safe path calculation
-    current_file = Path(__file__).resolve()
-    backend_dir = next(p for p in current_file.parents if p.name == "backend")
-    project_root = backend_dir.parent
+    project_root = settings.BASE_DIR
 
     # 3. Safe Filesystem Cleanup
     if exp.output_folder:
@@ -2047,9 +2027,7 @@ async def download_experiment_results(experiment_id: str, db: Session = Depends(
         raise HTTPException(status_code=400, detail="Experiment has no output files")
 
     # Resolve project root
-    current_file = Path(__file__).resolve()
-    backend_dir = next(p for p in current_file.parents if p.name == "backend")
-    project_root = backend_dir.parent
+    project_root = settings.BASE_DIR
     
     abs_output_dir = (project_root / exp.output_folder).resolve()
     if not abs_output_dir.exists():
@@ -2093,9 +2071,7 @@ async def get_experiment_quality_stats(experiment_id: str, db: Session = Depends
         raise HTTPException(status_code=404, detail="Experiment not found")
         
     # Resolve project root (portable logic)
-    current_file = Path(__file__).resolve()
-    backend_dir = next(p for p in current_file.parents if p.name == "backend")
-    project_root = backend_dir.parent
+    project_root = settings.BASE_DIR
     
     stats = calculate_experiment_quality(exp, project_root)
     return stats
@@ -2248,11 +2224,7 @@ async def upload_prediction_images(
     project_name = project.name if project else "unknown"
     
     # Resolve Project Root (portable logic)
-    current_file = Path(__file__).resolve()
-    backend_dir = current_file.parent
-    while backend_dir.name != "backend" and backend_dir.parent != backend_dir:
-        backend_dir = backend_dir.parent
-    project_root = backend_dir.parent
+    project_root = settings.BASE_DIR
 
     # Define and create temp storage directory
     # Standard: projects/{project_name}/model/prediction_temp/{experiment_id}/
@@ -2424,9 +2396,7 @@ async def trigger_prediction(
     # --- Start Prediction Subprocess ---
     try:
         # Resolve paths
-        current_file = Path(__file__).resolve()
-        backend_dir = next(p for p in current_file.parents if p.name == "backend")
-        project_root = backend_dir.parent
+        project_root = settings.BASE_DIR
         
         # 1. Weights Path
         weights_filename = "best.pt" if payload.weights_type == 'best' else "last.pt"
@@ -2595,9 +2565,7 @@ async def get_missed_ground_truth(
         else:
             base_rel_path = rel_path
             
-        # Project root is 3 levels up from backend/models/training/api_routes.py
-        # Project root is 3 levels up from backend/models/training/api_routes.py
-        project_root = Path(__file__).resolve().parents[3]
+        project_root = settings.BASE_DIR
         abs_dataset_path = (project_root / base_rel_path).resolve()
         
         # Load annotations for this split

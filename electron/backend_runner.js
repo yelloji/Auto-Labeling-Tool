@@ -42,8 +42,8 @@ function startBackend(backendDir) {
     PYTHONUTF8: '1'
   });
 
-  backendProcess = spawn(PYTHON_EXE, ['main.py'], {
-    cwd: backendDir,
+  backendProcess = spawn(PYTHON_EXE, [path.join(backendDir, 'main.py')], {
+    cwd: APP_DATA_DIR,
     env: env,
     stdio: ['ignore', 'pipe', 'pipe']
   });

@@ -6,6 +6,7 @@ from datetime import datetime
 from database.database import SessionLocal
 from database.models import TrainingSession
 from logging_system.professional_logger import get_professional_logger
+from core.config import settings
 
 logger = get_professional_logger()
 
@@ -53,12 +54,7 @@ def check_training_health():
                         import json
                         
                         # Construct log file path
-                        current_file = Path(__file__).resolve()
-                        project_root = current_file
-                        while project_root.parent != project_root:
-                            if (project_root / "projects").exists():
-                                break
-                            project_root = project_root.parent
+                        project_root = settings.BASE_DIR
                         
                         log_file_path = project_root / session.logs_dir / "training.log"
                         
@@ -112,12 +108,7 @@ def check_training_health():
                             
                             # Construct log file path (stored as relative path in DB)
                             # Find project root
-                            current_file = Path(__file__).resolve()
-                            project_root = current_file
-                            while project_root.parent != project_root:
-                                if (project_root / "projects").exists():
-                                    break
-                                project_root = project_root.parent
+                            project_root = settings.BASE_DIR
                             
                             log_file_path = project_root / session.logs_dir / "training.log"
                             

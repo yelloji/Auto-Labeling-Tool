@@ -26,6 +26,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from core.release_controller import ReleaseController, ReleaseConfig, create_release_controller
 from core.transformation_schema import generate_release_configurations
+from core.config import settings
 
 # Import professional logging system
 from logging_system.professional_logger import get_professional_logger, log_info, log_error, log_warning, log_critical
@@ -578,7 +579,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             "project_id": project_id
         })
         
-        projects_root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "projects")
+        projects_root = str(settings.PROJECTS_DIR)
         releases_dir = os.path.join(projects_root, project.name, "releases")
         os.makedirs(releases_dir, exist_ok=True)
         
@@ -1357,11 +1358,7 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
             project_name = project.name if project else f"project_{release.project_id}"
             
             # Create project-specific releases directory using the correct path structure
-            # First, get the application root directory (3 levels up from this file)
-            app_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-            
-            # Create the path: [root_folder]/projects/gevis/releases/
-            projects_root = os.path.join(app_root, "projects")
+            projects_root = str(settings.PROJECTS_DIR)
             releases_dir = os.path.join(projects_root, "gevis", "releases")
             
             logger.debug("operations.exports", f"Creating releases directory", "releases_directory_creation", {
@@ -2453,10 +2450,10 @@ def create_complete_release_zip(
                 'dataset_id': dataset_id
             })
             
-            # Get dataset path - go up one more level to get to app-2 root
+            # Get dataset path
             dataset_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-                "projects", project_name, "dataset", dataset.name
+                str(settings.PROJECTS_DIR),
+                project_name, "dataset", dataset.name
             )
             
             if not os.path.exists(dataset_path):

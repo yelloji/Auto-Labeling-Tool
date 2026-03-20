@@ -19,6 +19,7 @@ from PIL import Image
 # Import our components
 from core.transformation_schema import TransformationSchema, create_schema_from_database, generate_release_configurations
 from core.image_generator import ImageAugmentationEngine, create_augmentation_engine, process_release_images
+from core.config import settings
 from database.database import get_db
 from database.models import ImageTransformation, Release, Image, Dataset, Project
 from sqlalchemy.orm import Session
@@ -1515,7 +1516,7 @@ class ReleaseController:
             
             # Create project-specific releases directory
             # Use absolute path to projects directory (one level up from backend)
-            projects_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "projects")
+            projects_root = str(settings.PROJECTS_DIR)
             releases_dir = os.path.join(projects_root, project_name, "releases")
             os.makedirs(releases_dir, exist_ok=True)
             

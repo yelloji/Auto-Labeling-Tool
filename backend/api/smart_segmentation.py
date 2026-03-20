@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Tuple
 from logging_system.professional_logger import get_professional_logger
+from core.config import settings
 from database.database import get_db, SessionLocal
 from database.operations import ImageOperations
 
@@ -149,9 +150,8 @@ class UltralyticsSAMSegmentor(SegmentorStrategy):
                 # Use SAM2 Base - Better accuracy, still good speed
                 model_size = os.getenv("SAM_MODEL_SIZE", "sam2_b.pt")  # Best overall balance
                 
-                # Target directory for our local copy (same pattern as YOLO)
-                repo_root = Path(__file__).parent.parent.parent
-                sam_dir = repo_root / "models" / "sam"
+                # Target directory for our local copy — writable on any PC
+                sam_dir = settings.BASE_DIR / "models" / "sam"
                 sam_dir.mkdir(parents=True, exist_ok=True)
                 local_model_path = sam_dir / model_size
                 
@@ -820,27 +820,12 @@ async def segment_polygon(request: SmartPolygonRequest, db: Session = Depends(ge
             if not image_record:
                 raise HTTPException(status_code=404, detail="Image not found")
 
-            # Resolve path
+            # Resolve path using BASE_DIR — works on any PC (dev and exe)
             image_path_raw = image_record.normalized_file_path
-            from pathlib import Path
-            backend_root = Path(__file__).parent.parent
-            
-            possible_paths = [
-                image_path_raw,
-                backend_root / image_path_raw.lstrip('/'),
-                backend_root / "uploads" / image_path_raw.lstrip('/'),
-                backend_root.parent / image_path_raw.lstrip('/'),
-            ]
-            
-            image_path = None
-            for p in possible_paths:
-                p_str = str(p)
-                if os.path.exists(p_str):
-                    image_path = p_str
-                    break
-            
-            if image_path is None:
-                raise HTTPException(status_code=404, detail=f"Image file not found at {image_record.normalized_file_path}")
+            image_path = str(settings.BASE_DIR / image_path_raw.lstrip('/'))
+
+            if not os.path.exists(image_path):
+                raise HTTPException(status_code=404, detail=f"Image file not found at {image_path_raw}")
 
             image = cv2.imread(image_path)
             if image is None:

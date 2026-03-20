@@ -233,14 +233,21 @@ class ModelManager:
 
                     # Move/copy downloaded model from Ultralytics cache to our target path
                     ckpt_path = getattr(model, 'ckpt_path', None)
+                    cwd_file = Path(os.getcwd()) / model_config["model_name"]
                     if ckpt_path and os.path.exists(ckpt_path):
                         shutil.copy2(ckpt_path, model_path)
-                    elif os.path.exists(model_config["model_name"]):
-                        # Fallback: sometimes YOLO saves in CWD
-                        shutil.copy2(model_config["model_name"], model_path)
+                    elif cwd_file.exists():
+                        # Fallback: ultralytics saved in CWD (AppData root)
+                        shutil.copy2(str(cwd_file), model_path)
                     else:
-                        # If no file found, skip with warning
                         print(f"Warning: downloaded file for {model_config['model_name']} not found; skipping copy")
+
+                    # Clean up cwd leftover so models only exist in models/yolo/
+                    if cwd_file.exists() and cwd_file.resolve() != model_path.resolve():
+                        try:
+                            cwd_file.unlink()
+                        except Exception:
+                            pass
 
                     # Get model classes (if available)
                     classes = list(getattr(model, 'names', {}).values()) if hasattr(model, 'names') else []
@@ -285,12 +292,20 @@ class ModelManager:
                 
                 # Copy to our local storage
                 model_path = sam_dir / sam_config["model_name"]
+                cwd_sam_file = Path(os.getcwd()) / sam_config["model_name"]
                 ckpt_path = getattr(model, 'ckpt_path', None)
                 if ckpt_path and os.path.exists(ckpt_path):
                     shutil.copy2(ckpt_path, model_path)
                     print(f"SAM model saved to {model_path}")
-                elif os.path.exists(sam_config["model_name"]):
-                    shutil.copy2(sam_config["model_name"], model_path)
+                elif cwd_sam_file.exists():
+                    shutil.copy2(str(cwd_sam_file), model_path)
+
+                # Clean up cwd leftover so SAM only exists in models/sam/
+                if cwd_sam_file.exists() and cwd_sam_file.resolve() != model_path.resolve():
+                    try:
+                        cwd_sam_file.unlink()
+                    except Exception:
+                        pass
                 
                 # Register SAM in model info
                 model_info = ModelInfo(

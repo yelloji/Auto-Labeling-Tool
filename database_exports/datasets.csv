@@ -1,5 +1,5 @@
 ID,Name,Description,Project ID,Project Name,Created,Updated,Total Images,Labeled Images,Unlabeled Images,Annotations
-7c2978c8-d056-46da-8baa-8d37258021d4,animal,Images uploaded to gevis,1,gevis,2025-09-21 16:42:50,2026-01-20 11:11:39.459946,3,3,0,3
+7c2978c8-d056-46da-8baa-8d37258021d4,animal,Images uploaded to gevis,1,gevis,2025-09-21 16:42:50,2026-03-19 11:53:45.845051,3,3,0,3
 cb17fee5-e822-4232-a2a7-b1c1a4264b71,Reject,Images uploaded to gevis,1,gevis,2025-09-22 07:07:14,2026-01-20 11:11:36.672216,1,1,0,9
 86451fe3-1dff-4290-adfb-e4bc03b1d2be,bread_dataset,Images uploaded to gevis,1,gevis,2026-01-20 10:03:43,2026-01-21 07:48:37.395183,3,3,0,3
 859a7b3d-1fa0-4bbf-8dbc-f0dee78994f7,Reject,Images uploaded to MASMAC-O-RING,3,MASMAC-O-RING,2025-09-23 10:32:21,2025-09-30 15:28:47.702206,9,9,0,82
@@ -10,3 +10,8 @@ b7d194f0-e372-46e0-bd1e-80b4a4b9fcf8,external_square,Images uploaded to Sensore 
 bfc1403f-b242-48ee-86e6-2e531a1ae06c,internal_square,Images uploaded to Sensore di Forza internal,8,Sensore di Forza internal,2025-09-29 13:27:16,2025-12-29 14:36:12.283644,4,4,0,28
 acf243bd-49b6-4405-a670-1b4fb7115567,int2_square,Images uploaded to Sensore di Forza internal,8,Sensore di Forza internal,2025-09-29 14:01:17,2025-09-30 08:01:29.060562,8,8,0,51
 87f8771e-1a6d-47e2-a43a-c366d0d9d772,good,Images uploaded to Sensore di Forza internal,8,Sensore di Forza internal,2025-09-30 07:32:29,2025-11-05 08:27:25.175190,10,10,0,10
+e78a484c-b9ad-4735-815d-0f6fa971e1ef,cu-1,Imported with labels (YOLO),9,label,2026-03-17 14:17:12,2026-03-17 14:17:12.729757,0,0,0,0
+2ab163d4-f355-4cb3-8521-2b0d4dcc1282,custom444,Imported with labels (YOLO),9,label,2026-03-17 14:21:43,2026-03-17 14:21:44.261580,0,0,0,0
+005abd45-9c06-45cb-922f-a48a1c35363d,okkk,Images uploaded to label,9,label,2026-03-17 15:05:23,2026-03-17 15:05:23.796979,0,0,0,0
+f0c9f34d-356d-4ebb-8f28-b0b01282d53f,new,Images uploaded to label,9,label,2026-03-18 09:46:07,2026-03-19 12:50:52.982317,4,4,0,5
+d9248cbd-1d7c-4f43-97c5-93fb1036b6cc,custom,Imported with labels (YOLO),9,label,2026-03-19 13:18:55,2026-03-19 13:20:06.028340,452,452,0,1454

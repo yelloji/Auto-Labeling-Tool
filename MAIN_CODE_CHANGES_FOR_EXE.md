@@ -110,6 +110,57 @@ if path.startswith(("/static/", "/projects/", "/health")):
 
 ---
 
+---
+
+### 9. electron/backend_runner.js — cwd fix for model downloads and path resolution
+**What:** Changed `cwd` from `backendDir` (resources/backend/) to `APP_DATA_DIR` (AppData/Gevis AI Studio/). Changed `spawn(PYTHON_EXE, ['main.py'], ...)` to `spawn(PYTHON_EXE, [path.join(backendDir, 'main.py')], ...)`.
+**Why:** With cwd = resources/backend/ (read-only), ultralytics could not download .pt model files — Permission denied. Also, `os.getcwd()` in prediction_executor.py and validation_executor.py was used to make paths relative before saving to DB — those relative paths were wrong when cwd was resources/backend/. Setting cwd = AppData fixes both: models download to AppData (writable), and relative path computation is correct.
+**Impact:** Dev mode unchanged (backend_runner.js only runs in exe mode). Exe: all AI model downloads work. DB paths stored correctly.
+
+---
+
+### 10. Systematic fix — all `__file__`-based project_root → `settings.BASE_DIR` (20 instances across 9 files)
+**Root cause:** In dev mode, code and data are in the same folder (`project-root/backend/` and `project-root/projects/`). Any `Path(__file__).parent.parent` or directory-walk to find "projects/" accidentally worked. In exe mode, code is in `resources/backend/` (read-only) and data is in `AppData/Gevis AI Studio/` — completely separate locations. All such patterns broke silently.
+
+**Files fixed and what each did:**
+
+**backend/api/routes/datasets.py** — `get_image_url(image.id)` → `image.normalized_file_path`
+- `get_image_url()` calls `file_exists()` internally which resolves path then checks `os.path.exists()`. This check was failing in exe even when files existed, returning None → frontend showed "No Image" in Dataset section. `normalized_file_path` is purely string-based (no disk check), matches what Annotation Progress always used.
+
+**backend/api/routes/transformation_preview.py** — removed `file_exists()` check + `os.getcwd()` → `settings.BASE_DIR`
+- Line 500: `file_exists()` returned False → image_file=None → 404 "not found" for augmentation preview.
+- Lines 542-550: `os.getcwd()` used to build absolute path for OpenCV `imread()` — returned wrong directory in exe.
+
+**backend/models/training/api_routes.py** — 9 instances replaced (start_training, get_training_log, run_validation_task, get_model_experiment_quality, get_experiment_quality, run_prediction_task, run_external_validation, websocket live logs, missed-detections endpoint)
+
+**backend/models/training/yaml_generator.py** — `current_file.parents[3]` → `settings.BASE_DIR`
+- Used to resolve absolute data.yaml path and base model .pt path for YOLO training. Wrong in exe → training could not start.
+
+**backend/models/training/executor.py** — walk-up loop looking for "projects/" folder → `settings.BASE_DIR`
+- Used to set cwd for training subprocess. Wrong cwd → dataset paths in training failed.
+
+**backend/models/training/health_checker.py** — 2 walk-up loops → `settings.BASE_DIR`
+- Used to resolve training log file path for live metrics parsing during training.
+
+**backend/api/routes/releases.py** — 3 instances → `settings.PROJECTS_DIR`
+- Computing releases ZIP output directory for creating new releases.
+
+**backend/core/release_controller.py** — 1 instance → `settings.PROJECTS_DIR`
+- Same as above in the controller layer.
+
+**backend/api/smart_segmentation.py** — 2 fixes:
+- SAM model dir: `Path(__file__).parent.parent.parent / "models" / "sam"` → `settings.BASE_DIR / "models" / "sam"` — SAM model was saving to resources/ (read-only in exe).
+- Image path resolution: 4-entry fallback list all using `__file__`-based backend_root → single correct path `settings.BASE_DIR / image_path.lstrip('/')`.
+
+---
+
+### 11. backend/models/model_manager.py — clean up cwd leftovers after model download
+**What:** After copying a downloaded model from ultralytics cache to `models/yolo/` or `models/sam/`, delete the file in cwd (AppData root) if it exists as a leftover.
+**Why:** ultralytics downloads .pt files to the current working directory first. model_manager correctly copies them to `models/yolo/` or `models/sam/` afterwards, but the root copy was never deleted — causing duplicate files (e.g. `AppData/yolo26n.pt` AND `AppData/models/yolo/yolo26n.pt`).
+**Impact:** After fresh install, models are organized only in their proper subdirectories. AppData root stays clean.
+
+---
+
 ## Pending Changes (not done yet)
 
 None currently.

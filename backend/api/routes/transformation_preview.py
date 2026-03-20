@@ -17,6 +17,7 @@ from PIL import Image, ImageEnhance, ImageFilter
 
 from ..services.image_transformer import ImageTransformer
 from utils.image_utils import encode_image_to_base64, resize_image_for_preview
+from core.config import settings
 
 # Import professional logging system
 from logging_system.professional_logger import get_professional_logger
@@ -496,31 +497,11 @@ async def generate_preview_with_image_id(
                     "file_path": image.file_path
                 })
                 
-                # Check if file exists using path manager
-                if path_manager.file_exists(image.file_path):
-                    image_file = image.file_path
-                    logger.debug("operations.images", "Image file exists at original path", "image_path_valid", {
-                        "file_path": image.file_path
-                    })
-                else:
-                    logger.debug("operations.images", "Image file not found at original path, attempting migration", "image_path_migration_attempt", {
-                        "original_path": image.file_path
-                    })
-                    # Try to migrate old path format
-                    migrated_path = path_manager.migrate_old_path(image.file_path)
-                    if migrated_path and path_manager.file_exists(migrated_path):
-                        # Update database with new path
-                        ImageOperations.update_image_path(db, image_id, migrated_path)
-                        image_file = migrated_path
-                        logger.info("operations.images", "Image path migrated successfully", "image_path_migrated", {
-                            "old_path": image.file_path,
-                            "new_path": migrated_path
-                        })
-                    else:
-                        logger.warning("operations.images", "Image path migration failed", "image_path_migration_failed", {
-                            "original_path": image.file_path,
-                            "migrated_path": migrated_path
-                        })
+                # Use path directly from DB — no file_exists check (same pattern as Annotation Progress)
+                image_file = image.file_path
+                logger.debug("operations.images", "Image path resolved from database", "image_path_resolved", {
+                    "file_path": image.file_path
+                })
             else:
                 logger.warning("app.database", "Image not found in database", "database_image_not_found", {
                     "image_id": image_id
@@ -538,19 +519,9 @@ async def generate_preview_with_image_id(
         # Convert Windows-style backslashes to forward slashes for Linux compatibility
         image_file_normalized = image_file.replace('\\', '/')
         
-        # Make sure we have an absolute path relative to project root
+        # Make sure we have an absolute path using BASE_DIR (works in both dev and exe mode)
         if not os.path.isabs(image_file_normalized):
-            # All paths in database are relative to project root
-            # Get project root dynamically (cross-platform compatible)
-            import sys
-            current_dir = os.getcwd()
-            if 'backend' in current_dir:
-                project_root = os.path.dirname(current_dir)  # Go up one level from backend to project root
-            else:
-                project_root = current_dir
-            
-            # Join with forward slashes for Linux
-            image_file_normalized = os.path.join(project_root, image_file_normalized).replace('\\', '/')
+            image_file_normalized = str(settings.BASE_DIR / image_file_normalized).replace('\\', '/')
         
         logger.info("operations.images", f"Attempting to load image from: {image_file_normalized}", "image_load_attempt", {
             'image_path': image_file_normalized,
