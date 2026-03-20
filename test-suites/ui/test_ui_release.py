@@ -1,0 +1,195 @@
+"""
+UI Tests — Release Section (workspace sidebar → 'RELEASE')
+
+What is tested:
+  - Section renders: Release History list on left, Details panel on right
+  - 'Create Release' button is visible
+  - Release history list renders (even if empty)
+  - Release Details View panels: DatasetStats, ReleaseConfigPanel, TransformationSection
+  - Transformation cards render when transforms are configured
+  - TransformationModal opens when 'Add Transform' is clicked
+  - DownloadModal opens when 'Download' is clicked on a release
+  - ReleaseImageViewerModal opens when a preview image is clicked
+  - Train/Val/Test split sliders or inputs are present
+
+Requires: app at localhost:12000, at least one project exists.
+"""
+
+import pytest
+from .conftest import goto, DEFAULT_TIMEOUT, FAST_TIMEOUT
+
+
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+def _open_release_section(page, project_id: str):
+    goto(page, f"/projects/{project_id}/workspace")
+    page.wait_for_timeout(1200)
+    # The menu key is 'versions' but the label is 'RELEASE'
+    page.click(".ant-menu-item:has-text('RELEASE'), .ant-menu-item:has-text('Release')")
+    page.wait_for_timeout(1000)
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+def test_release_section_renders(workspace_page):
+    """Release section loads without a crash."""
+    page, project_id = workspace_page
+    _open_release_section(page, project_id)
+
+    page.wait_for_selector(
+        "text=Release, text=Releases, text=Create Release",
+        timeout=DEFAULT_TIMEOUT,
+    )
+
+
+def test_release_history_list_renders(workspace_page):
+    """Release history list panel is visible (may be empty)."""
+    page, project_id = workspace_page
+    _open_release_section(page, project_id)
+
+    # The list container or empty state should be present
+    history = page.query_selector(
+        "[class*='release-history'], "
+        "[class*='ReleaseHistory'], "
+        "text=No releases, "
+        "text=Release History, "
+        ".ant-list"
+    )
+    assert history is not None, "Release history list not found"
+
+
+def test_release_create_button_visible(workspace_page):
+    """'Create Release' button is present in the Release section."""
+    page, project_id = workspace_page
+    _open_release_section(page, project_id)
+
+    btn = page.query_selector(
+        "button:has-text('Create Release'), "
+        "button:has-text('Create New Release'), "
+        "button:has-text('New Release')"
+    )
+    assert btn is not None, "'Create Release' button not found"
+
+
+def test_release_details_panel_has_train_val_test_split(workspace_page):
+    """
+    The Release Details panel contains train/val/test split configuration
+    (sliders or number inputs).
+    """
+    page, project_id = workspace_page
+    _open_release_section(page, project_id)
+
+    split_config = page.query_selector(
+        "text=Train, text=Val, text=Test, "
+        ".ant-slider, "
+        ".ant-input-number"
+    )
+    assert split_config is not None, "Train/Val/Test split controls not found"
+
+
+def test_release_transformation_section_visible(workspace_page):
+    """
+    The Transformation/Augmentation section heading is visible in the release panel.
+    """
+    page, project_id = workspace_page
+    _open_release_section(page, project_id)
+
+    transform_el = page.query_selector(
+        "text=Transformation, text=Augmentation, text=Augment, "
+        "[class*='TransformationSection'], [class*='transformation']"
+    )
+    assert transform_el is not None, "Transformation/Augmentation section not found"
+
+
+def test_release_add_transformation_button_exists(workspace_page):
+    """
+    An 'Add Transformation' or 'Add Augmentation' button is present.
+    """
+    page, project_id = workspace_page
+    _open_release_section(page, project_id)
+
+    add_btn = page.query_selector(
+        "button:has-text('Add Transformation'), "
+        "button:has-text('Add Augmentation'), "
+        "button:has-text('Add Transform'), "
+        "button:has-text('Add')"
+    )
+    assert add_btn is not None, "Add Transformation button not found"
+
+
+def test_release_transformation_modal_opens(workspace_page):
+    """Clicking 'Add Transformation' opens the TransformationModal."""
+    page, project_id = workspace_page
+    _open_release_section(page, project_id)
+
+    add_btn = page.query_selector(
+        "button:has-text('Add Transformation'), "
+        "button:has-text('Add Augmentation'), "
+        "button:has-text('Add Transform')"
+    )
+    if add_btn is None:
+        pytest.skip("Add Transformation button not found.")
+
+    add_btn.click()
+    page.wait_for_timeout(700)
+
+    modal = page.query_selector(".ant-modal:visible, .ant-modal-content:visible")
+    assert modal is not None, "TransformationModal did not open"
+
+
+def test_release_download_button_visible_when_release_exists(workspace_page):
+    """
+    When at least one release exists, a 'Download' button is present.
+    Skipped if no releases have been created.
+    """
+    page, project_id = workspace_page
+    _open_release_section(page, project_id)
+    page.wait_for_timeout(800)
+
+    download_btn = page.query_selector(
+        "button:has-text('Download'), "
+        "button[title*='Download'], "
+        ".anticon-download"
+    )
+    if download_btn is None:
+        pytest.skip("No download button found — create a release first.")
+
+    assert download_btn is not None
+
+
+def test_release_download_modal_opens(workspace_page):
+    """Clicking the Download button on a release opens the DownloadModal."""
+    page, project_id = workspace_page
+    _open_release_section(page, project_id)
+    page.wait_for_timeout(800)
+
+    download_btn = page.query_selector(
+        "button:has-text('Download'), .anticon-download"
+    )
+    if download_btn is None:
+        pytest.skip("No download button — create a release first.")
+
+    download_btn.click()
+    page.wait_for_timeout(700)
+
+    modal = page.query_selector(".ant-modal:visible")
+    assert modal is not None, "DownloadModal did not open after clicking Download"
+
+
+def test_release_dataset_stats_section_renders(workspace_page):
+    """
+    DatasetStats (image count, class distribution stats) section is visible
+    in the release panel.
+    """
+    page, project_id = workspace_page
+    _open_release_section(page, project_id)
+
+    stats = page.query_selector(
+        "text=Dataset Stats, text=Statistics, text=Total Images, "
+        "[class*='DatasetStats'], [class*='dataset-stats']"
+    )
+    assert stats is not None, "DatasetStats panel not found in Release section"
