@@ -64,10 +64,8 @@ def log_warning(category, message, operation, data):
 class DatabaseAutoExporter:
     def __init__(self, db_path=None, export_dir="database_exports"):
         if db_path is None:
-            # Get absolute path to database.db in project root
-            current_file = Path(__file__).resolve()
-            project_root = current_file.parent.parent.parent  # Go up from backend/database/ to root
-            db_path = project_root / "database.db"
+            from core.config import settings
+            db_path = settings.DATABASE_PATH
         self.db_path = db_path
         self.export_dir = Path(export_dir)
         self.export_dir.mkdir(exist_ok=True)
