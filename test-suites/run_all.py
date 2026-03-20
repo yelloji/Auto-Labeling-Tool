@@ -2,10 +2,11 @@
 """
 Run all tests and print a clean PASS/FAIL summary.
 
-Usage:
-  python test-suites/run_all.py              # run everything
-  python test-suites/run_all.py --no-ui      # skip UI (Playwright) tests
-  python test-suites/run_all.py --ui-only    # run only UI tests
+Run from INSIDE the test-suites folder:
+  cd test-suites
+  python run_all.py              # run everything (backend + DB + UI)
+  python run_all.py --no-ui      # backend + DB only  (no app needed)
+  python run_all.py --ui-only    # UI only            (app must be running)
 
 UI tests require:
   - App running at http://localhost:12000
@@ -16,6 +17,7 @@ UI tests require:
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Parse flags
@@ -30,29 +32,29 @@ NO_UI    = "--no-ui"    in args
 # ---------------------------------------------------------------------------
 
 BACKEND_SUITES = [
-    ("Health",          ["pytest", "test-suites/backend/test_health.py",      "-v"]),
-    ("Projects API",    ["pytest", "test-suites/backend/test_projects.py",    "-v"]),
-    ("Datasets API",    ["pytest", "test-suites/backend/test_datasets.py",    "-v"]),
-    ("Images API",      ["pytest", "test-suites/backend/test_images.py",      "-v"]),
-    ("Annotations API", ["pytest", "test-suites/backend/test_annotations.py", "-v"]),
-    ("Labels API",      ["pytest", "test-suites/backend/test_labels.py",      "-v"]),
-    ("Releases API",    ["pytest", "test-suites/backend/test_releases.py",    "-v"]),
-    ("Analytics API",   ["pytest", "test-suites/backend/test_analytics.py",   "-v"]),
-    ("DB Schema",       ["pytest", "test-suites/database/test_schema.py",     "-v"]),
-    ("DB CRUD",         ["pytest", "test-suites/database/test_crud.py",       "-v"]),
+    ("Health",          ["pytest", "backend/test_health.py",      "-v"]),
+    ("Projects API",    ["pytest", "backend/test_projects.py",    "-v"]),
+    ("Datasets API",    ["pytest", "backend/test_datasets.py",    "-v"]),
+    ("Images API",      ["pytest", "backend/test_images.py",      "-v"]),
+    ("Annotations API", ["pytest", "backend/test_annotations.py", "-v"]),
+    ("Labels API",      ["pytest", "backend/test_labels.py",      "-v"]),
+    ("Releases API",    ["pytest", "backend/test_releases.py",    "-v"]),
+    ("Analytics API",   ["pytest", "backend/test_analytics.py",   "-v"]),
+    ("DB Schema",       ["pytest", "database/test_schema.py",     "-v"]),
+    ("DB CRUD",         ["pytest", "database/test_crud.py",       "-v"]),
 ]
 
 UI_SUITES = [
-    ("UI Projects",    ["pytest", "test-suites/ui/test_ui_projects.py",    "-v"]),
-    ("UI Upload",      ["pytest", "test-suites/ui/test_ui_upload.py",      "-v"]),
-    ("UI Management",  ["pytest", "test-suites/ui/test_ui_management.py",  "-v"]),
-    ("UI Dataset",     ["pytest", "test-suites/ui/test_ui_dataset.py",     "-v"]),
-    ("UI Release",     ["pytest", "test-suites/ui/test_ui_release.py",     "-v"]),
-    ("UI Analytics",   ["pytest", "test-suites/ui/test_ui_analytics.py",   "-v"]),
-    ("UI Models",      ["pytest", "test-suites/ui/test_ui_models.py",      "-v"]),
-    ("UI Training",    ["pytest", "test-suites/ui/test_ui_training.py",    "-v"]),
-    ("UI Model Lab",   ["pytest", "test-suites/ui/test_ui_modellab.py",    "-v"]),
-    ("UI Annotation",  ["pytest", "test-suites/ui/test_ui_annotation.py",  "-v"]),
+    ("UI Projects",    ["pytest", "ui/test_ui_projects.py",    "-v"]),
+    ("UI Upload",      ["pytest", "ui/test_ui_upload.py",      "-v"]),
+    ("UI Management",  ["pytest", "ui/test_ui_management.py",  "-v"]),
+    ("UI Dataset",     ["pytest", "ui/test_ui_dataset.py",     "-v"]),
+    ("UI Release",     ["pytest", "ui/test_ui_release.py",     "-v"]),
+    ("UI Analytics",   ["pytest", "ui/test_ui_analytics.py",   "-v"]),
+    ("UI Models",      ["pytest", "ui/test_ui_models.py",      "-v"]),
+    ("UI Training",    ["pytest", "ui/test_ui_training.py",    "-v"]),
+    ("UI Model Lab",   ["pytest", "ui/test_ui_modellab.py",    "-v"]),
+    ("UI Annotation",  ["pytest", "ui/test_ui_annotation.py",  "-v"]),
 ]
 
 if UI_ONLY:
@@ -66,7 +68,8 @@ else:
 # Run
 # ---------------------------------------------------------------------------
 
-PROJECT_ROOT = "v:/stage-1-labeling-app/app-3-fix-release-system-422-error"
+# Always run from the test-suites/ folder itself (where this file lives)
+PROJECT_ROOT = Path(__file__).resolve().parent
 
 results = []
 for name, cmd in SUITES:
