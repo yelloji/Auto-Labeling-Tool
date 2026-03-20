@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Run all tests and print a clean PASS/FAIL summary.
+Also saves a formatted report to test-results/latest-report.md
 
 Run from INSIDE the test-suites folder:
   cd test-suites
@@ -14,9 +15,11 @@ UI tests require:
   - Browsers installed: playwright install chromium
 """
 
+import os
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -59,17 +62,25 @@ UI_SUITES = [
 
 if UI_ONLY:
     SUITES = UI_SUITES
+    mode = "UI only"
 elif NO_UI:
     SUITES = BACKEND_SUITES
+    mode = "Backend + DB only"
 else:
     SUITES = BACKEND_SUITES + UI_SUITES
+    mode = "Full (Backend + DB + UI)"
 
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 
 # Always run from the test-suites/ folder itself (where this file lives)
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(os.path.abspath(__file__)).parent
+# Use os.getcwd()-relative path for writing (avoids pathlib V: drive issues)
+RESULTS_STR  = "test-results"
+os.makedirs(RESULTS_STR, exist_ok=True)
+
+run_at = datetime.now()
 
 results = []
 for name, cmd in SUITES:
@@ -89,10 +100,17 @@ for name, cmd in SUITES:
         r.returncode != 0 and "no tests ran" in (r.stdout + r.stderr).lower()
     )
 
-    results.append((name, passed, skipped, elapsed, r.stdout, r.stderr))
+    # Extract individual test lines (PASSED / FAILED) from pytest -v output
+    test_lines = [
+        line.strip()
+        for line in (r.stdout + r.stderr).splitlines()
+        if " PASSED" in line or " FAILED" in line or " ERROR" in line
+    ]
+
+    results.append((name, passed, skipped, elapsed, r.stdout, r.stderr, test_lines))
 
 # ---------------------------------------------------------------------------
-# Summary
+# Console summary
 # ---------------------------------------------------------------------------
 
 print()
@@ -100,7 +118,7 @@ print("=" * 68)
 print("  TEST SUMMARY")
 print("=" * 68)
 
-for name, passed, skipped, elapsed, stdout, stderr in results:
+for name, passed, skipped, elapsed, stdout, stderr, _ in results:
     if skipped:
         status = "SKIP"
     elif passed:
@@ -133,4 +151,76 @@ else:
     print(f"\n  {n_fail} SUITE(S) FAILED")
 
 print()
+
+# ---------------------------------------------------------------------------
+# Save markdown report
+# ---------------------------------------------------------------------------
+
+overall = "ALL PASSED" if n_fail == 0 else f"{n_fail} SUITE(S) FAILED"
+report_lines = [
+    f"# Test Report",
+    f"",
+    f"**Date:** {run_at.strftime('%Y-%m-%d %H:%M:%S')}  ",
+    f"**Mode:** {mode}  ",
+    f"**Result:** {overall}  ",
+    f"**Total:** {len(results)}  |  PASS: {n_pass}  |  FAIL: {n_fail}  |  SKIP: {n_skip}",
+    f"",
+    f"---",
+    f"",
+    f"## Suite Results",
+    f"",
+    f"| Status | Suite | Time |",
+    f"|--------|-------|------|",
+]
+
+for name, passed, skipped, elapsed, _, _, _ in results:
+    if skipped:
+        icon, status = "SKIP", "SKIP"
+    elif passed:
+        icon, status = "PASS", "PASS"
+    else:
+        icon, status = "FAIL", "FAIL"
+    report_lines.append(f"| {icon} | {name} | {elapsed:.1f}s |")
+
+report_lines += ["", "---", "", "## Individual Tests", ""]
+
+for name, passed, skipped, elapsed, stdout, stderr, test_lines in results:
+    if skipped:
+        status = "SKIP"
+    elif passed:
+        status = "PASS"
+    else:
+        status = "FAIL"
+
+    report_lines.append(f"### {status} — {name}")
+    report_lines.append("")
+
+    if test_lines:
+        for line in test_lines:
+            # Shorten long pytest paths for readability
+            short = line.split("::")[-1] if "::" in line else line
+            marker = "PASS" if "PASSED" in line else ("FAIL" if "FAILED" in line else "ERROR")
+            report_lines.append(f"- `{marker}` {short}")
+    else:
+        report_lines.append("- *(no individual test output captured)*")
+
+    if not passed and not skipped:
+        report_lines.append("")
+        report_lines.append("**Failure details:**")
+        report_lines.append("```")
+        combined = (stdout + stderr).strip().split("\n")
+        for line in combined[-30:]:
+            report_lines.append(line)
+        report_lines.append("```")
+
+    report_lines.append("")
+
+os.makedirs(RESULTS_STR, exist_ok=True)  # recreate if pytest cleanup removed it
+report_path = os.path.join(RESULTS_STR, "latest-report.md")
+with open(report_path, "w", encoding="utf-8") as f:
+    f.write("\n".join(report_lines))
+
+print(f"  Report saved: {report_path}")
+print()
+
 sys.exit(0 if n_fail == 0 else 1)
