@@ -86,7 +86,7 @@ function createMainWindow() {
 
 // ── Backend health polling ─────────────────────────────────────────────────
 
-function waitForBackend(timeoutMs = 60000) {
+function waitForBackend(timeoutMs = 300000) {
   return new Promise((resolve, reject) => {
     const start = Date.now();
 
@@ -98,8 +98,13 @@ function waitForBackend(timeoutMs = 60000) {
     };
 
     const retry = () => {
-      if (Date.now() - start > timeoutMs) {
-        return reject(new Error('Backend did not start within 60 seconds.'));
+      const elapsed = Date.now() - start;
+      if (elapsed > timeoutMs) {
+        return reject(new Error('Backend did not start. This may happen on the first launch while AI models are downloading. Please try again.'));
+      }
+      // Update splash with download hint after 30 seconds (likely downloading models)
+      if (elapsed > 30000 && elapsed < 31000) {
+        updateSplash(60, 'Downloading AI models (first launch only)...');
       }
       setTimeout(check, 500);
     };
@@ -138,7 +143,7 @@ app.whenReady().then(async () => {
       const backendDir = path.join(appResourcesDir, 'backend');
       startBackend(backendDir);
 
-      updateSplash(50, 'Loading application...');
+      updateSplash(50, 'Starting backend (first launch may take a few minutes)...');
       await waitForBackend();
       updateSplash(100, 'Ready');
     }

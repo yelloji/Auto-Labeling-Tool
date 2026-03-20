@@ -161,6 +161,13 @@ if path.startswith(("/static/", "/projects/", "/health")):
 
 ---
 
+### 12. electron/main.js — Increase startup timeout from 60s to 300s (first-launch model download fix)
+**What:** Increased `waitForBackend()` default timeout from 60,000 ms to 300,000 ms (5 minutes). Updated splash message to indicate first launch may take longer. Updated error message to explain the cause. Added a splash hint "Downloading AI models (first launch only)..." that appears after 30 seconds.
+**Why:** On first launch, `_download_default_models()` runs synchronously and downloads all 8 YOLO models + SAM2 Base (~30MB each) before the backend's `/health` endpoint responds. SAM2 is last and caused the 60-second timeout to fire before download completed. This caused two problems: (1) "Backend did not start within 60 seconds" error dialog, (2) models_config.json was not saved with sam2_b ID, causing SAM2 to re-download on every subsequent launch.
+**Impact:** Dev mode unchanged (also uses `waitForBackend()` but backend is already running). Exe first launch: waits up to 5 minutes instead of 60 seconds, allowing all models to download completely. After first launch: models_config.json correctly includes all 9 model IDs, no re-downloads on subsequent launches.
+
+---
+
 ## Pending Changes (not done yet)
 
 None currently.
