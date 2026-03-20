@@ -22,17 +22,21 @@ if str(BACKEND_DIR) not in sys.path:
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
-# In-memory SQLite engine — one per test *session* so table creation is fast,
-# but each test function gets its own transaction that is rolled back.
+# In-memory SQLite engine — StaticPool forces ALL connections to share the
+# same underlying SQLite connection so the in-memory database (and its tables)
+# is visible to every session, including the ones created by override_get_db().
+# Without StaticPool each new connection gets a blank empty database.
 # ---------------------------------------------------------------------------
 TEST_DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
     TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
 )
 
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -75,12 +79,21 @@ def override_get_db():
 # setting environment variables that disable optional startup work.
 # ---------------------------------------------------------------------------
 os.environ.setdefault("GEVIS_EXE_MODE", "0")
+os.environ.setdefault("DB_EXPORT_ENABLE_AUTO_EXPORT", "0")   # disable background export threads in tests
 
 from database.database import get_db  # noqa: E402 — must come after sys.path patch
 
 from main import app  # noqa: E402
 
 app.dependency_overrides[get_db] = override_get_db
+
+# ---------------------------------------------------------------------------
+# Patch modules that create their own SessionLocal() bypassing FastAPI DI.
+# Without this, file_handler and any other direct SessionLocal callers would
+# open a connection to the real production database during tests.
+# ---------------------------------------------------------------------------
+import core.file_handler as _file_handler  # noqa: E402
+_file_handler.SessionLocal = TestingSessionLocal
 
 
 # ---------------------------------------------------------------------------
@@ -162,10 +175,11 @@ def sample_image(test_client, sample_dataset):
     )
     assert resp.status_code in (200, 201), f"Failed to upload sample image: {resp.text}"
     data = resp.json()
-    # The endpoint may return a list of uploaded images or a dict with an
-    # "images" key — handle both shapes.
+    # Handle all response shapes from the upload endpoint.
     if isinstance(data, list):
         return data[0]
+    if "uploaded_images" in data:
+        return data["uploaded_images"][0]
     if "images" in data:
         return data["images"][0]
     return data

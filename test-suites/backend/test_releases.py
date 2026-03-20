@@ -88,7 +88,11 @@ def _upload_image(client: TestClient, dataset_id: str) -> dict:
     )
     assert resp.status_code in (200, 201), resp.text
     data = resp.json()
-    return data[0] if isinstance(data, list) else data.get("images", [data])[0]
+    if isinstance(data, list):
+        return data[0]
+    if "uploaded_images" in data:
+        return data["uploaded_images"][0]
+    return data.get("images", [data])[0]
 
 
 def _release_payload(dataset_ids: list, version_name: str = "v1.0") -> dict:

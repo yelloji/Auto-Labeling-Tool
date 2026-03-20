@@ -69,9 +69,11 @@ def _upload_image(client: TestClient, dataset_id: str, filename: str = "test.jpg
     )
     assert resp.status_code in (200, 201), f"Upload failed: {resp.text}"
     data = resp.json()
-    # Handle both list and dict response shapes
+    # Handle all response shapes
     if isinstance(data, list):
         return data[0]
+    if "uploaded_images" in data:
+        return data["uploaded_images"][0]
     if "images" in data:
         return data["images"][0]
     return data

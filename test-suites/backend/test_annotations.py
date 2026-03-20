@@ -63,7 +63,14 @@ def _setup(client: TestClient, suffix: str = "") -> dict:
         files=[("files", ("ann_test.jpg", _make_jpeg(), "image/jpeg"))],
     )
     data = upload_resp.json()
-    image = data[0] if isinstance(data, list) else data.get("images", [data])[0]
+    if isinstance(data, list):
+        image = data[0]
+    elif "uploaded_images" in data:
+        image = data["uploaded_images"][0]
+    elif "images" in data:
+        image = data["images"][0]
+    else:
+        image = data
 
     return {"project": proj, "dataset": ds, "image": image}
 

@@ -10,7 +10,7 @@
 # ── Backend API tests (pytest + FastAPI TestClient) ──────────────────────────
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
-httpx>=0.27.0           # required by FastAPI TestClient async support
+httpx>=0.27.0,<0.28     # must stay <0.28 — starlette 0.27 TestClient breaks with httpx 0.28+
 Pillow>=10.0.0          # used in conftest.py to create test images in-memory
 
 # ── UI tests (Playwright browser automation) ─────────────────────────────────
