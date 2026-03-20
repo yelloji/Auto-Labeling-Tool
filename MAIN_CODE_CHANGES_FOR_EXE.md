@@ -175,6 +175,51 @@ if path.startswith(("/static/", "/projects/", "/health")):
 
 ---
 
+### 14. backend/database/auto_export.py — fix __file__-based database path
+
+**What:** Replaced `__file__`-based `db_path` computation with `settings.DATABASE_PATH` in `DatabaseAutoExporter.__init__`.
+**Why:** `auto_export.py` was walking up from `__file__` to find `database.db`. In exe mode, `__file__` is inside `resources/backend/` (read-only), so the computed path pointed to `resources/database.db` which doesn't exist — the actual database is in AppData. This caused the auto-export utility to read from the wrong (non-existent) database.
+**Before:**
+```python
+current_file = Path(__file__).resolve()
+project_root = current_file.parent.parent.parent
+db_path = project_root / "database.db"
+```
+**After:**
+```python
+from core.config import settings
+db_path = settings.DATABASE_PATH
+```
+**Impact:** Dev mode unchanged (settings.DATABASE_PATH resolves to repo root in dev). Exe: auto-export reads from the correct AppData database.
+
+---
+
+### 15. backend/models/training/executor.py — fix YOLO command not found in exe mode
+
+**What:** Replaced broken `python -m ultralytics` fallback with a lookup of `yolo.exe` inside the bundled Python's `Scripts/` folder. Added a final inline-entrypoint fallback if `yolo.exe` is still not found.
+**Why:** In exe mode, `yolo` is not on PATH, so `shutil.which("yolo")` returns None. The previous fallback `python -m ultralytics cfg=...` fails with `No module named ultralytics.__main__` because ultralytics has no `__main__.py`. The bundled Python installs `yolo.exe` at `AppData\Local\Gevis AI Studio\python\Scripts\yolo.exe` — we now find it there directly.
+**Before:**
+```python
+if not shutil.which("yolo"):
+    cmd = [sys.executable, "-m", "ultralytics", f"cfg={config_yaml_path}"]
+```
+**After:**
+```python
+yolo_cmd = shutil.which("yolo")
+if not yolo_cmd:
+    scripts_dir = Path(sys.executable).parent / "Scripts"
+    yolo_in_scripts = scripts_dir / "yolo.exe"
+    if yolo_in_scripts.exists():
+        yolo_cmd = str(yolo_in_scripts)
+if yolo_cmd:
+    cmd = [yolo_cmd, f"cfg={config_yaml_path}"]
+else:
+    cmd = [sys.executable, "-c", "from ultralytics.cfg import entrypoint; ..."]
+```
+**Impact:** Dev mode unchanged (`shutil.which("yolo")` finds it on PATH in dev). Exe: training subprocess now launches correctly using the bundled `yolo.exe`.
+
+---
+
 ## Pending Changes (not done yet)
 
 None currently.

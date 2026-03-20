@@ -40,14 +40,26 @@ def start_ultralytics_training(
         import shutil
         import sys
         
-        cmd = ["yolo", f"cfg={config_yaml_path}"]
-        
-        if not shutil.which("yolo"):
-            logger.warning("operations.training", "YOLO command not found in PATH, falling back to python module", "yolo_fallback", {
-                "path": str(os.environ.get("PATH"))
+        # Find yolo executable: check PATH first, then Scripts/ next to python.exe (exe mode)
+        yolo_cmd = shutil.which("yolo")
+        if not yolo_cmd:
+            # In exe mode yolo is not on PATH — find it next to the bundled python.exe
+            scripts_dir = Path(sys.executable).parent / "Scripts"
+            yolo_in_scripts = scripts_dir / "yolo.exe"
+            if yolo_in_scripts.exists():
+                yolo_cmd = str(yolo_in_scripts)
+
+        if yolo_cmd:
+            cmd = [yolo_cmd, f"cfg={config_yaml_path}"]
+        else:
+            # Last resort: call the ultralytics entrypoint directly via -c
+            logger.warning("operations.training", "yolo.exe not found, using inline entrypoint fallback", "yolo_fallback", {
+                "python": sys.executable
             })
-            # Fallback to python -m ultralytics
-            cmd = [sys.executable, "-m", "ultralytics", f"cfg={config_yaml_path}"]
+            cmd = [
+                sys.executable, "-c",
+                f"from ultralytics.cfg import entrypoint; import sys; sys.argv=['yolo', 'cfg={config_yaml_path}']; entrypoint('yolo')"
+            ]
         
 
         
