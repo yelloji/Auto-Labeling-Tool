@@ -141,7 +141,7 @@ async function runSetup(appResourcesDir, onProgress) {
   };
 
   // 1. Create AppData directories
-  report(2, 'Creating data folders...');
+  report(2, 'Preparing your workspace...');
   fs.mkdirSync(APP_DATA_DIR, { recursive: true });
   fs.mkdirSync(PYTHON_DIR, { recursive: true });
   fs.mkdirSync(path.join(APP_DATA_DIR, 'projects'), { recursive: true });
@@ -155,16 +155,16 @@ async function runSetup(appResourcesDir, onProgress) {
 
   // 2. Download Python embeddable zip
   const zipPath = path.join(APP_DATA_DIR, 'python.zip');
-  report(5, 'Downloading Python runtime...');
+  report(5, 'Downloading required components...');
   log(`Downloading Python from: ${PYTHON_ZIP_URL}`);
   await downloadFile(
     PYTHON_ZIP_URL,
     zipPath,
-    (pct, msg) => report(5 + Math.round(pct * 0.25), `Downloading Python: ${msg}`),
+    (pct, msg) => report(5 + Math.round(pct * 0.25), `Downloading required components... (${Math.round(pct)}%)`),
     'Python runtime'
   );
   log('Python download complete.');
-  report(30, 'Extracting Python runtime...');
+  report(30, 'Extracting components...');
 
   // 3. Extract Python zip
   log(`Extracting Python zip to: ${PYTHON_DIR}`);
@@ -173,7 +173,7 @@ async function runSetup(appResourcesDir, onProgress) {
   log('Python extracted.');
 
   // 4. Enable pip in embedded Python
-  report(35, 'Configuring Python...');
+  report(35, 'Configuring...');
   const pthFiles = fs.readdirSync(PYTHON_DIR).filter(f => f.endsWith('._pth'));
   log(`Found ._pth files: ${pthFiles.join(', ')}`);
   for (const pthFile of pthFiles) {
@@ -185,7 +185,7 @@ async function runSetup(appResourcesDir, onProgress) {
   }
 
   // 5. Download get-pip.py
-  report(38, 'Installing pip...');
+  report(38, 'Setting up installer...');
   const getPipPath = path.join(PYTHON_DIR, 'get-pip.py');
   log(`Downloading get-pip.py from: ${GET_PIP_URL}`);
   await downloadFile(GET_PIP_URL, getPipPath, null, 'pip');
@@ -199,7 +199,7 @@ async function runSetup(appResourcesDir, onProgress) {
   log('pip installed.');
 
   // 7. Auto-detect CUDA and choose requirements file
-  report(45, 'Detecting hardware...');
+  report(45, 'Detecting your hardware...');
   let reqFile = path.join(appResourcesDir, 'backend', 'requirements.txt');
   const cudaReqFile = path.join(appResourcesDir, 'backend', 'requirements-cuda121.txt');
   log(`CPU requirements: ${reqFile}`);
@@ -219,9 +219,9 @@ async function runSetup(appResourcesDir, onProgress) {
 
   if (useCuda && fs.existsSync(cudaReqFile)) {
     reqFile = cudaReqFile;
-    report(48, 'GPU detected — installing CUDA dependencies...');
+    report(48, 'GPU detected — using GPU acceleration...');
   } else {
-    report(48, 'Installing CPU dependencies...');
+    report(48, 'Preparing AI libraries...');
   }
 
   // 8. pip install requirements
@@ -229,11 +229,11 @@ async function runSetup(appResourcesDir, onProgress) {
   log(`pip executable: ${pipExe}`);
   log(`pip exists: ${fs.existsSync(pipExe)}`);
   log(`Installing from: ${reqFile}`);
-  report(50, 'Installing packages (this takes 10-20 min)...');
+  report(50, 'Installing AI libraries — this may take 20–30 minutes, please wait...');
   await runCommand(pipExe, ['install', '-r', reqFile, '--no-warn-script-location']);
 
   // 9. Write setup complete flags
-  report(98, 'Finalizing...');
+  report(98, 'Almost ready...');
   fs.writeFileSync(SETUP_FLAG, new Date().toISOString(), 'utf8');
   fs.writeFileSync(VERSION_FLAG, APP_VERSION, 'utf8');
   log('Setup complete flag written.');

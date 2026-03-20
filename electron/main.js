@@ -104,7 +104,7 @@ function waitForBackend(timeoutMs = 300000) {
       }
       // Update splash with download hint after 30 seconds (likely downloading models)
       if (elapsed > 30000 && elapsed < 31000) {
-        updateSplash(60, 'Downloading AI models (first launch only)...');
+        updateSplash(60, 'Downloading AI models for the first time...');
       }
       setTimeout(check, 500);
     };
@@ -130,10 +130,11 @@ app.whenReady().then(async () => {
         ? path.join(__dirname, '..')  // dev: repo root
         : process.resourcesPath;      // exe: resources/ folder next to app.asar
 
-      if (!isSetupComplete()) {
+      const firstLaunch = !isSetupComplete();
+      if (firstLaunch) {
         await runSetup(appResourcesDir, (pct, msg) => updateSplash(pct, msg));
       } else {
-        updateSplash(10, 'Starting backend...');
+        updateSplash(10, 'Loading Gevis AI Studio...');
       }
 
       if (!isPythonReady()) {
@@ -143,7 +144,10 @@ app.whenReady().then(async () => {
       const backendDir = path.join(appResourcesDir, 'backend');
       startBackend(backendDir);
 
-      updateSplash(50, 'Starting backend (first launch may take a few minutes)...');
+      updateSplash(50, firstLaunch
+        ? 'Preparing your workspace (this may take a few minutes)...'
+        : 'Loading Gevis AI Studio...'
+      );
       await waitForBackend();
       updateSplash(100, 'Ready');
     }

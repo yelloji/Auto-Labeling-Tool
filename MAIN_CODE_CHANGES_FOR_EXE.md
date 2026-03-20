@@ -220,6 +220,28 @@ else:
 
 ---
 
+### 16. electron/main.js — user-friendly splash messages
+
+**What:** Replaced technical "Starting backend..." text with user-friendly messages. First launch shows "Preparing your workspace (this may take a few minutes)..." — subsequent launches show "Loading Gevis AI Studio...".
+**Why:** "Starting backend" is a technical term users don't understand. Not professional.
+**Before:**
+```javascript
+updateSplash(10, 'Starting backend...');
+updateSplash(50, 'Starting backend (first launch may take a few minutes)...');
+```
+**After:**
+```javascript
+const firstLaunch = !isSetupComplete();
+updateSplash(10, 'Loading Gevis AI Studio...');
+updateSplash(50, firstLaunch
+  ? 'Preparing your workspace (this may take a few minutes)...'
+  : 'Loading Gevis AI Studio...'
+);
+```
+**Impact:** Dev mode unchanged. Exe: professional splash messages on every launch.
+
+---
+
 ## Pending Changes (not done yet)
 
 None currently.
