@@ -168,6 +168,13 @@ if path.startswith(("/static/", "/projects/", "/health")):
 
 ---
 
+### 13. backend/models/training/api_routes.py — fix undefined `backend_dir` in validate and predict endpoints
+**What:** Replaced `backend_dir / "models" / "training" / "validation_executor.py"` and `backend_dir / "models" / "training" / "prediction_executor.py"` with `Path(__file__).parent / "validation_executor.py"` and `Path(__file__).parent / "prediction_executor.py"`.
+**Why:** `backend_dir` was removed in the systematic path fix (change #10) but two usages in the validate and predict endpoints were missed. This caused a `NameError: backend_dir is not defined` on every prediction or validation request → 500 Internal Server Error → validation and prediction completely broken in exe. `Path(__file__).parent` is correct here because these are code files (scripts to spawn as subprocesses) that live in the same folder as `api_routes.py`.
+**Impact:** Dev mode unchanged. Exe: validation and prediction now work.
+
+---
+
 ## Pending Changes (not done yet)
 
 None currently.

@@ -1753,7 +1753,7 @@ async def trigger_validation(
         os.makedirs(abs_output_dir, exist_ok=True)
 
         # 4. Launch Subprocess
-        executor_path = (backend_dir / "models" / "training" / "validation_executor.py").as_posix()
+        executor_path = (Path(__file__).parent / "validation_executor.py").as_posix()
         params_json = json.dumps(payload.dict())
         
         log_file_path = abs_output_dir / "validation.log"
@@ -1948,7 +1948,7 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
         try:
             process = psutil.Process(exp.process_pid)
             if process.is_running():
-                logger.info("operations.validation", f"Terminating active process {exp.process_pid} before deletion", "experiment_process_termination")
+                logger.info("operations.training", f"Terminating active process {exp.process_pid} before deletion", "experiment_process_termination")
                 process.terminate()
                 process.wait(timeout=3)
         except (Exception):
@@ -1980,7 +1980,7 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
             
             if is_inside_projects and is_in_experiments and full_path.exists() and full_path.is_dir():
                 try:
-                    logger.info("operations.validation", f"Deleting experiment folder: {full_path}", "experiment_folder_deleted")
+                    logger.info("operations.training", f"Deleting experiment folder: {full_path}", "experiment_folder_deleted")
                     shutil.rmtree(full_path)
                 except Exception as e:
                     logger.error("errors.system", f"Failed to delete experiment folder: {str(e)}", "experiment_folder_delete_failure")
@@ -1995,7 +1995,7 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
             # Safety check: must be inside prediction_temp
             if "prediction_temp" in str(full_temp_path.as_posix()) and full_temp_path.exists() and full_temp_path.is_dir():
                 try:
-                    logger.info("operations.validation", f"Deleting temporary source folder: {full_temp_path}", "temp_source_deleted")
+                    logger.info("operations.training", f"Deleting temporary source folder: {full_temp_path}", "temp_source_deleted")
                     shutil.rmtree(full_temp_path)
                 except Exception as e:
                     logger.error("errors.system", f"Failed to delete temp source: {str(e)}", "temp_source_delete_failure")
@@ -2007,7 +2007,7 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
     db.delete(exp)
     db.commit()
     
-    logger.info("operations.validation", f"Deleted experiment {experiment_id}", "experiment_deleted", {
+    logger.info("operations.training", f"Deleted experiment {experiment_id}", "experiment_deleted", {
         "experiment_id": experiment_id,
         "training_id": exp.training_id,
         "status": exp.status
@@ -2467,7 +2467,7 @@ async def trigger_prediction(
         os.makedirs(abs_output_dir, exist_ok=True)
 
         # 4. Launch Subprocess
-        executor_path = (backend_dir / "models" / "training" / "prediction_executor.py").as_posix()
+        executor_path = (Path(__file__).parent / "prediction_executor.py").as_posix()
         
         # Build params dict
         # device is intentionally excluded — predictor.py auto-detects GPU vs CPU
