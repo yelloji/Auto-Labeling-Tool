@@ -1,32 +1,57 @@
 """
-Tests for release endpoints.
+test_releases.py — Tests for the Releases API (/api/v1/releases).
 
-The key bug this suite guards against is the 422 error on POST /releases/create.
-The endpoint is mounted via:
-    app.include_router(releases.router, prefix="/api/v1", ...)
+PURPOSE
+-------
+A Release is an exported, versioned snapshot of a project's labeled data.
+This suite specifically guards against the reported 422 Unprocessable Entity
+bug on POST /releases/create, and verifies all other release endpoints.
 
-So the full path is:
-    POST   /api/v1/releases/create             -> create a release (the reported 422 bug)
-    POST   /api/v1/releases/generate           -> enhanced release generation
-    GET    /api/v1/projects/{id}/releases      -> list releases for a project
-    GET    /api/v1/releases/{id}/progress      -> release progress
-    DELETE /api/v1/releases/{id}               -> delete a release
-    PUT    /api/v1/releases/{id}/rename        -> rename a release
+ROUTES TESTED
+-------------
+  POST   /api/v1/releases/create          create a release (the 422 bug endpoint)
+  GET    /api/v1/projects/{id}/releases   list all releases for a project
+  GET    /api/v1/releases/{id}/progress   get export progress for a release
+  DELETE /api/v1/releases/{id}            delete a release
 
-Payload schema for POST /releases/create (ReleaseCreate model):
-    version_name: str
-    dataset_ids: List[str]
-    description: str = ""
-    transformations: List[dict] = []
-    multiplier: int = 1
-    preserve_annotations: bool = True
-    export_format: str = "YOLO"
-    task_type: str = "object_detection"
-    include_images: bool = True
-    include_annotations: bool = True
-    verified_only: bool = False
-    output_format: str = "original"
-    preview_data: Optional[dict] = None
+THE 422 BUG HISTORY
+-------------------
+  The original bug: POST /releases/create returned 422 Unprocessable Entity
+  even when the payload was correct. This was caused by a mismatch between
+  the frontend payload and the backend Pydantic model field names.
+  test_create_release_does_not_return_422 is the regression test that ensures
+  this bug never comes back.
+
+RELEASE PAYLOAD FORMAT
+----------------------
+  {
+    "version_name":         "v1.0",             # required — release label
+    "dataset_ids":          ["<uuid>", ...],    # required — which datasets to include
+    "description":          "My release",       # optional
+    "transformations":      [],                 # image augmentation config
+    "multiplier":           1,                  # augmentation multiplier
+    "preserve_annotations": true,               # keep annotation files
+    "export_format":        "YOLO",             # YOLO / COCO / Pascal VOC
+    "task_type":            "object_detection", # object_detection / segmentation
+    "include_images":       true,
+    "include_annotations":  true,
+    "verified_only":        false,
+    "output_format":        "original"
+  }
+
+KEY BEHAVIORS VERIFIED
+----------------------
+  - Valid payload must NOT return 422 (the reported bug)
+  - Valid payload must NOT return 500 (server crash)
+  - Missing dataset_ids returns 422 (correct validation error)
+  - Missing version_name returns 422 (correct validation error)
+  - Listing releases for a project returns 200
+  - Progress endpoint for non-existent release returns 404
+  - Delete endpoint for non-existent release returns 404
+
+HOW TESTS RUN
+-------------
+No server needed. Uses FastAPI TestClient + in-memory SQLite.
 """
 
 import io

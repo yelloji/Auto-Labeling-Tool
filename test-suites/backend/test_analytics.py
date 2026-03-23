@@ -1,15 +1,35 @@
 """
-Tests for analytics endpoints.
+test_analytics.py — Tests for the Analytics API (/api/analytics).
 
-The analytics router registers its own prefix in analytics.py:
-    router = APIRouter(prefix="/api/analytics", ...)
+PURPOSE
+-------
+The analytics endpoints provide statistics about how well a dataset is
+labeled — class balance, train/val/test split ratios, labeling progress,
+and per-project label distribution. These are shown in the Analytics
+section of the workspace UI.
 
-So routes are:
-    GET /api/analytics/dataset/{dataset_id}/class-distribution
-    GET /api/analytics/dataset/{dataset_id}/split-analysis
-    GET /api/analytics/dataset/{dataset_id}/imbalance-report
-    GET /api/analytics/dataset/{dataset_id}/labeling-progress
-    GET /api/analytics/project/{project_id}/label-distribution
+NOTE: The analytics router uses a DIFFERENT prefix from other routes.
+It is registered directly in analytics.py, not via main.py include_router.
+
+ROUTES TESTED
+-------------
+  GET /api/analytics/project/{project_id}/label-distribution   class counts across all datasets
+  GET /api/analytics/dataset/{dataset_id}/class-distribution   class counts for one dataset
+  GET /api/analytics/dataset/{dataset_id}/split-analysis       train/val/test ratio breakdown
+  GET /api/analytics/dataset/{dataset_id}/labeling-progress    how many images are labeled vs not
+  GET /api/analytics/dataset/{dataset_id}/imbalance-report     which classes have too few examples
+
+KEY BEHAVIORS VERIFIED
+----------------------
+  - All endpoints return 200 for valid project/dataset IDs
+  - All responses are valid JSON (no crash, no 500 errors)
+  - A non-existent project ID does NOT crash the server (returns 200
+    with empty data — the endpoint is designed to be graceful)
+
+HOW TESTS RUN
+-------------
+No server needed. Uses FastAPI TestClient + in-memory SQLite.
+Each test creates its own project + dataset so results are isolated.
 """
 
 import io

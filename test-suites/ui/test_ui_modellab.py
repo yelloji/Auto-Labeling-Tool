@@ -1,28 +1,43 @@
 """
-UI Tests — Model Lab Section (workspace sidebar → 'Model Lab')
+test_ui_modellab.py — UI Tests for the Model Lab Section (sidebar → 'Model Lab').
 
-Model Lab has a two-panel layout:
-  LEFT  — TrainingList: list of all training sessions
-  RIGHT — OverviewView with 6 tabs once a training is selected:
-            Tab 1: Overview       — best metrics, final validation metrics, loss/accuracy curves
-            Tab 2: Configuration  — ViewConfig + AdvancedConfigEditor (YAML)
-            Tab 3: Models         — ModelManagerView: weights (best.pt / last.pt), download
-            Tab 4: Validation     — ValidationView: run validation, mAP, confusion matrix
-            Tab 5: Prediction     — PredictionView + AnalyticsModal (4 sub-views)
-            Tab 6: Comparison     — ComparisonEngineView: compare 2–3 experiments
+WHAT THIS SECTION DOES
+----------------------
+Model Lab is the post-training analysis workspace. After a training session
+completes, users come here to review results, run validation, test predictions,
+and compare multiple experiments.
 
-What is tested:
-  - Section renders, two-panel layout visible
-  - TrainingList renders (may be empty)
-  - All 6 right-panel tabs exist when a training is selected
-  - Overview tab: metrics, charts area
-  - Configuration tab: config viewer and YAML editor
-  - Models tab: best.pt / last.pt cards, download button
-  - Validation tab: init button, confidence/IoU sliders, run button
-  - Prediction tab: config section, run button, gallery area
-  - Prediction Analytics Modal opens and has 4 sub-view tabs
-  - Comparison tab: compare button exists
+LAYOUT — Two-panel design:
+  LEFT panel   — TrainingList: all training sessions for this project
+  RIGHT panel  — OverviewView: analysis tabs for the selected training
 
+RIGHT PANEL TABS (6 total)
+--------------------------
+  Tab 1: Overview      — best metrics (mAP, precision, recall), loss/accuracy charts
+  Tab 2: Configuration — training config viewer + advanced YAML editor
+  Tab 3: Models        — trained weight files (best.pt / last.pt) + download buttons
+  Tab 4: Validation    — run validation on test set, see mAP + confusion matrix
+  Tab 5: Prediction    — run prediction on new images, view results gallery
+                         AnalyticsModal inside Prediction has 4 sub-views:
+                           Charts | Quality | Report | Export
+  Tab 6: Comparison    — compare 2–3 training experiments side by side
+
+WHAT IS TESTED
+--------------
+  Layout           — two-panel structure renders, TrainingList panel visible
+  TrainingList     — list renders (may be empty if no training done yet)
+  All 6 tabs       — all tab buttons are accessible when a training is selected
+  Overview tab     — metrics display area and chart area present
+  Configuration tab — config viewer and YAML editor visible
+  Models tab       — best.pt / last.pt weight cards present, download button
+  Validation tab   — init button, confidence slider, IoU slider, Run button
+  Prediction tab   — config section and run prediction button visible
+  Analytics Modal  — opens from Prediction tab and has all 4 sub-view tabs
+  Comparison tab   — comparison engine section and compare button exist
+
+Requires: app at localhost:12000, at least one project with a completed training.
+Tests that require a training session skip automatically if none exist.
+"""
 Requires: app at localhost:12000, at least one project exists.
 Training sub-tab tests are skipped if no training sessions exist.
 """

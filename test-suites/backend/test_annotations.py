@@ -1,16 +1,48 @@
 """
-Tests for annotation endpoints.
+test_annotations.py — Tests for the Annotations API (/api/v1/images).
 
-Route prefix registered in main.py:
-    app.include_router(annotations.router, prefix="/api/v1/images", ...)
+PURPOSE
+-------
+Annotations are the bounding boxes (and optional polygon segmentations)
+drawn on images. These tests verify that annotations can be saved in bulk,
+retrieved, updated, and deleted. The annotation format uses normalised
+coordinates (0.0–1.0 range relative to image size).
 
-Key routes (inside annotations.py):
-    GET    /api/v1/images/{image_id}/annotations            -> list annotations
-    POST   /api/v1/images/{image_id}/annotations            -> save annotations (bulk)
-    PUT    /api/v1/images/{image_id}/annotations/{ann_id}   -> update one annotation
-    DELETE /api/v1/images/annotations/{ann_id}              -> delete annotation
-    PUT    /api/v1/images/{ann_id}                          -> update annotation (by id)
-    DELETE /api/v1/images/annotations/{ann_id}              -> delete annotation
+ROUTES TESTED
+-------------
+  POST   /api/v1/images/{image_id}/annotations            save/replace all annotations for an image
+  GET    /api/v1/images/{image_id}/annotations            list all annotations for an image
+  PUT    /api/v1/images/{image_id}/annotations/{ann_id}   update a single annotation field
+  DELETE /api/v1/images/annotations/{ann_id}              delete a single annotation by ID
+
+ANNOTATION PAYLOAD FORMAT
+--------------------------
+  {
+    "class_name": "cat",        # label name (string)
+    "class_id":   0,            # label index (int)
+    "x":          0.1,          # bounding box center X (normalised 0-1)
+    "y":          0.1,          # bounding box center Y (normalised 0-1)
+    "width":      0.2,          # bounding box width    (normalised 0-1)
+    "height":     0.2,          # bounding box height   (normalised 0-1)
+    "confidence": 1.0,          # 1.0 = manual, <1.0 = auto-labeled
+    "segmentation": [[...]]     # optional polygon points list
+  }
+
+KEY BEHAVIORS VERIFIED
+----------------------
+  - Saving annotations returns 200/201
+  - Multiple annotations can be saved in one request
+  - Posting to a non-existent image returns 4xx
+  - GET returns a list (empty list if no annotations yet)
+  - Saved annotation appears in GET response
+  - Polygon/segmentation annotations are accepted
+  - DELETE removes the annotation
+  - DELETE on non-existent annotation returns 404
+
+HOW TESTS RUN
+-------------
+No server needed. Uses FastAPI TestClient + in-memory SQLite.
+Each test calls _setup() to create project → dataset → upload image.
 """
 
 import io

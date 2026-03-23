@@ -1,38 +1,64 @@
 """
-UI Tests — Annotation Canvas (/annotate/{datasetId}/manual)
+test_ui_annotation.py — UI Tests for the Annotation Canvas.
 
-Layout: Left Sidebar | Main Canvas | Right Toolbox | Bottom Controls
+WHAT THIS SECTION DOES
+----------------------
+The Annotation Canvas is the main labeling workspace where users draw bounding
+boxes and polygons around objects in images to create ground-truth training data.
 
-What is tested:
+Route: /annotate/{datasetId}/manual
+
+Layout:
+  Left Sidebar  — image list with thumbnails (LabelSidebar)
+  Center Canvas — the annotation canvas showing the current image
+  Right Toolbox — drawing tools, label selector, annotation list (AnnotationToolbox)
+  Bottom Bar    — Prev/Next navigation, Save, Delete, progress indicator
+  Split Control — assign the current image to Train / Val / Test split
+
+WHAT IS TESTED
+--------------
   LabelSidebar (left):
-    - Image list renders
-    - Thumbnail images are visible
-    - Clicking an image thumbnail selects it (active state)
+    - Image list renders with thumbnails
+    - At least one thumbnail is visible if dataset has images
 
   AnnotationCanvas (center):
-    - Canvas/image display area is present
+    - Canvas/image display area is present (HTML5 canvas or styled div)
     - The selected image loads inside the canvas
 
   AnnotationToolbox (right):
-    - Tool buttons: Rectangle, Polygon, Point
-    - Label selector dropdown is present
-    - Annotation list is present
-    - Undo / Redo buttons exist
+    - Rectangle (bounding box) drawing tool button exists
+    - Polygon drawing tool button exists
+    - Label/class selector dropdown is present
+    - Undo and Redo buttons exist
 
   Bottom Controls:
-    - Previous / Next image buttons
-    - Save button
-    - Delete image button
-    - Progress indicator (x of y images)
+    - Previous / Next image navigation buttons exist
+    - Save button is visible
+    - Delete image button is visible
+    - Progress indicator (e.g. "1 of 5 images") is shown
 
   AnnotationSplitControl:
-    - Train / Val / Test assignment buttons/radio exist
+    - Train / Val / Test assignment buttons or radio group exist
 
-  LabelSelectionPopup:
-    - Appears after drawing an annotation (hard to test without drawing,
-      so we verify the existence of labels in the toolbox label selector)
+HOW TESTS RUN
+-------------
+  1. `_get_first_dataset_id(page)` navigates to /projects, opens the first project
+     workspace, goes to Management, and finds a dataset with an Annotate link.
+  2. `_open_annotation_canvas(page)` navigates to /annotate/{datasetId}/manual.
+  3. If no dataset exists, tests skip automatically.
+  4. These tests use the bare `page` fixture (not `workspace_page`) because they
+     need to navigate to a URL outside the workspace structure.
 
-Requires: app at localhost:12000, at least one dataset with images exists.
+IMPORTANT NOTES
+---------------
+- All tests skip if no annotatable dataset is found (no images uploaded yet).
+- Drawing an actual annotation (to test LabelSelectionPopup) requires simulating
+  mouse drag on the canvas — not tested here to avoid flakiness.
+- The annotation canvas route is separate from the workspace routes:
+    workspace: /projects/{projectId}/workspace
+    annotate:  /annotate/{datasetId}/manual  ← note: datasetId, not projectId
+
+Requires: app at localhost:12000, at least one dataset with images in it.
 """
 
 import pytest

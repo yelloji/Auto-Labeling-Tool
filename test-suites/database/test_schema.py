@@ -1,8 +1,51 @@
 """
-Database schema tests — verify that all ORM models produce the expected tables
-and columns when created against an in-memory SQLite database.
+test_schema.py — Database schema validation tests.
 
-All assertions are done via SQLAlchemy introspection, not via HTTP.
+PURPOSE
+-------
+These tests verify that all SQLAlchemy ORM models produce the correct
+tables and columns when applied to a fresh database. They are the
+first line of defence against migration mistakes — if someone adds
+a model field but forgets to update the DB schema, these tests catch it.
+
+All checks use SQLAlchemy Inspector (introspection) — they look at the
+actual database structure, not the Python model definitions.
+
+WHAT IS TESTED
+--------------
+  Table existence:
+    projects, datasets, images, annotations, ai_models, releases,
+    image_transformations, auto_label_jobs, dataset_splits,
+    label_analytics, training_sessions, model_experiments, labels,
+    image_variants, human_verifications, dev_mode_settings
+
+  Column checks (required columns per table):
+    projects            — id, name, description, project_type, confidence_threshold,
+                          iou_threshold, created_at, updated_at
+    datasets            — id, name, description, project_id, total_images,
+                          labeled_images, unlabeled_images, auto_label_enabled,
+                          created_at, updated_at
+    images              — id, filename, original_filename, file_path, dataset_id,
+                          width, height, format, is_labeled, split_type, split_section,
+                          created_at, updated_at
+    annotations         — id, image_id, class_name, class_id, confidence,
+                          x_min, y_min, x_max, y_max, segmentation,
+                          is_auto_generated, created_at, updated_at
+    labels              — id, name, color, project_id
+    releases            — id, project_id, name, description, export_format,
+                          task_type, datasets_used, created_at
+    ... and more
+
+  Primary key checks   — projects.id is integer, datasets.id is UUID string
+  Foreign key checks   — datasets.project_id → projects.id
+                         images.dataset_id → datasets.id
+                         annotations.image_id → images.id
+                         labels.project_id → projects.id
+
+HOW TESTS RUN
+-------------
+Uses a dedicated in-memory SQLite engine (not the shared conftest engine).
+No server, no HTTP, no FastAPI. Pure SQLAlchemy introspection only.
 """
 
 import sys

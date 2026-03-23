@@ -1,15 +1,32 @@
 """
-Tests for the /api/v1/projects endpoints.
+test_projects.py — Tests for the Projects API (/api/v1/projects).
 
-Route prefix registered in main.py:
-    app.include_router(projects.router, prefix="/api/v1/projects", ...)
+PURPOSE
+-------
+Verify full CRUD operations for projects — the top-level container for
+all datasets, images, annotations, and training sessions in the app.
 
-Routes inside projects.py:
-    GET    /           -> list projects
-    POST   /           -> create project
-    GET    /{id}       -> get project (handled by sub-routes; checked via list)
-    PUT    /{id}       -> update project
-    DELETE /{id}       -> delete project
+ROUTES TESTED
+-------------
+  POST   /api/v1/projects/        create a new project
+  GET    /api/v1/projects/        list all projects
+  GET    /api/v1/projects/{id}    get a single project by ID
+  PUT    /api/v1/projects/{id}    update project name / description / settings
+  DELETE /api/v1/projects/{id}    delete project and all its data
+
+KEY BEHAVIORS VERIFIED
+----------------------
+  - Creating a project with a valid payload returns 200/201
+  - Missing required fields (name) returns 422 Unprocessable Entity
+  - Listing returns all created projects
+  - Getting a non-existent project ID returns 404
+  - Updating fields persists the change
+  - Deleting removes the project from the list
+
+HOW TESTS RUN
+-------------
+No server needed. Uses FastAPI TestClient + in-memory SQLite.
+Each test function gets a fresh, isolated database state.
 """
 
 import sys

@@ -1,17 +1,33 @@
 """
-UI Tests — Projects Page (/projects)
+test_ui_projects.py — UI Tests for the Projects Page (/projects).
 
-What is tested:
-  - Page loads and shows the heading
-  - Create Project modal opens via the "New Project" button
-  - Required field validation fires when name is empty
-  - A new project appears in the list after creation
-  - Searching by project name filters the displayed cards
-  - The three-dot dropdown menu opens on a project card
-  - Clicking "Open" on a project card navigates to the workspace
+WHAT THIS PAGE DOES
+-------------------
+The Projects page is the app home screen. It shows all projects as cards.
+From here the user can: create a new project, search projects, open a project
+workspace, or use the three-dot menu (rename, duplicate, delete).
 
-All tests run against a live app at localhost:12000.
-Tests are automatically skipped if the backend is not running.
+WHAT IS TESTED
+--------------
+  Page load        — heading renders, "New Project" button is visible
+  Search box       — search input is present on the page
+  Create modal     — clicking "New Project" opens an Ant Design modal
+  Form validation  — submitting empty name shows a validation error
+  Project creation — filling name + submitting navigates to the workspace
+                     (the app redirects to /projects/{id}/workspace after creation)
+  Card interaction — project cards have a three-dot (⋯) menu button
+  Dropdown menu    — clicking ⋯ opens a dropdown with options
+  Search filter    — typing in search box reduces the visible card count
+
+IMPORTANT NOTES
+---------------
+  - After creating a project the app immediately navigates to the workspace.
+    Tests should NOT wait for the project name to appear on /projects page
+    because the page has already navigated away.
+  - Project cards have no explicit "Open" button — clicking the card itself
+    navigates to the workspace. The only button on a card is the three-dot (⋯).
+
+Requires: app at localhost:12000.
 """
 
 import pytest

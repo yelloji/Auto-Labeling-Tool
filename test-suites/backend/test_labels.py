@@ -1,14 +1,45 @@
 """
-Tests for label management endpoints.
+test_labels.py — Tests for the Labels API (/api/v1/projects/{id}/labels).
 
-Route prefix in main.py:
-    app.include_router(labels.router, prefix="/api/v1/projects", ...)
+PURPOSE
+-------
+Labels are the class names (e.g. "cat", "dog", "car") that annotations
+are assigned to. Each label has a name and a colour (hex string).
+Labels belong to a project — not a dataset — so they are shared across
+all datasets in the same project.
 
-Routes inside labels.py:
-    GET    /api/v1/projects/{project_id}/labels              -> list labels
-    POST   /api/v1/projects/{project_id}/labels              -> create label
-    PUT    /api/v1/projects/{project_id}/labels/{label_id}   -> update label
-    DELETE /api/v1/projects/{project_id}/labels/{label_id}   -> delete label
+ROUTES TESTED
+-------------
+  GET    /api/v1/projects/{project_id}/labels                  list all labels for a project
+  POST   /api/v1/projects/{project_id}/labels                  create a new label
+  PUT    /api/v1/projects/{project_id}/labels/{label_id}       update label name or colour
+  DELETE /api/v1/projects/{project_id}/labels/{label_id}       delete a label
+
+LABEL PAYLOAD FORMAT
+--------------------
+  {
+    "name":  "cat",      # class name shown in the annotation tool
+    "color": "#FF0000"   # hex colour displayed on the bounding box
+  }
+
+KEY BEHAVIORS VERIFIED
+----------------------
+  - Creating a label with valid name + color returns 200/201
+  - Missing name returns 400 (required field)
+  - Missing color returns 400 (required field)
+  - Duplicate label name in the same project returns an error
+  - The reserved label name "null" is rejected (it's used internally)
+  - GET returns a list containing the created label
+  - GET on a non-existent project returns 404
+  - PUT updates the label name and color correctly
+  - PUT on a non-existent label returns 404
+  - DELETE removes the label from the list
+  - DELETE on a non-existent label returns 404
+
+HOW TESTS RUN
+-------------
+No server needed. Uses FastAPI TestClient + in-memory SQLite.
+Each test creates its own project so label lists start empty.
 """
 
 import sys

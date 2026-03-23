@@ -1,16 +1,32 @@
 """
-Tests for the /api/v1/datasets endpoints.
+test_datasets.py — Tests for the Datasets API (/api/v1/datasets).
 
-Route prefix registered in main.py:
-    app.include_router(datasets.router, prefix="/api/v1/datasets", ...)
+PURPOSE
+-------
+Datasets belong to a project and hold groups of images. Every test here
+verifies that datasets can be created, retrieved, updated, and deleted,
+and that filtering by project works correctly.
 
-Key endpoints:
-    GET    /api/v1/datasets/              -> list datasets (optional ?project_id=)
-    POST   /api/v1/datasets/              -> create dataset (JSON body)
-    GET    /api/v1/datasets/{id}          -> get one dataset
-    PUT    /api/v1/datasets/{id}          -> rename / update dataset
-    DELETE /api/v1/datasets/{id}          -> delete dataset
-    PUT    /api/v1/datasets/images/{id}/split-section  -> update split stage
+ROUTES TESTED
+-------------
+  POST   /api/v1/datasets/                         create a new dataset
+  GET    /api/v1/datasets/                         list all datasets
+  GET    /api/v1/datasets/?project_id={id}         list datasets for one project
+  GET    /api/v1/datasets/{id}                     get one dataset by ID
+  PUT    /api/v1/datasets/{id}                     rename or update dataset
+  DELETE /api/v1/datasets/{id}                     delete dataset and its images
+
+KEY BEHAVIORS VERIFIED
+----------------------
+  - A dataset must be linked to an existing project (project_id required)
+  - Filtering by project_id only returns datasets for that project
+  - Getting a non-existent dataset returns 404
+  - Deleting a dataset removes it from the list
+
+HOW TESTS RUN
+-------------
+No server needed. Uses FastAPI TestClient + in-memory SQLite.
+Each test creates its own project first so tests are fully independent.
 """
 
 import sys

@@ -1,16 +1,22 @@
 """
-UI Tests — Analytics Section (workspace sidebar → 'Analytics')
+test_ui_analytics.py — UI Tests for the Analytics Section (sidebar → 'Analytics').
 
-What is tested:
-  - Section renders without crash
-  - Project overview stats: total images, total datasets, labeling progress
-  - Label distribution table is present (class name, count, %)
-  - Pie chart renders for label distribution
-  - Per-dataset table shows labeled/unlabeled count and progress bar
-  - 'Manage Labels' button opens the LabelManagementModal
-  - LabelManagementModal allows adding a new label
-  - LabelManagementModal allows editing an existing label's color
-  - LabelManagementModal allows deleting a label
+WHAT THIS SECTION DOES
+----------------------
+The Analytics section shows statistics about the project's labeling quality
+and data distribution. It helps identify class imbalance (too many images of
+one class, too few of another) before training a model.
+
+WHAT IS TESTED
+--------------
+  Project stats      — total images count, total datasets count, labeling progress %
+  Label distribution — table showing each class name, image count, percentage
+  Pie chart          — visual chart of label distribution renders without error
+  Per-dataset table  — shows labeled vs unlabeled image counts and a progress bar
+  Manage Labels      — 'Manage Labels' button opens the LabelManagementModal
+  Add label          — modal allows typing a new label name and picking a color
+  Edit label color   — modal allows changing the color of an existing label
+  Delete label       — modal allows removing a label from the project
 
 Requires: app at localhost:12000, at least one project exists.
 """

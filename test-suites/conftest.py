@@ -1,9 +1,50 @@
 """
-Shared test fixtures for the Auto-Labeling-Tool test suite.
+conftest.py — Shared test infrastructure for ALL backend and database tests.
 
-Uses an in-memory SQLite database so tests never touch the production database.db.
-The FastAPI dependency `get_db` is overridden for every request so every test
-gets a clean, isolated session.
+HOW THE TEST DATABASE WORKS
+----------------------------
+Tests never touch the real database.db file on disk.
+Instead we create a fresh SQLite database IN MEMORY for every test run.
+
+Why StaticPool?
+  SQLite ":memory:" databases are connection-specific by default.
+  If two different connections open the same ":memory:" URL they each
+  get a blank, separate database.  StaticPool forces every connection
+  to share the SAME underlying SQLite connection, so all sessions see
+  the same tables and rows.
+
+Why override_get_db?
+  The FastAPI app injects a database session into every route via the
+  get_db dependency.  We replace get_db with override_get_db so that
+  every API request during a test uses our in-memory session — not the
+  real production database.
+
+Why patch file_handler.SessionLocal?
+  Some backend modules (e.g. core/file_handler.py) open their own
+  database session directly via SessionLocal() instead of using FastAPI
+  dependency injection.  We patch that reference so those calls also
+  land in the in-memory test database.
+
+Why DB_EXPORT_ENABLE_AUTO_EXPORT=0?
+  The app starts a background export thread that writes to disk and
+  uses emoji in print() calls.  On Windows the terminal encoding
+  (cp1252) cannot handle emoji, which causes a fatal crash at pytest
+  shutdown.  Setting this env var disables the thread entirely during
+  tests.
+
+FIXTURES PROVIDED
+-----------------
+  db_session    — raw SQLAlchemy session, rolled back after each test
+  test_client   — FastAPI TestClient, uses in-memory DB, no server needed
+  sample_project — a project created via the API, returned as JSON dict
+  sample_dataset — a dataset inside sample_project, returned as JSON dict
+  sample_image  — a 10x10 JPEG uploaded to sample_dataset, returned as JSON dict
+
+HOW TO RUN
+----------
+  cd test-suites
+  python run_all.py --no-ui          # run all backend + DB suites
+  pytest backend/test_projects.py -v # run one suite directly
 """
 
 import sys

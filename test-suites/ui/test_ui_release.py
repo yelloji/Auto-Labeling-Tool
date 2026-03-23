@@ -1,16 +1,52 @@
 """
-UI Tests — Release Section (workspace sidebar → 'RELEASE')
+test_ui_release.py — UI Tests for the Release Section (sidebar → 'RELEASE').
 
-What is tested:
-  - Section renders: Release History list on left, Details panel on right
-  - 'Create Release' button is visible
-  - Release history list renders (even if empty)
-  - Release Details View panels: DatasetStats, ReleaseConfigPanel, TransformationSection
-  - Transformation cards render when transforms are configured
-  - TransformationModal opens when 'Add Transform' is clicked
-  - DownloadModal opens when 'Download' is clicked on a release
-  - ReleaseImageViewerModal opens when a preview image is clicked
-  - Train/Val/Test split sliders or inputs are present
+WHAT THIS SECTION DOES
+----------------------
+The Release section is where users package their labeled dataset into a
+versioned release ZIP for training. A release captures:
+  - Which images are included (train/val/test split ratios)
+  - What data augmentation / transformations to apply
+  - A snapshot of all annotations at that point in time
+
+The release ZIP is the input to the Model Training section.
+
+Layout:
+  Left panel  — Release History list (all past releases)
+  Right panel — Release configuration form:
+                  DatasetStats (image count, class breakdown)
+                  ReleaseConfigPanel (name, train/val/test split sliders)
+                  TransformationSection (augmentation cards + Add button)
+
+WHAT IS TESTED
+--------------
+  Section load     — Release section renders without crash
+  History list     — Release history panel is present (may be empty)
+  Create button    — 'Create Release' button is visible
+  Split config     — Train/Val/Test split sliders or number inputs are present
+  Augmentation     — Transformation/Augmentation section heading is visible
+  Add transform    — 'Add Transformation' button is present
+  Transform modal  — Clicking 'Add Transformation' opens the TransformationModal
+  Download button  — 'Download' button is shown when a release exists (skipped otherwise)
+  Download modal   — Clicking Download opens the DownloadModal (skipped if no release)
+  Dataset stats    — DatasetStats panel (image count, class info) is visible
+
+HOW TESTS RUN
+-------------
+  - Uses the `workspace_page` fixture which creates a project and navigates to workspace.
+  - `_open_release_section()` clicks the 'RELEASE' item in the sidebar menu.
+  - The menu label is "RELEASE" (uppercase) — the menu key in React is 'versions'.
+  - Tests that require an existing release skip automatically if none exist.
+
+IMPORTANT NOTES
+---------------
+- The sidebar menu item is labelled "RELEASE" (all caps), not "Release".
+  The click selector uses both casings for safety.
+- The 422 bug this branch fixes was in the release creation API — it caused
+  CreateRelease to fail when the payload had certain fields missing.
+  These UI tests verify the UI side of the release flow.
+- Download/DownloadModal tests skip if no release has been created yet
+  (they require an actual release to exist in the database).
 
 Requires: app at localhost:12000, at least one project exists.
 """

@@ -1,17 +1,25 @@
 """
-UI Tests — Management Section (workspace sidebar → 'Management')
+test_ui_management.py — UI Tests for the Management Section (sidebar → 'Management').
 
-What is tested:
-  - Section renders without crash
-  - Three-column layout is present: Unassigned | Annotating | Dataset (Completed)
-  - Each column header label is visible
-  - Dataset cards render inside columns (if datasets exist)
-  - The dataset dropdown (⋯ menu) opens on a dataset card
-  - 'Rename' option appears in the dropdown
-  - Move-to-stage options appear in the dropdown (Move to Annotating, Move to Dataset, etc.)
-  - Clicking a dataset card navigates to the annotation launcher
+WHAT THIS SECTION DOES
+----------------------
+Management is a Kanban-style board that organises datasets across three stages:
+  Unassigned   — newly created datasets, not yet being annotated
+  Annotating   — datasets actively being labeled by annotators
+  Dataset      — completed datasets ready for release export
 
-Requires: app running at localhost:12000, at least one project exists.
+Users drag dataset cards between columns or use the ⋯ dropdown to move them.
+
+WHAT IS TESTED
+--------------
+  Three-column layout  — all three column headers are visible on screen
+  Dataset cards        — cards render inside columns if datasets exist
+  Dropdown menu        — clicking ⋯ on a card opens a dropdown menu
+  Rename option        — 'Rename' appears in the dropdown
+  Move options         — 'Move to Annotating', 'Move to Dataset' etc. appear
+  Card navigation      — clicking a card opens the annotation launcher
+
+Requires: app at localhost:12000, at least one project exists.
 """
 
 import pytest

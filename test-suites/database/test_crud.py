@@ -1,8 +1,37 @@
 """
-Direct SQLAlchemy CRUD tests — no HTTP, no FastAPI TestClient.
+test_crud.py — Direct SQLAlchemy CRUD tests (no HTTP layer).
 
-Tests create, read, update and delete each core model and verify
-cascade deletes and relationships work correctly.
+PURPOSE
+-------
+These tests bypass FastAPI and the HTTP layer completely. They talk
+directly to the database using SQLAlchemy ORM operations. This verifies
+that the database models, relationships, and cascade deletes work
+correctly at the data layer — independent of any API bugs.
+
+WHAT IS TESTED
+--------------
+  Project   — create, read by ID, update name, delete
+  Dataset   — create inside a project, read, update
+  Image     — create inside a dataset, read, update is_labeled flag
+  Annotation — create on an image, read, verify image FK
+  Label     — create on a project, read, update color
+  Release   — create on a project, read
+
+  Cascade deletes:
+    - Deleting a Project also deletes its Datasets
+    - Deleting a Dataset also deletes its Images
+    - Deleting an Image also deletes its Annotations
+
+WHY THIS MATTERS
+----------------
+  Backend API tests verify HTTP behaviour.
+  These tests verify the underlying database logic is correct.
+  A bug could exist at either layer — both must be tested separately.
+
+HOW TESTS RUN
+-------------
+Uses a fresh in-memory SQLite database created per test module.
+No server, no HTTP, no FastAPI. Pure SQLAlchemy only.
 """
 
 import sys

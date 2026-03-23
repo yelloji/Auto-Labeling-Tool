@@ -1,16 +1,24 @@
 """
-UI Tests — Models Section (workspace sidebar → 'Models')
+test_ui_models.py — UI Tests for the Models Section (sidebar → 'Models').
 
-What is tested:
-  - Section renders without crash
-  - Model cards list renders (may be empty with an empty state)
-  - Search input is present
-  - Type filter (filter by model type) is present
-  - 'Include global models' toggle exists
-  - 'Upload / Import Model' button opens an upload modal
-  - Upload modal has a file input and type selector
-  - Clicking a model card opens the 'View Details' modal
-  - Details modal shows class list / config YAML / metadata tabs
+WHAT THIS SECTION DOES
+----------------------
+The Models section shows all AI models available for auto-labeling and
+training. Models can be project-specific (trained on this project's data)
+or global (pre-trained base models available to all projects).
+Users can search models, filter by type, import custom models, and view
+detailed model information.
+
+WHAT IS TESTED
+--------------
+  Model list         — model cards render (or empty state if no models)
+  Search input       — search box is present and visible
+  Type filter        — filter dropdown for model type (Detection / Segmentation)
+  Global toggle      — 'Include global models' toggle is visible
+  Upload modal       — 'Upload/Import Model' button opens a modal
+  Modal file input   — the upload modal has a file picker and type selector
+  Model detail modal — clicking a model card opens a details view
+  Detail tabs        — details modal shows class list, config YAML, metadata tabs
 
 Requires: app at localhost:12000, at least one project exists.
 """

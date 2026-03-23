@@ -1,15 +1,23 @@
 """
-UI Tests — Dataset Section (workspace sidebar → 'Dataset')
+test_ui_dataset.py — UI Tests for the Dataset Section (sidebar → 'Dataset').
 
-What is tested:
-  - Section renders with an image gallery
-  - Filter controls are visible: filename search, split filter, dataset filter, class filter, sort
-  - Each image card shows a thumbnail
-  - Each image card shows the split tag (train/val/test)
-  - Annotation SVG overlay is present on images that have annotations
-  - Pagination controls appear when there are more than 50 images
-  - 'Create New Release' button is visible
-  - Clicking a filter changes the displayed images
+WHAT THIS SECTION DOES
+----------------------
+The Dataset section shows all images across completed datasets in a gallery view.
+It is the main browsing and quality-checking view before creating a release.
+Users can filter by filename, class, split (train/val/test), or dataset,
+and can assign images to train/val/test splits from here.
+
+WHAT IS TESTED
+--------------
+  Gallery           — image cards render in a grid layout
+  Filters           — search box, split filter, dataset filter, class filter, sort control
+  Image card        — thumbnail is visible on each card
+  Split tag         — each card shows its split assignment (train / val / test / unassigned)
+  Annotation overlay — annotated images show an SVG box overlay on the thumbnail
+  Pagination        — pagination controls appear when there are many images (>50)
+  Create Release    — 'Create New Release' button is visible at the top
+  Filter interaction — applying a filter changes which image cards are shown
 
 Requires: app at localhost:12000, at least one project with images in 'Dataset' stage.
 """

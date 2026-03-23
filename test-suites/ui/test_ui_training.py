@@ -1,19 +1,34 @@
 """
-UI Tests — Model Training Section (workspace sidebar → 'Model Training')
+test_ui_training.py — UI Tests for Model Training Section (sidebar → 'Model Training').
 
-What is tested:
-  Tab 1 — Config:
-    - Mode toggle (User / Developer) is present
-    - Identity section (training name, description fields) is present
-    - Framework & Task selector (ultralytics / segmentation / detection) is present
-    - Pretrained model selector is present
-    - Dataset source selector is present (release ZIP or local path)
-    - Hyperparameter fields: epochs, image size, batch size are visible
-    - Device selector (CPU / GPU) is present
-    - 'Start Training' button is visible
+WHAT THIS SECTION DOES
+----------------------
+Model Training lets users configure and launch a YOLO model training job.
+Users set the training name, choose a framework (ultralytics), pick a task
+(object detection or segmentation), select a pretrained base model, configure
+hyperparameters (epochs, image size, batch size), choose device (CPU/GPU),
+and click Start Training.
 
-  Tab 2 — Training (live dashboard):
-    - Verified to exist only after a training session is running
+There are two modes:
+  User mode       — simplified UI with sensible defaults
+  Developer mode  — full access to all hyperparameter settings
+
+WHAT IS TESTED
+--------------
+  Tab 1 — Config (the setup form):
+    Mode toggle      — User / Developer mode switch is visible
+    Training name    — text input field for the session name
+    Framework        — dropdown to choose ultralytics (YOLO)
+    Task type        — object detection / segmentation selector
+    Pretrained model — dropdown to pick a base model (e.g. yolo11n)
+    Dataset source   — select a release ZIP or local path as training data
+    Hyperparameters  — epochs, image size, batch size inputs are visible
+    Device           — CPU / GPU selector is visible
+    Start Training   — the submit button exists and is visible
+
+  Tab 2 — Training live dashboard:
+    Only available after a training is started — not tested here
+    (would require actually launching a training job)
 
 Requires: app at localhost:12000, at least one project exists.
 """

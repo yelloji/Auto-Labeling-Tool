@@ -1,18 +1,55 @@
 """
-Shared Playwright fixtures for all UI tests.
+ui/conftest.py — Shared Playwright fixtures for ALL UI tests.
 
-REQUIREMENTS:
-  - Backend must be running at http://localhost:12000
-  - Install:  pip install playwright pytest-playwright
-  - Install browsers: playwright install chromium
+HOW UI TESTS WORK
+-----------------
+UI tests use Playwright to automate a real Chromium browser.
+The browser navigates to the running app, clicks buttons, fills forms,
+and checks that elements are visible — exactly as a real user would.
 
-USAGE:
-  pytest tests/ui/ -v
-  pytest tests/ui/ --headed              # see browser window
-  pytest tests/ui/ --slowmo=500          # slow down for debugging
+Unlike backend tests (which use an in-memory database and no server),
+UI tests require the FULL app to be running at localhost:12000.
+This means both the backend (FastAPI) and the frontend (React) must be served.
 
-Every test that uses `page` or `workspace_page` gets a clean browser context.
-Tests skip automatically if the backend is unreachable — they do NOT fail.
+REQUIREMENTS
+------------
+  1. Start the backend before running UI tests:
+       cd backend && python main.py
+     Wait for: "Uvicorn running on http://0.0.0.0:12000"
+
+  2. Run UI tests:
+       cd test-suites
+       python run_all.py --ui-only       # headless (invisible browser)
+       pytest ui/ --headed               # visible browser — you can watch it click
+
+  3. One-time setup (already done if requirements-dev.txt was installed):
+       pip install playwright pytest-playwright
+       playwright install chromium
+
+AUTO-SKIP BEHAVIOUR
+-------------------
+  If the backend is not running, every UI test automatically SKIPS (shows 's')
+  instead of failing. This is intentional — a skip means "could not test",
+  not "the feature is broken". This prevents false failures in CI.
+
+FIXTURES PROVIDED
+-----------------
+  page           — fresh Chromium browser page per test, 1440x900 viewport
+                   browser console errors are printed to pytest output
+  workspace_page — navigates to the first available project workspace
+                   skips the test if no projects exist
+
+HELPER FUNCTIONS (importable in test files)
+-------------------------------------------
+  goto(page, path)         navigate to BASE_URL + path and wait for React to render
+  wait_for_text(page, txt) wait until text is visible anywhere on the page
+  click_menu_item(page, lbl) click an Ant Design sidebar menu item by label
+  get_first_project_id(page) return the ID of the first project card (or None)
+
+TIMEOUTS
+--------
+  DEFAULT_TIMEOUT = 15 000 ms  — for first page load (React + API calls)
+  FAST_TIMEOUT    =  5 000 ms  — for elements already present on the page
 """
 
 import time

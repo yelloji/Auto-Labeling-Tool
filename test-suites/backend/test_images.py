@@ -1,11 +1,41 @@
 """
-Tests for image upload and management endpoints.
+test_images.py — Tests for image upload and management endpoints.
 
-Key routes (from main.py / datasets.py):
-    POST   /api/v1/datasets/{dataset_id}/upload    -> upload images to a dataset
-    GET    /api/v1/datasets/{dataset_id}/images    -> list images in a dataset
-    DELETE /api/v1/images/{image_id}               -> delete an image
-    PUT    /api/v1/datasets/images/{id}/split-section -> assign train/val/test split
+PURPOSE
+-------
+Images are the core data in the app. These tests verify that images can
+be uploaded to a dataset, listed, deleted, and assigned to train/val/test
+splits. All image content is generated in-memory (no real files on disk).
+
+ROUTES TESTED
+-------------
+  POST   /api/v1/datasets/{dataset_id}/upload          upload one or more images
+  GET    /api/v1/datasets/{dataset_id}/images          list images in a dataset
+  DELETE /api/v1/images/{image_id}                     delete a single image
+  PUT    /api/v1/datasets/images/{id}/split-section    assign train/val/test split
+
+IMPORTANT IMPLEMENTATION NOTES
+-------------------------------
+  - The upload endpoint calls file_handler.upload_images_to_dataset() which
+    opens its own database session via SessionLocal(). In tests, SessionLocal
+    is patched in conftest.py to use the in-memory test database.
+  - The upload response returns a dict with key "uploaded_images" (not "images").
+  - Images are saved to disk during tests (in a temp uploads folder).
+
+KEY BEHAVIORS VERIFIED
+----------------------
+  - Single and multiple file uploads succeed
+  - Upload to a non-existent dataset returns 4xx
+  - Uploaded image appears in the image list
+  - Empty dataset returns an empty list (not an error)
+  - Deleting an image removes it from the list
+  - Deleting a non-existent image returns 404
+  - Split section can be set to train, val, or test
+
+HOW TESTS RUN
+-------------
+No server needed. Uses FastAPI TestClient + in-memory SQLite.
+Each test creates its own project and dataset for full isolation.
 """
 
 import io

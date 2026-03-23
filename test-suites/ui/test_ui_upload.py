@@ -1,17 +1,25 @@
 """
-UI Tests — Upload Section (workspace sidebar → 'Upload Data')
+test_ui_upload.py — UI Tests for the Upload Section (sidebar → 'Upload Data').
 
-What is tested:
-  - Upload section renders inside the workspace
-  - Drag-and-drop zone is visible
-  - 'Select Files' button is present
-  - 'Select Folder' button is present
-  - Import With Labels collapse panel is present
-  - Video frame extraction option exists
-  - Unsupported file type shows an error/warning (validation)
-  - Recent images area renders (even if empty)
+WHAT THIS SECTION DOES
+----------------------
+The Upload section is where users add images to a project.
+It has a drag-and-drop zone, file/folder picker buttons, an option to
+import images together with existing label annotation files, and a
+video frame extraction tool.
 
-Requires: app running at localhost:12000, at least one project exists.
+WHAT IS TESTED
+--------------
+  Drag-and-drop zone  — the upload area is visible on screen
+  Select Files button — triggers a file picker (button must exist)
+  Select Folder button — triggers a folder picker (button must exist)
+  Import With Labels  — a collapsible panel for importing YOLO/COCO label files
+                        alongside images (e.g. if you already labeled elsewhere)
+  Video extraction    — an option to extract frames from a video file exists
+  File validation     — dropping an unsupported file type shows an error or warning
+  Recent images area  — shows recently uploaded images (or empty state)
+
+Requires: app at localhost:12000, at least one project exists.
 """
 
 import pytest

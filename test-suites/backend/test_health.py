@@ -1,5 +1,23 @@
 """
-Tests for the health-check and root endpoints.
+test_health.py — Tests for the health-check and root endpoints.
+
+PURPOSE
+-------
+These are the simplest "is the server alive?" checks.
+If these fail, all other tests will also fail because the app itself
+is broken or not importable.  Always fix health failures first.
+
+ROUTES TESTED
+-------------
+  GET /health   — returns {"status": "healthy", "message": "..."}
+  GET /         — serves the React build in production, or returns a
+                  JSON fallback {"version": "...", "message": "..."} in dev
+                  when the frontend build folder does not exist.
+
+HOW TESTS RUN
+-------------
+No server is needed. Tests use FastAPI TestClient with an in-memory
+SQLite database (configured in conftest.py). Everything runs in-process.
 """
 
 import sys
