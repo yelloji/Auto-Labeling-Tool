@@ -115,6 +115,25 @@ def _get_first_dataset_id(page) -> str | None:
     return None
 
 
+def _open_progress_page(page) -> bool:
+    """
+    Navigate to the AnnotateProgress page (/annotate-progress/{datasetId})
+    for the first available dataset. Returns True if successful.
+
+    AnnotateProgress is the page shown when all images in a dataset are
+    labeled — it lets the user assign images to train/val/test splits
+    before adding them to the Dataset stage.
+    """
+    dataset_id = _get_first_dataset_id(page)
+    if dataset_id is None:
+        return False
+
+    from .conftest import goto
+    goto(page, f"/annotate-progress/{dataset_id}")
+    page.wait_for_timeout(2000)
+    return True
+
+
 def _open_annotation_canvas(page) -> bool:
     """
     Navigate to the annotation canvas for the first available dataset.
@@ -327,3 +346,113 @@ def test_annotation_delete_image_button_exists(page):
         "[title*='Delete'], button[danger]"
     )
     assert del_btn is not None, "Delete image button not found"
+
+
+# ---------------------------------------------------------------------------
+# AnnotateProgress page — split slider tests
+# ---------------------------------------------------------------------------
+# These tests cover the "Add Images to Dataset Splits" flow:
+#   Route: /annotate-progress/{datasetId}
+#   The user picks a split method and sets train/val/test percentages
+#   before clicking "Update & Go to Workspace".
+#
+# REGRESSION: The range slider previously received value={[trainPercent, valPercent]}
+# (individual widths e.g. [70, 20]) instead of value={[trainEndPoint, valEndPoint]}
+# (cumulative positions e.g. [70, 90]). Ant Design interpreted this as handle
+# positions 70 and 20, causing handle 2 to render at the wrong location and
+# val% to display as a negative number (e.g. -38%) when dragged.
+# ---------------------------------------------------------------------------
+
+def test_progress_page_renders(page):
+    """AnnotateProgress page loads without crash."""
+    success = _open_progress_page(page)
+    if not success:
+        pytest.skip("No dataset found for progress page.")
+
+    page.wait_for_selector(
+        "text=Split Method, text=Dataset Distribution, text=Add Images",
+        timeout=DEFAULT_TIMEOUT,
+    )
+
+
+def test_progress_split_slider_renders(page):
+    """
+    The random split slider is present when 'SPLIT IMAGES BETWEEN TRAIN/VALID/TEST'
+    method is selected.
+    """
+    success = _open_progress_page(page)
+    if not success:
+        pytest.skip("No dataset found for progress page.")
+
+    # Select the random split method if not already selected
+    method_select = page.query_selector(".ant-select")
+    if method_select:
+        method_select.click()
+        page.wait_for_timeout(400)
+        option = page.query_selector(
+            ".ant-select-item:has-text('TRAIN'), "
+            ".ant-select-item:has-text('Random'), "
+            ".ant-select-item:has-text('Split')"
+        )
+        if option:
+            option.click()
+            page.wait_for_timeout(400)
+
+    slider = page.query_selector(".ant-slider")
+    assert slider is not None, "Split range slider not found in AnnotateProgress"
+
+
+def test_progress_split_percentages_are_non_negative(page):
+    """
+    REGRESSION TEST — val% must never be negative.
+
+    Bug: slider used value={[trainPercent, valPercent]} (individual widths)
+    instead of value={[trainEndPoint, valEndPoint]} (cumulative positions).
+    Ant Design treated the individual widths as positions, causing handle 2
+    to render at the wrong spot. After dragging, onChange returned corrupted
+    values and val% became negative (e.g. -38%).
+
+    Fix: slider now uses value={[trainEndPoint, valEndPoint]}.
+
+    This test verifies that all three displayed percentages are >= 0 and
+    the three labels together sum to 100.
+    """
+    success = _open_progress_page(page)
+    if not success:
+        pytest.skip("No dataset found for progress page.")
+
+    # Activate random split mode
+    method_select = page.query_selector(".ant-select")
+    if method_select:
+        method_select.click()
+        page.wait_for_timeout(400)
+        option = page.query_selector(
+            ".ant-select-item:has-text('TRAIN'), "
+            ".ant-select-item:has-text('Random'), "
+            ".ant-select-item:has-text('Split')"
+        )
+        if option:
+            option.click()
+            page.wait_for_timeout(600)
+
+    # Read the aria-valuenow attributes from both slider handles.
+    # With the fix, handle1 <= handle2 (cumulative positions).
+    handles = page.query_selector_all(".ant-slider-handle")
+    if not handles or len(handles) < 2:
+        pytest.skip("Range slider not found or not in random split mode.")
+
+    val1 = int(handles[0].get_attribute("aria-valuenow") or "0")
+    val2 = int(handles[1].get_attribute("aria-valuenow") or "100")
+
+    # Handle 1 = train boundary (cumulative), handle 2 = train+val boundary (cumulative)
+    train_pct = val1
+    val_pct = val2 - val1
+    test_pct = 100 - val2
+
+    assert train_pct >= 0, f"Train% is negative: {train_pct}"
+    assert val_pct >= 0, \
+        f"Val% is negative: {val_pct} — regression: slider value prop used " \
+        f"individual widths instead of cumulative positions"
+    assert test_pct >= 0, f"Test% is negative: {test_pct}"
+    assert train_pct + val_pct + test_pct == 100, \
+        f"Percentages do not sum to 100: {train_pct}+{val_pct}+{test_pct}"

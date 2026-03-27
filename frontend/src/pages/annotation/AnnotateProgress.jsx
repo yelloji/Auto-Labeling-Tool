@@ -1195,7 +1195,7 @@ const AnnotateProgress = () => {
                 range
                 min={0}
                 max={100}
-                value={splitPercentages}
+                value={[trainEndPoint, valEndPoint]}
                 onChange={handleSliderChange}
                 tooltip={{
                   formatter: value => `${value}%`,
@@ -1219,11 +1219,11 @@ const AnnotateProgress = () => {
                   <div style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', color: '#1890ff', marginTop: '0.25rem' }}>Train</div>
                 </div>
                 <div style={{ background: 'rgba(114, 46, 209, 0.05)', padding: '1rem', borderRadius: '0.625rem', textAlign: 'center', border: '1px solid rgba(114, 46, 209, 0.1)' }}>
-                  <div style={{ color: '#722ed1', fontWeight: 700, fontSize: '1.25rem' }}>{splitPercentages[1] - splitPercentages[0]}%</div>
+                  <div style={{ color: '#722ed1', fontWeight: 700, fontSize: '1.25rem' }}>{splitPercentages[1]}%</div>
                   <div style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', color: '#722ed1', marginTop: '0.25rem' }}>Val</div>
                 </div>
                 <div style={{ background: 'rgba(82, 196, 26, 0.05)', padding: '1rem', borderRadius: '0.625rem', textAlign: 'center', border: '1px solid rgba(82, 196, 26, 0.1)' }}>
-                  <div style={{ color: '#52c41a', fontWeight: 700, fontSize: '1.25rem' }}>{100 - splitPercentages[1]}%</div>
+                  <div style={{ color: '#52c41a', fontWeight: 700, fontSize: '1.25rem' }}>{testPercentage}%</div>
                   <div style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', color: '#52c41a', marginTop: '0.25rem' }}>Test</div>
                 </div>
               </div>
@@ -1242,19 +1242,19 @@ const AnnotateProgress = () => {
                   <Tag color="blue" style={{ marginRight: 0, fontSize: '0.9375rem', padding: '0.25rem 0.75rem' }}>Train: {splitPercentages[0]}%</Tag>
                 </div>
                 <div style={{
-                  width: `${splitPercentages[1] - splitPercentages[0]}%`,
+                  width: `${splitPercentages[1]}%`,
                   textAlign: 'center',
                   minWidth: '6rem'
                 }}>
-                  <Tag color="orange" style={{ marginRight: 0, fontSize: '0.9375rem', padding: '0.25rem 0.75rem' }}>Val: {splitPercentages[1] - splitPercentages[0]}%</Tag>
+                  <Tag color="orange" style={{ marginRight: 0, fontSize: '0.9375rem', padding: '0.25rem 0.75rem' }}>Val: {splitPercentages[1]}%</Tag>
                 </div>
                 <div style={{
-                  width: `${100 - splitPercentages[1]}%`,
+                  width: `${testPercentage}%`,
                   textAlign: 'center',
                   paddingLeft: '0.25rem',
                   minWidth: '4.5rem'
                 }}>
-                  <Tag color="green" style={{ marginRight: 0, fontSize: '0.9375rem', padding: '0.25rem 0.75rem' }}>Test: {100 - splitPercentages[1]}%</Tag>
+                  <Tag color="green" style={{ marginRight: 0, fontSize: '0.9375rem', padding: '0.25rem 0.75rem' }}>Test: {testPercentage}%</Tag>
                 </div>
               </div>
             )}
@@ -1274,7 +1274,7 @@ const AnnotateProgress = () => {
               <Col span={8}>
                 <Statistic
                   title="Validation"
-                  value={splitPercentages[1] - splitPercentages[0]}
+                  value={splitPercentages[1]}
                   suffix="%"
                   valueStyle={{ color: '#722ed1' }}
                   precision={0}
@@ -1284,7 +1284,7 @@ const AnnotateProgress = () => {
               <Col span={8}>
                 <Statistic
                   title="Test"
-                  value={100 - splitPercentages[1]}
+                  value={testPercentage}
                   suffix="%"
                   valueStyle={{ color: '#52c41a' }}
                   precision={0}
