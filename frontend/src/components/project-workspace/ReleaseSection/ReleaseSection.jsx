@@ -89,7 +89,6 @@ const AnnotatedImageCard = ({ image }) => {
         <img
           src={imageUrl}
           alt={image.filename || image.name}
-          loading="lazy"
           style={{
             width: '100%',
             height: '120px',
@@ -150,7 +149,7 @@ const AnnotatedImageCard = ({ image }) => {
               height: '120px',
               pointerEvents: 'none'
             }}
-            viewBox={`0 0 ${imageDimensions.width} ${imageDimensions.height}`}
+            viewBox={`0 0 ${image.width || imageDimensions.width} ${image.height || imageDimensions.height}`}
             preserveAspectRatio="xMidYMid slice"
           >
             {annotations.map((annotation, index) => {
