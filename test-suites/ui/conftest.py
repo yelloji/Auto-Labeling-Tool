@@ -99,13 +99,14 @@ def require_backend():
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="function")
-def page(playwright):
+def page(playwright, request):
     """
     Fresh Chromium page per test.
     - No persistent storage — every test starts clean.
     - Console errors are printed to stdout so failures are diagnosable.
     """
-    browser = playwright.chromium.launch(headless=True)
+    headed = request.config.getoption("--headed", default=False)
+    browser = playwright.chromium.launch(headless=not headed)
     context = browser.new_context(viewport={"width": 1440, "height": 900})
     page = context.new_page()
 
@@ -150,18 +151,17 @@ def click_menu_item(page, label: str):
 
 def get_first_project_id(page) -> str | None:
     """
-    Navigate to /projects, grab the first project card's 'Open' link href,
-    and return the project id extracted from the URL.
+    Fetch the first project ID from the API.
     Returns None if no projects exist.
+    Note: project cards use onClick+navigate() with no <a href> tags,
+    so DOM scraping does not work — use the API directly instead.
     """
-    goto(page, "/projects")
-    page.wait_for_timeout(1000)
-    links = page.query_selector_all("a[href*='/projects/']")
-    for link in links:
-        href = link.get_attribute("href") or ""
-        parts = [p for p in href.split("/") if p.isdigit()]
-        if parts:
-            return parts[0]
+    response = page.request.get(f"{BASE_URL}/api/projects")
+    if response.status != 200:
+        return None
+    projects = response.json()
+    if projects:
+        return str(projects[0]["id"])
     return None
 
 

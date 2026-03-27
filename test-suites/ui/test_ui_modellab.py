@@ -38,10 +38,6 @@ WHAT IS TESTED
 Requires: app at localhost:12000, at least one project with a completed training.
 Tests that require a training session skip automatically if none exist.
 """
-Requires: app at localhost:12000, at least one project exists.
-Training sub-tab tests are skipped if no training sessions exist.
-"""
-
 import pytest
 from .conftest import goto, DEFAULT_TIMEOUT, FAST_TIMEOUT
 
