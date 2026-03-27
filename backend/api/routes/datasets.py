@@ -393,7 +393,9 @@ async def get_dataset(dataset_id: str, db: Session = Depends(get_db)):
                 "is_labeled": image.is_labeled,
                 "is_auto_labeled": image.is_auto_labeled,
                 "is_verified": image.is_verified,
-                "created_at": image.created_at
+                "created_at": image.created_at,
+                "file_path": image.file_path,
+                "thumbnail_path": image.thumbnail_path
             }
             image_list.append(image_data)
         

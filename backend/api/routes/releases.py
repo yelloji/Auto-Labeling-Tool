@@ -1935,8 +1935,8 @@ def rebalance_dataset(dataset_id: str, payload: DatasetRebalanceRequest, db: Ses
 
                     new_rel_path = str(dataset_dir / split_name / filename)
 
-                    abs_old = PROJECT_ROOT / old_rel_path
-                    abs_new = PROJECT_ROOT / new_rel_path
+                    abs_old = settings.BASE_DIR / old_rel_path
+                    abs_new = settings.BASE_DIR / new_rel_path
 
                     # Ensure destination folder exists
                     os.makedirs(abs_new.parent, exist_ok=True)

@@ -74,7 +74,9 @@ const AnnotatedImageCard = ({ image }) => {
     loadAnnotations();
   }, [image.id, image]);
 
-  const imageUrl = `http://localhost:12000/api/images/${image.id}`;
+  const imageUrl = image.thumbnail_path
+    ? `http://localhost:12000/${image.thumbnail_path}`
+    : `http://localhost:12000/api/images/${image.id}`;
 
   return (
     <div style={{ 
