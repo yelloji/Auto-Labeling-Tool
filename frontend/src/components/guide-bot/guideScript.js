@@ -405,27 +405,98 @@ const guideScript = {
   // -------------------------------------------------------------------------
   '/models': {
     message: {
-      en: 'This is the Models page. Here you can see all available AI models.',
-      it: 'Questa è la pagina Modelli. Qui puoi vedere tutti i modelli AI disponibili.',
+      en: 'This is the AI Models page. Here you can see all models available across your projects.',
+      it: 'Questa è la pagina Modelli AI. Qui puoi vedere tutti i modelli disponibili per i tuoi progetti.',
     },
     options: [
       {
         label: { en: 'What are these models?', it: 'Cosa sono questi modelli?' },
-        action: { type: 'message', key: 'models-explain' },
+        action: { type: 'message', key: 'models-what' },
       },
       {
-        label: { en: 'Go to my projects', it: 'Vai ai miei progetti' },
+        label: { en: 'What is Object Detection?', it: "Cos'è il rilevamento oggetti?" },
+        action: { type: 'message', key: 'models-object-detection' },
+      },
+      {
+        label: { en: 'What is Segmentation?', it: "Cos'è la segmentazione?" },
+        action: { type: 'message', key: 'models-segmentation' },
+      },
+      {
+        label: { en: 'How do I upload a model?', it: 'Come carico un modello?' },
+        action: { type: 'message', key: 'models-upload' },
+      },
+      {
+        label: { en: 'Go to my Projects', it: 'Vai ai miei Progetti' },
         action: { type: 'navigate', path: '/projects' },
       },
     ],
   },
 
-  'models-explain': {
+  'models-what': {
     message: {
-      en: 'These are pre-trained AI models (YOLO). They are used to auto-label your images and train custom detectors for your objects.',
-      it: "Questi sono modelli AI pre-addestrati (YOLO). Vengono usati per etichettare automaticamente le immagini e addestrare rilevatori personalizzati per i tuoi oggetti.",
+      en: 'These are AI models used for auto-labeling and training. The default models (YOLO11, YOLO26, SAM2) come pre-installed. You can also upload your own custom models to use across all your projects.',
+      it: 'Questi sono modelli AI usati per l\'etichettatura automatica e il training. I modelli predefiniti (YOLO11, YOLO26, SAM2) sono pre-installati. Puoi anche caricare i tuoi modelli personalizzati da usare in tutti i tuoi progetti.',
     },
     options: [
+      {
+        label: { en: 'What is Object Detection?', it: "Cos'è il rilevamento oggetti?" },
+        action: { type: 'message', key: 'models-object-detection' },
+      },
+      {
+        label: { en: 'What is Segmentation?', it: "Cos'è la segmentazione?" },
+        action: { type: 'message', key: 'models-segmentation' },
+      },
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/models' },
+      },
+    ],
+  },
+
+  'models-object-detection': {
+    message: {
+      en: 'Object Detection finds objects in an image and draws a bounding box around them with a label. Example: detecting a car, a person, or a defect.',
+      it: 'Il rilevamento oggetti trova gli oggetti in un\'immagine e disegna un riquadro con un\'etichetta. Esempio: rilevare un\'auto, una persona o un difetto.',
+    },
+    options: [
+      {
+        label: { en: 'What is Segmentation?', it: "Cos'è la segmentazione?" },
+        action: { type: 'message', key: 'models-segmentation' },
+      },
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/models' },
+      },
+    ],
+  },
+
+  'models-segmentation': {
+    message: {
+      en: 'Segmentation detects the exact pixel-level shape of an object, not just a bounding box. Useful when you need precise object boundaries.',
+      it: 'La segmentazione rileva la forma esatta dell\'oggetto a livello di pixel, non solo un riquadro. Utile quando hai bisogno di contorni precisi.',
+    },
+    options: [
+      {
+        label: { en: 'What is Object Detection?', it: "Cos'è il rilevamento oggetti?" },
+        action: { type: 'message', key: 'models-object-detection' },
+      },
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/models' },
+      },
+    ],
+  },
+
+  'models-upload': {
+    message: {
+      en: 'Click Upload Model to add your own model. Supported formats are .pt and .onnx. For .pt files details are filled automatically. For .onnx you need to enter input size, classes and number of classes manually.',
+      it: 'Clicca su Carica Modello per aggiungere il tuo modello. I formati supportati sono .pt e .onnx. Per i file .pt i dettagli vengono compilati automaticamente. Per .onnx devi inserire manualmente la dimensione di input, le classi e il numero di classi.',
+    },
+    options: [
+      {
+        label: { en: 'Guide me through Upload', it: 'Guidami nel caricamento' },
+        action: { type: 'wizard', wizard: 'upload-model' },
+      },
       {
         label: { en: 'Go back', it: 'Torna indietro' },
         action: { type: 'message', key: '/models' },

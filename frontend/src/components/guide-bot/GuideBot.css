@@ -237,6 +237,108 @@
   transform: translateX(0);
 }
 
+/* ============================================================
+   WIZARD MODE — scrollable conversation
+   ============================================================ */
+
+.guide-bot-conversation {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 260px;
+  scroll-behavior: smooth;
+}
+
+.guide-bot-conversation::-webkit-scrollbar {
+  width: 4px;
+}
+.guide-bot-conversation::-webkit-scrollbar-track {
+  background: transparent;
+}
+.guide-bot-conversation::-webkit-scrollbar-thumb {
+  background: #1e3a5f;
+  border-radius: 4px;
+}
+
+.guide-bot-msg {
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 90%;
+  word-break: break-word;
+}
+
+.guide-bot-msg--bot {
+  background: #112240;
+  border: 1px solid #1e3a5f;
+  color: #e8f4fd;
+  border-radius: 10px 10px 10px 2px;
+  align-self: flex-start;
+}
+
+.guide-bot-msg--user {
+  background: #1677ff;
+  color: #ffffff;
+  border-radius: 10px 10px 2px 10px;
+  align-self: flex-end;
+}
+
+/* Wizard input area */
+.guide-bot-wizard-input {
+  padding: 8px 16px 4px;
+  border-top: 1px solid #1e3a5f;
+}
+
+.guide-bot-wizard-text-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.guide-bot-wizard-textinput {
+  flex: 1;
+  background: #112240;
+  border: 1px solid #1e3a5f;
+  border-radius: 8px;
+  color: #e8f4fd;
+  font-size: 13px;
+  padding: 8px 10px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.guide-bot-wizard-textinput:focus {
+  border-color: #1677ff;
+}
+
+.guide-bot-wizard-textinput::placeholder {
+  color: #4a6a8a;
+}
+
+.guide-bot-wizard-send {
+  background: #1677ff;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 16px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.guide-bot-wizard-send:hover {
+  background: #0958d9;
+}
+
 /* ---- Footer ---- */
 .guide-bot-footer {
   padding: 10px 16px;
