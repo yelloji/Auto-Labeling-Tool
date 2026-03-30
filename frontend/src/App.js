@@ -17,6 +17,7 @@ import AnnotateLauncher from './pages/annotation/AnnotateLauncher';
 import AnnotateProgress from './pages/annotation/AnnotateProgress';
 import ManualLabeling from './pages/annotation/ManualLabeling';
 import GlobalTrainingNotification from './components/GlobalTrainingNotification';
+import GuideBot from './components/guide-bot';
 // Removed: Datasets, DatasetDetailModern, ActiveLearningDashboard, Annotate (old)
 // These will be integrated into Projects
 
@@ -115,6 +116,9 @@ function App() {
 
       {/* Global Training Completion Notification */}
       <GlobalTrainingNotification />
+
+      {/* Guide Bot — always visible on every page */}
+      <GuideBot />
     </Router>
   );
 }

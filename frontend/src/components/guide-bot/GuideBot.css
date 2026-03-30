@@ -1,0 +1,263 @@
+/* ============================================================
+   GuideBot.css — Floating Guide Bot styles
+   ============================================================ */
+
+/* ---- Floating container (always bottom-right) ---- */
+.guide-bot-wrapper {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+}
+
+/* ---- Robot minimized container ---- */
+.guide-bot-robot-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* ---- Custom HELLO speech bubble ---- */
+.guide-bot-hello-bubble {
+  position: absolute;
+  top: -10px;
+  right: 0px;
+  background: #ffffff;
+  color: #0d1b2a;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 10px 10px 10px 2px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  white-space: nowrap;
+  animation: bubblePop 0.3s ease;
+  letter-spacing: 0.5px;
+}
+
+.guide-bot-hello-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 10px;
+  border-width: 6px 6px 0;
+  border-style: solid;
+  border-color: #ffffff transparent transparent;
+}
+
+@keyframes bubblePop {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+/* ============================================================
+   MINIMIZED STATE — robot floats
+   ============================================================ */
+.guide-bot-robot {
+  width: 130px;
+  height: 160px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.25))
+          drop-shadow(0 8px 24px rgba(0, 0, 0, 0.5));
+  background: radial-gradient(ellipse at center, rgba(255,255,255,0.08) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.guide-bot-robot:hover {
+  transform: scale(1.08) translateY(-4px);
+}
+
+/* Bigger robot on main pages: Dashboard, Projects, Models */
+.guide-bot-large .guide-bot-robot {
+  width: 180px;
+  height: 220px;
+}
+
+/* ============================================================
+   OPEN STATE — chat panel
+   ============================================================ */
+.guide-bot-panel {
+  width: 320px;
+  background: #0d1b2a;
+  border: 1px solid #1e3a5f;
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.25s ease;
+  margin-bottom: 8px;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- Panel Header ---- */
+.guide-bot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #0a1628;
+  border-bottom: 1px solid #1e3a5f;
+}
+
+.guide-bot-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guide-bot-header-avatar {
+  width: 32px;
+  height: 32px;
+}
+
+.guide-bot-header-title {
+  color: #e8f4fd;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.guide-bot-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Language toggle */
+.guide-bot-lang {
+  display: flex;
+  background: #1a2f4a;
+  border-radius: 20px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.guide-bot-lang button {
+  background: transparent;
+  border: none;
+  color: #6b8cae;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.5px;
+}
+
+.guide-bot-lang button.active {
+  background: #1677ff;
+  color: #ffffff;
+}
+
+/* Minimize button */
+.guide-bot-minimize {
+  background: transparent;
+  border: none;
+  color: #6b8cae;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 2px;
+  transition: color 0.15s ease;
+  display: flex;
+  align-items: center;
+}
+
+.guide-bot-minimize:hover {
+  color: #e8f4fd;
+}
+
+/* ---- Message area ---- */
+.guide-bot-message-area {
+  padding: 20px 16px 12px;
+  flex: 1;
+}
+
+.guide-bot-bubble {
+  background: #112240;
+  border: 1px solid #1e3a5f;
+  border-radius: 12px 12px 12px 2px;
+  padding: 12px 14px;
+  color: #e8f4fd;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+/* ---- Options ---- */
+.guide-bot-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.guide-bot-option-btn {
+  background: #112240;
+  border: 1px solid #1e3a5f;
+  border-radius: 10px;
+  color: #93c5fd;
+  font-size: 13px;
+  padding: 10px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guide-bot-option-btn:hover {
+  background: #1e3a5f;
+  border-color: #1677ff;
+  color: #ffffff;
+  transform: translateX(2px);
+}
+
+.guide-bot-option-btn:active {
+  transform: translateX(0);
+}
+
+/* ---- Footer ---- */
+.guide-bot-footer {
+  padding: 10px 16px;
+  border-top: 1px solid #1e3a5f;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.guide-bot-back-btn {
+  background: transparent;
+  border: none;
+  color: #6b8cae;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.15s ease;
+}
+
+.guide-bot-back-btn:hover {
+  color: #93c5fd;
+}
