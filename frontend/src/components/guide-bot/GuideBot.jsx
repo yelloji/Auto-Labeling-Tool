@@ -67,6 +67,22 @@ function getUploadWizardSteps(lang) {
 }
 
 // ---------------------------------------------------------------------------
+// Upload Files wizard steps
+// ---------------------------------------------------------------------------
+
+function getUploadFilesWizardSteps(lang) {
+  const s = {
+    en: [
+      { step: 'uf-batch-name', role: 'bot', text: 'A batch is a group of images you are uploading together. Give it a name so you can recognise it later — for example: "Factory Floor 1" or "Morning Inspection". What would you like to name this batch?', inputType: 'text', placeholder: 'e.g. Factory Floor 1' },
+    ],
+    it: [
+      { step: 'uf-batch-name', role: 'bot', text: 'Un batch è un gruppo di immagini che stai caricando insieme. Dagli un nome per riconoscerlo in seguito — ad esempio: "Piano Fabbrica 1" o "Ispezione Mattina". Come vuoi chiamare questo batch?', inputType: 'text', placeholder: 'es. Piano Fabbrica 1' },
+    ],
+  };
+  return s[lang] || s['en'];
+}
+
+// ---------------------------------------------------------------------------
 // Create Project wizard steps
 // ---------------------------------------------------------------------------
 
@@ -120,10 +136,11 @@ const BUBBLE_TEXT = {
 // ---------------------------------------------------------------------------
 
 export default function GuideBot() {
-  const location  = useLocation();
-  const navigate  = useNavigate();
-  const scrollRef = useRef(null);
-  const isMainPage = MAIN_PAGES.includes(location.pathname);
+  const location      = useLocation();
+  const navigate      = useNavigate();
+  const scrollRef     = useRef(null);
+  const observerRef   = useRef(null);
+  const isMainPage    = MAIN_PAGES.includes(location.pathname);
 
   const [isOpen,      setIsOpen]      = useState(false);
   const [lang,        setLang]        = useState('en');
@@ -143,6 +160,7 @@ export default function GuideBot() {
   useEffect(() => {
     const key = getScriptKey(location.pathname);
     setScriptKey(key);
+    if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
     setHistory([]);
     setWizardMode(false);
     setWizardType(null);
@@ -204,6 +222,81 @@ export default function GuideBot() {
     const firstStep = steps.find(s => s.step === 'cp-name');
     setWizardStep('cp-name');
     setConversation([{ role: 'bot', text: firstStep.text, inputType: firstStep.inputType, placeholder: firstStep.placeholder, step: 'cp-name' }]);
+  }
+
+  // ---- Start Upload Folder Wizard ----
+  // No batch name needed — folder picker opens directly.
+  // Bot closes so user can pick folder, then reopens when upload result appears.
+  function startUploadFolderWizard() {
+    setWizardMode(true);
+    setWizardType('upload-folder');
+    setConversation([]);
+
+    // Start observer BEFORE clicking — watches for upload result in background
+    if (observerRef.current) observerRef.current.disconnect();
+    const observer = new MutationObserver(() => {
+      const allEls = Array.from(document.querySelectorAll('div, p, span, h3, h4'));
+      const resultEl = allEls.find(el => el.textContent.includes('uploaded to'));
+      if (resultEl) {
+        observer.disconnect();
+        observerRef.current = null;
+        const text = resultEl.textContent.trim();
+        const uploadedMatch = text.match(/(\d+)\s+image/);
+        const skippedMatch  = text.match(/(\d+)\s+skipped/);
+        const uploaded = uploadedMatch ? uploadedMatch[1] : '?';
+        const skipped  = skippedMatch  ? skippedMatch[1]  : '0';
+        const resultMsg = lang === 'it'
+          ? `${uploaded} immagini caricate${skipped !== '0' ? `, ${skipped} saltate — esistevano già in questo progetto` : ''}. Vai su Management per iniziare ad etichettare.`
+          : `${uploaded} image(s) uploaded${skipped !== '0' ? `, ${skipped} skipped — they already exist in this project` : ''}. Go to Management to start labeling.`;
+        const goLabel = lang === 'it' ? 'Vai a Management' : 'Go to Management';
+        setTimeout(() => {
+          setIsOpen(true);
+          setConversation([{ role: 'bot', text: resultMsg, inputType: 'buttons', options: [goLabel], step: 'uf-done' }]);
+          setWizardStep('uf-done');
+        }, 600);
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    observerRef.current = observer;
+
+    // Click Select Folder (not the images+labels one)
+    setTimeout(() => {
+      const btn = Array.from(document.querySelectorAll('button'))
+        .find(b => b.textContent.trim().includes('Select Folder') && !b.textContent.includes('images'));
+      if (btn) btn.click();
+    }, 200);
+
+    // Close bot so folder picker is usable
+    setTimeout(() => setIsOpen(false), 400);
+  }
+
+  // ---- Start Upload Folder (images + labels) Wizard ----
+  // Shows explanation first with a button. User reads, clicks → bot closes, folder picker opens.
+  // Reopens automatically when "Import complete" appears.
+  function startUploadFolderLabelsWizard() {
+    setWizardMode(true);
+    setWizardType('upload-folder-labels');
+
+    const explainMsg = lang === 'it'
+      ? 'Usa questa opzione se la tua cartella contiene già immagini E file etichette. Formati supportati: YOLO (immagini + file .txt + data.yaml), COCO (immagini + file .json). Il nome della cartella verrà usato come nome batch.'
+      : 'Use this if your folder already has images AND their label files. Supported: YOLO format (images + .txt label files + data.yaml), COCO format (images + .json file). The folder name will be used as batch name.';
+    const btnLabel = lang === 'it' ? 'Seleziona Cartella' : 'Select Folder';
+
+    setConversation([{ role: 'bot', text: explainMsg, inputType: 'buttons', options: [btnLabel], step: 'ufl-start' }]);
+    setWizardStep('ufl-start');
+  }
+
+  // ---- Start Upload Files Wizard ----
+  function startUploadFilesWizard() {
+    setWizardMode(true);
+    setWizardType('upload-files');
+    setWizardData({});
+    setTextInput('');
+
+    const steps = getUploadFilesWizardSteps(lang);
+    const firstStep = steps.find(s => s.step === 'uf-batch-name');
+    setWizardStep('uf-batch-name');
+    setConversation([{ role: 'bot', text: firstStep.text, inputType: firstStep.inputType, placeholder: firstStep.placeholder, step: 'uf-batch-name' }]);
   }
 
   // ---- Handle wizard answer ----
@@ -278,6 +371,150 @@ export default function GuideBot() {
           setWizardStep('cp-done');
         }, 600);
         setTimeout(() => { setWizardMode(false); setWizardType(null); }, 2500);
+      }
+
+      return;
+    }
+
+    // ---- Upload Folder (images + labels) wizard ----
+    if (wizardType === 'upload-folder-labels') {
+      if (step === 'ufl-start') {
+        // Start observer — watch for "Import complete"
+        if (observerRef.current) observerRef.current.disconnect();
+        const observer = new MutationObserver(() => {
+          // Find the most specific element — shortest textContent containing "Import complete"
+          const matching = Array.from(document.querySelectorAll('div, p, span, h3, h4'))
+            .filter(el => el.textContent.includes('Import complete'));
+          const resultEl = matching.sort((a, b) => a.textContent.length - b.textContent.length)[0];
+          if (resultEl) {
+            observer.disconnect();
+            observerRef.current = null;
+            const text = resultEl.textContent.trim();
+            const imagesMatch      = text.match(/(\d+)\s+image/);
+            const annotationsMatch = text.match(/(\d+)\s+annotation/);
+            const images      = imagesMatch      ? imagesMatch[1]      : '?';
+            const annotations = annotationsMatch ? annotationsMatch[1] : '?';
+            const resultMsg = lang === 'it'
+              ? `Importazione completata — ${images} immagini, ${annotations} annotazioni importate. Vai su Management per iniziare a lavorare.`
+              : `Import complete — ${images} images, ${annotations} annotations imported. Go to Management to start working.`;
+            const goLabel = lang === 'it' ? 'Vai a Management' : 'Go to Management';
+            setTimeout(() => {
+              setIsOpen(true);
+              setConversation([{ role: 'bot', text: resultMsg, inputType: 'buttons', options: [goLabel], step: 'ufl-done' }]);
+              setWizardStep('ufl-done');
+            }, 600);
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        observerRef.current = observer;
+        // Click Select Folder (images + labels) button
+        setTimeout(() => {
+          const btn = Array.from(document.querySelectorAll('button'))
+            .find(b => b.textContent.trim().includes('Select Folder (images + labels)'));
+          if (btn) btn.click();
+        }, 200);
+        // Close bot so folder picker is usable
+        setTimeout(() => setIsOpen(false), 400);
+      }
+
+      else if (step === 'ufl-done') {
+        setTimeout(() => {
+          const mgmt = Array.from(document.querySelectorAll('li, a, span'))
+            .find(el => el.textContent.trim() === 'Management');
+          if (mgmt) mgmt.click();
+        }, 200);
+        setWizardMode(false);
+        setWizardType(null);
+        setIsOpen(false);
+      }
+      return;
+    }
+
+    // ---- Upload Folder wizard (only uf-done needs handling — rest is automatic) ----
+    if (wizardType === 'upload-folder') {
+      if (step === 'uf-done') {
+        setTimeout(() => {
+          const mgmt = Array.from(document.querySelectorAll('li, a, span'))
+            .find(el => el.textContent.trim() === 'Management');
+          if (mgmt) mgmt.click();
+        }, 200);
+        setWizardMode(false);
+        setWizardType(null);
+        setIsOpen(false);
+      }
+      return;
+    }
+
+    // ---- Upload Files wizard ----
+    if (wizardType === 'upload-files') {
+
+      if (step === 'uf-batch-name') {
+        const batchName = value;
+
+        // Step 1 — click Select File(s) to open the Enter Batch Name modal
+        setTimeout(() => {
+          const btn = Array.from(document.querySelectorAll('button'))
+            .find(b => b.textContent.trim().includes('Select File(s)'));
+          if (btn) btn.click();
+        }, 200);
+
+        // Step 2 — fill batch name in the modal input, then click Continue
+        setTimeout(() => {
+          const modalInput = document.querySelector('.ant-modal input, [role="dialog"] input');
+          if (modalInput) setReactInputValue(modalInput, batchName);
+          setTimeout(() => {
+            const continueBtn = Array.from(document.querySelectorAll('.ant-modal button, [role="dialog"] button'))
+              .find(b => b.textContent.trim().includes('Continue'));
+            if (continueBtn) continueBtn.click();
+          }, 400);
+        }, 700);
+
+        // Step 3 — show waiting message
+        const waitMsg = lang === 'it'
+          ? 'Seleziona i file nella finestra. Ti mostrerò il risultato qui.'
+          : 'Select your files in the dialog. I will show you the result here.';
+        setTimeout(() => {
+          addMessage('bot', waitMsg, { inputType: 'none', step: 'uf-waiting' });
+          setWizardStep('uf-waiting');
+        }, 1300);
+
+        // Step 4 — MutationObserver: watch for upload result text in DOM
+        if (observerRef.current) observerRef.current.disconnect();
+        const observer = new MutationObserver(() => {
+          const resultEl = Array.from(document.querySelectorAll('div, p, span, h3, h4'))
+            .filter(el => el.textContent.includes('uploaded to'))
+            .sort((a, b) => a.textContent.length - b.textContent.length)[0];
+          if (resultEl) {
+            observer.disconnect();
+            observerRef.current = null;
+            const text = resultEl.textContent.trim();
+            const uploadedMatch = text.match(/(\d+)\s+image/);
+            const skippedMatch  = text.match(/(\d+)\s+skipped/);
+            const uploaded = uploadedMatch ? uploadedMatch[1] : '?';
+            const skipped  = skippedMatch  ? skippedMatch[1]  : '0';
+            const resultMsg = lang === 'it'
+              ? `${uploaded} immagini caricate${skipped !== '0' ? `, ${skipped} saltate — esistevano già in questo progetto` : ''}. Vai su Management per iniziare ad etichettare.`
+              : `${uploaded} image(s) uploaded${skipped !== '0' ? `, ${skipped} skipped — they already exist in this project` : ''}. Go to Management to start labeling.`;
+            const goLabel = lang === 'it' ? 'Vai a Management' : 'Go to Management';
+            setTimeout(() => {
+              addMessage('bot', resultMsg, { inputType: 'buttons', options: [goLabel], step: 'uf-done' });
+              setWizardStep('uf-done');
+            }, 600);
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        observerRef.current = observer;
+      }
+
+      else if (step === 'uf-done') {
+        setTimeout(() => {
+          const mgmt = Array.from(document.querySelectorAll('li, a, span'))
+            .find(el => el.textContent.trim() === 'Management');
+          if (mgmt) mgmt.click();
+        }, 200);
+        setWizardMode(false);
+        setWizardType(null);
+        setIsOpen(false);
       }
 
       return;
@@ -454,6 +691,12 @@ export default function GuideBot() {
       startUploadWizard();
     } else if (action.type === 'wizard' && action.wizard === 'create-project') {
       startCreateProjectWizard();
+    } else if (action.type === 'wizard' && action.wizard === 'upload-files') {
+      startUploadFilesWizard();
+    } else if (action.type === 'wizard' && action.wizard === 'upload-folder') {
+      startUploadFolderWizard();
+    } else if (action.type === 'wizard' && action.wizard === 'upload-folder-labels') {
+      startUploadFolderLabelsWizard();
     } else if (action.type === 'click') {
       try {
         const hasTextMatch = action.selector.match(/:has-text\(['"](.+?)['"]\)/);
@@ -477,7 +720,8 @@ export default function GuideBot() {
 
   // ---- Back button ----
   function handleBack() {
-    if (wizardMode) { setWizardMode(false); setConversation([]); return; }
+    if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+    if (wizardMode) { setWizardMode(false); setWizardType(null); setConversation([]); return; }
     if (history.length === 0) return;
     const prev = history[history.length - 1];
     setHistory(h => h.slice(0, -1));

@@ -141,33 +141,29 @@ const guideScript = {
     },
     options: [
       {
-        label: { en: 'Upload images', it: 'Carica immagini' },
-        action: { type: 'click', selector: ".ant-menu-item:has-text('Upload')" },
-      },
-      {
-        label: { en: 'View my datasets', it: 'Visualizza i miei dataset' },
-        action: { type: 'click', selector: ".ant-menu-item:has-text('Management')" },
-      },
-      {
-        label: { en: 'Go to Release section', it: 'Vai alla sezione Release' },
-        action: { type: 'click', selector: ".ant-menu-item:has-text('Release')" },
-      },
-      {
         label: { en: 'What should I do first?', it: 'Cosa devo fare prima?' },
         action: { type: 'message', key: 'workspace-first-step' },
+      },
+      {
+        label: { en: 'Upload images or videos', it: 'Carica immagini o video' },
+        action: { type: 'message', key: 'workspace-upload' },
+      },
+      {
+        label: { en: 'Already uploaded your images? Go to Management', it: 'Immagini già caricate? Vai a Management' },
+        action: { type: 'click', selector: ".ant-menu-item:has-text('Management')" },
       },
     ],
   },
 
   'workspace-first-step': {
     message: {
-      en: 'Start by uploading your images. Go to Upload, select your image folder, then come back to Management to label them.',
-      it: "Inizia caricando le tue immagini. Vai su Upload, seleziona la cartella delle immagini, poi torna su Management per etichettarle.",
+      en: 'Here is the full flow: 1. Upload your images here. 2. Go to Management to label them. 3. Go to Release to prepare your dataset. 4. Train your AI model. 5. Use Model Lab to explore and analyse your trained models. Start with uploading your images or videos.',
+      it: 'Ecco il flusso completo: 1. Carica le tue immagini qui. 2. Vai su Management per etichettarle. 3. Vai su Release per preparare il dataset. 4. Addestra il tuo modello AI. 5. Usa il Model Lab per esplorare e analizzare i modelli addestrati. Inizia caricando le tue immagini o video.',
     },
     options: [
       {
-        label: { en: 'Upload images now', it: 'Carica immagini adesso' },
-        action: { type: 'click', selector: ".ant-menu-item:has-text('Upload')" },
+        label: { en: 'Upload images or videos', it: 'Carica immagini o video' },
+        action: { type: 'message', key: 'workspace-upload' },
       },
       {
         label: { en: 'Go back', it: 'Torna indietro' },
@@ -177,38 +173,37 @@ const guideScript = {
   },
 
   // -------------------------------------------------------------------------
-  // UPLOAD  (Upload tab inside workspace)
+  // UPLOAD  (Upload Data tab inside workspace)
   // -------------------------------------------------------------------------
   'workspace-upload': {
     message: {
-      en: 'Upload your image folder here. What do you need help with?',
-      it: 'Carica qui la cartella delle immagini. Con cosa hai bisogno di aiuto?',
+      en: 'Choose how you want to upload your data:',
+      it: 'Scegli come vuoi caricare i tuoi dati:',
     },
     options: [
       {
-        label: { en: 'Select image folder', it: 'Seleziona cartella immagini' },
-        action: { type: 'click', selector: "button:has-text('Upload'), input[type='file'], .ant-upload" },
+        label: { en: 'Pick individual image files', it: 'Seleziona singoli file immagine' },
+        action: { type: 'wizard', wizard: 'upload-files' },
       },
       {
-        label: { en: 'What format should my images be?', it: 'In che formato devono essere le immagini?' },
-        action: { type: 'message', key: 'upload-format' },
+        label: { en: 'Pick a whole folder of images', it: 'Seleziona una cartella di immagini' },
+        action: { type: 'wizard', wizard: 'upload-folder' },
       },
-    ],
-  },
-
-  'upload-format': {
-    message: {
-      en: 'Images should be JPG or PNG format. Any resolution works. Upload a full folder of images at once.',
-      it: 'Le immagini devono essere in formato JPG o PNG. Qualsiasi risoluzione va bene. Carica una cartella intera di immagini.',
-    },
-    options: [
       {
-        label: { en: 'Select image folder', it: 'Seleziona cartella immagini' },
-        action: { type: 'click', selector: "button:has-text('Upload'), input[type='file'], .ant-upload" },
+        label: { en: 'Pick a folder that already has images + labels', it: 'Seleziona una cartella con immagini + etichette' },
+        action: { type: 'wizard', wizard: 'upload-folder-labels' },
+      },
+      {
+        label: { en: 'Pick video files (frames will be extracted)', it: 'Seleziona file video (i frame verranno estratti)' },
+        action: { type: 'click', selector: "button:has-text('Select Video File(s)')" },
+      },
+      {
+        label: { en: 'Pick a folder of videos', it: 'Seleziona una cartella di video' },
+        action: { type: 'click', selector: "button:has-text('Select Video Folder')" },
       },
       {
         label: { en: 'Go back', it: 'Torna indietro' },
-        action: { type: 'message', key: 'workspace-upload' },
+        action: { type: 'message', key: '/projects/:id/workspace' },
       },
     ],
   },
