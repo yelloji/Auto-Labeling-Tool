@@ -68,7 +68,7 @@ const Navbar = () => {
         marginLeft: '1.5rem',
         whiteSpace: 'nowrap'
       }}>
-        🏷️ Auto-Labeling-Tool
+        Gevis AI Studio
       </div>
       <Menu
         theme="dark"

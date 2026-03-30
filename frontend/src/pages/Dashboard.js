@@ -171,7 +171,7 @@ const Dashboard = () => {
             />
           </div>
           <Paragraph style={{ color: '#C0C0C0' }}>
-            Welcome to Auto-Labeling-Tool - Your local computer vision dataset labeling solution
+            Welcome to Gevis AI Studio - Your local computer vision dataset labeling solution
           </Paragraph>
         </div>
         <Button 
