@@ -88,7 +88,7 @@ const guideScript = {
     options: [
       {
         label: { en: 'Create a new project', it: 'Crea un nuovo progetto' },
-        action: { type: 'click', selector: "button:has-text('New Project'), button:has-text('Create')" },
+        action: { type: 'wizard', wizard: 'create-project' },
       },
       {
         label: { en: 'Open an existing project', it: 'Apri un progetto esistente' },
@@ -103,8 +103,8 @@ const guideScript = {
 
   'projects-open-hint': {
     message: {
-      en: 'Click on any project card in the list to open it.',
-      it: 'Clicca su qualsiasi scheda progetto nella lista per aprirlo.',
+      en: 'Your projects are listed on this page. Each card shows the project name and image count. Click on any card to open it and start working.',
+      it: 'I tuoi progetti sono elencati in questa pagina. Ogni scheda mostra il nome del progetto e il numero di immagini. Clicca su qualsiasi scheda per aprirlo e iniziare a lavorare.',
     },
     options: [
       {
@@ -116,13 +116,13 @@ const guideScript = {
 
   'projects-explain': {
     message: {
-      en: 'A project is a collection of images and labels for one specific object you want to detect. For example: "Cars" or "Defects".',
-      it: "Un progetto è una raccolta di immagini ed etichette per un oggetto specifico che vuoi rilevare. Ad esempio: 'Auto' o 'Difetti'.",
+      en: 'A project is your complete workspace. Inside one project you upload images, label them, train your AI model, and analyse the results — all in one place. You can have multiple classes per project.',
+      it: "Un progetto è il tuo spazio di lavoro completo. Dentro un progetto carichi immagini, le etichetti, addestri il tuo modello AI e analizzi i risultati — tutto in un posto. Puoi avere più classi per progetto.",
     },
     options: [
       {
         label: { en: 'Create a new project', it: 'Crea un nuovo progetto' },
-        action: { type: 'click', selector: "button:has-text('New Project'), button:has-text('Create')" },
+        action: { type: 'wizard', wizard: 'create-project' },
       },
       {
         label: { en: 'Go back', it: 'Torna indietro' },

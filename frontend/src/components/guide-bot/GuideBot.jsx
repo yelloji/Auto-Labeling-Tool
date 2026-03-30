@@ -66,6 +66,28 @@ function getUploadWizardSteps(lang) {
   return s[lang] || s['en'];
 }
 
+// ---------------------------------------------------------------------------
+// Create Project wizard steps
+// ---------------------------------------------------------------------------
+
+function getCreateProjectWizardSteps(lang) {
+  const s = {
+    en: [
+      { step: 'cp-name',        role: 'bot', text: 'What would you like to name your project?',         inputType: 'text',      placeholder: 'e.g. Cars Detection' },
+      { step: 'cp-description', role: 'bot', text: 'Add a description (optional).',                     inputType: 'text-skip', placeholder: 'e.g. Detecting cars on road' },
+      { step: 'cp-type',        role: 'bot', text: 'What type of project?',                              inputType: 'buttons',   options: ['Object Detection', 'Segmentation'] },
+      { step: 'cp-confirm',     role: 'bot', text: 'All set! Ready to create your project?',             inputType: 'buttons',   options: ['Create Project'] },
+    ],
+    it: [
+      { step: 'cp-name',        role: 'bot', text: 'Come vuoi chiamare il tuo progetto?',               inputType: 'text',      placeholder: 'es. Rilevamento Auto' },
+      { step: 'cp-description', role: 'bot', text: 'Aggiungi una descrizione (opzionale).',             inputType: 'text-skip', placeholder: 'es. Rilevamento auto su strada' },
+      { step: 'cp-type',        role: 'bot', text: 'Che tipo di progetto?',                             inputType: 'buttons',   options: ['Rilevamento Oggetti', 'Segmentazione'] },
+      { step: 'cp-confirm',     role: 'bot', text: 'Tutto pronto! Pronto per creare il progetto?',      inputType: 'buttons',   options: ['Crea Progetto'] },
+    ],
+  };
+  return s[lang] || s['en'];
+}
+
 // Set value on a React-controlled input — bypasses React's synthetic event system
 function setReactInputValue(input, value) {
   const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
@@ -110,6 +132,7 @@ export default function GuideBot() {
 
   // Wizard state
   const [wizardMode,  setWizardMode]  = useState(false);
+  const [wizardType,  setWizardType]  = useState(null);  // 'upload-model' | 'create-project'
   const [conversation, setConversation] = useState([]);  // [{role, text, inputType, options, step}]
   const [wizardStep,  setWizardStep]  = useState(null);
   const [wizardData,  setWizardData]  = useState({});
@@ -122,6 +145,7 @@ export default function GuideBot() {
     setScriptKey(key);
     setHistory([]);
     setWizardMode(false);
+    setWizardType(null);
     setConversation([]);
     setWizardStep(null);
     setWizardData({});
@@ -148,12 +172,12 @@ export default function GuideBot() {
 
   // ---- Start Upload Model Wizard ----
   function startUploadWizard() {
-    // Open the Upload Model modal first
     const btn = Array.from(document.querySelectorAll('button'))
       .find(b => b.textContent.trim().includes('Upload Model'));
     if (btn) setTimeout(() => btn.click(), 100);
 
     setWizardMode(true);
+    setWizardType('upload-model');
     setWizardData({});
     setIsOnnx(false);
     setTextInput('');
@@ -164,11 +188,103 @@ export default function GuideBot() {
     setConversation([{ role: 'bot', text: firstStep.text, inputType: firstStep.inputType, placeholder: firstStep.placeholder, step: 'name' }]);
   }
 
+  // ---- Start Create Project Wizard ----
+  function startCreateProjectWizard() {
+    // Open the New Project modal first
+    const btn = Array.from(document.querySelectorAll('button'))
+      .find(b => b.textContent.trim().includes('New Project'));
+    if (btn) setTimeout(() => btn.click(), 100);
+
+    setWizardMode(true);
+    setWizardType('create-project');
+    setWizardData({});
+    setTextInput('');
+
+    const steps = getCreateProjectWizardSteps(lang);
+    const firstStep = steps.find(s => s.step === 'cp-name');
+    setWizardStep('cp-name');
+    setConversation([{ role: 'bot', text: firstStep.text, inputType: firstStep.inputType, placeholder: firstStep.placeholder, step: 'cp-name' }]);
+  }
+
   // ---- Handle wizard answer ----
   function handleWizardAnswer(value, step) {
-    const steps = getUploadWizardSteps(lang);
     addMessage('user', value);
     setTextInput('');
+
+    // ---- Create Project wizard ----
+    if (wizardType === 'create-project') {
+      const steps = getCreateProjectWizardSteps(lang);
+
+      if (step === 'cp-name') {
+        setTimeout(() => {
+          const input = document.querySelector('.ant-modal input[placeholder="Enter project name"], .ant-modal input');
+          if (input) setReactInputValue(input, value);
+        }, 300);
+        const next = steps.find(s => s.step === 'cp-description');
+        setTimeout(() => { setWizardStep('cp-description'); addMessage('bot', next.text, { inputType: 'text-skip', placeholder: next.placeholder, step: 'cp-description' }); }, 500);
+      }
+
+      else if (step === 'cp-description') {
+        if (value && value !== 'Skip' && value !== 'Salta') {
+          setTimeout(() => {
+            const textarea = document.querySelector('.ant-modal textarea');
+            if (textarea) {
+              const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+              nativeSetter.call(textarea, value);
+              textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          }, 200);
+        }
+        const next = steps.find(s => s.step === 'cp-type');
+        setTimeout(() => { setWizardStep('cp-type'); addMessage('bot', next.text, { inputType: 'buttons', options: next.options, step: 'cp-type' }); }, 400);
+      }
+
+      else if (step === 'cp-type') {
+        const isDetection = value.toLowerCase().includes('detection') || value.toLowerCase().includes('rilevamento');
+        setTimeout(() => {
+          const select = document.querySelector('.ant-modal .ant-select-selector');
+          if (select) {
+            select.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+            select.click();
+            setTimeout(() => {
+              const opts = Array.from(document.querySelectorAll('.ant-select-item-option'));
+              const match = opts.find(o => isDetection
+                ? o.textContent.toLowerCase().includes('object') || o.textContent.toLowerCase().includes('detection')
+                : o.textContent.toLowerCase().includes('segment'));
+              if (match) {
+                match.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                match.click();
+              }
+            }, 800);
+          }
+        }, 300);
+        const next = steps.find(s => s.step === 'cp-confirm');
+        setTimeout(() => { setWizardStep('cp-confirm'); addMessage('bot', next.text, { inputType: 'buttons', options: next.options, step: 'cp-confirm' }); }, 1200);
+      }
+
+      else if (step === 'cp-confirm') {
+        // Click the Create Project button in the modal
+        setTimeout(() => {
+          const btn = Array.from(document.querySelectorAll('.ant-modal button'))
+            .find(b => b.textContent.trim().includes('Create Project') || b.textContent.trim().includes('Crea Progetto'));
+          if (btn) btn.click();
+        }, 200);
+        // Show success message then close
+        const doneText = lang === 'it'
+          ? 'Progetto creato! Apertura del tuo workspace...'
+          : 'Project created! Opening your workspace...';
+        setTimeout(() => {
+          addMessage('bot', doneText, { inputType: 'none', step: 'cp-done' });
+          setWizardStep('cp-done');
+        }, 600);
+        setTimeout(() => { setWizardMode(false); setWizardType(null); }, 2500);
+      }
+
+      return;
+    }
+
+    // ---- Upload Model wizard ----
+    const steps = getUploadWizardSteps(lang);
 
     if (step === 'name') {
       setTimeout(() => {
@@ -336,6 +452,8 @@ export default function GuideBot() {
       setIsOpen(false);
     } else if (action.type === 'wizard' && action.wizard === 'upload-model') {
       startUploadWizard();
+    } else if (action.type === 'wizard' && action.wizard === 'create-project') {
+      startCreateProjectWizard();
     } else if (action.type === 'click') {
       try {
         const hasTextMatch = action.selector.match(/:has-text\(['"](.+?)['"]\)/);
