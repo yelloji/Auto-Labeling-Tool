@@ -446,6 +446,7 @@ export const projectsAPI = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 0, // No timeout — upload size is unpredictable (video frames can be thousands of files)
     });
     return response.data;
   },
@@ -456,6 +457,7 @@ export const projectsAPI = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 0, // No timeout — upload size is unpredictable (video frames can be thousands of files)
     });
     return response.data;
   },

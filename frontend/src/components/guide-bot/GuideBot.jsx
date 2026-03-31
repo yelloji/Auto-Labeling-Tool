@@ -138,8 +138,9 @@ const BUBBLE_TEXT = {
 export default function GuideBot() {
   const location      = useLocation();
   const navigate      = useNavigate();
-  const scrollRef     = useRef(null);
-  const observerRef   = useRef(null);
+  const scrollRef            = useRef(null);
+  const observerRef          = useRef(null);
+  const processingObserverRef = useRef(null);
   const isMainPage    = MAIN_PAGES.includes(location.pathname);
 
   const [isOpen,      setIsOpen]      = useState(false);
@@ -161,6 +162,7 @@ export default function GuideBot() {
     const key = getScriptKey(location.pathname);
     setScriptKey(key);
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+    if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
     setHistory([]);
     setWizardMode(false);
     setWizardType(null);
@@ -336,6 +338,19 @@ export default function GuideBot() {
         observer1.disconnect();
         // Start result observer immediately — catches result whether user clicks page button or bot button
         startExtractionResultObserver();
+        // Start processing observer — if user clicks Extract on the UI, close bot automatically
+        if (processingObserverRef.current) processingObserverRef.current.disconnect();
+        const procObserver = new MutationObserver(() => {
+          const processingBtn = Array.from(document.querySelectorAll('button'))
+            .find(b => b.textContent.includes('Processing'));
+          if (processingBtn) {
+            procObserver.disconnect();
+            processingObserverRef.current = null;
+            setIsOpen(false);
+          }
+        });
+        procObserver.observe(document.body, { childList: true, subtree: true });
+        processingObserverRef.current = procObserver;
         setTimeout(() => {
           setIsOpen(true);
           setConversation([{ role: 'bot', text: explainMsg, inputType: 'buttons', options: [extractLabel], step: 'uv-extract' }]);
@@ -451,6 +466,8 @@ export default function GuideBot() {
     // ---- Upload Video wizard (files and folder share same steps) ----
     if (wizardType === 'upload-video-files' || wizardType === 'upload-video-folder') {
       if (step === 'uv-extract') {
+        // User clicked bot button — stop processing observer (we're about to click ourselves)
+        if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
         // Just click the button — result observer already running from startUploadVideoWizard
         setTimeout(() => {
           const btn = Array.from(document.querySelectorAll('button'))
@@ -826,6 +843,7 @@ export default function GuideBot() {
   // ---- Back button ----
   function handleBack() {
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+    if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
     if (wizardMode) { setWizardMode(false); setWizardType(null); setConversation([]); return; }
     if (history.length === 0) return;
     const prev = history[history.length - 1];

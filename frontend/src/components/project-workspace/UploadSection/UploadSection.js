@@ -730,9 +730,11 @@ const UploadSection = ({ projectId }) => {
 
     setVideoProcessing(true);
 
+    let totalFramesExtracted = 0;
+    let batchNameToUse;
+
     try {
       const totalVideos = videoFile.length;
-      let totalFramesExtracted = 0;
 
       // Processing started — no toast, inline panel shown at end
 
@@ -747,7 +749,6 @@ const UploadSection = ({ projectId }) => {
       }
 
       // Create batch name based on context
-      let batchNameToUse;
       const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
       if (batchName) {
@@ -814,7 +815,20 @@ const UploadSection = ({ projectId }) => {
 
     } catch (error) {
       console.error('Video processing error:', error);
-      message.error(`Failed to process videos: ${error.message}`);
+      // If frames were already extracted and uploaded before the error (e.g. a late network error),
+      // still show the inline result panel so the UI resets and the guide bot can detect completion.
+      if (totalFramesExtracted > 0 && batchNameToUse) {
+        setUploadResult({
+          uploaded: totalFramesExtracted,
+          batchName: batchNameToUse,
+          skipped: 0,
+          duplicateFiles: []
+        });
+        setVideoFile(null);
+        setExtractedFrames([]);
+      } else {
+        message.error(`Failed to process videos: ${error.message}`);
+      }
     } finally {
       setVideoProcessing(false);
     }
