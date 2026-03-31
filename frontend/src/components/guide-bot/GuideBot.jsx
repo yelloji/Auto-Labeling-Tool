@@ -179,8 +179,9 @@ export default function GuideBot() {
       return;
     }
 
-    if (wizardType === 'management-annotating' || wizardType === 'management-completed' ||
-        wizardType === 'management-empty'      || wizardType === 'management-unassigned') {
+    if (wizardType === 'management-overview'   || wizardType === 'management-annotating' ||
+        wizardType === 'management-completed'  || wizardType === 'management-empty'      ||
+        wizardType === 'management-unassigned') {
       handleManagementAnswer(step, value, lang, r, s);
       return;
     }

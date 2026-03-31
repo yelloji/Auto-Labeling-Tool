@@ -1,7 +1,7 @@
 /**
  * managementBot.js — Management page logic for the guide bot.
  *
- * Snapshot-on-open (4 states) + full bidirectional sync:
+ * Snapshot-on-open (5 states) + full bidirectional sync:
  *   Bot button → UI action applied
  *   User UI action → Bot detects and responds
  *
@@ -11,15 +11,21 @@
  *
  * Column layout (left to right):
  *   col[0] = Unassigned   col[1] = Annotating   col[2] = Dataset
+ *
+ * Priority order:
+ *   0. All 3 columns populated → full overview of all columns + ⋮ menu explanation
+ *   1. Annotating has items only → guide to open labeling tool
+ *   2. Dataset has completed items (Annotating empty) → guide to Dataset section
+ *   3. All columns empty → guide to Upload section
+ *   4. Unassigned only → guide to start annotating + observer
  */
 
 import { clickSidebarItem, clickColumnCard } from './botUtils';
 
 // ---------------------------------------------------------------------------
 // Observer: watches for Annotating column to become EMPTY.
-// Called when bot is in Priority 1 state (Annotating has items).
-// When user moves a card OUT of Annotating (e.g. back to Unassigned via card menu),
-// the bot detects the change and updates to the correct new state.
+// Called when bot is in Priority 0 or Priority 1 state.
+// When user moves a card OUT of Annotating (via ⋮ menu), bot updates to new state.
 // ---------------------------------------------------------------------------
 function startManagementAnnotatingEmptyObserver(lang, refs, setters) {
   const { observerRef } = refs;
@@ -35,12 +41,11 @@ function startManagementAnnotatingEmptyObserver(lang, refs, setters) {
       obs.disconnect();
       observerRef.current = null;
 
-      // Re-detect correct state: Unassigned only, or all empty?
+      // Re-detect: Unassigned only, or all empty?
       const unassignedEmpty = Array.from(document.querySelectorAll('div, span, p'))
         .some(el => el.textContent.trim() === 'No unassigned datasets found.');
 
       if (unassignedEmpty) {
-        // All columns empty
         const goUploadLabel = lang === 'it' ? 'Vai a Upload' : 'Go to Upload';
         const msg = lang === 'it'
           ? 'Nessun dataset ancora. Inizia caricando delle immagini — usa il pulsante qui sotto oppure vai alla sezione Upload.'
@@ -49,11 +54,10 @@ function startManagementAnnotatingEmptyObserver(lang, refs, setters) {
         setConversation([{ role: 'bot', text: msg, inputType: 'buttons', options: [goUploadLabel], step: 'mgmt-empty' }]);
         setWizardStep('mgmt-empty');
       } else {
-        // Unassigned has items, start the forward observer for this new state
         startManagementAnnotatingObserver(lang, refs, setters);
         const startAnnotLabel = lang === 'it' ? 'Inizia Annotazione' : 'Start Annotating';
         const msg = lang === 'it'
-          ? 'Il dataset è tornato nella colonna Unassigned. Clicca su una scheda per iniziare il processo di etichettatura — oppure usa il pulsante qui sotto.'
+          ? 'Il dataset è tornato nella colonna Unassigned. Clicca su una scheda per iniziare — oppure usa il pulsante qui sotto.'
           : 'The dataset is back in the Unassigned column. Click any card to begin labeling — or use the button below.';
         setWizardType('management-unassigned');
         setConversation([{ role: 'bot', text: msg, inputType: 'buttons', options: [startAnnotLabel], step: 'mgmt-unassigned' }]);
@@ -68,7 +72,7 @@ function startManagementAnnotatingEmptyObserver(lang, refs, setters) {
 
 // ---------------------------------------------------------------------------
 // Observer: watches for Annotating column to receive a dataset.
-// Called when user is in the Unassigned-only state.
+// Called when bot is in Priority 4 state (Unassigned only).
 // When a card moves from Unassigned → Annotating, bot reopens with Priority 1 message.
 // ---------------------------------------------------------------------------
 function startManagementAnnotatingObserver(lang, refs, setters) {
@@ -78,7 +82,6 @@ function startManagementAnnotatingObserver(lang, refs, setters) {
   if (observerRef.current) observerRef.current.disconnect();
 
   const obs = new MutationObserver(() => {
-    // "Upload and assign images to an annotator." disappears when Annotating has a card
     const annotatingStillEmpty = Array.from(document.querySelectorAll('div, span, p'))
       .some(el => el.textContent.trim() === 'Upload and assign images to an annotator.');
     if (!annotatingStillEmpty) {
@@ -92,13 +95,7 @@ function startManagementAnnotatingObserver(lang, refs, setters) {
         setIsOpen(true);
         setWizardMode(true);
         setWizardType('management-annotating');
-        setConversation([{
-          role: 'bot',
-          text: nextMsg,
-          inputType: 'buttons',
-          options: [openLabelLabel],
-          step: 'mgmt-annotating',
-        }]);
+        setConversation([{ role: 'bot', text: nextMsg, inputType: 'buttons', options: [openLabelLabel], step: 'mgmt-annotating' }]);
         setWizardStep('mgmt-annotating');
       }, 600);
     }
@@ -111,30 +108,61 @@ function startManagementAnnotatingObserver(lang, refs, setters) {
 // ---------------------------------------------------------------------------
 // Snapshot check — reads current Management page DOM state when bot is opened.
 // Returns a wizard state object { wizardType, conversation, step } or null.
-//
-// Priority order:
-//   1. Annotating column has datasets  → guide to open labeling tool
-//   2. Dataset column has completed datasets → guide to Dataset section
-//   3. All columns empty → guide to Upload section
-//   4. Unassigned only → show info + Start Annotating button + start observer
 // ---------------------------------------------------------------------------
 export function checkManagementPageState(lang, refs, setters) {
   // Detect Management tab — "Upload More Images" button is unique to this tab
   const uploadMoreBtn = Array.from(document.querySelectorAll('button'))
     .find(b => b.textContent.trim() === 'Upload More Images');
-  if (!uploadMoreBtn) return null; // Not on Management tab
+  if (!uploadMoreBtn) return null;
 
   const openLabelLabel  = lang === 'it' ? 'Apri Strumento Etichettatura' : 'Open Labeling Tool';
   const goDatasetLabel  = lang === 'it' ? 'Vai a Dataset'  : 'Go to Dataset';
   const goUploadLabel   = lang === 'it' ? 'Vai a Upload'   : 'Go to Upload';
   const startAnnotLabel = lang === 'it' ? 'Inizia Annotazione' : 'Start Annotating';
 
-  // ---- Priority 1: Annotating column has items ----
-  // "Upload and assign images to an annotator." is absent → Annotating has cards
+  // Detect each column's state once — used across all priority checks
   const annotatingEmpty = Array.from(document.querySelectorAll('div, span, p'))
     .some(el => el.textContent.trim() === 'Upload and assign images to an annotator.');
+  const datasetEmpty = Array.from(document.querySelectorAll('div, span, p'))
+    .some(el => el.textContent.trim() === 'No completed datasets found.');
+  const unassignedEmpty = Array.from(document.querySelectorAll('div, span, p'))
+    .some(el => el.textContent.trim() === 'No unassigned datasets found.');
+
+  // ---- Priority 0: All 3 columns have datasets ----
+  // Show a full overview — what each column is, what the ⋮ menu does
+  if (!annotatingEmpty && !datasetEmpty && !unassignedEmpty) {
+    startManagementAnnotatingEmptyObserver(lang, refs, setters);
+
+    const headerMsg = lang === 'it'
+      ? 'Tutte e tre le colonne sono attive. Ecco cosa puoi fare da qui:'
+      : 'All three columns are active. Here is what you can do:';
+
+    const unassignedMsg = lang === 'it'
+      ? 'Unassigned: dataset in attesa. Clicca una scheda per spostarla in Annotating e iniziare l\'etichettatura. Usa il menu ⋮ sulla scheda per Rinominare o Eliminare.'
+      : 'Unassigned: datasets waiting to be labeled. Click a card to move it to Annotating. Use the ⋮ menu on the card to Rename or Delete.';
+
+    const annotatingMsg = lang === 'it'
+      ? 'Annotating: dataset in etichettatura. Clicca una scheda per aprire lo strumento di etichettatura. Usa ⋮ per Rinominare, spostare in Unassigned, o Eliminare.'
+      : 'Annotating: datasets being labeled. Click a card to open the labeling tool. Use ⋮ to Rename, move back to Unassigned, or Delete.';
+
+    const datasetMsg = lang === 'it'
+      ? 'Dataset: dataset completamente etichettati (100%). Usa ⋮ per Rinominare, spostarli in Unassigned o Annotating, o Eliminarli.'
+      : 'Dataset: fully labeled datasets (100% complete). Use ⋮ to Rename, move back to Unassigned or Annotating, or Delete.';
+
+    return {
+      wizardType: 'management-overview',
+      conversation: [
+        { role: 'bot', text: headerMsg,      inputType: 'none',    step: 'mgmt-overview-header' },
+        { role: 'bot', text: unassignedMsg,  inputType: 'none',    step: 'mgmt-overview-unassigned' },
+        { role: 'bot', text: annotatingMsg,  inputType: 'none',    step: 'mgmt-overview-annotating' },
+        { role: 'bot', text: datasetMsg,     inputType: 'buttons', options: [openLabelLabel, goDatasetLabel], step: 'mgmt-overview-action' },
+      ],
+      step: 'mgmt-overview-action',
+    };
+  }
+
+  // ---- Priority 1: Annotating has items (not all 3 populated) ----
   if (!annotatingEmpty) {
-    // Start reverse observer — if user moves card OUT of Annotating, bot updates
     startManagementAnnotatingEmptyObserver(lang, refs, setters);
     const msg = lang === 'it'
       ? 'Hai dataset nella colonna Annotating. Clicca su una scheda per aprire lo strumento di etichettatura — oppure usa il pulsante qui sotto.'
@@ -146,10 +174,7 @@ export function checkManagementPageState(lang, refs, setters) {
     };
   }
 
-  // ---- Priority 2: Dataset column has completed items ----
-  // "No completed datasets found." is absent → Dataset column has cards
-  const datasetEmpty = Array.from(document.querySelectorAll('div, span, p'))
-    .some(el => el.textContent.trim() === 'No completed datasets found.');
+  // ---- Priority 2: Dataset has completed items (Annotating is empty) ----
   if (!datasetEmpty) {
     const msg = lang === 'it'
       ? 'Hai dataset completati pronti. Vai alla sezione Dataset per vedere tutte le immagini etichettate.'
@@ -162,9 +187,6 @@ export function checkManagementPageState(lang, refs, setters) {
   }
 
   // ---- Priority 3: All columns empty ----
-  // "No unassigned datasets found." is present (+ annotating empty from priority 1 check)
-  const unassignedEmpty = Array.from(document.querySelectorAll('div, span, p'))
-    .some(el => el.textContent.trim() === 'No unassigned datasets found.');
   if (unassignedEmpty) {
     const msg = lang === 'it'
       ? 'Nessun dataset ancora. Inizia caricando delle immagini — usa il pulsante qui sotto oppure vai alla sezione Upload.'
@@ -177,10 +199,8 @@ export function checkManagementPageState(lang, refs, setters) {
   }
 
   // ---- Priority 4: Unassigned only ----
-  // Datasets exist in Unassigned but Annotating is empty.
-  // Start observer so bot reacts if user clicks a card directly in the UI.
+  // Start forward observer — if user clicks a card in UI, bot detects it and updates
   startManagementAnnotatingObserver(lang, refs, setters);
-
   const msg = lang === 'it'
     ? 'Hai dataset nella colonna Unassigned. Clicca su una scheda per spostarla in Annotating e iniziare il processo di etichettatura — oppure usa il pulsante qui sotto.'
     : 'You have datasets in the Unassigned column. Click any card to move it to Annotating and begin labeling — or use the button below.';
@@ -192,7 +212,7 @@ export function checkManagementPageState(lang, refs, setters) {
 }
 
 // ---------------------------------------------------------------------------
-// Handle wizard button clicks for management states
+// Handle wizard button clicks for all management states
 // ---------------------------------------------------------------------------
 export function handleManagementAnswer(step, value, lang, refs, setters) {
   const { observerRef } = refs;
@@ -203,6 +223,18 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
     setWizardType(null);
     setConversation([]);
     setIsOpen(false);
+  }
+
+  // Overview state (all 3 populated) — two action buttons
+  if (step === 'mgmt-overview-action') {
+    const isLabel = value.includes('Labeling Tool') || value.includes('Etichettatura');
+    if (isLabel) {
+      setTimeout(() => clickColumnCard(1), 200); // click first card in Annotating column
+    } else {
+      setTimeout(() => clickSidebarItem('Dataset'), 200);
+    }
+    closeBot();
+    return;
   }
 
   // Annotating state — click first card in Annotating column (col index 1)
@@ -227,7 +259,7 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
   }
 
   // Unassigned state — click first card in Unassigned column (col index 0)
-  // Stop the observer first (we are acting, no need to watch)
+  // Disconnect observer first (we are acting ourselves)
   if (step === 'mgmt-unassigned') {
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
     setTimeout(() => clickColumnCard(0), 200);

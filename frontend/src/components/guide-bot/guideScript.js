@@ -230,8 +230,8 @@ const guideScript = {
 
   'management-columns-explain': {
     message: {
-      en: 'Unassigned — freshly uploaded images, not yet being labeled. Annotating — click a card here to open the labeling tool. Dataset — 100% labeled, ready to use for training.',
-      it: 'Unassigned — immagini caricate di recente, non ancora in etichettatura. Annotating — clicca una scheda qui per aprire lo strumento di etichettatura. Dataset — 100% etichettato, pronto per il training.',
+      en: 'Unassigned: freshly uploaded, not yet labeled — click a card to move it to Annotating. Annotating: click a card to open the labeling tool. Dataset: 100% labeled and ready. Each card has a ⋮ menu for Rename, Move, and Delete actions.',
+      it: 'Unassigned: caricate di recente, non ancora etichettate — clicca una scheda per spostarla in Annotating. Annotating: clicca una scheda per aprire lo strumento di etichettatura. Dataset: 100% etichettato e pronto. Ogni scheda ha un menu ⋮ per Rinominare, Spostare ed Eliminare.',
     },
     options: [
       {
