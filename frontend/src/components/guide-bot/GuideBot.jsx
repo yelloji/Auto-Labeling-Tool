@@ -38,7 +38,7 @@ function getScriptKey(pathname) {
     return '/projects/:id/workspace';
   }
   if (pathname.startsWith('/annotate-progress/')) return '/annotate-progress';
-  if (pathname.startsWith('/annotate-launcher/')) return 'workspace-management';
+  if (pathname.startsWith('/annotate-launcher/')) return '/annotate-launcher';
   if (pathname.startsWith('/annotate/')) return '/annotate';
   return 'fallback';
 }

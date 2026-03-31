@@ -16,6 +16,57 @@
 import { clickSidebarItem, clickColumnCard } from './botUtils';
 
 // ---------------------------------------------------------------------------
+// Observer: watches for Annotating column to become EMPTY.
+// Called when bot is in Priority 1 state (Annotating has items).
+// When user moves a card OUT of Annotating (e.g. back to Unassigned via card menu),
+// the bot detects the change and updates to the correct new state.
+// ---------------------------------------------------------------------------
+function startManagementAnnotatingEmptyObserver(lang, refs, setters) {
+  const { observerRef } = refs;
+  const { setWizardType, setConversation, setWizardStep } = setters;
+
+  if (observerRef.current) observerRef.current.disconnect();
+
+  const obs = new MutationObserver(() => {
+    // "Upload and assign images to an annotator." appears when Annotating becomes empty
+    const annotatingNowEmpty = Array.from(document.querySelectorAll('div, span, p'))
+      .some(el => el.textContent.trim() === 'Upload and assign images to an annotator.');
+    if (annotatingNowEmpty) {
+      obs.disconnect();
+      observerRef.current = null;
+
+      // Re-detect correct state: Unassigned only, or all empty?
+      const unassignedEmpty = Array.from(document.querySelectorAll('div, span, p'))
+        .some(el => el.textContent.trim() === 'No unassigned datasets found.');
+
+      if (unassignedEmpty) {
+        // All columns empty
+        const goUploadLabel = lang === 'it' ? 'Vai a Upload' : 'Go to Upload';
+        const msg = lang === 'it'
+          ? 'Nessun dataset ancora. Inizia caricando delle immagini — usa il pulsante qui sotto oppure vai alla sezione Upload.'
+          : 'No datasets yet. Start by uploading images — use the button below or go to the Upload section.';
+        setWizardType('management-empty');
+        setConversation([{ role: 'bot', text: msg, inputType: 'buttons', options: [goUploadLabel], step: 'mgmt-empty' }]);
+        setWizardStep('mgmt-empty');
+      } else {
+        // Unassigned has items, start the forward observer for this new state
+        startManagementAnnotatingObserver(lang, refs, setters);
+        const startAnnotLabel = lang === 'it' ? 'Inizia Annotazione' : 'Start Annotating';
+        const msg = lang === 'it'
+          ? 'Il dataset è tornato nella colonna Unassigned. Clicca su una scheda per iniziare il processo di etichettatura — oppure usa il pulsante qui sotto.'
+          : 'The dataset is back in the Unassigned column. Click any card to begin labeling — or use the button below.';
+        setWizardType('management-unassigned');
+        setConversation([{ role: 'bot', text: msg, inputType: 'buttons', options: [startAnnotLabel], step: 'mgmt-unassigned' }]);
+        setWizardStep('mgmt-unassigned');
+      }
+    }
+  });
+
+  obs.observe(document.body, { childList: true, subtree: true });
+  observerRef.current = obs;
+}
+
+// ---------------------------------------------------------------------------
 // Observer: watches for Annotating column to receive a dataset.
 // Called when user is in the Unassigned-only state.
 // When a card moves from Unassigned → Annotating, bot reopens with Priority 1 message.
@@ -83,6 +134,8 @@ export function checkManagementPageState(lang, refs, setters) {
   const annotatingEmpty = Array.from(document.querySelectorAll('div, span, p'))
     .some(el => el.textContent.trim() === 'Upload and assign images to an annotator.');
   if (!annotatingEmpty) {
+    // Start reverse observer — if user moves card OUT of Annotating, bot updates
+    startManagementAnnotatingEmptyObserver(lang, refs, setters);
     const msg = lang === 'it'
       ? 'Hai dataset nella colonna Annotating. Clicca su una scheda per aprire lo strumento di etichettatura — oppure usa il pulsante qui sotto.'
       : 'You have datasets in the Annotating column. Click any card to open the labeling tool — or use the button below.';

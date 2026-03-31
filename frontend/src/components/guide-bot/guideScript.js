@@ -255,6 +255,52 @@ const guideScript = {
   },
 
   // -------------------------------------------------------------------------
+  // ANNOTATE LAUNCHER  /annotate-launcher/:datasetId
+  // -------------------------------------------------------------------------
+  '/annotate-launcher': {
+    message: {
+      en: 'Choose how you want to label this dataset. Manual Labeling gives you full control — draw boxes yourself. Auto Labeling uses AI to detect objects automatically, then you review and correct.',
+      it: 'Scegli come vuoi etichettare questo dataset. Etichettatura Manuale ti dà pieno controllo — disegni i riquadri tu stesso. Etichettatura Automatica usa l\'AI per rilevare gli oggetti, poi rivedi e correggi.',
+    },
+    options: [
+      {
+        label: { en: 'What is Manual Labeling?', it: "Cos'è l'Etichettatura Manuale?" },
+        action: { type: 'message', key: 'annotate-launcher-manual-explain' },
+      },
+      {
+        label: { en: 'What is Auto Labeling?', it: "Cos'è l'Etichettatura Automatica?" },
+        action: { type: 'message', key: 'annotate-launcher-auto-explain' },
+      },
+    ],
+  },
+
+  'annotate-launcher-manual-explain': {
+    message: {
+      en: 'Manual Labeling opens a canvas where you draw bounding boxes around objects yourself. Best for precise work, small datasets, or when AI accuracy is not enough yet.',
+      it: "L'Etichettatura Manuale apre un canvas dove disegni i riquadri attorno agli oggetti tu stesso. Ideale per lavori precisi, dataset piccoli, o quando l'accuratezza AI non è ancora sufficiente.",
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/annotate-launcher' },
+      },
+    ],
+  },
+
+  'annotate-launcher-auto-explain': {
+    message: {
+      en: 'Auto Labeling uses an AI model to detect and label objects automatically. It is fast for large datasets — you just review and fix any mistakes after.',
+      it: "L'Etichettatura Automatica usa un modello AI per rilevare e etichettare gli oggetti automaticamente. È veloce per dataset grandi — poi rivedi e correggi eventuali errori.",
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/annotate-launcher' },
+      },
+    ],
+  },
+
+  // -------------------------------------------------------------------------
   // ANNOTATE  /annotate/:datasetId/manual
   // -------------------------------------------------------------------------
   '/annotate': {
