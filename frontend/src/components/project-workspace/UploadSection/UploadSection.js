@@ -734,7 +734,7 @@ const UploadSection = ({ projectId }) => {
       const totalVideos = videoFile.length;
       let totalFramesExtracted = 0;
 
-      message.info(`Processing ${totalVideos} video file(s)...`);
+      // Processing started — no toast, inline panel shown at end
 
       // Determine if videos are from a folder (check if first video has webkitRelativePath)
       const isFromFolder = videoFile[0].webkitRelativePath && videoFile[0].webkitRelativePath.includes('/');
@@ -774,7 +774,7 @@ const UploadSection = ({ projectId }) => {
         const currentVideo = videoFile[i];
         const videoNumber = i + 1;
 
-        message.info(`Extracting frames from video ${videoNumber}/${totalVideos}: ${currentVideo.name}`);
+        // No per-video toast — final result shown in inline panel
 
         // Extract frames from current video with continuous numbering
         const frames = await extractFramesFromVideo(currentVideo, selectedFPS, selectedImageFormat, globalFrameIndex);
@@ -788,17 +788,22 @@ const UploadSection = ({ projectId }) => {
         globalFrameIndex += frames.length;
         totalFramesExtracted += frames.length;
 
-        message.success(`✓ Processed ${currentVideo.name}: ${frames.length} frames extracted`);
+        // No per-video success toast
       }
 
       // Upload all frames at once with continuous numbering
       if (allFrames.length > 0) {
-        message.info(`Uploading ${allFrames.length} total frames with continuous numbering to "${batchNameToUse}"...`);
+        // No upload-start toast — inline panel shown after completion
         await uploadMultipleFiles(allFrames, batchNameToUse);
-        message.success(`✓ All frames uploaded to "${batchNameToUse}"`);
       }
 
-      message.success(`Successfully processed ${totalVideos} video(s) and uploaded ${totalFramesExtracted} total frames!`);
+      // Show inline result panel (same as image upload)
+      setUploadResult({
+        uploaded: totalFramesExtracted,
+        batchName: batchNameToUse,
+        skipped: 0,
+        duplicateFiles: []
+      });
 
       // Refresh recent images
       loadRecentImages();

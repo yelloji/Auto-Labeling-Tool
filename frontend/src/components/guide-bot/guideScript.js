@@ -195,11 +195,11 @@ const guideScript = {
       },
       {
         label: { en: 'Pick video files (frames will be extracted)', it: 'Seleziona file video (i frame verranno estratti)' },
-        action: { type: 'click', selector: "button:has-text('Select Video File(s)')" },
+        action: { type: 'wizard', wizard: 'upload-video-files' },
       },
       {
         label: { en: 'Pick a folder of videos', it: 'Seleziona una cartella di video' },
-        action: { type: 'click', selector: "button:has-text('Select Video Folder')" },
+        action: { type: 'wizard', wizard: 'upload-video-folder' },
       },
       {
         label: { en: 'Go back', it: 'Torna indietro' },

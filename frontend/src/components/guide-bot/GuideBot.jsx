@@ -286,6 +286,78 @@ export default function GuideBot() {
     setWizardStep('ufl-start');
   }
 
+  // ---- Start Upload Video Wizard (files or folder) ----
+  // Closes bot → user picks video → observer detects "Selected Video:" → bot reopens
+  // with explanation + Extract Frames button → clicks it → shows result.
+  function startUploadVideoWizard(mode) {
+    const wizType = mode === 'folder' ? 'upload-video-folder' : 'upload-video-files';
+    setWizardMode(true);
+    setWizardType(wizType);
+    setConversation([]);
+
+    const explainMsg = lang === 'it'
+      ? 'Il tuo video è selezionato. Scegli quanti frame estrarre — puoi impostare frame al secondo (FPS) oppure un totale per video. Per la maggior parte dei casi, 2-5 frame al secondo danno buona copertura. Formato: JPEG è più piccolo, PNG ha qualità migliore. Quando sei pronto, clicca qui sotto.'
+      : 'Your video is selected. Choose how many frames to extract — either per second (FPS) or as a total per video. For most cases, 2 to 5 frames per second gives good coverage. Format: JPEG is smaller, PNG has better quality. When you are ready, click below.';
+    const extractLabel = lang === 'it' ? 'Estrai Frame' : 'Extract Frames';
+
+    // Helper — starts result observer.
+    // Watches ONLY for the inline upload result panel ("uploaded to") which appears
+    // once after ALL videos are fully processed and uploaded — not per-video toasts.
+    function startExtractionResultObserver() {
+      if (observerRef.current) observerRef.current.disconnect();
+      const observer2 = new MutationObserver(() => {
+        const uploadResultEl = Array.from(document.querySelectorAll('div, p, span'))
+          .filter(el => el.textContent.includes('uploaded to') && el.textContent.length < 200)
+          .sort((a, b) => a.textContent.length - b.textContent.length)[0];
+        if (uploadResultEl) {
+          observer2.disconnect();
+          observerRef.current = null;
+          const resultMsg = lang === 'it'
+            ? 'Estrazione completata. Vai su Management per vedere le tue immagini e iniziare ad etichettare.'
+            : 'Extraction complete. Go to Management to see your images and start labeling.';
+          const goLabel = lang === 'it' ? 'Vai a Management' : 'Go to Management';
+          setTimeout(() => {
+            setIsOpen(true);
+            setConversation([{ role: 'bot', text: resultMsg, inputType: 'buttons', options: [goLabel], step: 'uv-done' }]);
+            setWizardStep('uv-done');
+          }, 600);
+        }
+      });
+      observer2.observe(document.body, { childList: true, subtree: true });
+      observerRef.current = observer2;
+    }
+
+    // Observer 1 — watch for video selected (extraction settings panel appears)
+    if (observerRef.current) observerRef.current.disconnect();
+    const observer1 = new MutationObserver(() => {
+      const found = Array.from(document.querySelectorAll('div, span, p'))
+        .some(el => el.textContent.includes('Selected Video:') || (el.textContent.includes('Selected:') && el.textContent.includes('video')));
+      if (found) {
+        observer1.disconnect();
+        // Start result observer immediately — catches result whether user clicks page button or bot button
+        startExtractionResultObserver();
+        setTimeout(() => {
+          setIsOpen(true);
+          setConversation([{ role: 'bot', text: explainMsg, inputType: 'buttons', options: [extractLabel], step: 'uv-extract' }]);
+          setWizardStep('uv-extract');
+        }, 400);
+      }
+    });
+    observer1.observe(document.body, { childList: true, subtree: true });
+    observerRef.current = observer1;
+
+    // Click the correct button
+    setTimeout(() => {
+      const btnText = mode === 'folder' ? 'Select Video Folder' : 'Select Video File(s)';
+      const btn = Array.from(document.querySelectorAll('button'))
+        .find(b => b.textContent.trim().includes(btnText));
+      if (btn) btn.click();
+    }, 200);
+
+    // Close bot so file/folder picker is usable
+    setTimeout(() => setIsOpen(false), 400);
+  }
+
   // ---- Start Upload Files Wizard ----
   function startUploadFilesWizard() {
     setWizardMode(true);
@@ -373,6 +445,35 @@ export default function GuideBot() {
         setTimeout(() => { setWizardMode(false); setWizardType(null); }, 2500);
       }
 
+      return;
+    }
+
+    // ---- Upload Video wizard (files and folder share same steps) ----
+    if (wizardType === 'upload-video-files' || wizardType === 'upload-video-folder') {
+      if (step === 'uv-extract') {
+        // Just click the button — result observer already running from startUploadVideoWizard
+        setTimeout(() => {
+          const btn = Array.from(document.querySelectorAll('button'))
+            .find(b => b.textContent.trim().includes('Extract Frames'));
+          if (btn) btn.click();
+        }, 200);
+        const waitMsg = lang === 'it'
+          ? 'Estrazione in corso... Ti mostrerò il risultato qui.'
+          : 'Extracting frames... I will show you the result here.';
+        addMessage('bot', waitMsg, { inputType: 'none', step: 'uv-waiting' });
+        setWizardStep('uv-waiting');
+      }
+
+      else if (step === 'uv-done') {
+        setTimeout(() => {
+          const mgmt = Array.from(document.querySelectorAll('li, a, span'))
+            .find(el => el.textContent.trim() === 'Management');
+          if (mgmt) mgmt.click();
+        }, 200);
+        setWizardMode(false);
+        setWizardType(null);
+        setIsOpen(false);
+      }
       return;
     }
 
@@ -697,6 +798,10 @@ export default function GuideBot() {
       startUploadFolderWizard();
     } else if (action.type === 'wizard' && action.wizard === 'upload-folder-labels') {
       startUploadFolderLabelsWizard();
+    } else if (action.type === 'wizard' && action.wizard === 'upload-video-files') {
+      startUploadVideoWizard('files');
+    } else if (action.type === 'wizard' && action.wizard === 'upload-video-folder') {
+      startUploadVideoWizard('folder');
     } else if (action.type === 'click') {
       try {
         const hasTextMatch = action.selector.match(/:has-text\(['"](.+?)['"]\)/);
