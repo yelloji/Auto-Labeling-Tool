@@ -32,7 +32,8 @@ import {
   Modal,
   Tag,
   Collapse,
-  Alert
+  Alert,
+  Switch
 } from 'antd';
 import {
   UploadOutlined,
@@ -83,6 +84,7 @@ const UploadSection = ({ projectId }) => {
   const [selectedImageFormat, setSelectedImageFormat] = useState('jpeg'); // Selected output image format
   const [videoProcessing, setVideoProcessing] = useState(false); // Video processing status
   const [extractedFrames, setExtractedFrames] = useState([]); // Extracted image frames
+  const [allowDuplicates, setAllowDuplicates] = useState(false); // Allow duplicate frames (default OFF = dedup ON)
 
   // ==================== REFS ====================
   const fileInputRef = useRef(null); // Reference to hidden file input element
@@ -349,7 +351,7 @@ const UploadSection = ({ projectId }) => {
    * @param {string} batchNameToUse - The batch name for categorization
    * @returns {Promise} Upload result from API
    */
-  const uploadMultipleFiles = async (files, batchNameToUse) => {
+  const uploadMultipleFiles = async (files, batchNameToUse, skipDedup = false) => {
     // Validate files array
     if (!files || files.length === 0) {
       logError('app.frontend.validation', 'upload_multiple_files_invalid', 'Multiple files upload validation failed: invalid files array', {
@@ -380,6 +382,7 @@ const UploadSection = ({ projectId }) => {
     });
 
     formData.append('batch_name', batchNameToUse);
+    formData.append('allow_duplicates', skipDedup ? 'true' : 'false');
 
     // Add dataset IDs if tags are selected
     if (tags.length > 0) {
@@ -792,10 +795,13 @@ const UploadSection = ({ projectId }) => {
         // No per-video success toast
       }
 
-      // Upload all frames at once with continuous numbering
+      // Upload frames in chunks — avoids memory and request size limits for high-FPS / multi-video batches
+      const CHUNK_SIZE = 200;
       if (allFrames.length > 0) {
-        // No upload-start toast — inline panel shown after completion
-        await uploadMultipleFiles(allFrames, batchNameToUse);
+        for (let i = 0; i < allFrames.length; i += CHUNK_SIZE) {
+          const chunk = allFrames.slice(i, i + CHUNK_SIZE);
+          await uploadMultipleFiles(chunk, batchNameToUse, allowDuplicates);
+        }
       }
 
       // Show inline result panel (same as image upload)
@@ -1124,6 +1130,19 @@ const UploadSection = ({ projectId }) => {
                   <Option value="png">PNG (.png) - Lossless, larger size</Option>
                   <Option value="webp">WebP (.webp) - Modern, efficient</Option>
                 </Select>
+              </Col>
+            </Row>
+
+            <Row gutter={['1rem', '1rem']} style={{ marginBottom: '0.75rem' }}>
+              <Col span={24}>
+                <Space>
+                  <Switch
+                    checked={allowDuplicates}
+                    onChange={setAllowDuplicates}
+                    size="small"
+                  />
+                  <Text style={{ fontSize: '0.875rem' }}>Allow duplicate frames</Text>
+                </Space>
               </Col>
             </Row>
 

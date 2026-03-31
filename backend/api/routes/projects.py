@@ -2708,6 +2708,7 @@ async def upload_multiple_images_to_project(
     files: List[UploadFile] = File(...),
     batch_name: str = Form(None),
     dataset_ids: str = Form("[]"),
+    allow_duplicates: str = Form("false"),
     db: Session = Depends(get_db)
 ):
     """Upload multiple images to a project"""
@@ -2937,20 +2938,23 @@ async def upload_multiple_images_to_project(
                     continue
 
                 # Duplicate check — skip if same MD5 already exists in this project
+                # allow_duplicates flag bypasses this check (used for video frame uploads)
+                skip_dedup = allow_duplicates.lower() == 'true'
                 md5 = hashlib.md5(contents).hexdigest()
-                existing = (
-                    db.query(ImageModel)
-                    .join(DatasetModel, ImageModel.dataset_id == DatasetModel.id)
-                    .filter(
-                        DatasetModel.project_id == project_id,
-                        ImageModel.image_hash_md5 == md5
+                if not skip_dedup:
+                    existing = (
+                        db.query(ImageModel)
+                        .join(DatasetModel, ImageModel.dataset_id == DatasetModel.id)
+                        .filter(
+                            DatasetModel.project_id == project_id,
+                            ImageModel.image_hash_md5 == md5
+                        )
+                        .first()
                     )
-                    .first()
-                )
-                if existing:
-                    results['skipped_duplicates'] += 1
-                    results['duplicate_files'].append(Path(file.filename).name)
-                    continue
+                    if existing:
+                        results['skipped_duplicates'] += 1
+                        results['duplicate_files'].append(Path(file.filename).name)
+                        continue
 
                 # Save file
                 logger.debug("operations.images", f"Saving image file to storage", "image_save_start", {

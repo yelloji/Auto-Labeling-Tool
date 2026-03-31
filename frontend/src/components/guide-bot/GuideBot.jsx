@@ -298,8 +298,11 @@ export default function GuideBot() {
     setConversation([]);
 
     const explainMsg = lang === 'it'
-      ? 'Il tuo video è selezionato. Scegli quanti frame estrarre — puoi impostare frame al secondo (FPS) oppure un totale per video. Per la maggior parte dei casi, 2-5 frame al secondo danno buona copertura. Formato: JPEG è più piccolo, PNG ha qualità migliore. Quando sei pronto, clicca qui sotto.'
-      : 'Your video is selected. Choose how many frames to extract — either per second (FPS) or as a total per video. For most cases, 2 to 5 frames per second gives good coverage. Format: JPEG is smaller, PNG has better quality. When you are ready, click below.';
+      ? 'Il tuo video è selezionato. Scegli quanti frame estrarre — per la maggior parte dei casi, 2-5 frame al secondo danno buona copertura. Formato: JPEG è più piccolo, PNG ha qualità migliore.'
+      : 'Your video is selected. Choose how many frames to extract — for most cases, 2 to 5 frames per second gives good coverage. Format: JPEG is smaller, PNG has better quality.';
+    const toggleMsg = lang === 'it'
+      ? 'Nota il toggle "Allow duplicate frames" sotto i menu a discesa. Di default è SPENTO — i frame identici vengono saltati automaticamente (evita di etichettare la stessa immagine due volte). Attivalo SOLO se vuoi salvare ogni singolo frame, anche quelli identici.'
+      : 'Notice the "Allow duplicate frames" toggle below the dropdowns. By default it is OFF — identical frames are skipped automatically (saves you labeling the same image twice). Turn it ON only if you want every single frame stored, even if they look identical.';
     const extractLabel = lang === 'it' ? 'Estrai Frame' : 'Extract Frames';
 
     // Helper — starts result observer.
@@ -353,7 +356,10 @@ export default function GuideBot() {
         processingObserverRef.current = procObserver;
         setTimeout(() => {
           setIsOpen(true);
-          setConversation([{ role: 'bot', text: explainMsg, inputType: 'buttons', options: [extractLabel], step: 'uv-extract' }]);
+          setConversation([
+            { role: 'bot', text: explainMsg, inputType: 'none', step: 'uv-fps-info' },
+            { role: 'bot', text: toggleMsg, inputType: 'buttons', options: [extractLabel], step: 'uv-extract' }
+          ]);
           setWizardStep('uv-extract');
         }, 400);
       }
