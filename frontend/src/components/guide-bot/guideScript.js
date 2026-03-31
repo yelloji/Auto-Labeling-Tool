@@ -213,13 +213,13 @@ const guideScript = {
   // -------------------------------------------------------------------------
   'workspace-management': {
     message: {
-      en: 'Here you can see all your datasets. What would you like to do?',
-      it: 'Qui puoi vedere tutti i tuoi dataset. Cosa vorresti fare?',
+      en: 'You have datasets in the Unassigned column. Click any card to move it to Annotating — then click it again in the Annotating column to open the labeling tool.',
+      it: 'Hai dataset nella colonna Unassigned. Clicca su una scheda per spostarla in Annotating — poi clicca di nuovo nella colonna Annotating per aprire lo strumento di etichettatura.',
     },
     options: [
       {
-        label: { en: 'Start labeling images', it: 'Inizia a etichettare le immagini' },
-        action: { type: 'message', key: 'management-annotate-hint' },
+        label: { en: 'What are the 3 columns?', it: 'Cosa sono le 3 colonne?' },
+        action: { type: 'message', key: 'management-columns-explain' },
       },
       {
         label: { en: 'What is a dataset?', it: "Cos'è un dataset?" },
@@ -228,10 +228,10 @@ const guideScript = {
     ],
   },
 
-  'management-annotate-hint': {
+  'management-columns-explain': {
     message: {
-      en: 'Click the "Annotate" button on any dataset card to start labeling the images inside it.',
-      it: 'Clicca il pulsante "Annotate" su qualsiasi scheda dataset per iniziare a etichettare le immagini al suo interno.',
+      en: 'Unassigned — freshly uploaded images, not yet being labeled. Annotating — click a card here to open the labeling tool. Dataset — 100% labeled, ready to use for training.',
+      it: 'Unassigned — immagini caricate di recente, non ancora in etichettatura. Annotating — clicca una scheda qui per aprire lo strumento di etichettatura. Dataset — 100% etichettato, pronto per il training.',
     },
     options: [
       {
@@ -243,8 +243,8 @@ const guideScript = {
 
   'management-explain': {
     message: {
-      en: 'A dataset is a batch of images grouped together. When you upload images, they are organized into datasets automatically.',
-      it: 'Un dataset è un gruppo di immagini raggruppate insieme. Quando carichi immagini, vengono organizzate in dataset automaticamente.',
+      en: 'A dataset is a batch of images grouped together. Each time you upload images, they are stored as a named dataset so you can track and manage them separately.',
+      it: 'Un dataset è un gruppo di immagini raggruppate insieme. Ogni volta che carichi immagini, vengono salvate come dataset con un nome, così puoi tracciarle e gestirle separatamente.',
     },
     options: [
       {
