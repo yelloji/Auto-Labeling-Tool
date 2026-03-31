@@ -288,6 +288,32 @@ export default function GuideBot() {
     setWizardStep('ufl-start');
   }
 
+  // ---- Extraction result observer (component level — used by wizard and snapshot check) ----
+  // Watches for inline upload result panel ("uploaded to") — fires once after ALL videos done.
+  function startExtractionResultObserver() {
+    if (observerRef.current) observerRef.current.disconnect();
+    const observer2 = new MutationObserver(() => {
+      const uploadResultEl = Array.from(document.querySelectorAll('div, p, span'))
+        .filter(el => el.textContent.includes('uploaded to') && el.textContent.length < 200)
+        .sort((a, b) => a.textContent.length - b.textContent.length)[0];
+      if (uploadResultEl) {
+        observer2.disconnect();
+        observerRef.current = null;
+        const resultMsg = lang === 'it'
+          ? 'Estrazione completata. Vai su Management per vedere le tue immagini e iniziare ad etichettare.'
+          : 'Extraction complete. Go to Management to see your images and start labeling.';
+        const goLabel = lang === 'it' ? 'Vai a Management' : 'Go to Management';
+        setTimeout(() => {
+          setIsOpen(true);
+          setConversation([{ role: 'bot', text: resultMsg, inputType: 'buttons', options: [goLabel], step: 'uv-done' }]);
+          setWizardStep('uv-done');
+        }, 600);
+      }
+    });
+    observer2.observe(document.body, { childList: true, subtree: true });
+    observerRef.current = observer2;
+  }
+
   // ---- Start Upload Video Wizard (files or folder) ----
   // Closes bot → user picks video → observer detects "Selected Video:" → bot reopens
   // with explanation + Extract Frames button → clicks it → shows result.
@@ -304,33 +330,6 @@ export default function GuideBot() {
       ? 'Nota il toggle "Allow duplicate frames" sotto i menu a discesa. Di default è SPENTO — i frame identici vengono saltati automaticamente (evita di etichettare la stessa immagine due volte). Attivalo SOLO se vuoi salvare ogni singolo frame, anche quelli identici.'
       : 'Notice the "Allow duplicate frames" toggle below the dropdowns. By default it is OFF — identical frames are skipped automatically (saves you labeling the same image twice). Turn it ON only if you want every single frame stored, even if they look identical.';
     const extractLabel = lang === 'it' ? 'Estrai Frame' : 'Extract Frames';
-
-    // Helper — starts result observer.
-    // Watches ONLY for the inline upload result panel ("uploaded to") which appears
-    // once after ALL videos are fully processed and uploaded — not per-video toasts.
-    function startExtractionResultObserver() {
-      if (observerRef.current) observerRef.current.disconnect();
-      const observer2 = new MutationObserver(() => {
-        const uploadResultEl = Array.from(document.querySelectorAll('div, p, span'))
-          .filter(el => el.textContent.includes('uploaded to') && el.textContent.length < 200)
-          .sort((a, b) => a.textContent.length - b.textContent.length)[0];
-        if (uploadResultEl) {
-          observer2.disconnect();
-          observerRef.current = null;
-          const resultMsg = lang === 'it'
-            ? 'Estrazione completata. Vai su Management per vedere le tue immagini e iniziare ad etichettare.'
-            : 'Extraction complete. Go to Management to see your images and start labeling.';
-          const goLabel = lang === 'it' ? 'Vai a Management' : 'Go to Management';
-          setTimeout(() => {
-            setIsOpen(true);
-            setConversation([{ role: 'bot', text: resultMsg, inputType: 'buttons', options: [goLabel], step: 'uv-done' }]);
-            setWizardStep('uv-done');
-          }, 600);
-        }
-      });
-      observer2.observe(document.body, { childList: true, subtree: true });
-      observerRef.current = observer2;
-    }
 
     // Observer 1 — watch for video selected (extraction settings panel appears)
     if (observerRef.current) observerRef.current.disconnect();
@@ -857,6 +856,91 @@ export default function GuideBot() {
     setScriptKey(prev);
   }
 
+  // ---- Snapshot check for Upload page — reads current DOM state when bot is opened ----
+  function checkUploadPageState() {
+    const explainMsg = lang === 'it'
+      ? 'Vedo che hai già selezionato un video. Scegli FPS e formato, poi clicca Estrai Frame.'
+      : 'I can see you have already selected a video. Choose your FPS and format, then click Extract Frames.';
+    const toggleMsg = lang === 'it'
+      ? 'Nota il toggle "Allow duplicate frames" sotto i menu a discesa. Di default è SPENTO — i frame identici vengono saltati automaticamente. Attivalo SOLO se vuoi salvare ogni singolo frame, anche quelli identici.'
+      : 'Notice the "Allow duplicate frames" toggle below the dropdowns. By default it is OFF — identical frames are skipped automatically. Turn it ON only if you want every single frame stored, even if they look identical.';
+    const extractLabel  = lang === 'it' ? 'Estrai Frame'       : 'Extract Frames';
+    const goLabel       = lang === 'it' ? 'Vai a Management'   : 'Go to Management';
+
+    // State 1: Video is currently processing
+    const processingBtn = Array.from(document.querySelectorAll('button'))
+      .find(b => b.textContent.includes('Processing'));
+    if (processingBtn) {
+      const msg = lang === 'it'
+        ? 'Il tuo video è in elaborazione. Aspetta — ti avviserò quando è pronto.'
+        : 'Your video is being processed. Please wait — I will let you know when it is done.';
+      return { wizardType: 'upload-video-files', conversation: [{ role: 'bot', text: msg, inputType: 'none', step: 'uv-waiting' }], step: 'uv-waiting' };
+    }
+
+    // State 2: Upload result panel is visible
+    const uploadResultEl = Array.from(document.querySelectorAll('div, p, span'))
+      .filter(el => el.textContent.includes('uploaded to') && el.textContent.length < 200)
+      .sort((a, b) => a.textContent.length - b.textContent.length)[0];
+    if (uploadResultEl) {
+      const msg = lang === 'it'
+        ? 'Upload completato! Vai su Management per vedere le tue immagini e iniziare ad etichettare.'
+        : 'Upload complete! Go to Management to see your images and start labeling.';
+      return { wizardType: 'upload-video-files', conversation: [{ role: 'bot', text: msg, inputType: 'buttons', options: [goLabel], step: 'uv-done' }], step: 'uv-done' };
+    }
+
+    // State 3: Import complete panel is visible
+    const importEl = Array.from(document.querySelectorAll('div, p, span'))
+      .filter(el => el.textContent.includes('Import complete') && el.textContent.length < 300)
+      .sort((a, b) => a.textContent.length - b.textContent.length)[0];
+    if (importEl) {
+      const msg = lang === 'it'
+        ? 'Importazione completata! Vai su Management per vedere le tue immagini e le etichette.'
+        : 'Import complete! Go to Management to see your images and labels.';
+      return { wizardType: 'upload-folder-labels', conversation: [{ role: 'bot', text: msg, inputType: 'buttons', options: [goLabel], step: 'ufl-done' }], step: 'ufl-done' };
+    }
+
+    // State 4: Video is selected and waiting for extraction
+    const videoSelected = Array.from(document.querySelectorAll('div, span, p'))
+      .some(el => el.textContent.includes('Selected Video:') || el.textContent.includes('videos selected'));
+    if (videoSelected) {
+      // Start observers so bot catches result whether user clicks page button or bot button
+      startExtractionResultObserver();
+      if (processingObserverRef.current) processingObserverRef.current.disconnect();
+      const procObs = new MutationObserver(() => {
+        const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Processing'));
+        if (btn) { procObs.disconnect(); processingObserverRef.current = null; setIsOpen(false); }
+      });
+      procObs.observe(document.body, { childList: true, subtree: true });
+      processingObserverRef.current = procObs;
+      return {
+        wizardType: 'upload-video-files',
+        conversation: [
+          { role: 'bot', text: explainMsg, inputType: 'none', step: 'uv-fps-info' },
+          { role: 'bot', text: toggleMsg, inputType: 'buttons', options: [extractLabel], step: 'uv-extract' }
+        ],
+        step: 'uv-extract'
+      };
+    }
+
+    return null; // Normal state — open bot menu as usual
+  }
+
+  // ---- Handle robot click — snapshot check first, then open ----
+  function handleBotOpen() {
+    if (location.pathname.includes('/workspace')) {
+      const state = checkUploadPageState();
+      if (state) {
+        setWizardMode(true);
+        setWizardType(state.wizardType);
+        setConversation(state.conversation);
+        setWizardStep(state.step);
+        setIsOpen(true);
+        return;
+      }
+    }
+    setIsOpen(true);
+  }
+
   // ---- Current wizard input step ----
   const currentWizardStep = wizardMode && conversation.length > 0
     ? conversation[conversation.length - 1]
@@ -980,7 +1064,7 @@ export default function GuideBot() {
       {/* ROBOT — minimized */}
       {!isOpen && (
         <div className={`guide-bot-robot-container${isMainPage ? ' guide-bot-large' : ''}`}
-          onClick={() => setIsOpen(true)} title="Open Guide">
+          onClick={handleBotOpen} title="Open Guide">
           <div className="guide-bot-hello-bubble">
             {(BUBBLE_TEXT[lang] || BUBBLE_TEXT['en'])[location.pathname] || (BUBBLE_TEXT[lang] || BUBBLE_TEXT['en'])['default']}
           </div>
