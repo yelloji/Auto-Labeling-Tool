@@ -79,12 +79,14 @@ export default function GuideBot() {
   const [textInput,    setTextInput]    = useState('');
   const [isOnnx,       setIsOnnx]       = useState(false);
 
-  // When URL changes → reset everything and disconnect observers
+  // When URL changes → close bot and reset everything
+  // Bot must be closed so the next open triggers a fresh snapshot check for the new page
   useEffect(() => {
     const key = getScriptKey(location.pathname);
     setScriptKey(key);
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
     if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
+    setIsOpen(false);
     setHistory([]);
     setWizardMode(false);
     setWizardType(null);
