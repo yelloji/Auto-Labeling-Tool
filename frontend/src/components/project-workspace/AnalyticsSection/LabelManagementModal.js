@@ -61,6 +61,27 @@ const LabelManagementModal = ({
     }
   }, [visible, projectId]);
 
+  useEffect(() => {
+    const prev = window.__analyticsGuideState || {};
+    window.__analyticsGuideState = {
+      ...prev,
+      labelModalVisible: visible,
+      createLabelOpen: !!isCreating,
+      editLabelOpen: !!editingLabel,
+      deleteLabelOpen: deleteModalVisible,
+    };
+
+    window.dispatchEvent(new CustomEvent('analyticsGuideStateChanged', {
+      detail: {
+        forceRefresh: true,
+        modalOpen: visible,
+        createLabelOpen: !!isCreating,
+        editLabelOpen: !!editingLabel,
+        deleteLabelOpen: deleteModalVisible,
+      }
+    }));
+  }, [visible, isCreating, editingLabel, deleteModalVisible]);
+
   const loadLabels = async () => {
     logInfo('app.frontend.interactions', 'labels_loading_started', 'Started loading project labels', {
       timestamp: new Date().toISOString(),

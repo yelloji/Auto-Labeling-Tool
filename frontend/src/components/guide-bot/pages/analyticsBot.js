@@ -49,6 +49,21 @@ function isLabelModalOpen() {
     });
 }
 
+function isCreateLabelFormOpen() {
+  const state = window.__analyticsGuideState;
+  if (typeof state?.createLabelOpen === 'boolean') {
+    return state.createLabelOpen;
+  }
+
+  return !!Array.from(document.querySelectorAll('.ant-modal-wrap .ant-card, .ant-modal .ant-card'))
+    .find(el => {
+      const text = el.textContent;
+      return text.includes('Create New Label') &&
+        text.includes('Label Name') &&
+        text.includes('Label Color');
+    });
+}
+
 function hasLabelsOverview() {
   return !!Array.from(document.querySelectorAll('div, span, h1, h2, h3'))
     .find(el => el.textContent.trim() === 'Labels Overview');
@@ -58,6 +73,26 @@ function openLabelManagement() {
   const btn = Array.from(document.querySelectorAll('button'))
     .find(button => button.textContent.trim() === 'Create/Edit Labels');
   if (btn) btn.click();
+}
+
+function openCreateLabelForm() {
+  const btn = Array.from(document.querySelectorAll('.ant-modal button, .ant-modal-wrap button'))
+    .find(button => button.textContent.trim() === 'Create Label' && button.textContent.trim().length === 'Create Label'.length);
+  if (btn) btn.click();
+}
+
+function closeCreateLabelForm() {
+  const btn = Array.from(document.querySelectorAll('.ant-modal button, .ant-modal-wrap button'))
+    .find(button => button.textContent.trim() === 'Cancel');
+  if (btn) btn.click();
+}
+
+function refreshAnalyticsGuideSoon(delay = 220) {
+  setTimeout(() => {
+    window.dispatchEvent(new CustomEvent('analyticsGuideStateChanged', {
+      detail: { forceRefresh: true }
+    }));
+  }, delay);
 }
 
 function getHowLabel(lang) {
@@ -104,6 +139,30 @@ function getDeleteRuleLabel(lang) {
   return lang === 'it' ? 'Perche delete e disabilitato a volte?' : 'Why is delete disabled sometimes?';
 }
 
+function getCreateLabelActionLabel(lang) {
+  return lang === 'it' ? 'Crea Etichetta' : 'Create Label';
+}
+
+function getCreateLabelHelpLabel(lang) {
+  return lang === 'it' ? 'Come creo una etichetta?' : 'How do I create a label?';
+}
+
+function getLabelNameHelpLabel(lang) {
+  return lang === 'it' ? 'Cosa scrivo nel nome etichetta?' : 'What should I write as label name?';
+}
+
+function getColorHelpLabel(lang) {
+  return lang === 'it' ? 'Come funziona il colore etichetta?' : 'How does label color work?';
+}
+
+function getRandomHelpLabel(lang) {
+  return lang === 'it' ? 'Cosa fa Random?' : 'What does Random do?';
+}
+
+function getCancelCreateLabel(lang) {
+  return lang === 'it' ? 'Annulla Creazione' : 'Cancel Create Label';
+}
+
 function makeState(wizardType, text, options, step) {
   return {
     wizardType,
@@ -134,11 +193,25 @@ export function checkAnalyticsPageState(lang, refs, setters) {
     return makeState('analytics-loading', text, [], 'analytics-loading');
   }
 
+  if (isCreateLabelFormOpen()) {
+    const text = lang === 'it'
+      ? 'Il modulo per creare una nuova etichetta e aperto. Qui scegli un nome chiaro per l etichetta, poi selezioni un colore manualmente oppure usi Random.'
+      : 'The form for creating a new label is open. Here you choose a clear label name, then select a color manually or use Random.';
+    const options = [
+      getCreateLabelHelpLabel(lang),
+      getLabelNameHelpLabel(lang),
+      getColorHelpLabel(lang),
+      getRandomHelpLabel(lang),
+      getCancelCreateLabel(lang),
+    ];
+    return makeState('analytics-label-create', text, options, 'analytics-label-create');
+  }
+
   if (isLabelModalOpen()) {
     const text = lang === 'it'
       ? 'Questa finestra ti aiuta a gestire le etichette del progetto. Qui puoi capire come creare, modificare e cancellare le etichette in modo sicuro.'
       : 'This window helps you manage the project labels. Here you can understand how to create, edit, and delete labels safely.';
-    const options = [getModalHelpLabel(lang), getDeleteRuleLabel(lang)];
+    const options = [getCreateLabelActionLabel(lang), getCreateLabelHelpLabel(lang), getDeleteRuleLabel(lang)];
     return makeState('analytics-label-modal', text, options, 'analytics-label-modal');
   }
 
@@ -171,6 +244,12 @@ export function handleAnalyticsAnswer(step, value, lang, refs, setters) {
   const labelsMatterLabel = getLabelsMatterLabel(lang);
   const modalHelpLabel = getModalHelpLabel(lang);
   const deleteRuleLabel = getDeleteRuleLabel(lang);
+  const createLabelActionLabel = getCreateLabelActionLabel(lang);
+  const createLabelHelpLabel = getCreateLabelHelpLabel(lang);
+  const labelNameHelpLabel = getLabelNameHelpLabel(lang);
+  const colorHelpLabel = getColorHelpLabel(lang);
+  const randomHelpLabel = getRandomHelpLabel(lang);
+  const cancelCreateLabel = getCancelCreateLabel(lang);
 
   function closeBot() {
     setWizardMode(false);
@@ -292,13 +371,23 @@ export function handleAnalyticsAnswer(step, value, lang, refs, setters) {
     return;
   }
 
-  if (step === 'analytics-label-modal' && value === modalHelpLabel) {
+  if (step === 'analytics-label-modal' && value === createLabelActionLabel) {
+    requestReopen?.();
+    setTimeout(() => {
+      openCreateLabelForm();
+      refreshAnalyticsGuideSoon(220);
+    }, 120);
+    closeBot();
+    return;
+  }
+
+  if (step === 'analytics-label-modal' && value === createLabelHelpLabel) {
     const text = lang === 'it'
-      ? 'Qui puoi creare nuove etichette, modificare etichette esistenti e controllare quante annotazioni le usano. Elimina solo etichette non usate.'
-      : 'Here you can create new labels, edit existing labels, and check how many annotations use them. Delete only labels that are not used.';
+      ? 'Per creare una etichetta, apri il modulo con il pulsante Create Label, scrivi un nome univoco, scegli un colore oppure usa Random, poi salva.'
+      : 'To create a label, open the form with the Create Label button, type a unique name, choose a color or use Random, and then save it.';
     addMessage('bot', text, {
       inputType: 'buttons',
-      options: [backLabel],
+      options: [createLabelActionLabel, backLabel],
       step: 'analytics-modal-back',
     });
     return;
@@ -317,6 +406,79 @@ export function handleAnalyticsAnswer(step, value, lang, refs, setters) {
   }
 
   if (step === 'analytics-modal-back' && value === backLabel) {
+    applyFreshAnalyticsSnapshot(lang, refs, setters);
+    return;
+  }
+
+  if (step === 'analytics-modal-back' && value === createLabelActionLabel) {
+    requestReopen?.();
+    setTimeout(() => {
+      openCreateLabelForm();
+      refreshAnalyticsGuideSoon(220);
+    }, 120);
+    closeBot();
+    return;
+  }
+
+  if (step === 'analytics-label-create' && value === createLabelHelpLabel) {
+    const text = lang === 'it'
+      ? 'Crea una etichetta scrivendo un nome nuovo e riconoscibile, poi scegli un colore. Quando tutto e pronto, premi Create Label per salvarla nel progetto.'
+      : 'Create a label by typing a new recognizable name, then choosing a color. When everything is ready, press Create Label to save it into the project.';
+    addMessage('bot', text, {
+      inputType: 'buttons',
+      options: [backLabel],
+      step: 'analytics-create-back',
+    });
+    return;
+  }
+
+  if (step === 'analytics-label-create' && value === labelNameHelpLabel) {
+    const text = lang === 'it'
+      ? 'Nel nome etichetta scrivi un nome chiaro e coerente per l oggetto, evitando duplicati. Il nome deve aiutare chi annota e chi controlla il progetto a capire subito cosa rappresenta.'
+      : 'For the label name, write a clear and consistent object name and avoid duplicates. The name should help both annotators and reviewers understand immediately what it represents.';
+    addMessage('bot', text, {
+      inputType: 'buttons',
+      options: [backLabel],
+      step: 'analytics-create-back',
+    });
+    return;
+  }
+
+  if (step === 'analytics-label-create' && value === colorHelpLabel) {
+    const text = lang === 'it'
+      ? 'Il colore etichetta aiuta a riconoscere visivamente la classe nelle tabelle e nelle annotazioni. Nel selettore puoi scegliere il colore dall area principale, regolare la tonalita con la barra, scrivere un valore HEX oppure usare i colori consigliati.'
+      : 'The label color helps you recognize the class visually in tables and annotations. In the picker you can choose the color from the main area, adjust the hue with the bar, type a HEX value, or use the recommended colors.';
+    addMessage('bot', text, {
+      inputType: 'buttons',
+      options: [backLabel],
+      step: 'analytics-create-back',
+    });
+    return;
+  }
+
+  if (step === 'analytics-label-create' && value === randomHelpLabel) {
+    const text = lang === 'it'
+      ? 'Random assegna automaticamente un colore suggerito alla nuova etichetta. E utile se non vuoi scegliere il colore a mano, ma il colore scelto dovrebbe comunque restare coerente.'
+      : 'Random automatically assigns a suggested color to the new label. This is useful when you do not want to choose a color by hand, but the chosen color should still stay consistent.';
+    addMessage('bot', text, {
+      inputType: 'buttons',
+      options: [backLabel],
+      step: 'analytics-create-back',
+    });
+    return;
+  }
+
+  if (step === 'analytics-label-create' && value === cancelCreateLabel) {
+    requestReopen?.();
+    setTimeout(() => {
+      closeCreateLabelForm();
+      refreshAnalyticsGuideSoon(220);
+    }, 120);
+    closeBot();
+    return;
+  }
+
+  if (step === 'analytics-create-back' && value === backLabel) {
     applyFreshAnalyticsSnapshot(lang, refs, setters);
   }
 }
