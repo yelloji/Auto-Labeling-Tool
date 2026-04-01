@@ -151,8 +151,8 @@ const guideScript = {
         action: { type: 'message', key: 'upload-choose-type' },
       },
       {
-        label: { en: 'What formats are supported?', it: 'Quali formati sono supportati?' },
-        action: { type: 'message', key: 'upload-formats' },
+        label: { en: 'Already uploaded? Go to Management', it: 'Già caricato? Vai a Management' },
+        action: { type: 'click', selector: ".ant-menu-item:has-text('Management')" },
       },
     ],
   },
