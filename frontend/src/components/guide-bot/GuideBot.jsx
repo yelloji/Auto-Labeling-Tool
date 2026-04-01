@@ -264,7 +264,8 @@ export default function GuideBot() {
       return;
     }
 
-    if (wizardType === 'annotate-progress-complete' || wizardType === 'annotate-progress-incomplete') {
+    if (wizardType === 'annotate-progress-complete' || wizardType === 'annotate-progress-incomplete' ||
+        wizardType === 'annotate-progress-split') {
       handleAnnotateProgressAnswer(step, value, lang, r, s);
       return;
     }
