@@ -27,6 +27,7 @@ import { startCreateProjectWizard, handleCreateProjectAnswer } from './pages/pro
 import { checkManagementPageState, handleManagementAnswer } from './pages/managementBot';
 import { checkAnnotateProgressPageState, handleAnnotateProgressAnswer } from './pages/annotateProgressBot';
 import { checkManualLabelingPageState, handleManualLabelingAnswer } from './pages/manualLabelingBot';
+import { checkDatasetPageState, handleDatasetAnswer } from './pages/datasetBot';
 
 
 // ---------------------------------------------------------------------------
@@ -312,6 +313,9 @@ export default function GuideBot() {
       const mgmtState = checkManagementPageState(lang, r, s);
       if (mgmtState) { applyWizardState(mgmtState); return; }
 
+      const datasetState = checkDatasetPageState(lang, r, s);
+      if (datasetState) { applyWizardState(datasetState); return; }
+
       setIsOpen(true);
       return;
     }
@@ -355,6 +359,9 @@ export default function GuideBot() {
       // Check Management page state
       const mgmtState = checkManagementPageState(lang, r, s);
       if (mgmtState) { applyWizardState(mgmtState); return; }
+
+      const datasetState = checkDatasetPageState(lang, r, s);
+      if (datasetState) { applyWizardState(datasetState); return; }
     }
 
     if (location.pathname.startsWith('/annotate-progress/')) {
@@ -409,6 +416,11 @@ export default function GuideBot() {
     if (wizardType === 'annotate-progress-complete' || wizardType === 'annotate-progress-incomplete' ||
         wizardType === 'annotate-progress-split') {
       handleAnnotateProgressAnswer(step, value, lang, r, s);
+      return;
+    }
+
+    if (wizardType && wizardType.startsWith('dataset-')) {
+      handleDatasetAnswer(step, value, lang, r, s);
       return;
     }
 
@@ -488,6 +500,7 @@ export default function GuideBot() {
           wizardType === 'management-overview' || wizardType === 'management-annotating' ||
           wizardType === 'management-completed' || wizardType === 'management-empty' ||
           wizardType === 'management-unassigned' ||
+          (wizardType && wizardType.startsWith('dataset-')) ||
           (wizardType && wizardType.startsWith('manual-labeling-'))) {
         setWizardMode(false);
         setWizardType(null);
