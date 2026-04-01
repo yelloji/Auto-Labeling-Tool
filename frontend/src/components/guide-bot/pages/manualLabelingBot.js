@@ -135,8 +135,8 @@ function getBoxMainOptions(lang) {
 
 function getPolygonMainOptions(lang) {
   return lang === 'it'
-    ? ['Come uso Polygon?', 'Passa a Box', 'Passa a Smart Polygon']
-    : ['How do I use Polygon?', 'Switch to Box', 'Switch to Smart Polygon'];
+    ? ['Come uso Polygon?', 'Quando usare Polygon?', 'Passa a Box', 'Passa a Smart Polygon']
+    : ['How do I use Polygon?', 'When should I use Polygon?', 'Switch to Box', 'Switch to Smart Polygon'];
 }
 
 export function checkManualLabelingPageState(lang, refs, setters) {
@@ -172,8 +172,8 @@ export function checkManualLabelingPageState(lang, refs, setters) {
       ? 'Stai disegnando una forma precisa. Continua a cliccare intorno al bordo dell oggetto, poi premi Enter o fai doppio click per completare. Backspace rimuove l ultimo punto.'
       : 'You are drawing a precise shape. Keep clicking around the object edge, then press Enter or double-click to finish. Backspace removes the last point.';
     const options = lang === 'it'
-      ? ['Come finisco?', 'Passa a Select', 'Quando usare Polygon?']
-      : ['How do I finish?', 'Switch to Select', 'When should I use Polygon?'];
+      ? ['Come uso Polygon?', 'Passa a Select']
+      : ['How do I use Polygon?', 'Switch to Select'];
     return makeState('manual-labeling-polygon', text, options, 'polygon-choice');
   }
 
@@ -356,7 +356,10 @@ export function handleManualLabelingAnswer(step, value, lang, refs, setters) {
   }
 
   if (step === 'polygon-choice') {
-    if (value.includes('finish') || value.includes('finisco')) {
+    if (
+      value.includes('How do I use Polygon?') ||
+      value.includes('Come uso Polygon?')
+    ) {
       const explain = lang === 'it'
         ? 'Per chiudere la forma, premi Enter oppure fai doppio click vicino al punto finale. Backspace rimuove l ultimo punto ed Escape annulla la forma in corso. Durante il disegno puoi usare Shift+Z per annullare un punto e Shift+Y per ripristinarlo. Dopo che hai completato il polygon, Ctrl+Z annulla e Ctrl+Y ripristina. Nota: l annulla funziona dopo il completamento del polygon.'
         : 'To close the shape, press Enter or double-click near the end point. Backspace removes the last point and Escape cancels the shape in progress. While drawing, you can use Shift+Z to undo a point and Shift+Y to redo it. After you complete the polygon, Ctrl+Z undoes and Ctrl+Y redoes. Note: undo works after polygon completion.';
@@ -370,32 +373,37 @@ export function handleManualLabelingAnswer(step, value, lang, refs, setters) {
       refreshGuideSoon(300);
       return;
     }
-    const explain = lang === 'it'
-      ? 'Polygon e utile quando l oggetto non ha una forma rettangolare semplice e vuoi controllare manualmente il bordo. Durante il disegno puoi usare Backspace per togliere l ultimo punto, Enter per completare, Escape per annullare, Shift+Z per annullare un punto e Shift+Y per ripristinarlo. Dopo il completamento, Ctrl+Z annulla e Ctrl+Y ripristina.'
-      : 'Polygon is useful when the object does not fit a simple rectangle and you want full manual control of the boundary. While drawing, use Backspace to remove the last point, Enter to finish, Escape to cancel, Shift+Z to undo a point, and Shift+Y to redo it. After completion, Ctrl+Z undoes and Ctrl+Y redoes.';
-      const backLabel = lang === 'it' ? 'Indietro' : 'Back';
-      addMessage('bot', explain, { inputType: 'buttons', options: [backLabel], step: 'polygon-drawing-back' });
-      return;
-    }
+    return;
+  }
 
   if (step === 'polygon-drawing-back') {
     const intro = lang === 'it'
       ? 'Stai disegnando una forma precisa. Continua a cliccare intorno al bordo dell oggetto, poi premi Enter o fai doppio click per completare. Backspace rimuove l ultimo punto.'
       : 'You are drawing a precise shape. Keep clicking around the object edge, then press Enter or double-click to finish. Backspace removes the last point.';
     const options = lang === 'it'
-      ? ['Come finisco?', 'Passa a Select', 'Quando usare Polygon?']
-      : ['How do I finish?', 'Switch to Select', 'When should I use Polygon?'];
+      ? ['Come uso Polygon?', 'Passa a Select']
+      : ['How do I use Polygon?', 'Switch to Select'];
     addMessage('bot', intro, { inputType: 'buttons', options, step: 'polygon-choice' });
     return;
   }
 
   if (step === 'polygon-ready-choice') {
+    const normalizedValue = (value || '').toLowerCase();
+
     if (value.includes('How') || value.includes('Come')) {
       const explain = lang === 'it'
         ? 'Con Polygon, clicca attorno al bordo dell oggetto per aggiungere punti. Quando hai finito, premi Enter o fai doppio click per chiudere la forma. Backspace rimuove l ultimo punto ed Escape annulla la forma in corso. Durante il disegno puoi usare Shift+Z per annullare un punto e Shift+Y per ripristinarlo. Dopo il completamento, Ctrl+Z annulla e Ctrl+Y ripristina. Nota: l annulla funziona dopo il completamento del polygon.'
         : 'With Polygon, click around the object edge to add points. When you are done, press Enter or double-click to close the shape. Backspace removes the last point and Escape cancels the shape in progress. While drawing, you can use Shift+Z to undo a point and Shift+Y to redo it. After completion, Ctrl+Z undoes and Ctrl+Y redoes. Note: undo works after polygon completion.';
       const backLabel = lang === 'it' ? 'Indietro' : 'Back';
       addMessage('bot', explain, { inputType: 'buttons', options: [backLabel], step: 'polygon-ready-back' });
+      return;
+    }
+    if (normalizedValue.includes('when') || value.includes('Quando')) {
+      const explain = lang === 'it'
+        ? 'Polygon e utile quando vuoi seguire la forma reale dell oggetto, non solo mettergli intorno un box. Usalo per un etichettatura piu precisa quando il contorno dell oggetto conta, ad esempio nei task di segmentazione.'
+        : 'Polygon is useful when you want to follow the real shape of the object, not just put a box around it. Use it for more detailed labeling when the object outline matters, such as segmentation tasks.';
+      const backLabel = lang === 'it' ? 'Indietro' : 'Back';
+      addMessage('bot', explain, { inputType: 'buttons', options: [backLabel], step: 'polygon-ready-when-back' });
       return;
     }
     if (value.includes('Box')) {
@@ -413,6 +421,14 @@ export function handleManualLabelingAnswer(step, value, lang, refs, setters) {
   }
 
   if (step === 'polygon-ready-back') {
+    const intro = lang === 'it'
+      ? 'Polygon serve per tracciare manualmente un bordo preciso. Clicca punto per punto attorno all oggetto, poi chiudi la forma quando il contorno sembra corretto.'
+      : 'Polygon is for drawing a precise manual outline. Click point by point around the object, then close the shape when the contour looks right.';
+    addMessage('bot', intro, { inputType: 'buttons', options: getPolygonMainOptions(lang), step: 'polygon-ready-choice' });
+    return;
+  }
+
+  if (step === 'polygon-ready-when-back') {
     const intro = lang === 'it'
       ? 'Polygon serve per tracciare manualmente un bordo preciso. Clicca punto per punto attorno all oggetto, poi chiudi la forma quando il contorno sembra corretto.'
       : 'Polygon is for drawing a precise manual outline. Click point by point around the object, then close the shape when the contour looks right.';
