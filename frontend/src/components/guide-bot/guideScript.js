@@ -286,8 +286,8 @@ const guideScript = {
 
   'annotate-launcher-manual-explain': {
     message: {
-      en: 'Manual Labeling opens a canvas where you draw bounding boxes around objects yourself. Best for precise work, small datasets, or when AI accuracy is not enough yet.',
-      it: "L'Etichettatura Manuale apre un canvas dove disegni i riquadri attorno agli oggetti tu stesso. Ideale per lavori precisi, dataset piccoli, o quando l'accuratezza AI non è ancora sufficiente.",
+      en: 'Manual Labeling opens a canvas where you draw bounding boxes around objects yourself. Best for precise work, small datasets, or when AI accuracy is not enough yet. Click Start Manual Labeling → Annotation Progress page opens → shows labeled and remaining images → click any image to open the canvas and draw boxes.',
+      it: "L'Etichettatura Manuale apre un canvas dove disegni i riquadri attorno agli oggetti tu stesso. Ideale per lavori precisi, dataset piccoli, o quando l'accuratezza AI non è ancora sufficiente. Clicca Inizia Etichettatura Manuale → si apre la pagina Avanzamento Annotazione → mostra le immagini etichettate e quelle rimanenti → clicca un'immagine per aprire il canvas e disegnare i riquadri.",
     },
     options: [
       {
