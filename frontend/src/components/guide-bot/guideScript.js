@@ -291,6 +291,10 @@ const guideScript = {
     },
     options: [
       {
+        label: { en: 'Start Manual Labeling', it: 'Inizia Etichettatura Manuale' },
+        action: { type: 'click', selector: "button:has-text('Start Manual Labeling')" },
+      },
+      {
         label: { en: 'Go back', it: 'Torna indietro' },
         action: { type: 'message', key: '/annotate-launcher' },
       },
@@ -299,8 +303,8 @@ const guideScript = {
 
   'annotate-launcher-auto-explain': {
     message: {
-      en: 'Auto Labeling uses an AI model to detect and label objects automatically. It is fast for large datasets — you just review and fix any mistakes after.',
-      it: "L'Etichettatura Automatica usa un modello AI per rilevare e etichettare gli oggetti automaticamente. È veloce per dataset grandi — poi rivedi e correggi eventuali errori.",
+      en: 'Auto Labeling is an upcoming feature. It will use an AI model to detect and label objects automatically — fast for large datasets. Stay tuned.',
+      it: "L'Etichettatura Automatica è una funzionalità in arrivo. Userà un modello AI per rilevare e etichettare gli oggetti automaticamente — veloce per dataset grandi. Prossimamente.",
     },
     options: [
       {
