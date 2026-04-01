@@ -155,7 +155,7 @@ export function checkManagementPageState(lang, refs, setters) {
         { role: 'bot', text: headerMsg,      inputType: 'none',    step: 'mgmt-overview-header' },
         { role: 'bot', text: unassignedMsg,  inputType: 'none',    step: 'mgmt-overview-unassigned' },
         { role: 'bot', text: annotatingMsg,  inputType: 'none',    step: 'mgmt-overview-annotating' },
-        { role: 'bot', text: datasetMsg,     inputType: 'buttons', options: [openLabelLabel, goDatasetLabel], step: 'mgmt-overview-action' },
+        { role: 'bot', text: datasetMsg,     inputType: 'buttons', options: [openLabelLabel, goDatasetLabel, startAnnotLabel], step: 'mgmt-overview-action' },
       ],
       step: 'mgmt-overview-action',
     };
@@ -237,11 +237,14 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
     setIsOpen(false);
   }
 
-  // Overview state (all 3 populated) — two action buttons
+  // Overview state (all 3 populated) — three action buttons
   if (step === 'mgmt-overview-action') {
-    const isLabel = value.includes('Labeling Tool') || value.includes('Etichettatura');
+    const isLabel  = value.includes('Labeling Tool') || value.includes('Etichettatura');
+    const isAnnot  = value.includes('Start Annotating') || value.includes('Inizia Annotazione');
     if (isLabel) {
       setTimeout(() => clickColumnCard(1), 200); // click first card in Annotating column
+    } else if (isAnnot) {
+      setTimeout(() => clickColumnCard(0), 200); // click first card in Unassigned column
     } else {
       setTimeout(() => clickSidebarItem('Dataset'), 200);
     }
