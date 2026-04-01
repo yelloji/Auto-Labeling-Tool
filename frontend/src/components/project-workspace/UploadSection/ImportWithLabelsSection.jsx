@@ -118,6 +118,7 @@ const ImportWithLabelsSection = forwardRef(({ projectId }, ref) => {
       );
       setResult(res);
       setProgress(100);
+      window.dispatchEvent(new CustomEvent('uploadImportComplete'));
     } catch (err) {
       const msg = err?.response?.data?.detail || err?.message || 'Import failed';
       setError(msg);

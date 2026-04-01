@@ -423,6 +423,7 @@ const ManagementSection = ({
       message.info(`Assigning dataset to annotating: ${dataset.name}`);
       await projectsAPI.assignDatasetToAnnotating(projectId, dataset.id);
       message.success(`Dataset assigned to annotating: ${dataset.name}`);
+      window.dispatchEvent(new CustomEvent('managementOperationDone'));
 
       logInfo('app.frontend.interactions', 'assign_dataset_to_annotating_success', 'Successfully assigned dataset to annotating', {
         timestamp: new Date().toISOString(),

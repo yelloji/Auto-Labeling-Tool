@@ -81,6 +81,8 @@ function startManagementAnnotatingObserver(lang, refs, setters) {
 
   if (observerRef.current) observerRef.current.disconnect();
 
+  let timeoutId = null;
+
   const obs = new MutationObserver(() => {
     const annotatingStillEmpty = Array.from(document.querySelectorAll('div, span, p'))
       .some(el => el.textContent.trim() === 'Upload and assign images to an annotator.');
@@ -91,7 +93,7 @@ function startManagementAnnotatingObserver(lang, refs, setters) {
       const nextMsg = lang === 'it'
         ? 'Il tuo dataset è ora nella colonna Annotating. Clicca su di esso per aprire lo strumento di etichettatura — oppure usa il pulsante qui sotto.'
         : 'Your dataset is now in the Annotating column. Click it to open the labeling tool — or use the button below.';
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         setIsOpen(true);
         setWizardMode(true);
         setWizardType('management-annotating');
@@ -100,6 +102,10 @@ function startManagementAnnotatingObserver(lang, refs, setters) {
       }, 600);
     }
   });
+
+  // Override disconnect so any pending reopen is cancelled when managementOperationDone cleans up
+  const _disconnect = obs.disconnect.bind(obs);
+  obs.disconnect = () => { if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; } _disconnect(); };
 
   obs.observe(document.body, { childList: true, subtree: true });
   observerRef.current = obs;

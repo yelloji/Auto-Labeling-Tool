@@ -279,6 +279,13 @@ const UploadSection = ({ projectId }) => {
     loadRecentImages();
   }, [projectId]);
 
+  // When any upload completes (files, folder, video) → notify bot for bidirectional sync
+  useEffect(() => {
+    if (uploadResult) {
+      window.dispatchEvent(new CustomEvent('uploadComplete'));
+    }
+  }, [uploadResult]);
+
   // ==================== UPLOAD FUNCTIONS ====================
 
   /**

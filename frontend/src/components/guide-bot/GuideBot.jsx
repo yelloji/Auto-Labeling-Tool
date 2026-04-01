@@ -111,6 +111,25 @@ export default function GuideBot() {
     return () => window.removeEventListener('workspaceSectionChanged', handler);
   }, []);
 
+  // When any upload completes via UI → open bot with result snapshot (bidirectional sync)
+  useEffect(() => {
+    const handler = () => {
+      if (!location.pathname.includes('/workspace')) return;
+      setTimeout(() => {
+        const s = makeSetters();
+        const r = makeRefs();
+        const uploadState = checkUploadPageState(lang, r, s);
+        if (uploadState) applyWizardState(uploadState);
+      }, 400);
+    };
+    window.addEventListener('uploadComplete', handler);
+    window.addEventListener('uploadImportComplete', handler);
+    return () => {
+      window.removeEventListener('uploadComplete', handler);
+      window.removeEventListener('uploadImportComplete', handler);
+    };
+  }, [location.pathname, lang]);
+
   // When a Management column operation completes → close bot so next open gets fresh snapshot
   useEffect(() => {
     const handler = () => {

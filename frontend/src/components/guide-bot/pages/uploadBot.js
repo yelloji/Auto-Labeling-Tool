@@ -113,10 +113,9 @@ export function checkUploadPageState(lang, refs, setters) {
   }
 
   // State 3: Import complete panel visible
-  const importEl = Array.from(document.querySelectorAll('div, p, span'))
-    .filter(el => el.textContent.includes('Import complete') && el.textContent.length < 300)
-    .sort((a, b) => a.textContent.length - b.textContent.length)[0];
-  if (importEl) {
+  // Use innerText on body — avoids length filter failing when class names inflate textContent
+  const importExists = document.body.innerText.includes('Import complete');
+  if (importExists) {
     const msg = lang === 'it'
       ? 'Importazione completata! Vai su Management per vedere le tue immagini e le etichette.'
       : 'Import complete! Go to Management to see your images and labels.';
