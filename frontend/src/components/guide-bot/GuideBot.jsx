@@ -25,6 +25,7 @@ import { checkUploadPageState, startUploadFilesWizard, startUploadFolderWizard,
 import { startUploadModelWizard, handleModelAnswer } from './pages/modelBot';
 import { startCreateProjectWizard, handleCreateProjectAnswer } from './pages/projectBot';
 import { checkManagementPageState, handleManagementAnswer } from './pages/managementBot';
+import { checkAnnotateProgressPageState, handleAnnotateProgressAnswer } from './pages/annotateProgressBot';
 
 
 // ---------------------------------------------------------------------------
@@ -220,6 +221,14 @@ export default function GuideBot() {
       const mgmtState = checkManagementPageState(lang, r, s);
       if (mgmtState) { applyWizardState(mgmtState); return; }
     }
+
+    if (location.pathname.startsWith('/annotate-progress/')) {
+      const s = makeSetters();
+      const r = makeRefs();
+      const progressState = checkAnnotateProgressPageState(lang, r, s);
+      if (progressState) { applyWizardState(progressState); return; }
+    }
+
     setIsOpen(true);
   }
 
@@ -252,6 +261,11 @@ export default function GuideBot() {
         wizardType === 'management-completed'  || wizardType === 'management-empty'      ||
         wizardType === 'management-unassigned') {
       handleManagementAnswer(step, value, lang, r, s);
+      return;
+    }
+
+    if (wizardType === 'annotate-progress-complete' || wizardType === 'annotate-progress-incomplete') {
+      handleAnnotateProgressAnswer(step, value, lang, r, s);
       return;
     }
   }
