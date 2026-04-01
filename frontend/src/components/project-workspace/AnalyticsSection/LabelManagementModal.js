@@ -372,6 +372,23 @@ const LabelManagementModal = ({
       projectId: projectId
     });
 
+    window.__analyticsGuideState = {
+      ...(window.__analyticsGuideState || {}),
+      labelModalVisible: false,
+      createLabelOpen: false,
+      editLabelOpen: false,
+      deleteLabelOpen: false,
+    };
+    window.dispatchEvent(new CustomEvent('analyticsGuideStateChanged', {
+      detail: {
+        forceRefresh: true,
+        modalOpen: false,
+        createLabelOpen: false,
+        editLabelOpen: false,
+        deleteLabelOpen: false,
+      }
+    }));
+
     form.resetFields();
     setIsCreating(false);
     setEditingLabel(null);

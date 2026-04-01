@@ -65,10 +65,20 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
       loading,
       labelsCount: labels.length,
       datasetsCount: datasets.length,
+      createLabelOpen: false,
+      editLabelOpen: false,
+      deleteLabelOpen: false,
     };
 
     window.dispatchEvent(new CustomEvent('analyticsGuideStateChanged', {
-      detail: { forceRefresh: true, modalOpen: labelModalVisible, loading }
+      detail: {
+        forceRefresh: true,
+        modalOpen: labelModalVisible,
+        loading,
+        createLabelOpen: false,
+        editLabelOpen: false,
+        deleteLabelOpen: false,
+      }
     }));
   }, [labelModalVisible, loading, labels.length, datasets.length]);
 
