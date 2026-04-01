@@ -78,6 +78,9 @@ const ProjectWorkspace = () => {
     if (location.state?.selectedSection) {
       console.log('Updating selectedKey from location state:', location.state.selectedSection);
       setSelectedKey(location.state.selectedSection);
+      window.dispatchEvent(new CustomEvent('workspaceSectionChanged', {
+        detail: { section: location.state.selectedSection }
+      }));
       logInfo('app.frontend.navigation', 'Workspace section changed from location state', {
         projectId,
         section: location.state.selectedSection
@@ -90,6 +93,9 @@ const ProjectWorkspace = () => {
       if (section) {
         console.log('Updating selectedKey from URL parameter:', section);
         setSelectedKey(section);
+        window.dispatchEvent(new CustomEvent('workspaceSectionChanged', {
+          detail: { section }
+        }));
         logInfo('app.frontend.navigation', 'Workspace section changed from URL parameter', {
           projectId,
           section
