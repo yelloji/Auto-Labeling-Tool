@@ -37,13 +37,22 @@ export function clickSidebarItem(label) {
 // ---------------------------------------------------------------------------
 // Click the first dataset card in a Management column.
 // colIndex: 0 = Unassigned, 1 = Annotating, 2 = Dataset
-// Each column is .ant-col-8; dataset cards are nested inside the container card.
+// Finds column by header text — robust against other ant-col-8 elements on page.
+// Dataset cards have the 'hoverable' prop (ant-card-hoverable); the container card does not.
 // ---------------------------------------------------------------------------
 export function clickColumnCard(colIndex) {
-  const cols = Array.from(document.querySelectorAll('.ant-col.ant-col-8'));
-  const col = cols[colIndex];
+  const HEADERS = ['Unassigned', 'Annotating', 'Dataset'];
+  const header = HEADERS[colIndex];
+  if (!header) return;
+
+  // Find the column whose card header starts with the target text
+  const col = Array.from(document.querySelectorAll('.ant-col')).find(c => {
+    const head = c.querySelector('.ant-card-head');
+    return head && head.textContent.trim().startsWith(header);
+  });
   if (!col) return;
-  // Dataset cards are nested inside the outer container card (.ant-card .ant-card)
-  const cards = col.querySelectorAll('.ant-card .ant-card');
-  if (cards[0]) cards[0].click();
+
+  // Dataset cards are hoverable; the container column card is not
+  const card = col.querySelector('.ant-card-hoverable');
+  if (card) card.click();
 }
