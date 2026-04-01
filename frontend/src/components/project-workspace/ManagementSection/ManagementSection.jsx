@@ -596,6 +596,7 @@ const ManagementSection = ({
       await projectsAPI.moveDatasetToUnassigned(projectId, dataset.id);
       message.destroy(); // Clear loading message
       message.success(`Dataset moved to unassigned: ${dataset.name}`);
+      window.dispatchEvent(new CustomEvent('managementOperationDone'));
 
       logInfo('app.frontend.interactions', 'move_dataset_to_unassigned_success', 'Successfully moved dataset to unassigned', {
         timestamp: new Date().toISOString(),
@@ -634,6 +635,7 @@ const ManagementSection = ({
       await projectsAPI.assignDatasetToAnnotating(projectId, dataset.id);
       message.destroy(); // Clear loading message
       message.success(`Dataset moved to annotating: ${dataset.name}`);
+      window.dispatchEvent(new CustomEvent('managementOperationDone'));
 
       logInfo('app.frontend.interactions', 'move_dataset_to_annotating_success', 'Successfully moved dataset to annotating', {
         timestamp: new Date().toISOString(),
@@ -672,6 +674,7 @@ const ManagementSection = ({
       await projectsAPI.moveDatasetToCompleted(projectId, dataset.id);
       message.destroy(); // Clear loading message
       message.success(`Dataset moved to completed: ${dataset.name}`);
+      window.dispatchEvent(new CustomEvent('managementOperationDone'));
 
       logInfo('app.frontend.interactions', 'move_dataset_to_completed_success', 'Successfully moved dataset to completed', {
         timestamp: new Date().toISOString(),
@@ -709,6 +712,7 @@ const ManagementSection = ({
       message.info(`Deleting dataset: ${dataset.name}`);
       await projectsAPI.deleteProjectDataset(projectId, dataset.id);
       message.success(`Dataset deleted: ${dataset.name}`);
+      window.dispatchEvent(new CustomEvent('managementOperationDone'));
 
       logInfo('app.frontend.interactions', 'delete_dataset_success', 'Successfully deleted dataset', {
         timestamp: new Date().toISOString(),

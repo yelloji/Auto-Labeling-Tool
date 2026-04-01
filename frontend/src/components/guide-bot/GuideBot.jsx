@@ -109,6 +109,21 @@ export default function GuideBot() {
     return () => window.removeEventListener('workspaceSectionChanged', handler);
   }, []);
 
+  // When a Management column operation completes → close bot so next open gets fresh snapshot
+  useEffect(() => {
+    const handler = () => {
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
+      setIsOpen(false);
+      setWizardMode(false);
+      setWizardType(null);
+      setConversation([]);
+      setWizardStep(null);
+    };
+    window.addEventListener('managementOperationDone', handler);
+    return () => window.removeEventListener('managementOperationDone', handler);
+  }, []);
+
   // When URL changes → close bot and reset everything
   // Bot must be closed so the next open triggers a fresh snapshot check for the new page
   useEffect(() => {
