@@ -28,6 +28,7 @@ import { checkManagementPageState, handleManagementAnswer } from './pages/manage
 import { checkAnnotateProgressPageState, handleAnnotateProgressAnswer } from './pages/annotateProgressBot';
 import { checkManualLabelingPageState, handleManualLabelingAnswer } from './pages/manualLabelingBot';
 import { checkDatasetPageState, handleDatasetAnswer } from './pages/datasetBot';
+import { checkAnalyticsPageState, handleAnalyticsAnswer } from './pages/analyticsBot';
 
 
 // ---------------------------------------------------------------------------
@@ -197,6 +198,41 @@ export default function GuideBot() {
     };
   }, [location.pathname, isOpen, lang]);
 
+  useEffect(() => {
+    const handler = (e) => {
+      if (!location.pathname.includes('/workspace')) return;
+      if (detectWorkspaceSection() !== '/workspace/analytics') return;
+
+      const forceRefresh = !!e.detail?.forceRefresh;
+      const shouldRefresh = isOpenRef.current || pendingReopenRef.current || forceRefresh;
+      if (!shouldRefresh) return;
+
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
+      setIsOpen(false);
+      setWizardMode(false);
+      setWizardType(null);
+      setConversation([]);
+      setWizardStep(null);
+
+      setTimeout(() => {
+        const s = makeSetters();
+        const r = makeRefs();
+        const analyticsState = checkAnalyticsPageState(lang, r, s);
+        if (analyticsState) {
+          pendingReopenRef.current = false;
+          applyWizardState(analyticsState);
+        } else if (forceRefresh) {
+          pendingReopenRef.current = false;
+          setIsOpen(true);
+        }
+      }, 180);
+    };
+
+    window.addEventListener('analyticsGuideStateChanged', handler);
+    return () => window.removeEventListener('analyticsGuideStateChanged', handler);
+  }, [location.pathname, lang]);
+
   // When URL changes → close bot and reset everything
   // Bot must be closed so the next open triggers a fresh snapshot check for the new page
   useEffect(() => {
@@ -316,6 +352,9 @@ export default function GuideBot() {
       const datasetState = checkDatasetPageState(lang, r, s);
       if (datasetState) { applyWizardState(datasetState); return; }
 
+      const analyticsState = checkAnalyticsPageState(lang, r, s);
+      if (analyticsState) { applyWizardState(analyticsState); return; }
+
       setIsOpen(true);
       return;
     }
@@ -362,6 +401,9 @@ export default function GuideBot() {
 
       const datasetState = checkDatasetPageState(lang, r, s);
       if (datasetState) { applyWizardState(datasetState); return; }
+
+      const analyticsState = checkAnalyticsPageState(lang, r, s);
+      if (analyticsState) { applyWizardState(analyticsState); return; }
     }
 
     if (location.pathname.startsWith('/annotate-progress/')) {
@@ -421,6 +463,11 @@ export default function GuideBot() {
 
     if (wizardType && wizardType.startsWith('dataset-')) {
       handleDatasetAnswer(step, value, lang, r, s);
+      return;
+    }
+
+    if (wizardType && wizardType.startsWith('analytics-')) {
+      handleAnalyticsAnswer(step, value, lang, r, s);
       return;
     }
 
@@ -501,6 +548,7 @@ export default function GuideBot() {
           wizardType === 'management-completed' || wizardType === 'management-empty' ||
           wizardType === 'management-unassigned' ||
           (wizardType && wizardType.startsWith('dataset-')) ||
+          (wizardType && wizardType.startsWith('analytics-')) ||
           (wizardType && wizardType.startsWith('manual-labeling-'))) {
         setWizardMode(false);
         setWizardType(null);

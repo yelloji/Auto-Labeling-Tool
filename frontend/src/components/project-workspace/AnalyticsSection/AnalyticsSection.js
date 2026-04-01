@@ -59,6 +59,19 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
     }
   }, [projectId]);
 
+  useEffect(() => {
+    window.__analyticsGuideState = {
+      labelModalVisible,
+      loading,
+      labelsCount: labels.length,
+      datasetsCount: datasets.length,
+    };
+
+    window.dispatchEvent(new CustomEvent('analyticsGuideStateChanged', {
+      detail: { forceRefresh: true, modalOpen: labelModalVisible, loading }
+    }));
+  }, [labelModalVisible, loading, labels.length, datasets.length]);
+
   const loadProjectAnalytics = async () => {
     logInfo('app.frontend.interactions', 'analytics_data_loading_started', 'Started loading project analytics data', {
       timestamp: new Date().toISOString(),
