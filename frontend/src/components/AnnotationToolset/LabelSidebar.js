@@ -79,6 +79,7 @@ const LabelSidebar = ({
     const isSelected = selectedLabel === label.id;
     const isHidden = hiddenLabels.includes(label.id);
     const isActive = label.imageCount > 0;
+    const isLongLabel = (label.name || '').length > 18;
 
     return (
       <div
@@ -121,11 +122,18 @@ const LabelSidebar = ({
       >
         <div style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
-          marginBottom: '8px'
+          gap: '0.5rem',
+          marginBottom: '0.5rem'
         }}>
-          <Space size={8}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+            flex: 1,
+            minWidth: 0
+          }}>
             <div
               style={{
                 width: '1rem',
@@ -133,53 +141,36 @@ const LabelSidebar = ({
                 borderRadius: '0.25rem',
                 backgroundColor: label.color,
                 border: '0.0625rem solid rgba(0,0,0,0.1)',
-                boxShadow: '0 0.0625rem 0.125rem rgba(0,0,0,0.1)'
+                boxShadow: '0 0.0625rem 0.125rem rgba(0,0,0,0.1)',
+                flexShrink: 0,
+                marginTop: '0.125rem'
               }}
             />
             <Text
               strong={isActive}
               style={{
                 color: isActive ? '#bdc3c7' : '#95a5a6',
-                fontSize: '1rem',
-                maxWidth: '7.5rem',
+                fontSize: isLongLabel ? '0.875rem' : '1rem',
+                lineHeight: isLongLabel ? 1.25 : 1.4,
+                display: '-webkit-box',
+                WebkitLineClamp: isLongLabel ? 2 : 1,
+                WebkitBoxOrient: 'vertical',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
+                wordBreak: 'normal',
+                overflowWrap: 'break-word',
+                whiteSpace: 'normal',
+                flex: 1,
+                minWidth: 0,
+                marginTop: '0.0625rem'
               }}
               title={label.name}
             >
               {label.name}
             </Text>
-          </Space>
+          </div>
 
-          <Space size={4}>
-            {/* Image count badge */}
-            <Badge
-              count={label.imageCount}
-              style={{
-                backgroundColor: isActive ? '#52c41a' : '#d9d9d9',
-                color: '#fff',
-                fontSize: '0.875rem',
-                minWidth: '1.125rem',
-                height: '1.125rem',
-                lineHeight: '1.125rem'
-              }}
-              title={`${label.imageCount} annotations in this image`}
-            />
-
-            {/* Project count badge - always show project count */}
-            <Badge
-              count={`${label.projectCount}P`}
-              style={{
-                backgroundColor: '#3498db',
-                color: '#fff',
-                fontSize: '0.875rem',
-                minWidth: '1.5rem',
-                height: '1.125rem',
-                lineHeight: '1.125rem'
-              }}
-              title={`${label.projectCount} annotations in the project`}
-            />
+          <Space size={2} style={{ flexShrink: 0 }}>
             <Tooltip title={isHidden ? 'Show annotations' : 'Hide annotations'}>
               <Button
                 type="text"
@@ -204,6 +195,39 @@ const LabelSidebar = ({
               />
             </Tooltip>
           </Space>
+        </div>
+
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.375rem',
+          marginBottom: '0.5rem'
+        }}>
+          <Badge
+            count={label.imageCount}
+            style={{
+              backgroundColor: isActive ? '#52c41a' : '#d9d9d9',
+              color: '#fff',
+              fontSize: '0.75rem',
+              minWidth: '1rem',
+              height: '1rem',
+              lineHeight: '1rem'
+            }}
+            title={`${label.imageCount} annotations in this image`}
+          />
+
+          <Badge
+            count={`${label.projectCount}P`}
+            style={{
+              backgroundColor: '#3498db',
+              color: '#fff',
+              fontSize: '0.75rem',
+              minWidth: '1.375rem',
+              height: '1rem',
+              lineHeight: '1rem'
+            }}
+            title={`${label.projectCount} annotations in the project`}
+          />
         </div>
 
         <div style={{
