@@ -143,12 +143,33 @@ const guideScript = {
     },
     options: [
       {
+        label: { en: 'What should I do first?', it: 'Cosa devo fare prima?' },
+        action: { type: 'message', key: 'workspace-first-step' },
+      },
+      {
         label: { en: 'Guide me through uploading', it: 'Guidami nel caricamento' },
         action: { type: 'message', key: 'upload-choose-type' },
       },
       {
         label: { en: 'What formats are supported?', it: 'Quali formati sono supportati?' },
         action: { type: 'message', key: 'upload-formats' },
+      },
+    ],
+  },
+
+  'workspace-first-step': {
+    message: {
+      en: 'Here is the full flow: 1. Upload your images here. 2. Go to Management to label them. 3. Go to Release to prepare your dataset. 4. Train your AI model. 5. Use Model Lab to explore and analyse your trained models. Start with uploading your images or videos.',
+      it: 'Ecco il flusso completo: 1. Carica le tue immagini qui. 2. Vai su Management per etichettarle. 3. Vai su Release per preparare il dataset. 4. Addestra il tuo modello AI. 5. Usa il Model Lab per esplorare e analizzare i modelli addestrati. Inizia caricando le tue immagini o video.',
+    },
+    options: [
+      {
+        label: { en: 'Guide me through uploading', it: 'Guidami nel caricamento' },
+        action: { type: 'message', key: 'upload-choose-type' },
+      },
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/upload' },
       },
     ],
   },
