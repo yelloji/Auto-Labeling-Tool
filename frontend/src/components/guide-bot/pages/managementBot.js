@@ -164,10 +164,17 @@ export function checkManagementPageState(lang, refs, setters) {
   // ---- Priority 1: Annotating has items (not all 3 populated) ----
   if (!annotatingEmpty) {
     startManagementAnnotatingEmptyObserver(lang, refs, setters);
-    const msg = lang === 'it'
-      ? 'Hai dataset nella colonna Annotating. Clicca su una scheda per aprire lo strumento di etichettatura — oppure usa il pulsante qui sotto.'
-      : 'You have datasets in the Annotating column. Click any card to open the labeling tool — or use the button below.';
-    const options = !unassignedEmpty ? [openLabelLabel, startAnnotLabel] : [openLabelLabel];
+    const msg = unassignedEmpty
+      ? (lang === 'it'
+          ? 'Hai dataset nella colonna Annotating. La colonna Unassigned è vuota — puoi cliccare il pulsante "Upload More Images" su questa pagina oppure vai alla sezione Upload per aggiungere altri dati.'
+          : 'You have datasets in the Annotating column. Unassigned is empty — click the "Upload More Images" button on this page or go to the Upload section to add more data.')
+      : (lang === 'it'
+          ? 'Hai dataset nella colonna Annotating. Clicca su una scheda per aprire lo strumento di etichettatura — oppure usa i pulsanti qui sotto.'
+          : 'You have datasets in the Annotating column. Click any card to open the labeling tool — or use the buttons below.');
+    const options = [openLabelLabel];
+    if (!datasetEmpty)    options.push(goDatasetLabel);
+    if (!unassignedEmpty) options.push(startAnnotLabel);
+    if (unassignedEmpty)  options.push(goUploadLabel);
     return {
       wizardType: 'management-annotating',
       conversation: [{ role: 'bot', text: msg, inputType: 'buttons', options, step: 'mgmt-annotating' }],
@@ -253,13 +260,19 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
     return;
   }
 
-  // Annotating state — Open Labeling Tool OR Send to Annotating (if Unassigned also has items)
+  // Annotating state — multiple possible buttons
   if (step === 'mgmt-annotating') {
-    const isSend = value.includes('Send to Annotating') || value.includes('Sposta in Annotating');
+    const isSend    = value.includes('Send to Annotating') || value.includes('Sposta in Annotating');
+    const isDataset = value.includes('Dataset');
+    const isUpload  = value.includes('Upload');
     if (isSend) {
-      setTimeout(() => clickColumnCard(0), 200); // click first card in Unassigned column
+      setTimeout(() => clickColumnCard(0), 200);
+    } else if (isDataset) {
+      setTimeout(() => clickSidebarItem('Dataset'), 200);
+    } else if (isUpload) {
+      setTimeout(() => clickSidebarItem('Upload Data'), 200);
     } else {
-      setTimeout(() => clickColumnCard(1), 200); // click first card in Annotating column
+      setTimeout(() => clickColumnCard(1), 200); // Open Labeling Tool
     }
     closeBot();
     return;

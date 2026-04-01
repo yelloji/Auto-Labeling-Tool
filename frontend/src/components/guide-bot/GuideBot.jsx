@@ -167,9 +167,33 @@ export default function GuideBot() {
     setIsOpen(true);
   }
 
+  // ---- Detect active workspace section from sidebar DOM ----
+  function detectWorkspaceSection() {
+    const LABEL_MAP = {
+      'Upload Data':      '/workspace/upload',
+      'Management':       '/workspace/management',
+      'Dataset':          '/workspace/dataset',
+      'RELEASE':          '/workspace/versions',
+      'Analytics':        '/workspace/analytics',
+      'Models':           '/workspace/models',
+      'Model Training':   '/workspace/model-training',
+      'Model Lab':        '/workspace/model-lab',
+      'Deployments':      '/workspace/deployments',
+      'Active Learning':  '/workspace/active-learning',
+    };
+    const activeItem = document.querySelector('.ant-menu-item-selected');
+    if (activeItem) {
+      const text = activeItem.textContent.trim();
+      if (LABEL_MAP[text]) return LABEL_MAP[text];
+    }
+    return '/workspace/upload';
+  }
+
   // ---- Handle robot click — snapshot check first, then open ----
   function handleBotOpen() {
     if (location.pathname.includes('/workspace')) {
+      // Sync scriptKey to the actual active section so Cancel shows the right script
+      setScriptKey(detectWorkspaceSection());
       const s = makeSetters();
       const r = makeRefs();
 
