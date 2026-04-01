@@ -281,17 +281,20 @@ const ManualLabeling = () => {
   const [polygonPointsCount, setPolygonPointsCount] = useState(0);
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('manualLabelingStateChanged', {
-      detail: {
-        activeTool,
-        showLabelPopup,
-        selectedAnnotationId: selectedAnnotation?.id || null,
-        annotationCount: annotations.length,
-        currentImageIndex,
-        isNullMarked: annotations.some(ann => (ann.class_name || ann.label || '').toLowerCase() === 'null'),
-      }
-    }));
-  }, [activeTool, showLabelPopup, selectedAnnotation, annotations, currentImageIndex]);
+    const detail = {
+      activeTool,
+      showLabelPopup,
+      selectedAnnotationId: selectedAnnotation?.id || null,
+      annotationCount: annotations.length,
+      currentImageIndex,
+      isNullMarked: annotations.some(ann => (ann.class_name || ann.label || '').toLowerCase() === 'null'),
+      isPolygonDrawing,
+      polygonPointsCount,
+    };
+
+    window.__manualLabelingGuideState = detail;
+    window.dispatchEvent(new CustomEvent('manualLabelingStateChanged', { detail }));
+  }, [activeTool, showLabelPopup, selectedAnnotation, annotations, currentImageIndex, isPolygonDrawing, polygonPointsCount]);
 
   // Load initial data
   useEffect(() => {
