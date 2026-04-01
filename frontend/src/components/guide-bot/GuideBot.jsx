@@ -130,20 +130,29 @@ export default function GuideBot() {
     };
   }, [location.pathname, lang]);
 
-  // When a Management column operation completes → close bot so next open gets fresh snapshot
+  // When a Management column operation completes → close and auto-reopen with fresh snapshot if bot was open
   useEffect(() => {
     const handler = () => {
       if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
       if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
+      const wasOpen = isOpen;
       setIsOpen(false);
       setWizardMode(false);
       setWizardType(null);
       setConversation([]);
       setWizardStep(null);
+      if (wasOpen) {
+        setTimeout(() => {
+          const s = makeSetters();
+          const r = makeRefs();
+          const mgmtState = checkManagementPageState(lang, r, s);
+          if (mgmtState) applyWizardState(mgmtState);
+        }, 400);
+      }
     };
     window.addEventListener('managementOperationDone', handler);
     return () => window.removeEventListener('managementOperationDone', handler);
-  }, []);
+  }, [isOpen, lang]);
 
   useEffect(() => {
     const handler = (e) => {
