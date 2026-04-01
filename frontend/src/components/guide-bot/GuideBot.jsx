@@ -65,6 +65,7 @@ export default function GuideBot() {
   const scrollRef              = useRef(null);
   const observerRef            = useRef(null);
   const processingObserverRef  = useRef(null);
+  const isOpenRef              = useRef(false);
   const isMainPage             = MAIN_PAGES.includes(location.pathname);
 
   const [isOpen,       setIsOpen]       = useState(false);
@@ -80,6 +81,10 @@ export default function GuideBot() {
   const [wizardData,   setWizardData]   = useState({});
   const [textInput,    setTextInput]    = useState('');
   const [isOnnx,       setIsOnnx]       = useState(false);
+
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
 
   // When workspace sidebar section changes → close bot
   // Section changes don't change the URL, so we listen for the custom event fired by ProjectWorkspace
@@ -97,6 +102,7 @@ export default function GuideBot() {
       'active-learning': '/workspace/active-learning',
     };
     const handler = (e) => {
+      const wasOpen = isOpenRef.current;
       if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
       if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
       setIsOpen(false);
@@ -106,10 +112,13 @@ export default function GuideBot() {
       setWizardStep(null);
       const section = e.detail?.section;
       if (section && SECTION_SCRIPT[section]) setScriptKey(SECTION_SCRIPT[section]);
+      if (wasOpen) {
+        setTimeout(() => reopenForCurrentContext(location.pathname, section), 200);
+      }
     };
     window.addEventListener('workspaceSectionChanged', handler);
     return () => window.removeEventListener('workspaceSectionChanged', handler);
-  }, []);
+  }, [location.pathname, lang]);
 
   // When any upload completes via UI → open bot with result snapshot (bidirectional sync)
   useEffect(() => {
@@ -189,6 +198,7 @@ export default function GuideBot() {
   // Bot must be closed so the next open triggers a fresh snapshot check for the new page
   useEffect(() => {
     const key = getScriptKey(location.pathname);
+    const wasOpen = isOpenRef.current;
     setScriptKey(key);
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
     if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
@@ -199,6 +209,9 @@ export default function GuideBot() {
     setConversation([]);
     setWizardStep(null);
     setWizardData({});
+    if (wasOpen) {
+      setTimeout(() => reopenForCurrentContext(location.pathname), 220);
+    }
   }, [location.pathname]);
 
   // Auto-scroll conversation to bottom
@@ -263,6 +276,64 @@ export default function GuideBot() {
       if (LABEL_MAP[text]) return LABEL_MAP[text];
     }
     return '/workspace/upload';
+  }
+
+  function reopenForCurrentContext(pathname = location.pathname, sectionOverride = null) {
+    const s = makeSetters();
+    const r = makeRefs();
+
+    if (pathname.includes('/workspace')) {
+      const sectionMap = {
+        'upload': '/workspace/upload',
+        'management': '/workspace/management',
+        'dataset': '/workspace/dataset',
+        'versions': '/workspace/versions',
+        'analytics': '/workspace/analytics',
+        'models': '/workspace/models',
+        'model-training': '/workspace/model-training',
+        'model-lab': '/workspace/model-lab',
+        'deployments': '/workspace/deployments',
+        'active-learning': '/workspace/active-learning',
+      };
+
+      const nextScriptKey = sectionOverride
+        ? (sectionMap[sectionOverride] || '/workspace/upload')
+        : detectWorkspaceSection();
+
+      setScriptKey(nextScriptKey);
+
+      const uploadState = checkUploadPageState(lang, r, s);
+      if (uploadState) { applyWizardState(uploadState); return; }
+
+      const mgmtState = checkManagementPageState(lang, r, s);
+      if (mgmtState) { applyWizardState(mgmtState); return; }
+
+      setIsOpen(true);
+      return;
+    }
+
+    if (pathname.startsWith('/annotate-progress/')) {
+      const progressState = checkAnnotateProgressPageState(lang, r, s);
+      if (progressState) { applyWizardState(progressState); return; }
+      setIsOpen(true);
+      return;
+    }
+
+    if (pathname.startsWith('/annotate-launcher/')) {
+      setScriptKey('/annotate-launcher');
+      setIsOpen(true);
+      return;
+    }
+
+    if (pathname.startsWith('/annotate/')) {
+      const manualLabelingState = checkManualLabelingPageState(lang, r, s);
+      if (manualLabelingState) { applyWizardState(manualLabelingState); return; }
+      setIsOpen(true);
+      return;
+    }
+
+    setScriptKey(getScriptKey(pathname));
+    setIsOpen(true);
   }
 
   // ---- Handle robot click — snapshot check first, then open ----
@@ -401,7 +472,11 @@ export default function GuideBot() {
     if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
     if (wizardMode) {
       if (wizardType === 'annotate-progress-complete' || wizardType === 'annotate-progress-incomplete' ||
-          wizardType === 'annotate-progress-split' || (wizardType && wizardType.startsWith('manual-labeling-'))) {
+          wizardType === 'annotate-progress-split' ||
+          wizardType === 'management-overview' || wizardType === 'management-annotating' ||
+          wizardType === 'management-completed' || wizardType === 'management-empty' ||
+          wizardType === 'management-unassigned' ||
+          (wizardType && wizardType.startsWith('manual-labeling-'))) {
         setWizardMode(false);
         setWizardType(null);
         setConversation([]);
