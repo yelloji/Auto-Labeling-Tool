@@ -50,6 +50,11 @@ function getUsedInImageCount() {
 }
 
 function isLabelPopupOpen() {
+  const state = window.__manualLabelingGuideState;
+  if (typeof state?.showLabelPopup === 'boolean') {
+    return state.showLabelPopup;
+  }
+
   return !!Array.from(document.querySelectorAll('.ant-modal-wrap'))
     .find(el => {
       const style = window.getComputedStyle(el);
