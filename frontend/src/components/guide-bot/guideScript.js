@@ -138,6 +138,23 @@ const guideScript = {
   // Upload Data tab
   '/workspace/upload': {
     message: {
+      en: 'This is the Upload section. Here you can upload images, videos, or pre-labeled data to your project.',
+      it: 'Questa è la sezione Upload. Qui puoi caricare immagini, video o dati già etichettati nel tuo progetto.',
+    },
+    options: [
+      {
+        label: { en: 'Guide me through uploading', it: 'Guidami nel caricamento' },
+        action: { type: 'message', key: 'upload-choose-type' },
+      },
+      {
+        label: { en: 'What formats are supported?', it: 'Quali formati sono supportati?' },
+        action: { type: 'message', key: 'upload-formats' },
+      },
+    ],
+  },
+
+  'upload-choose-type': {
+    message: {
       en: 'Choose how you want to upload your data:',
       it: 'Scegli come vuoi caricare i tuoi dati:',
     },
@@ -151,16 +168,33 @@ const guideScript = {
         action: { type: 'wizard', wizard: 'upload-folder' },
       },
       {
-        label: { en: 'Pick a folder that already has images + labels', it: 'Seleziona una cartella con immagini + etichette' },
+        label: { en: 'Pick a folder with images + labels', it: 'Seleziona una cartella con immagini + etichette' },
         action: { type: 'wizard', wizard: 'upload-folder-labels' },
       },
       {
-        label: { en: 'Pick video files (frames will be extracted)', it: 'Seleziona file video (i frame verranno estratti)' },
+        label: { en: 'Pick video files (frames extracted)', it: 'Seleziona file video (frame estratti)' },
         action: { type: 'wizard', wizard: 'upload-video-files' },
       },
       {
         label: { en: 'Pick a folder of videos', it: 'Seleziona una cartella di video' },
         action: { type: 'wizard', wizard: 'upload-video-folder' },
+      },
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/upload' },
+      },
+    ],
+  },
+
+  'upload-formats': {
+    message: {
+      en: 'Supported image formats: .jpg, .png, .bmp, .webp, .avif. Annotation formats: .json, .xml, .txt. Video formats: .mp4, .mov, .avi. Max image size is 20 MB and 16,000 pixels.',
+      it: 'Formati immagine supportati: .jpg, .png, .bmp, .webp, .avif. Formati annotazione: .json, .xml, .txt. Formati video: .mp4, .mov, .avi. Dimensione massima immagine 20 MB e 16.000 pixel.',
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/upload' },
       },
     ],
   },
