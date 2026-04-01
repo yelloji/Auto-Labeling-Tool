@@ -35,7 +35,7 @@ function getScriptKey(pathname) {
   if (pathname === '/projects') return '/projects';
   if (pathname === '/models') return '/models';
   if (pathname.startsWith('/projects/') && pathname.includes('/workspace')) {
-    return '/projects/:id/workspace';
+    return '/workspace/upload';
   }
   if (pathname.startsWith('/annotate-progress/')) return '/annotate-progress';
   if (pathname.startsWith('/annotate-launcher/')) return '/annotate-launcher';
@@ -82,7 +82,19 @@ export default function GuideBot() {
   // When workspace sidebar section changes → close bot
   // Section changes don't change the URL, so we listen for the custom event fired by ProjectWorkspace
   useEffect(() => {
-    const handler = () => {
+    const SECTION_SCRIPT = {
+      'upload':          '/workspace/upload',
+      'management':      '/workspace/management',
+      'dataset':         '/workspace/dataset',
+      'versions':        '/workspace/versions',
+      'analytics':       '/workspace/analytics',
+      'models':          '/workspace/models',
+      'model-training':  '/workspace/model-training',
+      'model-lab':       '/workspace/model-lab',
+      'deployments':     '/workspace/deployments',
+      'active-learning': '/workspace/active-learning',
+    };
+    const handler = (e) => {
       if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
       if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
       setIsOpen(false);
@@ -90,6 +102,8 @@ export default function GuideBot() {
       setWizardType(null);
       setConversation([]);
       setWizardStep(null);
+      const section = e.detail?.section;
+      if (section && SECTION_SCRIPT[section]) setScriptKey(SECTION_SCRIPT[section]);
     };
     window.addEventListener('workspaceSectionChanged', handler);
     return () => window.removeEventListener('workspaceSectionChanged', handler);

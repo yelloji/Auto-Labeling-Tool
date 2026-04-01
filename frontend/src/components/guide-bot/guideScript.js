@@ -132,50 +132,11 @@ const guideScript = {
   },
 
   // -------------------------------------------------------------------------
-  // PROJECT WORKSPACE  /projects/:id/workspace
+  // WORKSPACE SECTIONS — one entry per sidebar tab
   // -------------------------------------------------------------------------
-  '/projects/:id/workspace': {
-    message: {
-      en: 'You are inside your project. What would you like to do?',
-      it: 'Sei nel tuo progetto. Cosa vorresti fare?',
-    },
-    options: [
-      {
-        label: { en: 'What should I do first?', it: 'Cosa devo fare prima?' },
-        action: { type: 'message', key: 'workspace-first-step' },
-      },
-      {
-        label: { en: 'Upload images or videos', it: 'Carica immagini o video' },
-        action: { type: 'message', key: 'workspace-upload' },
-      },
-      {
-        label: { en: 'Already uploaded your images? Go to Management', it: 'Immagini già caricate? Vai a Management' },
-        action: { type: 'click', selector: ".ant-menu-item:has-text('Management')" },
-      },
-    ],
-  },
 
-  'workspace-first-step': {
-    message: {
-      en: 'Here is the full flow: 1. Upload your images here. 2. Go to Management to label them. 3. Go to Release to prepare your dataset. 4. Train your AI model. 5. Use Model Lab to explore and analyse your trained models. Start with uploading your images or videos.',
-      it: 'Ecco il flusso completo: 1. Carica le tue immagini qui. 2. Vai su Management per etichettarle. 3. Vai su Release per preparare il dataset. 4. Addestra il tuo modello AI. 5. Usa il Model Lab per esplorare e analizzare i modelli addestrati. Inizia caricando le tue immagini o video.',
-    },
-    options: [
-      {
-        label: { en: 'Upload images or videos', it: 'Carica immagini o video' },
-        action: { type: 'message', key: 'workspace-upload' },
-      },
-      {
-        label: { en: 'Go back', it: 'Torna indietro' },
-        action: { type: 'message', key: '/projects/:id/workspace' },
-      },
-    ],
-  },
-
-  // -------------------------------------------------------------------------
-  // UPLOAD  (Upload Data tab inside workspace)
-  // -------------------------------------------------------------------------
-  'workspace-upload': {
+  // Upload Data tab
+  '/workspace/upload': {
     message: {
       en: 'Choose how you want to upload your data:',
       it: 'Scegli come vuoi caricare i tuoi dati:',
@@ -201,17 +162,11 @@ const guideScript = {
         label: { en: 'Pick a folder of videos', it: 'Seleziona una cartella di video' },
         action: { type: 'wizard', wizard: 'upload-video-folder' },
       },
-      {
-        label: { en: 'Go back', it: 'Torna indietro' },
-        action: { type: 'message', key: '/projects/:id/workspace' },
-      },
     ],
   },
 
-  // -------------------------------------------------------------------------
-  // MANAGEMENT  (Management tab inside workspace)
-  // -------------------------------------------------------------------------
-  'workspace-management': {
+  // Management tab
+  '/workspace/management': {
     message: {
       en: 'You have datasets in the Unassigned column. Click any card to move it to Annotating — then click it again in the Annotating column to open the labeling tool.',
       it: 'Hai dataset nella colonna Unassigned. Clicca su una scheda per spostarla in Annotating — poi clicca di nuovo nella colonna Annotating per aprire lo strumento di etichettatura.',
@@ -236,7 +191,7 @@ const guideScript = {
     options: [
       {
         label: { en: 'Go back', it: 'Torna indietro' },
-        action: { type: 'message', key: 'workspace-management' },
+        action: { type: 'message', key: '/workspace/management' },
       },
     ],
   },
@@ -249,7 +204,7 @@ const guideScript = {
     options: [
       {
         label: { en: 'Go back', it: 'Torna indietro' },
-        action: { type: 'message', key: 'workspace-management' },
+        action: { type: 'message', key: '/workspace/management' },
       },
     ],
   },
@@ -395,13 +350,38 @@ const guideScript = {
     ],
   },
 
-  // -------------------------------------------------------------------------
-  // RELEASE SECTION  (Release tab inside workspace)
-  // -------------------------------------------------------------------------
-  'workspace-release': {
+  // Dataset tab
+  '/workspace/dataset': {
     message: {
-      en: 'This is the Release section. Here you manage your final datasets.',
-      it: 'Questa è la sezione Release. Qui gestisci i tuoi dataset finali.',
+      en: 'This is the Dataset section. Here you can see all your fully labeled images grouped by dataset.',
+      it: 'Questa è la sezione Dataset. Qui puoi vedere tutte le immagini etichettate raggruppate per dataset.',
+    },
+    options: [
+      {
+        label: { en: 'What can I do here?', it: 'Cosa posso fare qui?' },
+        action: { type: 'message', key: 'dataset-explain' },
+      },
+    ],
+  },
+
+  'dataset-explain': {
+    message: {
+      en: 'In the Dataset section you can browse all labeled images, view annotation details, and move images to the Release section when ready.',
+      it: 'Nella sezione Dataset puoi sfogliare tutte le immagini etichettate, vedere i dettagli delle annotazioni e spostarle nella sezione Release quando sono pronte.',
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/dataset' },
+      },
+    ],
+  },
+
+  // Release tab
+  '/workspace/versions': {
+    message: {
+      en: 'This is the Release section. Here you manage your final labeled datasets before training.',
+      it: 'Questa è la sezione Release. Qui gestisci i tuoi dataset etichettati finali prima del training.',
     },
     options: [
       {
@@ -423,7 +403,7 @@ const guideScript = {
     options: [
       {
         label: { en: 'Go back', it: 'Torna indietro' },
-        action: { type: 'message', key: 'workspace-release' },
+        action: { type: 'message', key: '/workspace/versions' },
       },
     ],
   },
@@ -436,7 +416,169 @@ const guideScript = {
     options: [
       {
         label: { en: 'Go back', it: 'Torna indietro' },
-        action: { type: 'message', key: 'workspace-release' },
+        action: { type: 'message', key: '/workspace/versions' },
+      },
+    ],
+  },
+
+  // Analytics tab
+  '/workspace/analytics': {
+    message: {
+      en: 'This is the Analytics section. Here you can see label distribution, class balance, and dataset statistics.',
+      it: 'Questa è la sezione Analytics. Qui puoi vedere la distribuzione delle etichette, il bilanciamento delle classi e le statistiche del dataset.',
+    },
+    options: [
+      {
+        label: { en: 'What is class balance?', it: "Cos'è il bilanciamento delle classi?" },
+        action: { type: 'message', key: 'analytics-class-balance' },
+      },
+    ],
+  },
+
+  'analytics-class-balance': {
+    message: {
+      en: 'Class balance shows how many labeled images you have per class. A balanced dataset — similar counts for each class — trains a more accurate AI model.',
+      it: 'Il bilanciamento delle classi mostra quante immagini etichettate hai per ciascuna classe. Un dataset bilanciato — conteggi simili per ogni classe — addestra un modello AI più accurato.',
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/analytics' },
+      },
+    ],
+  },
+
+  // Models tab (within workspace)
+  '/workspace/models': {
+    message: {
+      en: 'This is the Models section. Here you can see all AI models linked to this project and start a new training run.',
+      it: 'Questa è la sezione Modelli. Qui puoi vedere tutti i modelli AI collegati a questo progetto e avviare un nuovo training.',
+    },
+    options: [
+      {
+        label: { en: 'How do I train a model?', it: 'Come addestro un modello?' },
+        action: { type: 'message', key: 'workspace-models-train-hint' },
+      },
+    ],
+  },
+
+  'workspace-models-train-hint': {
+    message: {
+      en: 'Go to the Model Training section to start a new training run. Select a base model, set your epochs, and click Train. Your labeled dataset will be used automatically.',
+      it: 'Vai alla sezione Model Training per avviare un nuovo training. Seleziona un modello base, imposta le epoche e clicca su Addestra. Il tuo dataset etichettato verrà usato automaticamente.',
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/models' },
+      },
+    ],
+  },
+
+  // Model Training tab
+  '/workspace/model-training': {
+    message: {
+      en: 'This is Model Training. Select a base model and configure your training run — then click Train to start.',
+      it: 'Questo è il Model Training. Seleziona un modello base e configura il training — poi clicca su Addestra per iniziare.',
+    },
+    options: [
+      {
+        label: { en: 'What is an epoch?', it: "Cos'è un'epoca?" },
+        action: { type: 'message', key: 'training-epoch-explain' },
+      },
+    ],
+  },
+
+  'training-epoch-explain': {
+    message: {
+      en: 'An epoch is one full pass through all your training images. More epochs = more learning, but too many can cause overfitting. Start with 50-100 epochs.',
+      it: "Un'epoca è un passaggio completo attraverso tutte le immagini di training. Più epoche = più apprendimento, ma troppe possono causare overfitting. Inizia con 50-100 epoche.",
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/model-training' },
+      },
+    ],
+  },
+
+  // Model Lab tab
+  '/workspace/model-lab': {
+    message: {
+      en: 'This is Model Lab. Here you can test your trained models on new images and compare their results.',
+      it: 'Questo è il Model Lab. Qui puoi testare i tuoi modelli addestrati su nuove immagini e confrontare i risultati.',
+    },
+    options: [
+      {
+        label: { en: 'What can I do here?', it: 'Cosa posso fare qui?' },
+        action: { type: 'message', key: 'model-lab-explain' },
+      },
+    ],
+  },
+
+  'model-lab-explain': {
+    message: {
+      en: 'Upload an image and run it through any of your trained models to see predictions. Use this to compare models and decide which one performs best before deploying.',
+      it: 'Carica un\'immagine ed eseguila con uno qualsiasi dei tuoi modelli addestrati per vedere le previsioni. Usalo per confrontare i modelli e decidere quale funziona meglio prima del deploy.',
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/model-lab' },
+      },
+    ],
+  },
+
+  // Deployments tab
+  '/workspace/deployments': {
+    message: {
+      en: 'This is the Deployments section. Here you can run your trained model as a live inference service.',
+      it: 'Questa è la sezione Deployments. Qui puoi eseguire il tuo modello addestrato come servizio di inferenza live.',
+    },
+    options: [
+      {
+        label: { en: 'What is a deployment?', it: "Cos'è un deployment?" },
+        action: { type: 'message', key: 'deployments-explain' },
+      },
+    ],
+  },
+
+  'deployments-explain': {
+    message: {
+      en: 'A deployment runs your trained model as a service so other applications can send images and receive predictions. Select a model, start the service, and use the API endpoint.',
+      it: "Un deployment esegue il tuo modello addestrato come servizio in modo che altre applicazioni possano inviare immagini e ricevere previsioni. Seleziona un modello, avvia il servizio e usa l'endpoint API.",
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/deployments' },
+      },
+    ],
+  },
+
+  // Active Learning tab
+  '/workspace/active-learning': {
+    message: {
+      en: 'This is Active Learning. It helps you improve your model by identifying the images that need labeling most.',
+      it: "Questo è l'Active Learning. Ti aiuta a migliorare il tuo modello identificando le immagini che hanno più bisogno di essere etichettate.",
+    },
+    options: [
+      {
+        label: { en: 'How does Active Learning work?', it: "Come funziona l'Active Learning?" },
+        action: { type: 'message', key: 'active-learning-explain' },
+      },
+    ],
+  },
+
+  'active-learning-explain': {
+    message: {
+      en: 'Active Learning runs your model on unlabeled images and finds the ones it is least confident about. Label those images first — it is the fastest way to improve model accuracy.',
+      it: "L'Active Learning esegue il tuo modello su immagini non etichettate e trova quelle su cui è meno sicuro. Etichetta prima quelle immagini — è il modo più veloce per migliorare l'accuratezza del modello.",
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/active-learning' },
       },
     ],
   },
