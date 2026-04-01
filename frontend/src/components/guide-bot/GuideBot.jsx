@@ -26,6 +26,7 @@ import { startUploadModelWizard, handleModelAnswer } from './pages/modelBot';
 import { startCreateProjectWizard, handleCreateProjectAnswer } from './pages/projectBot';
 import { checkManagementPageState, handleManagementAnswer } from './pages/managementBot';
 import { checkAnnotateProgressPageState, handleAnnotateProgressAnswer } from './pages/annotateProgressBot';
+import { checkManualLabelingPageState, handleManualLabelingAnswer } from './pages/manualLabelingBot';
 
 
 // ---------------------------------------------------------------------------
@@ -124,6 +125,37 @@ export default function GuideBot() {
     window.addEventListener('managementOperationDone', handler);
     return () => window.removeEventListener('managementOperationDone', handler);
   }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!location.pathname.startsWith('/annotate/')) return;
+      const forceRefresh = !!e.detail?.forceRefresh;
+      if (!isOpen && !forceRefresh) return;
+
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
+      setIsOpen(false);
+      setWizardMode(false);
+      setWizardType(null);
+      setConversation([]);
+      setWizardStep(null);
+
+      setTimeout(() => {
+        const s = makeSetters();
+        const r = makeRefs();
+        const manualLabelingState = checkManualLabelingPageState(lang, r, s);
+        if (manualLabelingState) applyWizardState(manualLabelingState);
+        else if (forceRefresh) setIsOpen(true);
+      }, 180);
+    };
+
+    window.addEventListener('manualLabelingStateChanged', handler);
+    window.addEventListener('manualLabelingGuideRefresh', handler);
+    return () => {
+      window.removeEventListener('manualLabelingStateChanged', handler);
+      window.removeEventListener('manualLabelingGuideRefresh', handler);
+    };
+  }, [location.pathname, isOpen, lang]);
 
   // When URL changes → close bot and reset everything
   // Bot must be closed so the next open triggers a fresh snapshot check for the new page
@@ -229,6 +261,13 @@ export default function GuideBot() {
       if (progressState) { applyWizardState(progressState); return; }
     }
 
+    if (location.pathname.startsWith('/annotate/')) {
+      const s = makeSetters();
+      const r = makeRefs();
+      const manualLabelingState = checkManualLabelingPageState(lang, r, s);
+      if (manualLabelingState) { applyWizardState(manualLabelingState); return; }
+    }
+
     setIsOpen(true);
   }
 
@@ -267,6 +306,13 @@ export default function GuideBot() {
     if (wizardType === 'annotate-progress-complete' || wizardType === 'annotate-progress-incomplete' ||
         wizardType === 'annotate-progress-split') {
       handleAnnotateProgressAnswer(step, value, lang, r, s);
+      return;
+    }
+
+    if (wizardType === 'manual-labeling-popup' || wizardType === 'manual-labeling-null' ||
+        wizardType === 'manual-labeling-smart' || wizardType === 'manual-labeling-polygon' ||
+        wizardType === 'manual-labeling-has-annotations' || wizardType === 'manual-labeling-empty') {
+      handleManualLabelingAnswer(step, value, lang, r, s);
       return;
     }
   }
@@ -329,7 +375,7 @@ export default function GuideBot() {
     if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
     if (wizardMode) {
       if (wizardType === 'annotate-progress-complete' || wizardType === 'annotate-progress-incomplete' ||
-          wizardType === 'annotate-progress-split') {
+          wizardType === 'annotate-progress-split' || (wizardType && wizardType.startsWith('manual-labeling-'))) {
         setWizardMode(false);
         setWizardType(null);
         setConversation([]);
