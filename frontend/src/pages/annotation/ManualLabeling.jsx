@@ -220,6 +220,7 @@ const ManualLabeling = () => {
   const [projectLabels, setProjectLabels] = useState([]);
   const [imageLabels, setImageLabels] = useState([]);
   const [selectedLabel, setSelectedLabel] = useState(null);
+  const [hiddenLabels, setHiddenLabels] = useState([]);
 
   const findProjectLabelByName = useCallback((labelName) => {
     if (!labelName) return null;
@@ -232,6 +233,31 @@ const ManualLabeling = () => {
     return existingProjectLabel?.color || fallbackColor || AnnotationAPI.generateLabelColor(labelName);
   }, [findProjectLabelByName]);
 
+  const isLabelHidden = useCallback((labelName) => {
+    if (!labelName) return false;
+    const existingProjectLabel = findProjectLabelByName(labelName);
+    return hiddenLabels.includes(existingProjectLabel?.id) || hiddenLabels.includes(labelName);
+  }, [findProjectLabelByName, hiddenLabels]);
+
+  const toggleLabelVisibility = useCallback((labelId) => {
+    const targetLabel = projectLabels.find(label => label.id === labelId);
+    const targetLabelName = targetLabel?.name || labelId;
+    const selectedLabelName = selectedAnnotation?.class_name || selectedAnnotation?.label;
+    const isCurrentlyHidden = hiddenLabels.includes(labelId);
+
+    if (!isCurrentlyHidden && selectedLabelName && selectedLabelName.toLowerCase() === String(targetLabelName).toLowerCase()) {
+      setSelectedAnnotation(null);
+      setEditingAnnotation(null);
+      setShowLabelPopup(false);
+    }
+
+    setHiddenLabels(prev =>
+      prev.includes(labelId)
+        ? prev.filter(id => id !== labelId)
+        : [...prev, labelId]
+    );
+  }, [projectLabels, selectedAnnotation, hiddenLabels]);
+
   // UI state
   const [showLabelPopup, setShowLabelPopup] = useState(false);
   const [labelPopupPosition, setLabelPopupPosition] = useState({ x: 0, y: 0 });
@@ -243,6 +269,11 @@ const ManualLabeling = () => {
     total: 0,
     labeled: 0,
     percentage: 0
+  });
+
+  const visibleAnnotations = annotations.filter(ann => {
+    const labelName = ann.class_name || ann.label || '';
+    return labelName.toLowerCase() !== 'null' && !isLabelHidden(labelName);
   });
 
   // State to track polygon drawing
@@ -2140,11 +2171,13 @@ const ManualLabeling = () => {
             projectLabels={projectLabels}
             imageAnnotations={annotations.filter(ann => (ann.class_name || ann.label || '').toLowerCase() !== 'null')}
             selectedLabel={selectedLabel}
+            hiddenLabels={hiddenLabels}
             onLabelSelect={setSelectedLabel}
             onLabelHighlight={(labelName) => {
               // Highlight annotations with this label
               console.log('Highlight label:', labelName);
             }}
+            onLabelVisibilityToggle={toggleLabelVisibility}
           />
         </Sider>
 
@@ -2173,7 +2206,7 @@ const ManualLabeling = () => {
               <AnnotationCanvas
                 imageUrl={imageUrl}
                 imageId={imageData?.id}
-                annotations={annotations.filter(ann => (ann.class_name || ann.label || '').toLowerCase() !== 'null')}
+                annotations={visibleAnnotations}
                 selectedAnnotation={selectedAnnotation}
                 activeTool={activeTool}
                 zoomLevel={zoomLevel}
