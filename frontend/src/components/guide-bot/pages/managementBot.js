@@ -167,9 +167,10 @@ export function checkManagementPageState(lang, refs, setters) {
     const msg = lang === 'it'
       ? 'Hai dataset nella colonna Annotating. Clicca su una scheda per aprire lo strumento di etichettatura — oppure usa il pulsante qui sotto.'
       : 'You have datasets in the Annotating column. Click any card to open the labeling tool — or use the button below.';
+    const options = !unassignedEmpty ? [openLabelLabel, startAnnotLabel] : [openLabelLabel];
     return {
       wizardType: 'management-annotating',
-      conversation: [{ role: 'bot', text: msg, inputType: 'buttons', options: [openLabelLabel], step: 'mgmt-annotating' }],
+      conversation: [{ role: 'bot', text: msg, inputType: 'buttons', options, step: 'mgmt-annotating' }],
       step: 'mgmt-annotating',
     };
   }
@@ -252,9 +253,14 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
     return;
   }
 
-  // Annotating state — click first card in Annotating column (col index 1)
+  // Annotating state — Open Labeling Tool OR Send to Annotating (if Unassigned also has items)
   if (step === 'mgmt-annotating') {
-    setTimeout(() => clickColumnCard(1), 200);
+    const isSend = value.includes('Send to Annotating') || value.includes('Sposta in Annotating');
+    if (isSend) {
+      setTimeout(() => clickColumnCard(0), 200); // click first card in Unassigned column
+    } else {
+      setTimeout(() => clickColumnCard(1), 200); // click first card in Annotating column
+    }
     closeBot();
     return;
   }
