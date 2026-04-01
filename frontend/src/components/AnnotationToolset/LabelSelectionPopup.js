@@ -26,6 +26,14 @@ const LabelSelectionPopup = React.memo(({
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const findExistingLabel = (value) => {
+    if (!value) return null;
+    const normalizedValue = String(value).toLowerCase();
+    return existingLabels.find(label =>
+      label.id === value || (label.name && label.name.toLowerCase() === normalizedValue)
+    ) || null;
+  };
+
   // Handle popup visibility changes and logging
   useEffect(() => {
     if (visible) {
@@ -120,10 +128,7 @@ const LabelSelectionPopup = React.memo(({
       // If we have a default label, try to find it in existing labels
       if (defaultLabel) {
         // Try to find the label by ID first
-        const foundLabel = existingLabels.find(label =>
-          label.id === defaultLabel ||
-          (label.name && label.name.toLowerCase() === defaultLabel.toLowerCase())
-        );
+        const foundLabel = findExistingLabel(defaultLabel);
 
         if (foundLabel) {
           console.log('🏷️ Found matching label for default:', foundLabel);
@@ -165,7 +170,7 @@ const LabelSelectionPopup = React.memo(({
         console.log('Using new label name:', labelToUse);
       } else {
         // Find the selected label object by ID
-        const selectedLabelObj = existingLabels.find(label => label.id === selectedLabel);
+        const selectedLabelObj = findExistingLabel(selectedLabel);
         console.log('Selected label object:', selectedLabelObj);
 
         // Use the name from the label object
@@ -487,15 +492,14 @@ const LabelSelectionPopup = React.memo(({
             return null;
           }
           // Use memoized values to prevent recalculations
+          const selectedLabelObj = findExistingLabel(selectedLabel);
           const previewColor = isCreatingNew
             ? (newLabelName ? AnnotationAPI.generateLabelColor(newLabelName) : '#ccc')
-            : (selectedLabel && existingLabels.find(label => label.id === selectedLabel)?.color ||
-              AnnotationAPI.generateLabelColor(selectedLabel || ''));
-
+            : (selectedLabelObj?.color || AnnotationAPI.generateLabelColor(selectedLabel || ''));
 
           const previewText = isCreatingNew
             ? newLabelName
-            : (selectedLabel && existingLabels.find(label => label.id === selectedLabel)?.name || selectedLabel);
+            : (selectedLabelObj?.name || selectedLabel);
 
           return (
             <div

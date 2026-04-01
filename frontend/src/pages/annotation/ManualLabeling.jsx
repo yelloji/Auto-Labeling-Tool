@@ -221,6 +221,17 @@ const ManualLabeling = () => {
   const [imageLabels, setImageLabels] = useState([]);
   const [selectedLabel, setSelectedLabel] = useState(null);
 
+  const findProjectLabelByName = useCallback((labelName) => {
+    if (!labelName) return null;
+    const normalizedName = labelName.toLowerCase();
+    return projectLabels.find(label => (label.name || '').toLowerCase() === normalizedName) || null;
+  }, [projectLabels]);
+
+  const resolveLabelColor = useCallback((labelName, fallbackColor = null) => {
+    const existingProjectLabel = findProjectLabelByName(labelName);
+    return existingProjectLabel?.color || fallbackColor || AnnotationAPI.generateLabelColor(labelName);
+  }, [findProjectLabelByName]);
+
   // UI state
   const [showLabelPopup, setShowLabelPopup] = useState(false);
   const [labelPopupPosition, setLabelPopupPosition] = useState({ x: 0, y: 0 });
@@ -655,11 +666,11 @@ const ManualLabeling = () => {
         });
 
         const updatedImageLabels = Object.entries(labelCounts).map(([name, count]) => {
-          const projectLabel = projectLabels.find(l => l.name === name);
+          const projectLabel = findProjectLabelByName(name);
           return {
             name,
             count,
-            color: projectLabel?.color || AnnotationAPI.generateLabelColor(name)
+            color: resolveLabelColor(name, projectLabel?.color)
           };
         });
 
@@ -697,7 +708,7 @@ const ManualLabeling = () => {
       console.error('Clear all failed', e);
       message.error('Failed to clear all annotations');
     }
-  }, [annotations, imageData, projectLabels]);
+  }, [annotations, imageData, findProjectLabelByName, resolveLabelColor]);
 
   const loadDatasetImages = async () => {
     try {
@@ -972,8 +983,8 @@ const ManualLabeling = () => {
 
         // CRITICAL: Get the correct label color from project labels
         const labelName = ann.class_name || ann.label;
-        const existingProjectLabel = projectLabels.find(l => l.name === labelName);
-        const labelColor = existingProjectLabel?.color || AnnotationAPI.generateLabelColor(labelName);
+        const existingProjectLabel = findProjectLabelByName(labelName);
+        const labelColor = resolveLabelColor(labelName, ann.color);
 
         // Create UI-friendly annotation object
         const uiAnnotation = {
@@ -1029,11 +1040,11 @@ const ManualLabeling = () => {
       const uniqueLabels = [...new Set(fetchedAnnotations.map(ann => ann.class_name || ann.label))]
         .filter(labelName => labelName && labelName.toLowerCase() !== 'null')
         .map(labelName => {
-          const existingLabel = projectLabels.find(l => l.name === labelName);
+          const existingLabel = findProjectLabelByName(labelName);
           return existingLabel || {
             id: labelName,
             name: labelName,
-            color: AnnotationAPI.generateLabelColor(labelName),
+            color: resolveLabelColor(labelName),
             count: fetchedAnnotations.filter(ann => (ann.class_name || ann.label) === labelName).length
           };
         });
@@ -1276,7 +1287,7 @@ const ManualLabeling = () => {
       console.log(`Saving label "${labelName}" to dataset ${datasetId}`);
       const savedLabel = await AnnotationAPI.saveProjectLabel(datasetId, {
         name: labelName,
-        color: AnnotationAPI.generateLabelColor(labelName)
+        color: resolveLabelColor(labelName)
       });
 
       console.log('Label saved to project:', savedLabel);
@@ -1303,7 +1314,7 @@ const ManualLabeling = () => {
             ...ann,
             label: labelName,
             class_name: labelName,
-            color: savedLabel.color || AnnotationAPI.generateLabelColor(labelName)
+            color: resolveLabelColor(labelName, savedLabel.color)
           } : ann
         ));
 
@@ -1442,7 +1453,7 @@ const ManualLabeling = () => {
         class_name: savedAnnotation.class_name || savedAnnotation.label,
         label: savedAnnotation.class_name || savedAnnotation.label,
         confidence: savedAnnotation.confidence || 1.0,
-        color: savedLabel.color || AnnotationAPI.generateLabelColor(labelName)
+        color: resolveLabelColor(labelName, savedLabel.color)
       };
 
       // CRITICAL: Set the type explicitly based on the annotation we just created
@@ -1562,14 +1573,13 @@ const ManualLabeling = () => {
         return newAnnotations;
       });
       // Check if the label already exists in the project
-      const existingProjectLabel = projectLabels.find(l => l.name === labelName);
+      const existingProjectLabel = findProjectLabelByName(labelName);
 
       // Check if the label already exists in the image
       const existingImageLabel = imageLabels.find(l => l.name === labelName);
 
       // Generate a consistent color for the label
-      const labelColor = existingProjectLabel?.color ||
-        AnnotationAPI.generateLabelColor(labelName);
+      const labelColor = resolveLabelColor(labelName, savedLabel.color);
 
       // Update image labels
       if (existingImageLabel) {
@@ -1642,9 +1652,7 @@ const ManualLabeling = () => {
         }
 
         // Case-insensitive search for existing label in UI state
-        const existingProjectLabel = projectLabels.find(l =>
-          l.name.toLowerCase() === labelName.toLowerCase()
-        );
+        const existingProjectLabel = findProjectLabelByName(labelName);
 
         if (!existingProjectLabel) {
           // Add the new label to project labels UI state
@@ -1712,16 +1720,14 @@ const ManualLabeling = () => {
         console.error('FAILED TO UPDATE PROJECT LABELS:', error);
 
         // Even if updating the database fails, ensure the label is in the UI
-        const existingProjectLabel = projectLabels.find(l =>
-          l.name.toLowerCase() === labelName.toLowerCase()
-        );
+        const existingProjectLabel = findProjectLabelByName(labelName);
 
         if (!existingProjectLabel) {
           // Add the new label to project labels
           const newProjectLabel = {
             id: savedLabel.id || Date.now(),
             name: labelName,
-            color: savedLabel.color || AnnotationAPI.generateLabelColor(labelName),
+            color: resolveLabelColor(labelName, savedLabel.color),
             count: 1
           };
 
@@ -1778,7 +1784,7 @@ const ManualLabeling = () => {
         setPendingShape(null);
       }, 100); // short delay is enough
     }
-  }, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation, annotations, pushHistory, historyPast]);
+  }, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation, annotations, pushHistory, historyPast, findProjectLabelByName, resolveLabelColor]);
 
   const handleAnnotationSelect = useCallback((annotation) => {
     logUserClick('ManualLabeling', 'annotation_select', {
@@ -1963,6 +1969,29 @@ const ManualLabeling = () => {
       navigate(`/annotate/${datasetId}/manual?imageId=${newImage.id}`);
     }
   }, [currentImageIndex, imageList, datasetId, navigate, imageData]);
+
+  useEffect(() => {
+    const handleArrowNavigation = (e) => {
+      const targetTag = e.target?.tagName;
+      const isTypingTarget =
+        targetTag === 'INPUT' ||
+        targetTag === 'TEXTAREA' ||
+        e.target?.isContentEditable;
+
+      if (isTypingTarget) return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navigateToImage('prev');
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navigateToImage('next');
+      }
+    };
+
+    document.addEventListener('keydown', handleArrowNavigation);
+    return () => document.removeEventListener('keydown', handleArrowNavigation);
+  }, [navigateToImage]);
 
   const handleBack = () => {
     logUserClick('ManualLabeling', 'back_button', {
