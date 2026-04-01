@@ -423,7 +423,6 @@ const ManagementSection = ({
       message.info(`Assigning dataset to annotating: ${dataset.name}`);
       await projectsAPI.assignDatasetToAnnotating(projectId, dataset.id);
       message.success(`Dataset assigned to annotating: ${dataset.name}`);
-      window.dispatchEvent(new CustomEvent('managementOperationDone'));
 
       logInfo('app.frontend.interactions', 'assign_dataset_to_annotating_success', 'Successfully assigned dataset to annotating', {
         timestamp: new Date().toISOString(),
@@ -432,7 +431,8 @@ const ManagementSection = ({
         datasetName: dataset.name
       });
 
-      loadManagementData(); // Reload data
+      await loadManagementData();
+      window.dispatchEvent(new CustomEvent('managementOperationDone'));
     } catch (error) {
       logError('app.frontend.interactions', 'assign_dataset_to_annotating_failed', 'Failed to assign dataset to annotating', {
         timestamp: new Date().toISOString(),
@@ -597,7 +597,6 @@ const ManagementSection = ({
       await projectsAPI.moveDatasetToUnassigned(projectId, dataset.id);
       message.destroy(); // Clear loading message
       message.success(`Dataset moved to unassigned: ${dataset.name}`);
-      window.dispatchEvent(new CustomEvent('managementOperationDone'));
 
       logInfo('app.frontend.interactions', 'move_dataset_to_unassigned_success', 'Successfully moved dataset to unassigned', {
         timestamp: new Date().toISOString(),
@@ -606,9 +605,9 @@ const ManagementSection = ({
         datasetName: dataset.name
       });
 
-      // Add a small delay to ensure backend operations complete
-      setTimeout(() => {
-        loadManagementData(); // Reload data
+      setTimeout(async () => {
+        await loadManagementData();
+        window.dispatchEvent(new CustomEvent('managementOperationDone'));
       }, 500);
     } catch (error) {
       message.destroy(); // Clear loading message
@@ -636,7 +635,6 @@ const ManagementSection = ({
       await projectsAPI.assignDatasetToAnnotating(projectId, dataset.id);
       message.destroy(); // Clear loading message
       message.success(`Dataset moved to annotating: ${dataset.name}`);
-      window.dispatchEvent(new CustomEvent('managementOperationDone'));
 
       logInfo('app.frontend.interactions', 'move_dataset_to_annotating_success', 'Successfully moved dataset to annotating', {
         timestamp: new Date().toISOString(),
@@ -645,9 +643,9 @@ const ManagementSection = ({
         datasetName: dataset.name
       });
 
-      // Add a small delay to ensure backend operations complete
-      setTimeout(() => {
-        loadManagementData(); // Reload data
+      setTimeout(async () => {
+        await loadManagementData();
+        window.dispatchEvent(new CustomEvent('managementOperationDone'));
       }, 500);
     } catch (error) {
       message.destroy(); // Clear loading message
@@ -675,7 +673,6 @@ const ManagementSection = ({
       await projectsAPI.moveDatasetToCompleted(projectId, dataset.id);
       message.destroy(); // Clear loading message
       message.success(`Dataset moved to completed: ${dataset.name}`);
-      window.dispatchEvent(new CustomEvent('managementOperationDone'));
 
       logInfo('app.frontend.interactions', 'move_dataset_to_completed_success', 'Successfully moved dataset to completed', {
         timestamp: new Date().toISOString(),
@@ -684,9 +681,9 @@ const ManagementSection = ({
         datasetName: dataset.name
       });
 
-      // Add a small delay to ensure backend operations complete
-      setTimeout(() => {
-        loadManagementData(); // Reload data
+      setTimeout(async () => {
+        await loadManagementData();
+        window.dispatchEvent(new CustomEvent('managementOperationDone'));
       }, 500);
     } catch (error) {
       message.destroy(); // Clear loading message
@@ -713,7 +710,6 @@ const ManagementSection = ({
       message.info(`Deleting dataset: ${dataset.name}`);
       await projectsAPI.deleteProjectDataset(projectId, dataset.id);
       message.success(`Dataset deleted: ${dataset.name}`);
-      window.dispatchEvent(new CustomEvent('managementOperationDone'));
 
       logInfo('app.frontend.interactions', 'delete_dataset_success', 'Successfully deleted dataset', {
         timestamp: new Date().toISOString(),
@@ -722,7 +718,8 @@ const ManagementSection = ({
         datasetName: dataset.name
       });
 
-      loadManagementData(); // Reload data
+      await loadManagementData();
+      window.dispatchEvent(new CustomEvent('managementOperationDone'));
     } catch (error) {
       logError('app.frontend.interactions', 'delete_dataset_failed', 'Failed to delete dataset', {
         timestamp: new Date().toISOString(),

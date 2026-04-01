@@ -147,7 +147,7 @@ export default function GuideBot() {
           const r = makeRefs();
           const mgmtState = checkManagementPageState(lang, r, s);
           if (mgmtState) applyWizardState(mgmtState);
-        }, 400);
+        }, 200);
       }
     };
     window.addEventListener('managementOperationDone', handler);
