@@ -55,7 +55,7 @@ function startManagementAnnotatingEmptyObserver(lang, refs, setters) {
         setWizardStep('mgmt-empty');
       } else {
         startManagementAnnotatingObserver(lang, refs, setters);
-        const startAnnotLabel = lang === 'it' ? 'Inizia Annotazione' : 'Start Annotating';
+        const startAnnotLabel = lang === 'it' ? 'Sposta in Annotating' : 'Send to Annotating';
         const msg = lang === 'it'
           ? 'Il dataset è tornato nella colonna Unassigned. Clicca su una scheda per iniziare — oppure usa il pulsante qui sotto.'
           : 'The dataset is back in the Unassigned column. Click any card to begin labeling — or use the button below.';
@@ -118,7 +118,7 @@ export function checkManagementPageState(lang, refs, setters) {
   const openLabelLabel  = lang === 'it' ? 'Apri Strumento Etichettatura' : 'Open Labeling Tool';
   const goDatasetLabel  = lang === 'it' ? 'Vai a Dataset'  : 'Go to Dataset';
   const goUploadLabel   = lang === 'it' ? 'Vai a Upload'   : 'Go to Upload';
-  const startAnnotLabel = lang === 'it' ? 'Inizia Annotazione' : 'Start Annotating';
+  const startAnnotLabel = lang === 'it' ? 'Sposta in Annotating' : 'Send to Annotating';
 
   // Detect each column's state once — used across all priority checks
   const annotatingEmpty = Array.from(document.querySelectorAll('div, span, p'))
@@ -240,7 +240,7 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
   // Overview state (all 3 populated) — three action buttons
   if (step === 'mgmt-overview-action') {
     const isLabel  = value.includes('Labeling Tool') || value.includes('Etichettatura');
-    const isAnnot  = value.includes('Start Annotating') || value.includes('Inizia Annotazione');
+    const isAnnot  = value.includes('Send to Annotating') || value.includes('Sposta in Annotating');
     if (isLabel) {
       setTimeout(() => clickColumnCard(1), 200); // click first card in Annotating column
     } else if (isAnnot) {
@@ -259,7 +259,7 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
     return;
   }
 
-  // Completed state — Go to Dataset or Start Annotating (when Unassigned also has items)
+  // Completed state — Go to Dataset or Send to Annotating (when Unassigned also has items)
   if (step === 'mgmt-completed') {
     const isAnnotate = value.includes('Annotating') || value.includes('Annotazione');
     if (isAnnotate) {
