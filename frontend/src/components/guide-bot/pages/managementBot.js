@@ -82,30 +82,38 @@ function startManagementAnnotatingObserver(lang, refs, setters) {
   if (observerRef.current) observerRef.current.disconnect();
 
   let timeoutId = null;
+  let cancelled = false;
 
   const obs = new MutationObserver(() => {
+    if (cancelled) return;
     const annotatingStillEmpty = Array.from(document.querySelectorAll('div, span, p'))
       .some(el => el.textContent.trim() === 'Upload and assign images to an annotator.');
     if (!annotatingStillEmpty) {
-      obs.disconnect();
+      obs.disconnect(); // sets cancelled=true via override below
       observerRef.current = null;
       const openLabelLabel = lang === 'it' ? 'Apri Strumento Etichettatura' : 'Open Labeling Tool';
+      const goDatasetLabel  = lang === 'it' ? 'Vai a Dataset' : 'Go to Dataset';
       const nextMsg = lang === 'it'
         ? 'Il tuo dataset è ora nella colonna Annotating. Clicca su di esso per aprire lo strumento di etichettatura — oppure usa il pulsante qui sotto.'
         : 'Your dataset is now in the Annotating column. Click it to open the labeling tool — or use the button below.';
       timeoutId = setTimeout(() => {
+        if (cancelled) return; // guard: cancelled by managementOperationDone or external disconnect
+        const datasetEmpty = Array.from(document.querySelectorAll('div, span, p'))
+          .some(el => el.textContent.trim() === 'No completed datasets found.');
+        const options = [openLabelLabel];
+        if (!datasetEmpty) options.push(goDatasetLabel);
         setIsOpen(true);
         setWizardMode(true);
         setWizardType('management-annotating');
-        setConversation([{ role: 'bot', text: nextMsg, inputType: 'buttons', options: [openLabelLabel], step: 'mgmt-annotating' }]);
+        setConversation([{ role: 'bot', text: nextMsg, inputType: 'buttons', options, step: 'mgmt-annotating' }]);
         setWizardStep('mgmt-annotating');
       }, 600);
     }
   });
 
-  // Override disconnect so any pending reopen is cancelled when managementOperationDone cleans up
+  // Override disconnect — sets cancelled flag so any pending timeout is blocked even after observerRef is nulled
   const _disconnect = obs.disconnect.bind(obs);
-  obs.disconnect = () => { if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; } _disconnect(); };
+  obs.disconnect = () => { cancelled = true; if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; } _disconnect(); };
 
   obs.observe(document.body, { childList: true, subtree: true });
   observerRef.current = obs;
