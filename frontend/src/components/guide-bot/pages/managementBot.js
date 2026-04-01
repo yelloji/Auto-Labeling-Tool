@@ -176,6 +176,18 @@ export function checkManagementPageState(lang, refs, setters) {
 
   // ---- Priority 2: Dataset has completed items (Annotating is empty) ----
   if (!datasetEmpty) {
+    // If Unassigned also has datasets, offer both actions
+    if (!unassignedEmpty) {
+      startManagementAnnotatingObserver(lang, refs, setters);
+      const msg = lang === 'it'
+        ? 'Hai dataset completati nella colonna Dataset e dataset in attesa nella colonna Unassigned.'
+        : 'You have completed datasets in the Dataset column and datasets waiting in Unassigned.';
+      return {
+        wizardType: 'management-completed',
+        conversation: [{ role: 'bot', text: msg, inputType: 'buttons', options: [goDatasetLabel, startAnnotLabel], step: 'mgmt-completed' }],
+        step: 'mgmt-completed',
+      };
+    }
     const msg = lang === 'it'
       ? 'Hai dataset completati pronti. Vai alla sezione Dataset per vedere tutte le immagini etichettate.'
       : 'You have completed datasets ready. Go to the Dataset section to view all your labeled images.';
@@ -244,8 +256,15 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
     return;
   }
 
-  // Completed state — navigate to Dataset section via sidebar
+  // Completed state — Go to Dataset or Start Annotating (when Unassigned also has items)
   if (step === 'mgmt-completed') {
+    const isAnnotate = value.includes('Annotating') || value.includes('Annotazione');
+    if (isAnnotate) {
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      setTimeout(() => clickColumnCard(0), 200);
+      closeBot();
+      return;
+    }
     setTimeout(() => clickSidebarItem('Dataset'), 200);
     closeBot();
     return;
