@@ -309,9 +309,7 @@ export default function GuideBot() {
       return;
     }
 
-    if (wizardType === 'manual-labeling-popup' || wizardType === 'manual-labeling-null' ||
-        wizardType === 'manual-labeling-smart' || wizardType === 'manual-labeling-polygon' ||
-        wizardType === 'manual-labeling-has-annotations' || wizardType === 'manual-labeling-empty') {
+    if (wizardType && wizardType.startsWith('manual-labeling-')) {
       handleManualLabelingAnswer(step, value, lang, r, s);
       return;
     }
