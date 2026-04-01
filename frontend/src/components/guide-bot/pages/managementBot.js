@@ -250,27 +250,23 @@ export function checkManagementPageState(lang, refs, setters) {
 // ---------------------------------------------------------------------------
 export function handleManagementAnswer(step, value, lang, refs, setters) {
   const { observerRef } = refs;
-  const { setIsOpen, setWizardMode, setWizardType, setConversation } = setters;
 
-  function closeBot() {
-    setWizardMode(false);
-    setWizardType(null);
-    setConversation([]);
-    setIsOpen(false);
-  }
+  // Bot stays open after every action — closes and reopens automatically via:
+  //   managementOperationDone (card moves) → GuideBot closes + reruns snapshot
+  //   workspaceSectionChanged (sidebar nav) → GuideBot closes
+  //   URL change (Open Labeling Tool) → GuideBot closes
 
   // Overview state (all 3 populated) — three action buttons
   if (step === 'mgmt-overview-action') {
-    const isLabel  = value.includes('Labeling Tool') || value.includes('Etichettatura');
-    const isAnnot  = value.includes('Send to Annotating') || value.includes('Sposta in Annotating');
+    const isLabel = value.includes('Labeling Tool') || value.includes('Etichettatura');
+    const isAnnot = value.includes('Send to Annotating') || value.includes('Sposta in Annotating');
     if (isLabel) {
-      setTimeout(() => clickColumnCard(1), 200); // click first card in Annotating column
+      setTimeout(() => clickColumnCard(1), 200);
     } else if (isAnnot) {
-      setTimeout(() => clickColumnCard(0), 200); // click first card in Unassigned column
+      setTimeout(() => clickColumnCard(0), 200);
     } else {
       setTimeout(() => clickSidebarItem('Dataset'), 200);
     }
-    closeBot();
     return;
   }
 
@@ -288,37 +284,31 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
     } else {
       setTimeout(() => clickColumnCard(1), 200); // Open Labeling Tool
     }
-    closeBot();
     return;
   }
 
-  // Completed state — Go to Dataset or Send to Annotating (when Unassigned also has items)
+  // Completed state — Go to Dataset or Send to Annotating
   if (step === 'mgmt-completed') {
     const isAnnotate = value.includes('Annotating') || value.includes('Annotazione');
     if (isAnnotate) {
       if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
       setTimeout(() => clickColumnCard(0), 200);
-      closeBot();
-      return;
+    } else {
+      setTimeout(() => clickSidebarItem('Dataset'), 200);
     }
-    setTimeout(() => clickSidebarItem('Dataset'), 200);
-    closeBot();
     return;
   }
 
   // Empty state — navigate to Upload section via sidebar
   if (step === 'mgmt-empty') {
     setTimeout(() => clickSidebarItem('Upload Data'), 200);
-    closeBot();
     return;
   }
 
-  // Unassigned state — click first card in Unassigned column (col index 0)
-  // Disconnect observer first (we are acting ourselves)
+  // Unassigned state — disconnect observer first, then click first card in Unassigned
   if (step === 'mgmt-unassigned') {
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
     setTimeout(() => clickColumnCard(0), 200);
-    closeBot();
     return;
   }
 }
