@@ -327,7 +327,20 @@ export default function GuideBot() {
   function handleBack() {
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
     if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
-    if (wizardMode) { setWizardMode(false); setWizardType(null); setConversation([]); return; }
+    if (wizardMode) {
+      if (wizardType === 'annotate-progress-complete' || wizardType === 'annotate-progress-incomplete' ||
+          wizardType === 'annotate-progress-split') {
+        setWizardMode(false);
+        setWizardType(null);
+        setConversation([]);
+        setIsOpen(false);
+        return;
+      }
+      setWizardMode(false);
+      setWizardType(null);
+      setConversation([]);
+      return;
+    }
     if (history.length === 0) return;
     const prev = history[history.length - 1];
     setHistory(h => h.slice(0, -1));
