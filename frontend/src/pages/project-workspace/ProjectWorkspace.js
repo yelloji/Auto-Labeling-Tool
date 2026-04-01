@@ -535,6 +535,7 @@ const ProjectWorkspace = () => {
               newSection: key
             });
             setSelectedKey(key);
+            window.dispatchEvent(new CustomEvent('workspaceSectionChanged', { detail: { section: key } }));
           }}
         />
       </Sider>

@@ -79,6 +79,22 @@ export default function GuideBot() {
   const [textInput,    setTextInput]    = useState('');
   const [isOnnx,       setIsOnnx]       = useState(false);
 
+  // When workspace sidebar section changes → close bot
+  // Section changes don't change the URL, so we listen for the custom event fired by ProjectWorkspace
+  useEffect(() => {
+    const handler = () => {
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
+      setIsOpen(false);
+      setWizardMode(false);
+      setWizardType(null);
+      setConversation([]);
+      setWizardStep(null);
+    };
+    window.addEventListener('workspaceSectionChanged', handler);
+    return () => window.removeEventListener('workspaceSectionChanged', handler);
+  }, []);
+
   // When URL changes → close bot and reset everything
   // Bot must be closed so the next open triggers a fresh snapshot check for the new page
   useEffect(() => {
