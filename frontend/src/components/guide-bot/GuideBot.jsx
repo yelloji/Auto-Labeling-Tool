@@ -66,6 +66,7 @@ export default function GuideBot() {
   const observerRef            = useRef(null);
   const processingObserverRef  = useRef(null);
   const isOpenRef              = useRef(false);
+  const pendingReopenRef       = useRef(false);
   const isMainPage             = MAIN_PAGES.includes(location.pathname);
 
   const [isOpen,       setIsOpen]       = useState(false);
@@ -102,7 +103,7 @@ export default function GuideBot() {
       'active-learning': '/workspace/active-learning',
     };
     const handler = (e) => {
-      const wasOpen = isOpenRef.current;
+      const shouldReopen = isOpenRef.current || pendingReopenRef.current;
       if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
       if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
       setIsOpen(false);
@@ -112,7 +113,8 @@ export default function GuideBot() {
       setWizardStep(null);
       const section = e.detail?.section;
       if (section && SECTION_SCRIPT[section]) setScriptKey(SECTION_SCRIPT[section]);
-      if (wasOpen) {
+      if (shouldReopen) {
+        pendingReopenRef.current = false;
         setTimeout(() => reopenForCurrentContext(location.pathname, section), 200);
       }
     };
@@ -198,7 +200,7 @@ export default function GuideBot() {
   // Bot must be closed so the next open triggers a fresh snapshot check for the new page
   useEffect(() => {
     const key = getScriptKey(location.pathname);
-    const wasOpen = isOpenRef.current;
+    const shouldReopen = isOpenRef.current || pendingReopenRef.current;
     setScriptKey(key);
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
     if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
@@ -209,7 +211,8 @@ export default function GuideBot() {
     setConversation([]);
     setWizardStep(null);
     setWizardData({});
-    if (wasOpen) {
+    if (shouldReopen) {
+      pendingReopenRef.current = false;
       setTimeout(() => reopenForCurrentContext(location.pathname), 220);
     }
   }, [location.pathname]);
@@ -239,6 +242,7 @@ export default function GuideBot() {
       setIsOpen, setWizardMode, setWizardType, setConversation,
       setWizardStep, setWizardData, setTextInput, setIsOnnx,
       setScriptKey, addMessage,
+      requestReopen: () => { pendingReopenRef.current = true; },
     };
   }
 
@@ -432,6 +436,7 @@ export default function GuideBot() {
     const r = makeRefs();
 
     if (action.type === 'navigate') {
+      pendingReopenRef.current = true;
       navigate(action.path);
       setIsOpen(false);
     } else if (action.type === 'wizard') {
@@ -447,6 +452,7 @@ export default function GuideBot() {
       }
     } else if (action.type === 'click') {
       try {
+        pendingReopenRef.current = true;
         const hasTextMatch = action.selector.match(/:has-text\(['"](.+?)['"]\)/);
         let el = null;
         if (hasTextMatch) {
@@ -458,8 +464,14 @@ export default function GuideBot() {
           el = document.querySelector(action.selector);
         }
         if (el) { setIsOpen(false); setTimeout(() => el.click(), 100); }
-        else setIsOpen(false);
-      } catch (e) { setIsOpen(false); }
+        else {
+          pendingReopenRef.current = false;
+          setIsOpen(false);
+        }
+      } catch (e) {
+        pendingReopenRef.current = false;
+        setIsOpen(false);
+      }
     } else if (action.type === 'message') {
       setHistory(prev => [...prev, scriptKey]);
       setScriptKey(action.key);

@@ -310,7 +310,7 @@ export function startUploadVideoWizard(mode, lang, refs, setters) {
 // ---------------------------------------------------------------------------
 export function handleUploadAnswer(wizardType, step, value, lang, refs, setters) {
   const { observerRef, processingObserverRef } = refs;
-  const { setWizardMode, setWizardType, setIsOpen, setConversation, setWizardStep, addMessage } = setters;
+  const { setWizardMode, setWizardType, setIsOpen, setConversation, setWizardStep, addMessage, requestReopen } = setters;
 
   // ---- Upload Video wizard ----
   if (wizardType === 'upload-video-files' || wizardType === 'upload-video-folder') {
@@ -329,6 +329,7 @@ export function handleUploadAnswer(wizardType, step, value, lang, refs, setters)
       setWizardStep('uv-waiting');
     }
     else if (step === 'uv-done') {
+      requestReopen?.();
       setTimeout(() => clickSidebarItem('Management'), 200);
       setWizardMode(false);
       setWizardType(null);
@@ -375,6 +376,7 @@ export function handleUploadAnswer(wizardType, step, value, lang, refs, setters)
       setTimeout(() => setIsOpen(false), 400);
     }
     else if (step === 'ufl-done') {
+      requestReopen?.();
       setTimeout(() => clickSidebarItem('Management'), 200);
       setWizardMode(false);
       setWizardType(null);
@@ -386,6 +388,7 @@ export function handleUploadAnswer(wizardType, step, value, lang, refs, setters)
   // ---- Upload Folder (images only) wizard ----
   if (wizardType === 'upload-folder') {
     if (step === 'uf-done') {
+      requestReopen?.();
       setTimeout(() => clickSidebarItem('Management'), 200);
       setWizardMode(false);
       setWizardType(null);
@@ -459,6 +462,7 @@ export function handleUploadAnswer(wizardType, step, value, lang, refs, setters)
       observerRef.current = observer;
     }
     else if (step === 'uf-done') {
+      requestReopen?.();
       setTimeout(() => clickSidebarItem('Management'), 200);
       setWizardMode(false);
       setWizardType(null);

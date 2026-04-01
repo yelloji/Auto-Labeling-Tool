@@ -336,6 +336,7 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
   const columnsLabel = getColumnsLabel(lang);
   const menuLabel = getMenuLabel(lang);
   const backLabel = getBackLabel(lang);
+  const { requestReopen } = setters;
 
   if (
     (step === 'mgmt-overview-action' ||
@@ -390,10 +391,13 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
     const isAnnot = value.includes('Send to Annotating') || value.includes('Sposta in Annotating');
 
     if (isLabel) {
+      requestReopen?.();
       setTimeout(() => clickColumnCard(1), 200);
     } else if (isAnnot) {
+      requestReopen?.();
       setTimeout(() => clickColumnCard(0), 200);
     } else {
+      requestReopen?.();
       setTimeout(() => clickSidebarItem('Dataset'), 200);
     }
     return;
@@ -405,12 +409,16 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
     const isUpload = value.includes('Upload');
 
     if (isSend) {
+      requestReopen?.();
       setTimeout(() => clickColumnCard(0), 200);
     } else if (isDataset) {
+      requestReopen?.();
       setTimeout(() => clickSidebarItem('Dataset'), 200);
     } else if (isUpload) {
+      requestReopen?.();
       setTimeout(() => clickSidebarItem('Upload Data'), 200);
     } else {
+      requestReopen?.();
       setTimeout(() => clickColumnCard(1), 200);
     }
     return;
@@ -423,14 +431,17 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
         observerRef.current.disconnect();
         observerRef.current = null;
       }
+      requestReopen?.();
       setTimeout(() => clickColumnCard(0), 200);
     } else {
+      requestReopen?.();
       setTimeout(() => clickSidebarItem('Dataset'), 200);
     }
     return;
   }
 
   if (step === 'mgmt-empty') {
+    requestReopen?.();
     setTimeout(() => clickSidebarItem('Upload Data'), 200);
     return;
   }
@@ -440,6 +451,7 @@ export function handleManagementAnswer(step, value, lang, refs, setters) {
       observerRef.current.disconnect();
       observerRef.current = null;
     }
+    requestReopen?.();
     setTimeout(() => clickColumnCard(0), 200);
   }
 }

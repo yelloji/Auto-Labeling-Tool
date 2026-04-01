@@ -127,7 +127,7 @@ export function checkAnnotateProgressPageState(lang, refs, setters) {
 // Handle wizard answers
 // ---------------------------------------------------------------------------
 export function handleAnnotateProgressAnswer(step, value, lang, refs, setters) {
-  const { setIsOpen, setWizardMode, setWizardType, setConversation, addMessage } = setters;
+  const { setIsOpen, setWizardMode, setWizardType, setConversation, addMessage, requestReopen } = setters;
 
   function closeBot() {
     setWizardMode(false);
@@ -165,6 +165,7 @@ export function handleAnnotateProgressAnswer(step, value, lang, refs, setters) {
         setTimeout(() => clickDrawerSubmit(), 300);
       }, 200);
     }
+    requestReopen?.();
     closeBot();
     return;
   }
@@ -193,6 +194,7 @@ export function handleAnnotateProgressAnswer(step, value, lang, refs, setters) {
         setTimeout(() => clickDrawerSubmit(), 400);
       }, 300);
     }, 200);
+    requestReopen?.();
     closeBot();
     return;
   }
@@ -214,6 +216,7 @@ export function handleAnnotateProgressAnswer(step, value, lang, refs, setters) {
         .find(b => b.textContent.trim() === 'Add Images to Dataset');
       if (btn) btn.click();
     }, 200);
+    requestReopen?.();
     closeBot();
     return;
   }
@@ -225,6 +228,7 @@ export function handleAnnotateProgressAnswer(step, value, lang, refs, setters) {
         .find(b => b.textContent.trim() === 'Add Images to Dataset');
       if (btn) btn.click();
     }, 200);
+    requestReopen?.();
     closeBot();
     return;
   }
@@ -247,6 +251,7 @@ export function handleAnnotateProgressAnswer(step, value, lang, refs, setters) {
         if (card) card.click();
       }
     }, 200);
+    requestReopen?.();
     closeBot();
     return;
   }
