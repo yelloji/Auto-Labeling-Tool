@@ -72,7 +72,7 @@ const AnalyticsSection = ({ projectId, project, loadProject }) => {
 
     window.dispatchEvent(new CustomEvent('analyticsGuideStateChanged', {
       detail: {
-        forceRefresh: true,
+        forceRefresh: false,
         modalOpen: labelModalVisible,
         loading,
         createLabelOpen: false,

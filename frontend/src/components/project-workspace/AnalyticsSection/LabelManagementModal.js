@@ -73,7 +73,7 @@ const LabelManagementModal = ({
 
     window.dispatchEvent(new CustomEvent('analyticsGuideStateChanged', {
       detail: {
-        forceRefresh: true,
+        forceRefresh: false,
         modalOpen: visible,
         createLabelOpen: !!isCreating,
         editLabelOpen: !!editingLabel,
@@ -381,7 +381,7 @@ const LabelManagementModal = ({
     };
     window.dispatchEvent(new CustomEvent('analyticsGuideStateChanged', {
       detail: {
-        forceRefresh: true,
+        forceRefresh: false,
         modalOpen: false,
         createLabelOpen: false,
         editLabelOpen: false,

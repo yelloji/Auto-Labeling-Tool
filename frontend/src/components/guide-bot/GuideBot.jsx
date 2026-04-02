@@ -421,6 +421,7 @@ export default function GuideBot() {
 
   function closeBotManually() {
     pendingReopenRef.current = false;
+    isOpenRef.current = false;
     setIsOpen(false);
   }
 
