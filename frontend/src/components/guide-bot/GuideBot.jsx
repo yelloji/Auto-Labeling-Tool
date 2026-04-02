@@ -65,11 +65,14 @@ const BUBBLE_TEXT = {
 export default function GuideBot() {
   const location               = useLocation();
   const navigate               = useNavigate();
+  const wrapperRef             = useRef(null);
+  const panelRef               = useRef(null);
   const scrollRef              = useRef(null);
   const observerRef            = useRef(null);
   const processingObserverRef  = useRef(null);
   const isOpenRef              = useRef(false);
   const pendingReopenRef       = useRef(false);
+  const dragStateRef           = useRef({ active: false, offsetX: 0, offsetY: 0, moved: false, startX: 0, startY: 0 });
   const isMainPage             = MAIN_PAGES.includes(location.pathname);
 
   const [isOpen,       setIsOpen]       = useState(false);
@@ -85,10 +88,90 @@ export default function GuideBot() {
   const [wizardData,   setWizardData]   = useState({});
   const [textInput,    setTextInput]    = useState('');
   const [isOnnx,       setIsOnnx]       = useState(false);
+  const [botPosition,  setBotPosition]  = useState(null);
+  const [openPosition, setOpenPosition] = useState(null);
 
   useEffect(() => {
     isOpenRef.current = isOpen;
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setOpenPosition(null);
+      return;
+    }
+
+    const adjustOpenPosition = () => {
+      const wrapperEl = wrapperRef.current;
+      const panelEl = panelRef.current;
+      if (!wrapperEl || !panelEl) return;
+
+      const wrapperRect = wrapperEl.getBoundingClientRect();
+      const panelRect = panelEl.getBoundingClientRect();
+      const currentX = botPosition?.x ?? wrapperRect.left;
+      const currentY = botPosition?.y ?? wrapperRect.top;
+      const padding = 16;
+
+      const maxX = Math.max(padding, window.innerWidth - panelRect.width - padding);
+      const maxY = Math.max(padding, window.innerHeight - panelRect.height - padding);
+
+      const nextX = Math.min(Math.max(padding, currentX), maxX);
+      const nextY = Math.min(Math.max(padding, currentY), maxY);
+
+      setOpenPosition({ x: nextX, y: nextY });
+    };
+
+    adjustOpenPosition();
+    const resizeObserver = new ResizeObserver(() => {
+      adjustOpenPosition();
+    });
+    if (panelRef.current) resizeObserver.observe(panelRef.current);
+    window.addEventListener('resize', adjustOpenPosition);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', adjustOpenPosition);
+    };
+  }, [isOpen, botPosition]);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      const drag = dragStateRef.current;
+      if (!drag.active || isOpenRef.current) return;
+
+      const wrapperEl = wrapperRef.current;
+      if (!wrapperEl) return;
+
+      const wrapperRect = wrapperEl.getBoundingClientRect();
+      const nextX = e.clientX - drag.offsetX;
+      const nextY = e.clientY - drag.offsetY;
+      const maxX = Math.max(16, window.innerWidth - wrapperRect.width - 16);
+      const maxY = Math.max(16, window.innerHeight - wrapperRect.height - 16);
+
+      const boundedX = Math.min(Math.max(16, nextX), maxX);
+      const boundedY = Math.min(Math.max(16, nextY), maxY);
+
+      if (Math.abs(e.clientX - drag.startX) > 6 || Math.abs(e.clientY - drag.startY) > 6) {
+        drag.moved = true;
+      }
+
+      setBotPosition({ x: boundedX, y: boundedY });
+    };
+
+    const handleMouseUp = () => {
+      if (!dragStateRef.current.active) return;
+      dragStateRef.current.active = false;
+      setTimeout(() => {
+        dragStateRef.current.moved = false;
+      }, 0);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
 
   // When workspace sidebar section changes → close bot
   // Section changes don't change the URL, so we listen for the custom event fired by ProjectWorkspace
@@ -336,6 +419,11 @@ export default function GuideBot() {
     setIsOpen(true);
   }
 
+  function closeBotManually() {
+    pendingReopenRef.current = false;
+    setIsOpen(false);
+  }
+
   // ---- Detect active workspace section from sidebar DOM ----
   function detectWorkspaceSection() {
     const LABEL_MAP = {
@@ -427,6 +515,8 @@ export default function GuideBot() {
 
   // ---- Handle robot click — snapshot check first, then open ----
   function handleBotOpen() {
+    if (dragStateRef.current.moved) return;
+
     if (location.pathname.includes('/workspace')) {
       // Sync scriptKey to the actual active section so Cancel shows the right script
       setScriptKey(detectWorkspaceSection());
@@ -466,6 +556,30 @@ export default function GuideBot() {
     }
 
     setIsOpen(true);
+  }
+
+  function handleRobotMouseDown(e) {
+    if (isOpen || e.button !== 0) return;
+
+    const wrapperEl = wrapperRef.current;
+    if (!wrapperEl) return;
+
+    const wrapperRect = wrapperEl.getBoundingClientRect();
+    dragStateRef.current = {
+      active: true,
+      offsetX: e.clientX - wrapperRect.left,
+      offsetY: e.clientY - wrapperRect.top,
+      moved: false,
+      startX: e.clientX,
+      startY: e.clientY,
+    };
+
+    if (!botPosition) {
+      setBotPosition({
+        x: wrapperRect.left,
+        y: wrapperRect.top,
+      });
+    }
   }
 
   // ---- Handle wizard button/text answers ----
@@ -630,12 +744,20 @@ export default function GuideBot() {
     ? conversation[conversation.length - 1]
     : null;
 
+  const wrapperPositionStyle = isOpen
+    ? (openPosition ? { top: openPosition.y, left: openPosition.x, right: 'auto', bottom: 'auto' } : undefined)
+    : (botPosition ? { top: botPosition.y, left: botPosition.x, right: 'auto', bottom: 'auto' } : undefined);
+
   return (
-    <div className="guide-bot-wrapper">
+    <div
+      ref={wrapperRef}
+      className="guide-bot-wrapper"
+      style={wrapperPositionStyle}
+    >
 
       {/* CHAT PANEL */}
       {isOpen && (
-        <div className="guide-bot-panel">
+        <div ref={panelRef} className="guide-bot-panel">
 
           {/* Header */}
           <div className="guide-bot-header">
@@ -648,7 +770,7 @@ export default function GuideBot() {
                 <button className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>EN</button>
                 <button className={lang === 'it' ? 'active' : ''} onClick={() => setLang('it')}>IT</button>
               </div>
-              <button className="guide-bot-minimize" onClick={() => setIsOpen(false)} title="Minimize">&#8722;</button>
+              <button className="guide-bot-minimize" onClick={closeBotManually} title="Minimize">&#8722;</button>
             </div>
           </div>
 
@@ -748,6 +870,7 @@ export default function GuideBot() {
       {/* ROBOT — minimized */}
       {!isOpen && (
         <div className={`guide-bot-robot-container${isMainPage ? ' guide-bot-large' : ''}`}
+          onMouseDown={handleRobotMouseDown}
           onClick={handleBotOpen} title="Open Guide">
           <div className="guide-bot-hello-bubble">
             {(BUBBLE_TEXT[lang] || BUBBLE_TEXT['en'])[location.pathname] || (BUBBLE_TEXT[lang] || BUBBLE_TEXT['en'])['default']}
