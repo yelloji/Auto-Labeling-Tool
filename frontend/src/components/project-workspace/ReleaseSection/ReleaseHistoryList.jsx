@@ -13,6 +13,24 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
   const [loading, setLoading] = useState(true);
   const [editingRelease, setEditingRelease] = useState(null);
   const [newName, setNewName] = useState('');
+  const [deleteReleaseOpen, setDeleteReleaseOpen] = useState(false);
+
+  useEffect(() => {
+    const prev = window.__releaseGuideState || {};
+    window.__releaseGuideState = {
+      ...prev,
+      renameReleaseOpen: !!editingRelease,
+      deleteReleaseOpen,
+    };
+
+    window.dispatchEvent(new CustomEvent('releaseGuideStateChanged', {
+      detail: {
+        forceRefresh: false,
+        renameReleaseOpen: !!editingRelease,
+        deleteReleaseOpen,
+      }
+    }));
+  }, [editingRelease, deleteReleaseOpen]);
 
   useEffect(() => {
     logInfo('app.frontend.ui', 'release_history_list_initialized', 'ReleaseHistoryList component initialized', {
@@ -310,6 +328,7 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
       function: 'handleDelete'
     });
 
+    setDeleteReleaseOpen(true);
     confirm({
       title: 'Delete Release',
       icon: <ExclamationCircleOutlined />,
@@ -362,9 +381,12 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
           });
           console.error('Failed to delete release:', error);
           message.error('Failed to delete release');
+        } finally {
+          setDeleteReleaseOpen(false);
         }
       },
       onCancel: () => {
+        setDeleteReleaseOpen(false);
         logUserClick('release_delete_cancelled', 'User cancelled release deletion');
         logInfo('app.frontend.ui', 'release_delete_confirmation_cancelled', 'Release delete confirmation cancelled', {
           timestamp: new Date().toISOString(),

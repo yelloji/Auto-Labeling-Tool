@@ -430,6 +430,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
   const [releaseLoading, setReleaseLoading] = useState(false);
 
   useEffect(() => {
+    const prev = window.__releaseGuideState || {};
     const hasResize = transformations.some(transform => {
       const name = (transform?.name || '').toLowerCase();
       const keys = Object.keys(transform?.config || {}).map(key => key.toLowerCase());
@@ -437,6 +438,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     });
 
     window.__releaseGuideState = {
+      ...prev,
       isReleasePage: true,
       loading: releaseLoading,
       hasCompletedDatasets: selectedDatasets.length > 0,
@@ -452,6 +454,13 @@ const ReleaseSection = ({ projectId, datasetId }) => {
       showReleaseDetails,
       selectedReleaseId: selectedRelease?.id || null,
       isCreating: releaseLoading || downloadModal.isExporting,
+      globalRebalanceOpen: prev.globalRebalanceOpen || false,
+      renameReleaseOpen: prev.renameReleaseOpen || false,
+      deleteReleaseOpen: prev.deleteReleaseOpen || false,
+      transformationPickerVisible: prev.transformationPickerVisible || false,
+      transformationPickerType: prev.transformationPickerType || null,
+      transformationConfigVisible: prev.transformationConfigVisible || false,
+      transformationConfigTool: prev.transformationConfigTool || null,
     };
 
     window.dispatchEvent(new CustomEvent('releaseGuideStateChanged', {
@@ -495,6 +504,13 @@ const ReleaseSection = ({ projectId, datasetId }) => {
         showReleaseDetails: false,
         selectedReleaseId: null,
         isCreating: false,
+        globalRebalanceOpen: false,
+        renameReleaseOpen: false,
+        deleteReleaseOpen: false,
+        transformationPickerVisible: false,
+        transformationPickerType: null,
+        transformationConfigVisible: false,
+        transformationConfigTool: null,
       };
     };
   }, []);

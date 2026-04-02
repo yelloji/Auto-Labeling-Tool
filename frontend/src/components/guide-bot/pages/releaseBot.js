@@ -67,8 +67,201 @@ function getAddBasicLabel(lang) {
   return lang === 'it' ? 'Add Basic Transformation' : 'Add Basic Transformation';
 }
 
+function getAddAdvancedLabel(lang) {
+  return lang === 'it' ? 'Add Advanced Transformation' : 'Add Advanced Transformation';
+}
+
 function getTransformationsHelpLabel(lang) {
   return lang === 'it' ? 'Cosa fanno queste trasformazioni?' : 'What do these transformations do?';
+}
+
+function getToolUseHelpLabel(lang) {
+  return lang === 'it' ? 'Come uso questo strumento?' : 'How do I use this tool?';
+}
+
+function getToolParamHelpLabel(lang) {
+  return lang === 'it' ? 'Cosa significano questi parametri?' : 'What do these parameters mean?';
+}
+
+function getCombinationsHelpLabel(lang) {
+  return lang === 'it' ? 'Che cos e Estimated Combinations?' : 'What is Estimated Combinations?';
+}
+
+function getApplyTransformationLabel(lang) {
+  return lang === 'it' ? 'Apply Transformation' : 'Apply Transformation';
+}
+
+function getRenameHelpLabel(lang) {
+  return lang === 'it' ? 'Che nome dovrei scrivere?' : 'What should I write here?';
+}
+
+function getDeleteHelpLabel(lang) {
+  return lang === 'it' ? 'Cosa succede se la elimino?' : 'What happens if I delete it?';
+}
+
+function getRebalanceCountsHelpLabel(lang) {
+  return lang === 'it' ? 'Come compilo questi numeri?' : 'How should I fill these counts?';
+}
+
+function normalizeToolName(toolName) {
+  if (!toolName) return '';
+  return String(toolName).trim().toLowerCase().replace(/_/g, ' ');
+}
+
+function getToolSpecificGuidance(toolName, lang) {
+  const name = normalizeToolName(toolName);
+
+  if (name.includes('resize')) {
+    return {
+      use: lang === 'it'
+        ? 'Resize e il primo strumento importante qui, perche sblocca la configurazione finale della release. Imposta larghezza e altezza pensando alla dimensione di training desiderata, poi scegli il resize mode che conserva meglio il contenuto.'
+        : 'Resize is the key first tool here because it unlocks the final release configuration. Set width and height for the training size you want, then choose the resize mode that preserves the content best.',
+      params: lang === 'it'
+        ? 'Width e Height definiscono la dimensione finale. Resize Mode decide come l immagine entra nella nuova misura: stretch deforma, fit mantiene le proporzioni, mentre fill/crop gestiscono i bordi o il taglio.'
+        : 'Width and Height define the final size. Resize Mode decides how the image fits the new size: stretch distorts, fit preserves proportions, while fill/crop modes manage borders or trimming.',
+      combinations: lang === 'it'
+        ? 'Con Resize di solito le combinazioni restano semplici, perche spesso usi una sola misura finale. Il suo ruolo principale qui e definire la base su cui lavorano le altre trasformazioni.'
+        : 'Resize usually keeps combinations simple because you often choose one final size. Its main role here is defining the base that the other transformations work on.',
+    };
+  }
+
+  if (name.includes('rotate')) {
+    return {
+      use: lang === 'it'
+        ? 'Usa Rotate per aggiungere variazione di orientamento quando l oggetto puo apparire inclinato. Controlla sempre il preview, perche angoli troppo forti possono rendere l immagine poco realistica.'
+        : 'Use Rotate to add orientation variation when the object can appear tilted. Always check the preview, because very strong angles can make the image unrealistic.',
+      params: lang === 'it'
+        ? 'Angle controlla la rotazione. Fill Color decide il colore degli angoli vuoti creati dalla rotazione: scegli un riempimento che non distragga o falsi troppo il contesto.'
+        : 'Angle controls the rotation. Fill Color decides the color of the empty corners created by rotation: choose a fill that does not distract or distort the context too much.',
+      combinations: lang === 'it'
+        ? 'Con una sola rotazione la combinazione e semplice. Se combini Rotate con altri strumenti geometrici, il numero di varianti possibili cresce piu rapidamente.'
+        : 'With a single rotation the combination stays simple. If you combine Rotate with other geometric tools, the number of possible variants grows faster.',
+    };
+  }
+
+  if (name.includes('flip')) {
+    return {
+      use: lang === 'it'
+        ? 'Usa Flip quando l oggetto puo apparire valido specchiato. E molto utile per aumentare rapidamente la variazione, ma evita di usarlo se il verso dell oggetto ha un significato fisso.'
+        : 'Use Flip when the object can still be valid when mirrored. It is very useful for adding variation quickly, but avoid it if the object orientation has a fixed meaning.',
+      params: lang === 'it'
+        ? 'Horizontal e Vertical attivano i due tipi di flip. Orizzontale e di solito il piu sicuro; verticale puo essere piu aggressivo e va controllato con attenzione sul preview.'
+        : 'Horizontal and Vertical enable the two flip directions. Horizontal is usually the safer one; vertical can be more aggressive and should be checked carefully in the preview.',
+      combinations: lang === 'it'
+        ? 'Le combinazioni restano basse se attivi una sola direzione. Se usi piu direzioni o lo combini con altri strumenti, il massimo Images per Original puo aumentare.'
+        : 'Combinations stay low if you enable only one direction. If you use multiple directions or combine it with other tools, the Images per Original maximum can increase.',
+    };
+  }
+
+  if (name.includes('crop')) {
+    return {
+      use: lang === 'it'
+        ? 'Usa Crop per simulare inquadrature piu strette. E utile, ma troppo crop puo tagliare parti importanti dell oggetto o dell annotazione.'
+        : 'Use Crop to simulate tighter framing. It is useful, but too much cropping can remove important parts of the object or annotation.',
+      params: lang === 'it'
+        ? 'Crop Percentage decide quanto dell immagine originale rimane. Crop Mode decide dove avviene il taglio: center e piu stabile, random o corner danno piu variazione ma piu rischio.'
+        : 'Crop Percentage decides how much of the original image remains. Crop Mode decides where the trim happens: center is more stable, while random or corner modes give more variation but more risk.',
+      combinations: lang === 'it'
+        ? 'Con una sola percentuale e una sola modalita hai una combinazione semplice. Modalita piu variabili rendono il dataset piu diverso, ma richiedono piu attenzione al preview.'
+        : 'With one percentage and one mode you have a simple combination. More variable modes make the dataset more diverse, but require more preview checking.',
+    };
+  }
+
+  if (name.includes('brightness')) {
+    return {
+      use: lang === 'it'
+        ? 'Usa Brightness per simulare condizioni di luce leggermente diverse. E meglio restare su valori moderati, per non rendere le immagini troppo scure o troppo forti.'
+        : 'Use Brightness to simulate slightly different lighting conditions. It is best to stay with moderate values so the images do not become too dark or too strong.',
+      params: lang === 'it'
+        ? 'La percentuale controlla quanto l immagine diventa piu scura o piu luminosa. Valori aggressivi possono ridurre il dettaglio utile per il training.'
+        : 'The percentage controls how much the image becomes darker or brighter. Aggressive values can reduce useful detail for training.',
+      combinations: lang === 'it'
+        ? 'Per strumenti di intensita come Brightness, lo schema puo generare varianti anche in base a valori opposti o combinati con altri strumenti, quindi il massimo finale puo crescere.'
+        : 'For intensity tools like Brightness, the schema can generate variants from opposite values or in combination with other tools, so the final maximum can grow.',
+    };
+  }
+
+  if (name.includes('contrast')) {
+    return {
+      use: lang === 'it'
+        ? 'Contrast cambia la separazione tra zone chiare e scure. E utile per robustezza visiva, ma troppo contrasto puo far perdere sfumature o dettaglio fine.'
+        : 'Contrast changes the separation between light and dark areas. It helps visual robustness, but too much contrast can remove gradients or fine detail.',
+      params: lang === 'it'
+        ? 'La percentuale controlla quanto il contrasto viene ridotto o aumentato. In genere valori piccoli o medi sono piu sicuri di cambi estremi.'
+        : 'The percentage controls how much contrast is reduced or increased. Small or moderate values are usually safer than extreme changes.',
+      combinations: lang === 'it'
+        ? 'Come Brightness, anche Contrast puo contribuire a piu varianti quando il sistema considera direzioni opposte o combinazioni con altri strumenti.'
+        : 'Like Brightness, Contrast can also contribute to multiple variants when the system considers opposite directions or combinations with other tools.',
+    };
+  }
+
+  if (name.includes('blur')) {
+    return {
+      use: lang === 'it'
+        ? 'Usa Blur per simulare messa a fuoco non perfetta o movimento. E utile con moderazione; troppo blur puo cancellare i dettagli necessari alle annotazioni.'
+        : 'Use Blur to simulate imperfect focus or motion. It is useful in moderation; too much blur can remove the details needed for the annotations.',
+      params: lang === 'it'
+        ? 'Radius controlla la forza del blur. Blur Type cambia lo stile: Gaussian e il piu comune, Motion e piu specifico, Box e piu semplice ma spesso meno naturale.'
+        : 'Radius controls blur strength. Blur Type changes the style: Gaussian is the most common, Motion is more specific, and Box is simpler but often less natural.',
+      combinations: lang === 'it'
+        ? 'Con un solo blur la combinazione resta semplice. Se lo combini con zoom, crop o rotate, la varietà aumenta ma il rischio di immagini troppo degradate cresce.'
+        : 'With one blur the combination stays simple. If you combine it with zoom, crop, or rotate, variety increases but the risk of overly degraded images also grows.',
+    };
+  }
+
+  if (name.includes('random zoom') || name.includes('zoom')) {
+    return {
+      use: lang === 'it'
+        ? 'Usa Random Zoom per simulare oggetti un po piu vicini o piu lontani. E utile per robustezza di scala, ma controlla che l oggetto resti leggibile e ben inquadrato.'
+        : 'Use Random Zoom to simulate objects being a bit closer or farther away. It helps scale robustness, but check that the object stays readable and properly framed.',
+      params: lang === 'it'
+        ? 'Zoom Factor usa 1.0 come dimensione originale. Sopra 1.0 zoomi in, sotto 1.0 zoomi out. Valori troppo forti possono tagliare contesto o rendere l oggetto troppo piccolo.'
+        : 'Zoom Factor uses 1.0 as the original size. Above 1.0 you zoom in, below 1.0 you zoom out. Very strong values can cut context or make the object too small.',
+      combinations: lang === 'it'
+        ? 'Random Zoom da solo resta semplice, ma combinato con crop o affine puo alzare molto il numero di varianti e la forza della trasformazione finale.'
+        : 'Random Zoom alone stays simple, but combined with crop or affine it can greatly increase both the number of variants and the strength of the final transformation.',
+    };
+  }
+
+  if (name.includes('color jitter')) {
+    return {
+      use: lang === 'it'
+        ? 'Color Jitter e uno strumento piu ricco: cambia colore, luminosita, contrasto e saturazione insieme. E potente, ma va usato con attenzione per non creare colori innaturali.'
+        : 'Color Jitter is a richer tool: it changes color, brightness, contrast, and saturation together. It is powerful, but should be used carefully to avoid unnatural colors.',
+      params: lang === 'it'
+        ? 'Ogni parametro controlla una parte diversa della variazione colore. Piccoli valori su piu parametri spesso funzionano meglio di un solo valore troppo aggressivo.'
+        : 'Each parameter controls a different part of the color variation. Small values across multiple parameters often work better than one overly aggressive value.',
+      combinations: lang === 'it'
+        ? 'Poiche ha piu parametri, Color Jitter puo aumentare rapidamente le varianti possibili. Per questo conviene controllare Estimated Combinations e il max Images per Original.'
+        : 'Because it has multiple parameters, Color Jitter can raise the number of possible variants quickly. That is why it is worth checking Estimated Combinations and the Images per Original max.',
+    };
+  }
+
+  if (name.includes('affine')) {
+    return {
+      use: lang === 'it'
+        ? 'Affine Transform combina scala, rotazione e spostamento. E utile per una variazione geometrica forte, ma e uno degli strumenti da controllare con piu attenzione.'
+        : 'Affine Transform combines scale, rotation, and shifting. It is useful for stronger geometric variation, but it is one of the tools that needs the most careful checking.',
+      params: lang === 'it'
+        ? 'Scale, rotation, horizontal shift e vertical shift agiscono insieme. Anche valori moderati possono cambiare molto il risultato finale quando vengono combinati.'
+        : 'Scale, rotation, horizontal shift, and vertical shift work together. Even moderate values can change the final result a lot when they are combined.',
+      combinations: lang === 'it'
+        ? 'Con piu parametri geometrici, le combinazioni possono crescere rapidamente. Guarda Estimated Combinations e scegli Images per Original in modo coerente con il livello di variazione che vuoi.'
+        : 'With multiple geometric parameters, combinations can grow quickly. Watch Estimated Combinations and choose Images per Original in line with the amount of variation you actually want.',
+    };
+  }
+
+  return {
+    use: lang === 'it'
+      ? 'Confronta sempre Original e Preview prima di applicare lo strumento. L obiettivo e ottenere una variazione utile senza rendere l immagine poco realistica.'
+      : 'Always compare Original and Preview before applying the tool. The goal is to get useful variation without making the image unrealistic.',
+    params: lang === 'it'
+      ? 'I parametri controllano intensita, direzione o stile della trasformazione. Cambi troppo forti possono danneggiare dettagli importanti o creare casi poco credibili.'
+      : 'The parameters control the strength, direction, or style of the transformation. Changes that are too strong can damage important detail or create unrealistic cases.',
+    combinations: lang === 'it'
+      ? 'Estimated Combinations mostra quante varianti questa configurazione puo contribuire a generare. Questo influenza il massimo disponibile in Images per Original.'
+      : 'Estimated Combinations shows how many variants this configuration can contribute to generating. This influences the available Images per Original maximum.',
+  };
 }
 
 function getImagesPerOriginalHelpLabel(lang) {
@@ -161,6 +354,8 @@ function isDownloadModalOpen(state) {
 }
 
 function isGlobalRebalanceOpen() {
+  const state = getPublishedState();
+  if (typeof state?.globalRebalanceOpen === 'boolean') return state.globalRebalanceOpen;
   return !!findTextNode(/^Rebalance Train\/Test Split$/);
 }
 
@@ -175,18 +370,26 @@ function isDatasetRebalanceOpen(state) {
 }
 
 function isRenameReleaseOpen() {
+  const state = getPublishedState();
+  if (typeof state?.renameReleaseOpen === 'boolean') return state.renameReleaseOpen;
   return !!findTextNode(/^Rename Release$/);
 }
 
 function isDeleteReleaseOpen() {
+  const state = getPublishedState();
+  if (typeof state?.deleteReleaseOpen === 'boolean') return state.deleteReleaseOpen;
   return !!findTextNode(/^Delete Release$/);
 }
 
 function hasToolModalOpen() {
+  const state = getPublishedState();
+  if (typeof state?.transformationPickerVisible === 'boolean') return state.transformationPickerVisible;
   return !!findTextNode(/^Add Basic Transformation$/) || !!findTextNode(/^Add Advanced Transformation$/);
 }
 
 function hasToolConfigOpen() {
+  const state = getPublishedState();
+  if (typeof state?.transformationConfigVisible === 'boolean') return state.transformationConfigVisible;
   return !!findTextNode(/^Back to Tools$/) && !!findButtonByText('Apply Transformation');
 }
 
@@ -204,6 +407,9 @@ export function checkReleasePageState(lang, refs, setters) {
     downloadModalOpen = false,
     isCreating = false,
   } = state;
+
+  const transformationPickerType = state?.transformationPickerType || null;
+  const transformationConfigTool = state?.transformationConfigTool || null;
 
   if (loading && !showReleaseConfig && !hasCompletedDatasets) {
     const text = lang === 'it'
@@ -237,21 +443,21 @@ export function checkReleasePageState(lang, refs, setters) {
     const text = lang === 'it'
       ? 'Questa finestra conferma l eliminazione di una release salvata. E un azione distruttiva e non puo essere annullata.'
       : 'This window confirms deleting a saved release. It is a destructive action and cannot be undone.';
-    return makeState('release-delete-modal', text, [getBackLabel(lang)], 'release-delete-modal');
+    return makeState('release-delete-modal', text, [getDeleteHelpLabel(lang), getBackLabel(lang)], 'release-delete-modal');
   }
 
   if (isRenameReleaseOpen()) {
     const text = lang === 'it'
       ? 'Qui puoi rinominare una release gia salvata. Scegli un nome chiaro che ti aiuti a riconoscere questa versione in seguito.'
       : 'Here you can rename a saved release. Choose a clear name so this version stays easy to recognize later.';
-    return makeState('release-rename-modal', text, [getBackLabel(lang)], 'release-rename-modal');
+    return makeState('release-rename-modal', text, [getRenameHelpLabel(lang), getBackLabel(lang)], 'release-rename-modal');
   }
 
   if (isDatasetRebalanceOpen(state)) {
     const text = lang === 'it'
       ? 'Questo rebalance cambia Train, Validation e Test solo dentro questo dataset completato. Non ribilancia tutti i dataset della release insieme.'
       : 'This rebalance changes Train, Validation, and Test only inside this completed dataset. It does not rebalance all release datasets together.';
-    return makeState('release-dataset-rebalance', text, [getRebalanceHelpLabel(lang), getBackLabel(lang)], 'release-dataset-rebalance');
+    return makeState('release-dataset-rebalance', text, [getRebalanceCountsHelpLabel(lang), getBackLabel(lang)], 'release-dataset-rebalance');
   }
 
   if (isDatasetDetailsOpen(state)) {
@@ -265,20 +471,26 @@ export function checkReleasePageState(lang, refs, setters) {
     const text = lang === 'it'
       ? 'Questo rebalance ridistribuisce gli split Train, Validation e Test sull intero pool di dataset completati idonei alla release.'
       : 'This rebalance redistributes Train, Validation, and Test across the full eligible pool of completed datasets for the release.';
-    return makeState('release-global-rebalance', text, [getRebalanceHelpLabel(lang), getBackLabel(lang)], 'release-global-rebalance');
+    return makeState('release-global-rebalance', text, [getRebalanceHelpLabel(lang), getRebalanceCountsHelpLabel(lang), getBackLabel(lang)], 'release-global-rebalance');
   }
 
   if (hasToolConfigOpen()) {
+    const toolName = transformationConfigTool
+      ? transformationConfigTool.replace(/_/g, ' ').replace(/\b\w/g, m => m.toUpperCase())
+      : (lang === 'it' ? 'questa trasformazione' : 'this transformation');
     const text = lang === 'it'
-      ? 'Qui configuri una trasformazione guardando anteprima, parametri e numero stimato di combinazioni prima di applicarla.'
-      : 'Here you configure one transformation by checking the preview, the parameters, and the estimated combinations before applying it.';
-    return makeState('release-tool-config', text, [getTransformationsHelpLabel(lang), getHowManyImagesLabel(lang), getBackLabel(lang)], 'release-tool-config');
+      ? `Qui configuri ${toolName} guardando anteprima, parametri e numero stimato di combinazioni prima di applicarla.`
+      : `Here you configure ${toolName} by checking the preview, the parameters, and the estimated combinations before applying it.`;
+    return makeState('release-tool-config', text, [getToolUseHelpLabel(lang), getToolParamHelpLabel(lang), getCombinationsHelpLabel(lang), getApplyTransformationLabel(lang), getBackLabel(lang)], 'release-tool-config');
   }
 
   if (hasToolModalOpen()) {
+    const pickerLabel = transformationPickerType === 'advanced'
+      ? (lang === 'it' ? 'trasformazione avanzata' : 'advanced transformation')
+      : (lang === 'it' ? 'trasformazione base' : 'basic transformation');
     const text = lang === 'it'
-      ? 'Qui scegli quale trasformazione aggiungere alla pipeline della release. Gli strumenti base fanno modifiche comuni, quelli avanzati introducono variazioni piu forti.'
-      : 'Here you choose which transformation to add to the release pipeline. Basic tools make common changes, while advanced tools introduce stronger variation.';
+      ? `Qui scegli quale ${pickerLabel} aggiungere alla pipeline della release. Gli strumenti base fanno modifiche comuni, quelli avanzati introducono variazioni piu forti.`
+      : `Here you choose which ${pickerLabel} to add to the release pipeline. Basic tools make common changes, while advanced tools introduce stronger variation.`;
     return makeState('release-tool-picker', text, [getTransformationsHelpLabel(lang), getBackLabel(lang)], 'release-tool-picker');
   }
 
@@ -325,6 +537,13 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
   const rebalanceHelpLabel = getRebalanceHelpLabel(lang);
   const addBasicLabel = getAddBasicLabel(lang);
   const transformationsHelpLabel = getTransformationsHelpLabel(lang);
+  const toolUseHelpLabel = getToolUseHelpLabel(lang);
+  const toolParamHelpLabel = getToolParamHelpLabel(lang);
+  const combinationsHelpLabel = getCombinationsHelpLabel(lang);
+  const applyTransformationLabel = getApplyTransformationLabel(lang);
+  const renameHelpLabel = getRenameHelpLabel(lang);
+  const deleteHelpLabel = getDeleteHelpLabel(lang);
+  const rebalanceCountsHelpLabel = getRebalanceCountsHelpLabel(lang);
   const imagesPerOriginalHelpLabel = getImagesPerOriginalHelpLabel(lang);
   const howManyImagesLabel = getHowManyImagesLabel(lang);
   const configHelpLabel = getConfigHelpLabel(lang);
@@ -334,10 +553,12 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
   const downloadZipLabel = getDownloadZipLabel(lang);
   const downloadHelpLabel = getDownloadHelpLabel(lang);
   const continueConfigLabel = getContinueConfigLabel(lang);
+  const addAdvancedLabel = getAddAdvancedLabel(lang);
   const detailsHelpLabel = getDetailsHelpLabel(lang);
   const createNewReleaseLabel = getCreateNewReleaseLabel(lang);
   const backToHistoryLabel = getBackToHistoryLabel(lang);
   const goManagementLabel = getGoManagementLabel(lang);
+  const toolGuidance = getToolSpecificGuidance(getPublishedState()?.transformationConfigTool, lang);
 
   function closeBot() {
     setWizardMode(false);
@@ -378,6 +599,27 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
       requestReopen();
       clickButtonByText('Add Basic Transformation');
       closeBot();
+      return;
+    }
+  }
+
+  if (step === 'release-page-help') {
+    if (value === datasetsHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'I dataset disponibili qui sono solo quelli completati e gia pronti per la fase Dataset. In Release puoi usarli per creare una versione esportabile con trasformazioni e configurazione finale.'
+          : 'The datasets shown here are only the completed ones already ready in the Dataset stage. In Release you use them to create an exportable version with transformations and final configuration.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-datasets-help' }
+      );
+      return;
+    }
+    if (value === rebalanceHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Il rebalance principale rimescola Train, Validation e Test sull intero pool dei dataset completati idonei alla release. Il rebalance di dataset invece lavora solo dentro un singolo dataset completato.'
+          : 'The main rebalance reshuffles Train, Validation, and Test across the full pool of completed datasets eligible for the release. Dataset rebalance works only inside one completed dataset.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-rebalance-help' }
+      );
       return;
     }
   }
@@ -476,7 +718,7 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
         lang === 'it'
           ? 'Questa vista mostra tutti i dettagli di una release creata: statistiche finali, trasformazioni usate, classi, formato e immagini generate. Serve come pagina di controllo e audit della release.'
           : 'This view shows all details of one created release: final statistics, transformations used, classes, format, and generated images. It works as the review and audit page for that release.',
-        { inputType: 'buttons', options: [backLabel], step: 'release-details-help' }
+        { inputType: 'buttons', options: [lang === 'it' ? 'Cosa mostrano queste statistiche?' : 'What do these statistics show?', lang === 'it' ? 'Cosa mostrano queste immagini?' : 'What do these images show?', backLabel], step: 'release-details-help' }
       );
       return;
     }
@@ -519,6 +761,158 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
     }
   }
 
+  if (step === 'release-details-help') {
+    const statsHelp = lang === 'it' ? 'Cosa mostrano queste statistiche?' : 'What do these statistics show?';
+    const imagesHelp = lang === 'it' ? 'Cosa mostrano queste immagini?' : 'What do these images show?';
+    if (value === statsHelp) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'In alto vedi totale immagini, split finali, classi e formato della release. Sotto trovi le trasformazioni applicate, cosi puoi controllare esattamente come e stata costruita questa versione.'
+          : 'At the top you see total images, final splits, classes, and the release format. Below that you see the applied transformations, so you can verify exactly how this version was built.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-details-stats-help' }
+      );
+      return;
+    }
+    if (value === imagesHelp) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Queste sono le immagini finali generate dalla release. Qui puoi controllare anteprima, split assegnato e annotazioni risultanti prima di scaricare o riutilizzare la release.'
+          : 'These are the final images generated for the release. Here you can review the preview, assigned split, and resulting annotations before downloading or reusing the release.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-details-images-help' }
+      );
+      return;
+    }
+  }
+
+  if (step === 'release-rename-modal') {
+    if (value === renameHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Usa un nome che ti aiuti a riconoscere velocemente questa versione: per esempio dataset, task, trasformazioni principali o data. Un nome chiaro rende piu facile confrontare release diverse.'
+          : 'Use a name that helps you recognize this version quickly, for example the dataset, task, main transformations, or date. A clear name makes it easier to compare different releases later.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-rename-help' }
+      );
+      return;
+    }
+  }
+
+  if (step === 'release-delete-modal') {
+    if (value === deleteHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Eliminando una release rimuovi questa versione salvata dalla cronologia. Fallo solo se sei sicuro di non aver piu bisogno di consultarla o scaricarla di nuovo.'
+          : 'Deleting a release removes this saved version from the history. Do it only if you are sure you no longer need to review it or download it again.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-delete-help' }
+      );
+      return;
+    }
+  }
+
+  if (step === 'release-global-rebalance') {
+    if (value === rebalanceHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Questo cambia la distribuzione degli split su tutti i dataset completati che entrano nella release. Train, Validation e Test devono sommare al totale mostrato prima di poter salvare.'
+          : 'This changes split distribution across all completed datasets that enter the release. Train, Validation, and Test must add up to the shown total before you can save.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-global-rebalance-help' }
+      );
+      return;
+    }
+    if (value === rebalanceCountsHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Compila Train, Validation e Test in modo che la loro somma corrisponda al totale disponibile. Le percentuali si aggiornano da sole, quindi controlla il totale verde prima di salvare.'
+          : 'Fill Train, Validation, and Test so their sum matches the available total. The percentages update automatically, so check the green total before saving.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-global-rebalance-counts-help' }
+      );
+      return;
+    }
+  }
+
+  if (step === 'release-dataset-details') {
+    if (value === datasetsHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Qui controlli overview del dataset, distribuzione Train/Val/Test e immagini di esempio. E utile per capire se questo singolo dataset e pronto per entrare nella release.'
+          : 'Here you review the dataset overview, Train/Val/Test distribution, and sample images. It is useful for checking whether this one dataset is ready to enter the release.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-dataset-details-help' }
+      );
+      return;
+    }
+    if (value === rebalanceHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Il rebalance di dataset rimescola gli split solo dentro questo dataset completato. Non cambia la distribuzione sugli altri dataset della release.'
+          : 'Dataset rebalance reshuffles splits only inside this completed dataset. It does not change distribution for the other release datasets.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-dataset-rebalance-help' }
+      );
+      return;
+    }
+  }
+
+  if (step === 'release-dataset-rebalance') {
+    if (value === rebalanceCountsHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Qui compili Train, Validation e Test solo per questo dataset. Anche in questo caso la somma deve corrispondere al totale del dataset prima di poter salvare.'
+          : 'Here you fill Train, Validation, and Test only for this dataset. Here too, the sum must match the dataset total before you can save.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-dataset-rebalance-counts-help' }
+      );
+      return;
+    }
+  }
+
+  if (step === 'release-tool-picker') {
+    if (value === transformationsHelpLabel) {
+      const pickerType = getPublishedState()?.transformationPickerType;
+      addMessage('bot',
+        pickerType === 'advanced'
+          ? (
+            lang === 'it'
+              ? 'Qui stai scegliendo uno strumento avanzato. Questi strumenti introducono variazioni piu forti come affine transform, color jitter e random zoom, quindi conviene controllare bene preview e combinazioni.'
+              : 'Here you are choosing an advanced tool. These tools introduce stronger variation such as affine transform, color jitter, and random zoom, so it is worth checking the preview and combinations carefully.'
+          )
+          : (
+            lang === 'it'
+              ? 'Qui stai scegliendo uno strumento base. Gli strumenti base fanno modifiche comuni come resize, rotate, flip, crop, blur e brightness, e di solito sono il punto migliore da cui iniziare.'
+              : 'Here you are choosing a basic tool. Basic tools make common changes like resize, rotate, flip, crop, blur, and brightness, and they are usually the best place to start.'
+          ),
+        { inputType: 'buttons', options: [backLabel], step: 'release-tool-picker-help' }
+      );
+      return;
+    }
+  }
+
+  if (step === 'release-tool-config') {
+    if (value === toolUseHelpLabel) {
+      addMessage('bot',
+        toolGuidance.use,
+        { inputType: 'buttons', options: [backLabel], step: 'release-tool-use-help' }
+      );
+      return;
+    }
+    if (value === toolParamHelpLabel) {
+      addMessage('bot',
+        toolGuidance.params,
+        { inputType: 'buttons', options: [backLabel], step: 'release-tool-params-help' }
+      );
+      return;
+    }
+    if (value === combinationsHelpLabel) {
+      addMessage('bot',
+        toolGuidance.combinations,
+        { inputType: 'buttons', options: [backLabel], step: 'release-tool-combinations-help' }
+      );
+      return;
+    }
+    if (value === applyTransformationLabel) {
+      requestReopen();
+      clickButtonByText('Apply Transformation');
+      closeBot();
+      return;
+    }
+  }
+
   if (
     value === backLabel &&
     [
@@ -532,6 +926,8 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
       'release-preview-help',
       'release-download-help',
       'release-details-help',
+      'release-rename-help',
+      'release-delete-help',
       'release-delete-modal',
       'release-rename-modal',
       'release-global-rebalance',
@@ -539,6 +935,16 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
       'release-dataset-rebalance',
       'release-tool-picker',
       'release-tool-config',
+      'release-global-rebalance-help',
+      'release-global-rebalance-counts-help',
+      'release-dataset-details-help',
+      'release-dataset-rebalance-counts-help',
+      'release-details-stats-help',
+      'release-details-images-help',
+      'release-tool-picker-help',
+      'release-tool-use-help',
+      'release-tool-params-help',
+      'release-tool-combinations-help',
       'release-empty-help',
     ].includes(step)
   ) {

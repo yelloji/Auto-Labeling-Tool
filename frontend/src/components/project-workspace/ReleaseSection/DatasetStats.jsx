@@ -17,6 +17,21 @@ const DatasetStats = ({ selectedDatasets = [] }) => {
   const [testCount, setTestCount] = useState(1);
   const [totalAvailableImages, setTotalAvailableImages] = useState(10);
 
+  useEffect(() => {
+    const prev = window.__releaseGuideState || {};
+    window.__releaseGuideState = {
+      ...prev,
+      globalRebalanceOpen: rebalanceModalVisible,
+    };
+
+    window.dispatchEvent(new CustomEvent('releaseGuideStateChanged', {
+      detail: {
+        forceRefresh: false,
+        globalRebalanceOpen: rebalanceModalVisible,
+      }
+    }));
+  }, [rebalanceModalVisible]);
+
   useEffect(() => { 
     logInfo('app.frontend.ui', 'dataset_stats_initialized', 'DatasetStats component initialized', {
       timestamp: new Date().toISOString(),

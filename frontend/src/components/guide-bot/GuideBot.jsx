@@ -768,6 +768,7 @@ export default function GuideBot() {
           (wizardType && wizardType.startsWith('dataset-')) ||
           (wizardType && wizardType.startsWith('analytics-')) ||
           (wizardType && wizardType.startsWith('local-models-')) ||
+          (wizardType && wizardType.startsWith('release-')) ||
           wizardType === 'local-upload-model' ||
           (wizardType && wizardType.startsWith('manual-labeling-'))) {
         setWizardMode(false);

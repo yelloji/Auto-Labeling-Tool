@@ -437,7 +437,7 @@ const guideScript = {
   },
 
   // Release tab
-  '/workspace/versions': {
+  '/workspace/versions-legacy-disabled': {
     message: {
       en: 'This is the Release section. Here you prepare versioned dataset releases, review release history, and export finished releases.',
       it: 'Questa e la sezione Release. Qui prepari release versionate del dataset, controlli la cronologia e scarichi le release completate.',
@@ -445,16 +445,16 @@ const guideScript = {
     options: [
       {
         label: { en: 'What is Rebalance?', it: "Cos'è il Ribilanciamento?" },
-        action: { type: 'message', key: 'release-rebalance' },
+        action: { type: 'message', key: 'release-rebalance-legacy-disabled' },
       },
       {
         label: { en: 'Export my dataset', it: 'Esporta il mio dataset' },
-        action: { type: 'message', key: 'release-export' },
+        action: { type: 'message', key: 'release-export-legacy-disabled' },
       },
     ],
   },
 
-  'release-rebalance': {
+  'release-rebalance-legacy-disabled': {
     message: {
       en: 'Rebalance redistributes your images between Train, Validation and Test sets. Use it if you want to change the split percentages.',
       it: 'Il ribilanciamento ridistribuisce le immagini tra i set Train, Validazione e Test. Usalo se vuoi cambiare le percentuali di suddivisione.',
@@ -462,12 +462,12 @@ const guideScript = {
     options: [
       {
         label: { en: 'Go back', it: 'Torna indietro' },
-        action: { type: 'message', key: '/workspace/versions' },
+        action: { type: 'message', key: '/workspace/versions-legacy-disabled' },
       },
     ],
   },
 
-  'release-export': {
+  'release-export-legacy-disabled': {
     message: {
       en: 'Click the Export button on your dataset to download it in YOLO format, ready for training.',
       it: 'Clicca il pulsante Esporta sul tuo dataset per scaricarlo in formato YOLO, pronto per il training.',
@@ -475,7 +475,7 @@ const guideScript = {
     options: [
       {
         label: { en: 'Go back', it: 'Torna indietro' },
-        action: { type: 'message', key: '/workspace/versions' },
+        action: { type: 'message', key: '/workspace/versions-legacy-disabled' },
       },
     ],
   },

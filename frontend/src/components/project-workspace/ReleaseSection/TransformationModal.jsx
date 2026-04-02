@@ -57,6 +57,26 @@ const TransformationModal = ({
   const [currentSelectedImage, setCurrentSelectedImage] = useState(null); // Store the current image for reuse
   const [combinationCount, setCombinationCount] = useState(1); // Track number of possible combinations
 
+  useEffect(() => {
+    const prev = window.__releaseGuideState || {};
+    const toolName = selectedTransformation?.name || selectedTransformation?.type || null;
+    const configVisible = visible && view === 'configuration';
+
+    window.__releaseGuideState = {
+      ...prev,
+      transformationConfigVisible: configVisible,
+      transformationConfigTool: configVisible ? toolName : null,
+    };
+
+    window.dispatchEvent(new CustomEvent('releaseGuideStateChanged', {
+      detail: {
+        forceRefresh: false,
+        transformationConfigVisible: configVisible,
+        transformationConfigTool: configVisible ? toolName : null,
+      }
+    }));
+  }, [visible, view, selectedTransformation]);
+
   // Calculate combination count based on parameter ranges
   const calculateCombinationCount = (config, transformationDetails) => {
     logInfo('app.frontend.ui', 'combination_count_calculation_started', 'Combination count calculation started', {

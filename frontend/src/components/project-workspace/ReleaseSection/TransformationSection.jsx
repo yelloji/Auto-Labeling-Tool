@@ -61,6 +61,23 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
   const [currentReleaseVersion, setCurrentReleaseVersion] = useState(null);
   const [loadingTransformations, setLoadingTransformations] = useState(false);
 
+  useEffect(() => {
+    const prev = window.__releaseGuideState || {};
+    window.__releaseGuideState = {
+      ...prev,
+      transformationPickerVisible: modalVisible,
+      transformationPickerType: modalVisible ? modalType : null,
+    };
+
+    window.dispatchEvent(new CustomEvent('releaseGuideStateChanged', {
+      detail: {
+        forceRefresh: false,
+        transformationPickerVisible: modalVisible,
+        transformationPickerType: modalVisible ? modalType : null,
+      }
+    }));
+  }, [modalVisible, modalType]);
+
   // Load available transformations and existing transformations on component mount
   useEffect(() => {
     logInfo('app.frontend.ui', 'transformation_section_initialized', 'TransformationSection component initialized', {
