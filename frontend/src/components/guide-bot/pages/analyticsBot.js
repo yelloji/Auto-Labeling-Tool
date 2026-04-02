@@ -90,7 +90,7 @@ function closeCreateLabelForm() {
 function refreshAnalyticsGuideSoon(delay = 220) {
   setTimeout(() => {
     window.dispatchEvent(new CustomEvent('analyticsGuideStateChanged', {
-      detail: { forceRefresh: true }
+      detail: { forceRefresh: false }
     }));
   }, delay);
 }

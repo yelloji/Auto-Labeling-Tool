@@ -30,6 +30,7 @@ import { checkManualLabelingPageState, handleManualLabelingAnswer } from './page
 import { checkDatasetPageState, handleDatasetAnswer } from './pages/datasetBot';
 import { checkAnalyticsPageState, handleAnalyticsAnswer } from './pages/analyticsBot';
 import { checkLocalModelPageState, handleLocalModelAnswer, startLocalUploadModelWizard } from './pages/localModelBot';
+import { checkReleasePageState, handleReleaseAnswer } from './pages/releaseBot';
 
 
 // ---------------------------------------------------------------------------
@@ -355,6 +356,41 @@ export default function GuideBot() {
     return () => window.removeEventListener('localModelsGuideStateChanged', handler);
   }, [location.pathname, lang, wizardType]);
 
+  useEffect(() => {
+    const handler = (e) => {
+      if (!location.pathname.includes('/workspace')) return;
+      if (detectWorkspaceSection() !== '/workspace/versions') return;
+
+      const forceRefresh = !!e.detail?.forceRefresh;
+      const shouldRefresh = isOpenRef.current || pendingReopenRef.current || forceRefresh;
+      if (!shouldRefresh) return;
+
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
+      setIsOpen(false);
+      setWizardMode(false);
+      setWizardType(null);
+      setConversation([]);
+      setWizardStep(null);
+
+      setTimeout(() => {
+        const s = makeSetters();
+        const r = makeRefs();
+        const releaseState = checkReleasePageState(lang, r, s);
+        if (releaseState) {
+          pendingReopenRef.current = false;
+          applyWizardState(releaseState);
+        } else if (forceRefresh) {
+          pendingReopenRef.current = false;
+          setIsOpen(true);
+        }
+      }, 180);
+    };
+
+    window.addEventListener('releaseGuideStateChanged', handler);
+    return () => window.removeEventListener('releaseGuideStateChanged', handler);
+  }, [location.pathname, lang]);
+
   // When URL changes → close bot and reset everything
   // Bot must be closed so the next open triggers a fresh snapshot check for the new page
   useEffect(() => {
@@ -486,6 +522,9 @@ export default function GuideBot() {
       const localModelsState = checkLocalModelPageState(lang, r, s);
       if (localModelsState) { applyWizardState(localModelsState); return; }
 
+      const releaseState = checkReleasePageState(lang, r, s);
+      if (releaseState) { applyWizardState(releaseState); return; }
+
       setIsOpen(true);
       return;
     }
@@ -540,6 +579,9 @@ export default function GuideBot() {
 
       const localModelsState = checkLocalModelPageState(lang, r, s);
       if (localModelsState) { applyWizardState(localModelsState); return; }
+
+      const releaseState = checkReleasePageState(lang, r, s);
+      if (releaseState) { applyWizardState(releaseState); return; }
     }
 
     if (location.pathname.startsWith('/annotate-progress/')) {
@@ -633,6 +675,11 @@ export default function GuideBot() {
 
     if (wizardType && wizardType.startsWith('local-models-')) {
       handleLocalModelAnswer(step, value, lang, r, s, wizardData, setWizardData, isOnnx, setIsOnnx);
+      return;
+    }
+
+    if (wizardType && wizardType.startsWith('release-')) {
+      handleReleaseAnswer(step, value, lang, r, s);
       return;
     }
 

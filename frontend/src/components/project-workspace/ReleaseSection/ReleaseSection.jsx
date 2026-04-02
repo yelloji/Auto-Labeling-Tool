@@ -429,6 +429,76 @@ const ReleaseSection = ({ projectId, datasetId }) => {
   const [releaseImages, setReleaseImages] = useState([]);
   const [releaseLoading, setReleaseLoading] = useState(false);
 
+  useEffect(() => {
+    const hasResize = transformations.some(transform => {
+      const name = (transform?.name || '').toLowerCase();
+      const keys = Object.keys(transform?.config || {}).map(key => key.toLowerCase());
+      return name === 'resize' || keys.includes('resize');
+    });
+
+    window.__releaseGuideState = {
+      isReleasePage: true,
+      loading: releaseLoading,
+      hasCompletedDatasets: selectedDatasets.length > 0,
+      selectedDatasetsCount: selectedDatasets.length,
+      transformationsCount: transformations.length,
+      hasResize,
+      showReleaseConfig,
+      currentReleaseVersion,
+      datasetDetailsModalVisible: datasetDetailsModal.visible,
+      datasetRebalanceModalVisible: datasetRebalanceModal.visible,
+      downloadModalOpen: downloadModal.isOpen,
+      downloadModalExporting: downloadModal.isExporting,
+      showReleaseDetails,
+      selectedReleaseId: selectedRelease?.id || null,
+      isCreating: releaseLoading || downloadModal.isExporting,
+    };
+
+    window.dispatchEvent(new CustomEvent('releaseGuideStateChanged', {
+      detail: {
+        forceRefresh: false,
+        showReleaseConfig,
+        downloadModalOpen: downloadModal.isOpen,
+        showReleaseDetails,
+        isCreating: releaseLoading || downloadModal.isExporting,
+      }
+    }));
+  }, [
+    releaseLoading,
+    selectedDatasets.length,
+    transformations,
+    showReleaseConfig,
+    currentReleaseVersion,
+    datasetDetailsModal.visible,
+    datasetRebalanceModal.visible,
+    downloadModal.isOpen,
+    downloadModal.isExporting,
+    showReleaseDetails,
+    selectedRelease?.id,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      window.__releaseGuideState = {
+        isReleasePage: false,
+        loading: false,
+        hasCompletedDatasets: false,
+        selectedDatasetsCount: 0,
+        transformationsCount: 0,
+        hasResize: false,
+        showReleaseConfig: false,
+        currentReleaseVersion: null,
+        datasetDetailsModalVisible: false,
+        datasetRebalanceModalVisible: false,
+        downloadModalOpen: false,
+        downloadModalExporting: false,
+        showReleaseDetails: false,
+        selectedReleaseId: null,
+        isCreating: false,
+      };
+    };
+  }, []);
+
   // Function to fetch datasets
   const fetchDatasets = useCallback(async () => {
     logInfo('app.frontend.interactions', 'fetch_datasets_started', 'Fetching project datasets started', {

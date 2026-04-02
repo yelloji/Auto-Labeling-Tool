@@ -439,8 +439,8 @@ const guideScript = {
   // Release tab
   '/workspace/versions': {
     message: {
-      en: 'This is the Release section. Here you manage your final labeled datasets before training.',
-      it: 'Questa è la sezione Release. Qui gestisci i tuoi dataset etichettati finali prima del training.',
+      en: 'This is the Release section. Here you prepare versioned dataset releases, review release history, and export finished releases.',
+      it: 'Questa e la sezione Release. Qui prepari release versionate del dataset, controlli la cronologia e scarichi le release completate.',
     },
     options: [
       {
