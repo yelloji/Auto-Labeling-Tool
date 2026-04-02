@@ -534,6 +534,33 @@ const guideScript = {
     ],
   },
 
+  // Project Models tab (override fallback copy with project-scoped meaning)
+  '/workspace/models': {
+    message: {
+      en: 'This is the project Models section. Here you can review the models available to this project, including local models and any global models you choose to show.',
+      it: 'Questa Ã¨ la sezione Modelli del progetto. Qui puoi controllare i modelli disponibili per questo progetto, inclusi i modelli locali e quelli globali che scegli di mostrare.',
+    },
+    options: [
+      {
+        label: { en: 'What do local and global models mean?', it: 'Cosa significano modelli locali e globali?' },
+        action: { type: 'message', key: 'workspace-models-scope-hint' },
+      },
+    ],
+  },
+
+  'workspace-models-scope-hint': {
+    message: {
+      en: 'Local models belong only to this project. Global models are shared across the app and can be shown here with the Include Global Models toggle. Trained models can also appear here after they are added from training.',
+      it: 'I modelli locali appartengono solo a questo progetto. I modelli globali sono condivisi nell app e possono essere mostrati qui con il toggle Include Global Models. Anche i modelli addestrati possono apparire qui dopo essere stati aggiunti dal training.',
+    },
+    options: [
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/workspace/models' },
+      },
+    ],
+  },
+
   // Model Training tab
   '/workspace/model-training': {
     message: {

@@ -156,6 +156,50 @@ const ModelsSection = ({ projectId, project }) => {
     setFilteredModels(filtered);
   }, [models, searchTerm, filterType]);
 
+  useEffect(() => {
+    window.__localModelsGuideState = {
+      isProjectModelsPage: true,
+      loading,
+      uploadModalVisible,
+      viewModalVisible,
+      searchTerm,
+      filterType,
+      includeGlobal,
+      modelsCount: models.length,
+      filteredCount: filteredModels.length,
+      projectId: String(projectId || ''),
+    };
+    window.dispatchEvent(new CustomEvent('localModelsGuideStateChanged'));
+  }, [
+    loading,
+    uploadModalVisible,
+    viewModalVisible,
+    searchTerm,
+    filterType,
+    includeGlobal,
+    models.length,
+      filteredModels.length,
+      projectId,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      window.__localModelsGuideState = {
+        isProjectModelsPage: false,
+        loading: false,
+        uploadModalVisible: false,
+        viewModalVisible: false,
+        searchTerm: '',
+        filterType: 'all',
+        includeGlobal: false,
+        modelsCount: 0,
+        filteredCount: 0,
+        projectId: '',
+      };
+      window.dispatchEvent(new CustomEvent('localModelsGuideStateChanged'));
+    };
+  }, []);
+
 
   // Helpers similar to ModelsModern
   const getModelTypeInfo = (type) => {

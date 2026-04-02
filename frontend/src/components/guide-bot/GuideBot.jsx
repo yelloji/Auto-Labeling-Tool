@@ -29,6 +29,7 @@ import { checkAnnotateProgressPageState, handleAnnotateProgressAnswer } from './
 import { checkManualLabelingPageState, handleManualLabelingAnswer } from './pages/manualLabelingBot';
 import { checkDatasetPageState, handleDatasetAnswer } from './pages/datasetBot';
 import { checkAnalyticsPageState, handleAnalyticsAnswer } from './pages/analyticsBot';
+import { checkLocalModelPageState, handleLocalModelAnswer, startLocalUploadModelWizard } from './pages/localModelBot';
 
 
 // ---------------------------------------------------------------------------
@@ -233,6 +234,44 @@ export default function GuideBot() {
     return () => window.removeEventListener('analyticsGuideStateChanged', handler);
   }, [location.pathname, lang]);
 
+  useEffect(() => {
+    const handler = (e) => {
+      if (!location.pathname.includes('/workspace')) return;
+      if (detectWorkspaceSection() !== '/workspace/models') return;
+
+      const localModelsGuideState = window.__localModelsGuideState || {};
+      if (wizardType === 'local-upload-model' && localModelsGuideState.uploadModalVisible && !e.detail?.forceRefresh) return;
+
+      const forceRefresh = !!e.detail?.forceRefresh;
+      const shouldRefresh = isOpenRef.current || pendingReopenRef.current || forceRefresh;
+      if (!shouldRefresh) return;
+
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
+      setIsOpen(false);
+      setWizardMode(false);
+      setWizardType(null);
+      setConversation([]);
+      setWizardStep(null);
+
+      setTimeout(() => {
+        const s = makeSetters();
+        const r = makeRefs();
+        const localModelsState = checkLocalModelPageState(lang, r, s);
+        if (localModelsState) {
+          pendingReopenRef.current = false;
+          applyWizardState(localModelsState);
+        } else if (forceRefresh) {
+          pendingReopenRef.current = false;
+          setIsOpen(true);
+        }
+      }, 180);
+    };
+
+    window.addEventListener('localModelsGuideStateChanged', handler);
+    return () => window.removeEventListener('localModelsGuideStateChanged', handler);
+  }, [location.pathname, lang, wizardType]);
+
   // When URL changes → close bot and reset everything
   // Bot must be closed so the next open triggers a fresh snapshot check for the new page
   useEffect(() => {
@@ -355,6 +394,9 @@ export default function GuideBot() {
       const analyticsState = checkAnalyticsPageState(lang, r, s);
       if (analyticsState) { applyWizardState(analyticsState); return; }
 
+      const localModelsState = checkLocalModelPageState(lang, r, s);
+      if (localModelsState) { applyWizardState(localModelsState); return; }
+
       setIsOpen(true);
       return;
     }
@@ -404,6 +446,9 @@ export default function GuideBot() {
 
       const analyticsState = checkAnalyticsPageState(lang, r, s);
       if (analyticsState) { applyWizardState(analyticsState); return; }
+
+      const localModelsState = checkLocalModelPageState(lang, r, s);
+      if (localModelsState) { applyWizardState(localModelsState); return; }
     }
 
     if (location.pathname.startsWith('/annotate-progress/')) {
@@ -471,6 +516,16 @@ export default function GuideBot() {
       return;
     }
 
+    if (wizardType && wizardType.startsWith('local-models-')) {
+      handleLocalModelAnswer(step, value, lang, r, s, wizardData, setWizardData, isOnnx, setIsOnnx);
+      return;
+    }
+
+    if (wizardType === 'local-upload-model') {
+      handleLocalModelAnswer(step, value, lang, r, s, wizardData, setWizardData, isOnnx, setIsOnnx);
+      return;
+    }
+
     if (wizardType && wizardType.startsWith('manual-labeling-')) {
       handleManualLabelingAnswer(step, value, lang, r, s);
       return;
@@ -501,6 +556,7 @@ export default function GuideBot() {
     } else if (action.type === 'wizard') {
       switch (action.wizard) {
         case 'upload-model':         startUploadModelWizard(lang, s);              break;
+        case 'local-upload-model':   startLocalUploadModelWizard(lang, s);         break;
         case 'create-project':       startCreateProjectWizard(lang, s);            break;
         case 'upload-files':         startUploadFilesWizard(lang, s);              break;
         case 'upload-folder':        startUploadFolderWizard(lang, r, s);          break;
@@ -549,6 +605,8 @@ export default function GuideBot() {
           wizardType === 'management-unassigned' ||
           (wizardType && wizardType.startsWith('dataset-')) ||
           (wizardType && wizardType.startsWith('analytics-')) ||
+          (wizardType && wizardType.startsWith('local-models-')) ||
+          wizardType === 'local-upload-model' ||
           (wizardType && wizardType.startsWith('manual-labeling-'))) {
         setWizardMode(false);
         setWizardType(null);
