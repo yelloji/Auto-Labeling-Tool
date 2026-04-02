@@ -342,9 +342,24 @@ const ModelsSection = ({ projectId, project }) => {
     }
   };
 
+  const getGridProps = () => {
+    const count = filteredModels.length;
+    if (count <= 1) {
+      return { xs: 24, sm: 24, md: 16, lg: 12, xl: 10 };
+    }
+    if (count === 2) {
+      return { xs: 24, sm: 24, md: 12, lg: 12, xl: 12 };
+    }
+    if (count === 3) {
+      return { xs: 24, sm: 12, md: 12, lg: 8, xl: 8 };
+    }
+    return { xs: 24, sm: 12, lg: 8, xl: 6 };
+  };
+
   const renderModelCard = (model) => {
     const typeInfo = getModelTypeInfo(model.type);
     const statusInfo = getModelStatus(model);
+    const gridProps = getGridProps();
 
     const moreMenu = (
       <Menu>
@@ -432,7 +447,7 @@ const ModelsSection = ({ projectId, project }) => {
     );
 
     return (
-      <Col xs={24} sm={12} lg={8} xl={6} key={model.id}>
+      <Col {...gridProps} key={model.id}>
         <Card hoverable style={{ height: '100%', borderRadius: '8px', border: '1px solid #f0f0f0' }} bodyStyle={{ padding: '16px' }}>
           <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
             {getModelThumbnail(model)}
