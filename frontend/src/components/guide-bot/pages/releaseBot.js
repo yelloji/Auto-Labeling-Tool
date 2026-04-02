@@ -96,6 +96,10 @@ function getDatasetsHelpLabel(lang) {
   return lang === 'it' ? 'Cosa significano i dataset disponibili?' : 'What do available datasets mean?';
 }
 
+function getReleaseHistoryHelpLabel(lang) {
+  return lang === 'it' ? 'Che cos e Release History?' : 'What is Release History?';
+}
+
 function getRebalanceHelpLabel(lang) {
   return lang === 'it' ? 'Che cos e Rebalance?' : 'What is Rebalance?';
 }
@@ -407,12 +411,12 @@ function isGlobalRebalanceOpen() {
 }
 
 function isDatasetDetailsOpen(state) {
-  if (state?.datasetDetailsModalVisible) return true;
+  if (typeof state?.datasetDetailsModalVisible === 'boolean') return state.datasetDetailsModalVisible;
   return !!findTextNode(/^Dataset Details:/);
 }
 
 function isDatasetRebalanceOpen(state) {
-  if (state?.datasetRebalanceModalVisible) return true;
+  if (typeof state?.datasetRebalanceModalVisible === 'boolean') return state.datasetRebalanceModalVisible;
   return !!findTextNode(/^Rebalance Dataset:/);
 }
 
@@ -579,7 +583,7 @@ export function checkReleasePageState(lang, refs, setters) {
   const text = lang === 'it'
     ? 'Questa pagina crea versioni esportabili del dataset. Prima scegli le trasformazioni: Resize e obbligatorio, poi potrai continuare alla configurazione della release.'
     : 'This page creates exportable dataset releases. First choose the transformations: Resize is required, then you can continue to release configuration.';
-  return makeState('release-ready-no-tools', text, [getHowLabel(lang), getDatasetsHelpLabel(lang), getAddBasicLabel(lang), getRebalanceHelpLabel(lang)], 'release-ready-no-tools');
+  return makeState('release-ready-no-tools', text, [getHowLabel(lang), getReleaseHistoryHelpLabel(lang), getDatasetsHelpLabel(lang), getAddBasicLabel(lang), getRebalanceHelpLabel(lang)], 'release-ready-no-tools');
 }
 
 export function handleReleaseAnswer(step, value, lang, refs, setters) {
@@ -587,6 +591,7 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
 
   const backLabel = getBackLabel(lang);
   const howLabel = getHowLabel(lang);
+  const releaseHistoryHelpLabel = getReleaseHistoryHelpLabel(lang);
   const datasetsHelpLabel = getDatasetsHelpLabel(lang);
   const rebalanceHelpLabel = getRebalanceHelpLabel(lang);
   const addBasicLabel = getAddBasicLabel(lang);
@@ -627,7 +632,16 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
         lang === 'it'
           ? 'Questa pagina ti aiuta a creare una release versionata del dataset. A sinistra vedi la cronologia release, mentre a destra prepari una nuova release scegliendo dataset, trasformazioni e configurazione finale.'
           : 'This page helps you create a versioned dataset release. On the left you see release history, and on the right you prepare a new release by choosing datasets, transformations, and the final configuration.',
-        { inputType: 'buttons', options: [datasetsHelpLabel, rebalanceHelpLabel, backLabel], step: 'release-page-help' }
+        { inputType: 'buttons', options: [releaseHistoryHelpLabel, datasetsHelpLabel, rebalanceHelpLabel, backLabel], step: 'release-page-help' }
+      );
+      return;
+    }
+    if (value === releaseHistoryHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Release History e la colonna a sinistra con le release gia create. Da li puoi aprire una release completa, scaricarla di nuovo, rinominarla o eliminarla.'
+          : 'Release History is the left column with the releases that were already created. From there you can open a full release, download it again, rename it, or delete it.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-history-help' }
       );
       return;
     }
@@ -658,6 +672,15 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
   }
 
   if (step === 'release-page-help') {
+    if (value === releaseHistoryHelpLabel) {
+      addMessage('bot',
+        lang === 'it'
+          ? 'Release History e la parte sinistra della pagina. Ogni card rappresenta una release gia creata: puoi aprire i dettagli completi, scaricare il pacchetto, rinominare la release o eliminarla.'
+          : 'Release History is the left side of the page. Each card represents a release that was already created: you can open the full details, download the package, rename the release, or delete it.',
+        { inputType: 'buttons', options: [backLabel], step: 'release-history-help' }
+      );
+      return;
+    }
     if (value === datasetsHelpLabel) {
       addMessage('bot',
         lang === 'it'
@@ -986,6 +1009,7 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
       'release-rebalance-help',
       'release-transformations-help',
       'release-images-count-help',
+      'release-history-help',
       'release-config-help',
       'release-images-per-original-help',
       'release-preview-help',
