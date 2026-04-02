@@ -18,6 +18,25 @@
 
 import { clickSidebarItem } from './botUtils';
 
+function hasButtonText(text) {
+  return Array.from(document.querySelectorAll('button'))
+    .some(btn => btn.textContent?.trim() === text);
+}
+
+function hasHeadingText(text) {
+  return Array.from(document.querySelectorAll('h1, h2, h3'))
+    .some(el => el.textContent?.trim() === text);
+}
+
+function isUploadWorkspacePage() {
+  return (
+    hasHeadingText('Upload') &&
+    hasButtonText('Select File(s)') &&
+    hasButtonText('Select Folder') &&
+    hasButtonText('Select Folder (images + labels)')
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Upload Files wizard step definitions
 // ---------------------------------------------------------------------------
@@ -73,6 +92,8 @@ export function startExtractionResultObserver(lang, refs, setters) {
 export function checkUploadPageState(lang, refs, setters) {
   const { observerRef, processingObserverRef } = refs;
   const { setIsOpen, setConversation, setWizardStep } = setters;
+
+  if (!isUploadWorkspacePage()) return null;
 
   const explainMsg = lang === 'it'
     ? 'Vedo che hai già selezionato un video. Scegli FPS e formato, poi clicca Estrai Frame.'
