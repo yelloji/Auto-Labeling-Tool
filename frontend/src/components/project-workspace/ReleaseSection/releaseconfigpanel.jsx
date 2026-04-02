@@ -27,6 +27,21 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
   const [maxCombinations, setMaxCombinations] = useState(100); // Default max
   const [originalSplits, setOriginalSplits] = useState({ train: 0, val: 0, test: 0 });
 
+  useEffect(() => {
+    const prev = window.__releaseGuideState || {};
+    window.__releaseGuideState = {
+      ...prev,
+      previewVisible: !!previewData,
+    };
+
+    window.dispatchEvent(new CustomEvent('releaseGuideStateChanged', {
+      detail: {
+        forceRefresh: false,
+        previewVisible: !!previewData,
+      }
+    }));
+  }, [previewData]);
+
   // Fetch class count and split information when selected datasets change
   useEffect(() => {
     const fetchDatasetInfo = async () => {

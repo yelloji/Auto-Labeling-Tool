@@ -57,6 +57,23 @@ const ReleaseImageViewerModal = ({
   const containerRef = useRef(null);
   const svgRef = useRef(null);
 
+  useEffect(() => {
+    const prev = window.__releaseGuideState || {};
+    window.__releaseGuideState = {
+      ...prev,
+      imageViewerVisible: visible,
+      imageViewerFilename: visible ? images?.[currentIndex]?.filename || null : null,
+    };
+
+    window.dispatchEvent(new CustomEvent('releaseGuideStateChanged', {
+      detail: {
+        forceRefresh: false,
+        imageViewerVisible: visible,
+        imageViewerFilename: visible ? images?.[currentIndex]?.filename || null : null,
+      }
+    }));
+  }, [visible, currentIndex, images]);
+
   const currentImage = images[currentIndex];
   
   // Use same key-matching logic as thumbnails
