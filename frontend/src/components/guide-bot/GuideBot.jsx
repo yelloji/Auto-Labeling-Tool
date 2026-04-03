@@ -401,6 +401,19 @@ export default function GuideBot() {
       const shouldRefresh = isOpenRef.current || pendingReopenRef.current || forceRefresh;
       if (!shouldRefresh) return;
 
+      const s = makeSetters();
+      const r = makeRefs();
+      const trainingState = checkTrainingPageState(lang, r, s);
+
+      if (isOpenRef.current && trainingState) {
+        pendingReopenRef.current = false;
+        setWizardMode(true);
+        setWizardType(trainingState.wizardType);
+        setConversation(trainingState.conversation);
+        setWizardStep(trainingState.step);
+        return;
+      }
+
       if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
       if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
       setIsOpen(false);
@@ -410,9 +423,6 @@ export default function GuideBot() {
       setWizardStep(null);
 
       setTimeout(() => {
-        const s = makeSetters();
-        const r = makeRefs();
-        const trainingState = checkTrainingPageState(lang, r, s);
         if (trainingState) {
           pendingReopenRef.current = false;
           applyWizardState(trainingState);
