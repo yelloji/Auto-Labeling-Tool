@@ -58,6 +58,8 @@ function clickButtonByText(text, root = document) {
 
 function clickReleaseAction({ text, selector }) {
   const roots = [
+    document.querySelector('.download-modal'),
+    document.querySelector('.download-modal-overlay'),
     document.querySelector('.transformation-modal'),
     document.querySelector('.release-config-panel'),
     document.querySelector('.release-section'),
@@ -780,7 +782,7 @@ export function handleReleaseAnswer(step, value, lang, refs, setters) {
       return;
     }
     if (value === downloadZipLabel) {
-      clickReleaseAction({ text: 'Download ZIP File' });
+      clickReleaseAction({ text: 'Download ZIP File', selector: '.download-button.primary' });
       return;
     }
   }
