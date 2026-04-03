@@ -562,7 +562,7 @@ const guideScript = {
   },
 
   // Model Training tab
-  '/workspace/model-training': {
+  '/workspace/model-training-legacy-disabled': {
     message: {
       en: 'This is Model Training. Select a base model and configure your training run — then click Train to start.',
       it: 'Questo è il Model Training. Seleziona un modello base e configura il training — poi clicca su Addestra per iniziare.',
@@ -583,7 +583,7 @@ const guideScript = {
     options: [
       {
         label: { en: 'Go back', it: 'Torna indietro' },
-        action: { type: 'message', key: '/workspace/model-training' },
+        action: { type: 'message', key: '/workspace/model-training-legacy-disabled' },
       },
     ],
   },

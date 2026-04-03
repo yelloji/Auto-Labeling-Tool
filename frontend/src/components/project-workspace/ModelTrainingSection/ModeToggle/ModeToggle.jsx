@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Segmented, Tooltip, Modal, Input, Button, message } from 'antd';
 import { trainingAPI } from '../../../../services/api';
+import { mergeTrainingGuideState } from '../trainingGuideState';
 
 export default function ModeToggle({ mode, onChange }) {
   const [showVerify, setShowVerify] = useState(false);
@@ -9,6 +10,21 @@ export default function ModeToggle({ mode, onChange }) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPassword2, setNewPassword2] = useState('');
+
+  useEffect(() => {
+    mergeTrainingGuideState({
+      devPasswordOpen: showVerify,
+      devChangePasswordOpen: showChange,
+    });
+
+    return () => {
+      mergeTrainingGuideState({
+        devPasswordOpen: false,
+        devChangePasswordOpen: false,
+      });
+    };
+  }, [showVerify, showChange]);
+
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <div>

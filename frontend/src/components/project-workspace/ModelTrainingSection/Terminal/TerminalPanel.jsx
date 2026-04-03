@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Card, Button, Input, Modal, Space } from 'antd'
 import { API_BASE_URL } from '../../../../config'
+import { mergeTrainingGuideState } from '../trainingGuideState'
 
 export default function TerminalPanel({ projectId, trainingName, visible, autoPrompt = true, onClose }) {
   const [open, setOpen] = useState(false)
@@ -56,6 +57,20 @@ export default function TerminalPanel({ projectId, trainingName, visible, autoPr
       setOpen(true)
     }
   }, [visible])
+
+  useEffect(() => {
+    mergeTrainingGuideState({
+      aiConsoleVisible: visible,
+      terminalPasswordOpen: visible && open && !connected,
+    })
+
+    return () => {
+      mergeTrainingGuideState({
+        aiConsoleVisible: false,
+        terminalPasswordOpen: false,
+      })
+    }
+  }, [visible, open, connected])
 
   if (!visible) return null
 

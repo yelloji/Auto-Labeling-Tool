@@ -13,6 +13,7 @@ import { trainingAPI, releasesAPI } from '../../../services/api';
 import TerminalPanel from './Terminal/TerminalPanel';
 import LiveTrainingDashboard from './Dashboard/LiveTrainingDashboard';
 import TrainingInitializing from './Dashboard/TrainingInitializing';
+import { clearTrainingGuideState, mergeTrainingGuideState } from './trainingGuideState';
 
 const { Title, Text } = Typography;
 
@@ -63,6 +64,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
   const [serverConfig, setServerConfig] = useState({});
   const isTraining = form.status === 'running';
   const isDeveloper = form.mode === 'developer';
+  const [recentOutcome, setRecentOutcome] = useState(null);
   const handleChange = (patch) => {
     setForm((prev) => ({ ...prev, ...patch }));
     // Track dataset summary separately for validation
@@ -181,6 +183,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
       prevTrainingName.current !== form.trainingName &&
       form.trainingName.trim().length > 0) {
       setForm(prev => ({ ...prev, liveMetrics: null }));
+      setRecentOutcome(null);
     }
     prevTrainingName.current = form.trainingName;
   }, [form.trainingName]);
@@ -218,6 +221,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
               liveMetrics: JSON.parse(session.metrics_json),
               status: 'completed'
             }));
+            setRecentOutcome(null);
           }
         }
       } catch (e) {
@@ -266,6 +270,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
       try {
         const sess = await trainingAPI.getSession({ projectId: form.projectId, name: form.trainingName });
         if (sess && sess.status && sess.status !== form.status) {
+          if (sess.status === 'failed') setRecentOutcome('failed');
+          if (sess.status === 'completed') setRecentOutcome('completed');
           setForm(prev => ({ ...prev, status: sess.status }));
         }
       } catch (e) { }
@@ -282,6 +288,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     const wasTraining = sessionStorage.getItem('wasTraining') === 'true';
 
     if (wasTraining && !isTraining && (form.status === 'completed' || form.status === 'failed')) {
+      setRecentOutcome(form.status);
       // Training just finished - reset form to initial state
       setForm(prev => ({ ...initialFormState, projectId, sessionId: null, status: 'queued', liveMetrics: prev.liveMetrics }));
       sessionStorage.removeItem('wasTraining');
@@ -735,6 +742,93 @@ const ModelTrainingSection = ({ projectId, project }) => {
     modelReady: Boolean(form.pretrainedModel)
   }), [form]);
 
+  const hasMetrics = useMemo(() => {
+    const metrics = form.liveMetrics || {};
+    return Object.keys(metrics?.training || {}).length > 0 || Object.keys(metrics?.validation || {}).length > 0;
+  }, [form.liveMetrics]);
+
+  const showInitializing = activeTab === 'status' &&
+    form.status === 'running' &&
+    (!form.liveMetrics || !form.liveMetrics.training || !form.liveMetrics.training.epoch);
+
+  const showRunningDashboard = activeTab === 'status' && form.status === 'running' && hasMetrics;
+  const showFailed = activeTab === 'status' && !isTraining && recentOutcome === 'failed';
+  const showLastResult = activeTab === 'status' && !isTraining && hasMetrics && recentOutcome !== 'failed';
+
+  useEffect(() => {
+    mergeTrainingGuideState({
+      mode: form.mode,
+      activeTab,
+      trainingName: form.trainingName,
+      framework: form.framework,
+      taskType: form.taskType,
+      pretrainedModel: form.pretrainedModel,
+      device: form.device,
+      gpuIndex: form.gpuIndex,
+      batchSize: form.batchSize,
+      imgSize: form.imgSize,
+      resume: form.resume,
+      datasetReleaseId: form.datasetReleaseId,
+      datasetZipPath: form.datasetZipPath,
+      datasetZipSelected: Boolean(form.datasetZipPath),
+      datasetExtracted: Boolean(form.datasetReleaseDir),
+      datasetReleaseDir: form.datasetReleaseDir,
+      datasetSummaryVisible: Boolean(datasetSummary),
+      datasetSummaryClasses: datasetSummary?.num_classes || datasetSummary?.classes?.length || 0,
+      singleClassDataset: (datasetSummary?.num_classes || datasetSummary?.classes?.length || 0) === 1,
+      singleClassEnabled: Boolean(form.single_cls),
+      readiness,
+      status: form.status,
+      isTraining,
+      isDeveloper,
+      aiConsoleVisible: consoleVisible,
+      configPreviewVisible: activeTab === 'config',
+      statusVisible: activeTab === 'status',
+      hasMetrics,
+      showInitializing,
+      showRunningDashboard,
+      showFailed,
+      showLastResult,
+      recentOutcome,
+      optimizerMode: form.optimizerMode,
+      optimizer: form.optimizer,
+      yolo26ModelSelected: typeof form.pretrainedModel === 'string' && form.pretrainedModel.toLowerCase().includes('yolo26'),
+      startTrainingEnabled: readiness.nameReady && readiness.datasetReady && readiness.modelReady && !isTraining,
+    }, {
+      forceRefresh: recentOutcome === 'failed' || recentOutcome === 'completed',
+    });
+  }, [
+    activeTab,
+    consoleVisible,
+    datasetSummary,
+    form.datasetReleaseDir,
+    form.datasetReleaseId,
+    form.datasetZipPath,
+    form.framework,
+    form.mode,
+    form.optimizer,
+    form.optimizerMode,
+    form.pretrainedModel,
+    form.status,
+    form.taskType,
+    form.trainingName,
+    hasMetrics,
+    isDeveloper,
+    isTraining,
+    readiness,
+    recentOutcome,
+    showFailed,
+    showInitializing,
+    showLastResult,
+    showRunningDashboard,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearTrainingGuideState();
+    };
+  }, []);
+
   const currentStep = useMemo(() => {
     if (!readiness.nameReady) return 0;
     if (!readiness.datasetReady) return 1;
@@ -905,6 +999,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
                       try {
                         if (form.projectId && form.trainingName) {
+                          setRecentOutcome(null);
                           setForm(prev => ({ ...prev, status: 'running' }));
                           await trainingAPI.startSession({ projectId: form.projectId, name: form.trainingName });
                           setActiveTab('status'); // Auto-switch to status tab

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space, Row, Col, Collapse } from 'antd';
 import { systemAPI } from '../../../../services/api';
+import { mergeTrainingGuideState } from '../trainingGuideState';
 
 
 export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, max_det, taskType, datasetSummary, disabled }) {
@@ -19,6 +20,20 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [loadingHW, setLoadingHW] = useState(false);
   const [hw, setHW] = useState(null);
+
+  useEffect(() => {
+    mergeTrainingGuideState({
+      gpuDialogOpen: showDeviceModal,
+      gpuCount: Array.isArray(hw?.gpus) ? hw.gpus.length : 0,
+      gpuHardwareLoaded: !!hw,
+    });
+
+    return () => {
+      mergeTrainingGuideState({
+        gpuDialogOpen: false,
+      });
+    };
+  }, [showDeviceModal, hw]);
 
   const openDeviceModal = async () => {
     setShowDeviceModal(true);
