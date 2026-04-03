@@ -74,8 +74,11 @@ async def get_models(db: Session = Depends(get_db)):
 
         for m in all_models:
             try:
-                # Always include pre-trained models
+                # Always include pre-trained models (except SAM — internal annotation tool)
                 if not bool(m.get("is_custom", False)):
+                    mi = model_manager.models_info.get(m.get("id"))
+                    if mi is not None and 'models/sam' in str(getattr(mi, 'path', '')).replace('\\', '/').lower():
+                        continue
                     filtered.append(m)
                     continue
 

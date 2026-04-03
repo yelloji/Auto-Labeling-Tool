@@ -17,6 +17,9 @@ def get_trainable_models(db: Session, project_id: Optional[int], framework: str,
         if framework == "ultralytics":
             if not p.lower().endswith(".pt") and "pytorch" not in f:
                 continue
+            # Exclude SAM annotation models — not compatible with YOLO training
+            if 'models/sam' in p.replace('\\', '/'):
+                continue
         if cfg["types"] and t not in cfg["types"]:
             continue
         out.append({

@@ -103,6 +103,8 @@ async def get_project_models(
             raise HTTPException(status_code=404, detail="Project not found")
 
         models = AiModelOperations.list_models_by_project(db, project_id=project_id, include_global=include_global)
+        # Exclude SAM annotation models from UI — they are internal tools used by smart polygon, not user-facing models
+        models = [m for m in models if 'models/sam' not in str(getattr(m, 'file_path', '')).replace('\\', '/')]
         # Use centralized serialization with authoritative flags for UI consumption
         result = [serialize_ai_model(db, m) for m in models]
         logger.info("operations.operations", "Project models retrieved successfully", "get_project_models_success", {
