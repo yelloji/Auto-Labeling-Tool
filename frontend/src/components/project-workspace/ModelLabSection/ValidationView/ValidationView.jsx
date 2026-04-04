@@ -18,6 +18,7 @@ import {
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { projectsAPI, handleAPIError } from '../../../../services/api';
 import { logInfo, logError, logUserClick } from '../../../../utils/professional_logger';
+import { mergeModelLabGuideState } from '../modellabGuideState';
 import './ValidationView.css';
 
 const { Title, Text } = Typography;
@@ -184,6 +185,16 @@ const ValidationView = ({ training }) => {
     const [loading, setLoading] = useState(false);
     const [running, setRunning] = useState(false);
     const [isWaitingForCompletion, setIsWaitingForCompletion] = useState(false);
+
+    useEffect(() => {
+        mergeModelLabGuideState({
+            validationExperimentName: params.name || '',
+            validationNameValid: params.name.trim().length >= 3,
+            validationResultExists: !!activeExperiment,
+            activeValidationExperimentId: activeExperiment?.id || null,
+            activeValidationStatus: activeExperiment?.status || null,
+        }, { forceRefresh: true });
+    }, [params.name, activeExperiment]);
 
     // Compute available dataset splits from training session
     const availableSplits = React.useMemo(() => {

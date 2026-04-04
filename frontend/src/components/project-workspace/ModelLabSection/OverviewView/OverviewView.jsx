@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Card, Typography, Table, Tag, Tooltip, Tabs } from 'antd';
+import { Card, Typography, Table, Tag, Tooltip, Tabs, Modal } from 'antd';
 import AnalyticsView from '../AnalyticsView/AnalyticsView';
 import ViewConfig from '../ConfigurationView/ViewConfig';
 import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
@@ -8,6 +8,7 @@ import ModelManagerView from '../ModelManagerView/ModelManagerView';
 import ValidationView from '../ValidationView/ValidationView';
 import PredictionView from '../PredictionView/PredictionView';
 import ComparisonEngineView from '../ComparisonEngine/ComparisonEngineView';
+import { mergeModelLabGuideState } from '../modellabGuideState';
 import './OverviewView.css';
 
 const { Title, Text } = Typography;
@@ -22,6 +23,30 @@ const { Title, Text } = Typography;
  * - Confusion Matrix
  */
 const OverviewView = ({ training }) => {
+    const [activeTopLevelTab, setActiveTopLevelTab] = useState('overview');
+    const [activeConfigTab, setActiveConfigTab] = useState('view');
+    const [confusionModalOpen, setConfusionModalOpen] = useState(false);
+
+    useEffect(() => {
+        if (!training) return;
+
+        const topLevelStateMap = {
+            overview: 'modellab-overview',
+            configuration: activeConfigTab === 'editor' ? 'modellab-config-advanced' : 'modellab-config-view',
+            'model-manager': 'modellab-model-manager',
+            validation: 'modellab-validation',
+            prediction: 'modellab-prediction',
+            'comparison-engine': 'modellab-comparison-engine',
+        };
+
+        mergeModelLabGuideState({
+            activeTopLevelTab,
+            activeConfigTab,
+            confusionMatrixOpen: confusionModalOpen,
+            stateKey: confusionModalOpen ? 'modellab-confusion-modal' : (topLevelStateMap[activeTopLevelTab] || 'modellab-overview'),
+        }, { forceRefresh: true });
+    }, [training, activeTopLevelTab, activeConfigTab, confusionModalOpen]);
+
     if (!training) {
         return (
             <div className="overview-empty">
@@ -240,7 +265,7 @@ const OverviewView = ({ training }) => {
             </div>
 
             {/* Tabs */}
-            <Tabs defaultActiveKey="overview" items={[
+            <Tabs activeKey={activeTopLevelTab} onChange={setActiveTopLevelTab} items={[
                 {
                     key: 'overview',
                     label: 'Overview',
@@ -394,7 +419,7 @@ const OverviewView = ({ training }) => {
                                             src={`/api/v1/projects/${training.projectId}/training/${training.id}/confusion_matrix.png`}
                                             alt="Confusion Matrix"
                                             className="confusion-matrix-image confusion-matrix-thumbnail"
-                                            onClick={() => {
+                                            onClick={() => { setConfusionModalOpen(true); return;
                                                 // Open image in modal with loading state
                                                 const modal = document.createElement('div');
                                                 modal.className = 'confusion-matrix-modal';
@@ -446,7 +471,8 @@ const OverviewView = ({ training }) => {
                     label: 'Configuration',
                     children: (
                         <Tabs
-                            defaultActiveKey="view"
+                            activeKey={activeConfigTab}
+                            onChange={setActiveConfigTab}
                             items={[
                                 {
                                     key: 'view',
@@ -492,11 +518,25 @@ const OverviewView = ({ training }) => {
                     children: <PredictionView training={training} />
                 },
                 {
-                    key: 'comparison',
+                    key: 'comparison-engine',
                     label: 'Comparison Engine',
                     children: <ComparisonEngineView currentTraining={training} />
                 }
             ]} />
+            <Modal
+                open={confusionModalOpen}
+                onCancel={() => setConfusionModalOpen(false)}
+                footer={null}
+                width="80vw"
+                destroyOnClose
+                title="Confusion Matrix"
+            >
+                <img
+                    src={`/api/v1/projects/${training.projectId}/training/${training.id}/confusion_matrix.png`}
+                    alt="Confusion Matrix Full Size"
+                    style={{ width: '100%', height: 'auto', display: 'block' }}
+                />
+            </Modal>
         </div>
     );
 };

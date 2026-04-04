@@ -9,6 +9,7 @@ import {
   SaveOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
+import { mergeModelLabGuideState } from '../modellabGuideState';
 import './ModelManagerView.css';
 
 const { TextArea } = Input;
@@ -25,6 +26,14 @@ const ModelManagerView = ({ projectId, trainingId, sessionName }) => {
   useEffect(() => {
     loadModels();
   }, [projectId, trainingId]);
+
+  useEffect(() => {
+    mergeModelLabGuideState({
+      modelManagerHasBestModel: !!models?.best_model,
+      modelManagerHasLastModel: !!models?.last_model,
+      modelManagerAdditionalFilesCount: models?.additional_files?.length || 0,
+    }, { forceRefresh: true });
+  }, [models]);
 
   const loadModels = async () => {
     setLoading(true);

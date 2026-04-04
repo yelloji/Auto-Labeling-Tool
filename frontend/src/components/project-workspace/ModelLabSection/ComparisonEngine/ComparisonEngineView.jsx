@@ -3,6 +3,7 @@ import { Card, Typography, Select, Button, Spin, Empty, Tag, Space, Row, Col, Di
 import { SwapOutlined, CheckCircleOutlined, CloseCircleOutlined, InfoCircleOutlined, PlusOutlined, MinusOutlined, WarningOutlined, LinkOutlined } from '@ant-design/icons';
 import { trainingAPI, projectsAPI } from '../../../../services/api';
 import DeltaGalleryModal from './DeltaGalleryModal';
+import { mergeModelLabGuideState } from '../modellabGuideState';
 import './ComparisonEngineView.css';
 
 const { Title, Text } = Typography;
@@ -738,6 +739,22 @@ const ComparisonEngineView = ({ currentTraining }) => {
     };
 
     const isCompareReady = baselineId && challengerId && (!modelCEnabled || challengerCId);
+
+    useEffect(() => {
+        mergeModelLabGuideState({
+            comparisonViewerOpen: galleryVisible,
+            comparisonHasBaseline: !!baselineId,
+            comparisonHasChallenger: !!challengerId,
+            comparisonHasThirdModel: !!challengerCId,
+            comparisonReady: !!isCompareReady,
+            comparisonMode: modelCEnabled ? 'three-way' : 'two-way',
+            comparisonResultLoaded: !!comparisonData,
+            comparisonBaselineExperimentId: baselineId || null,
+            comparisonChallengerExperimentId: challengerId || null,
+            comparisonViewerType: galleryVisible ? galleryConfig.type || null : null,
+            stateKey: galleryVisible ? 'modellab-comparison-viewer' : 'modellab-comparison-engine',
+        }, { forceRefresh: true });
+    }, [galleryVisible, galleryConfig.type, baselineId, challengerId, challengerCId, isCompareReady, modelCEnabled, comparisonData]);
 
     const handleCompare = async () => {
         if (!isCompareReady) return;

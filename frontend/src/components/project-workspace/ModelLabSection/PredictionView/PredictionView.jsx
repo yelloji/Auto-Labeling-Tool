@@ -53,6 +53,7 @@ import AnalyticsModal from './AnalyticsModal';
 import ImageViewerModal from './ImageViewerModal';
 
 import { projectsAPI, handleAPIError } from '../../../../services/api';
+import { mergeModelLabGuideState } from '../modellabGuideState';
 import './PredictionView.css';
 
 const { Text } = Typography;
@@ -297,6 +298,23 @@ const PredictionView = ({ training }) => {
         }
         return [];
     }, [training?.resolved_config_json]);
+
+    useEffect(() => {
+        mergeModelLabGuideState({
+            selectedPredictionExperimentId: selectedExp?.id || null,
+            selectedPredictionExperimentName: selectedExp?.name || null,
+            predictionViewerOpen: previewVisible,
+            predictionAnalyticsOpen: analyticsVisible,
+            predictionHelpOpen: previewVisible ? undefined : false,
+            classifyMissingOpen: previewVisible ? undefined : false,
+            activePredictionAnalyticsTab: analyticsVisible ? undefined : null,
+            stateKey: previewVisible
+                ? 'modellab-prediction-image-viewer'
+                : analyticsVisible
+                    ? 'modellab-prediction-analytics'
+                    : 'modellab-prediction',
+        }, { forceRefresh: true });
+    }, [selectedExp, previewVisible, analyticsVisible]);
 
 
 

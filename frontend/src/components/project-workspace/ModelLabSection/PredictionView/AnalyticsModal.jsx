@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Modal, Row, Col, Card, Statistic, Typography, Divider, Table, Tabs, Empty, Progress, Tag, Alert } from 'antd';
 import {
     BarChartOutlined,
@@ -8,7 +8,6 @@ import {
     InfoCircleOutlined,
     LineChartOutlined,
     FileTextOutlined,
-    DownloadOutlined,
     FundOutlined,
     TrophyOutlined,
     RiseOutlined,
@@ -22,17 +21,26 @@ import './AnalyticsModal.css';
 import QualityView from './AnalyticsViews/QualityView';
 import ChartsView from './AnalyticsViews/ChartsView';
 import ReportView from './AnalyticsViews/ReportView';
-import ExportView from './AnalyticsViews/ExportView';
+import { mergeModelLabGuideState } from '../modellabGuideState';
 
 const { Title, Text, Paragraph } = Typography;
 
 /**
  * AnalyticsModal Component
  * 
- * Premium analytics dashboard with 5 tabs
+ * Premium analytics dashboard with 4 tabs
  */
 const AnalyticsModal = ({ visible, onCancel, training, experiment, verifications = [], projectLabels = [], trainingClasses = [] }) => {
     const [activeTab, setActiveTab] = useState('overview');
+
+    useEffect(() => {
+        if (!visible) return;
+        mergeModelLabGuideState({
+            predictionAnalyticsOpen: true,
+            activePredictionAnalyticsTab: activeTab,
+            stateKey: `modellab-prediction-analytics-${activeTab}`,
+        }, { forceRefresh: true });
+    }, [visible, activeTab]);
 
     // Calculate insights - with safety checks
     const insights = useMemo(() => {
@@ -426,17 +434,6 @@ const AnalyticsModal = ({ visible, onCancel, training, experiment, verifications
                     />
                 </Tabs.TabPane>
 
-                <Tabs.TabPane
-                    tab={
-                        <span>
-                            <DownloadOutlined />
-                            Export
-                        </span>
-                    }
-                    key="export"
-                >
-                    <ExportView experiment={experiment} />
-                </Tabs.TabPane>
             </Tabs>
         </Modal>
     );

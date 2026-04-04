@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { Card, Typography, Input, InputNumber, Select, Button, Modal, message, Alert } from 'antd';
 import { projectsAPI } from '../../../../services/api';
+import { mergeModelLabGuideState } from '../modellabGuideState';
 
 const { Title, Text } = Typography;
 
@@ -55,6 +56,8 @@ const AdvancedConfigEditor = ({ training }) => {
     });
     const [originalConfig, setOriginalConfig] = useState({});
     const [loading, setLoading] = useState(false);
+    const [hasQueuedTraining, setHasQueuedTraining] = useState(false);
+    const [queuedTrainingName, setQueuedTrainingName] = useState(null);
 
     useEffect(() => {
         // Parse resolved_config_json - keep nested structure
@@ -71,6 +74,39 @@ const AdvancedConfigEditor = ({ training }) => {
             }
         }
     }, [training]);
+
+    useEffect(() => {
+        let active = true;
+
+        const syncQueuedTrainingState = async () => {
+            if (!training?.projectId) return;
+            try {
+                const queuedTraining = await projectsAPI.getQueuedTraining(training.projectId);
+                if (!active) return;
+
+                setHasQueuedTraining(!!queuedTraining);
+                setQueuedTrainingName(queuedTraining?.name || null);
+                mergeModelLabGuideState({
+                    advancedConfigCanSendToTraining: !!queuedTraining,
+                    advancedConfigQueuedTrainingName: queuedTraining?.name || null,
+                }, { forceRefresh: true });
+            } catch (error) {
+                if (!active) return;
+
+                setHasQueuedTraining(false);
+                setQueuedTrainingName(null);
+                mergeModelLabGuideState({
+                    advancedConfigCanSendToTraining: false,
+                    advancedConfigQueuedTrainingName: null,
+                }, { forceRefresh: true });
+            }
+        };
+
+        syncQueuedTrainingState();
+        return () => {
+            active = false;
+        };
+    }, [training?.projectId]);
 
     // Detect if config was created in developer mode
     const isDeveloperConfig = () => {
@@ -154,6 +190,12 @@ const AdvancedConfigEditor = ({ training }) => {
                             config
                         );
                         message.success(`Config applied to training "${queuedTraining.name}"!`);
+                        setHasQueuedTraining(true);
+                        setQueuedTrainingName(queuedTraining.name);
+                        mergeModelLabGuideState({
+                            advancedConfigCanSendToTraining: true,
+                            advancedConfigQueuedTrainingName: queuedTraining.name,
+                        }, { forceRefresh: true });
                     } catch (error) {
                         message.error('Failed to apply config: ' + error.message);
                     }
@@ -274,6 +316,16 @@ const AdvancedConfigEditor = ({ training }) => {
                 message="Edit settings to reuse in your next training"
                 description="Changes here won't affect the current training - they'll be saved for your upcoming queued training."
                 type="info"
+                showIcon
+                style={{ marginBottom: '20px' }}
+            />
+
+            <Alert
+                message={hasQueuedTraining ? 'Ready to Send to Training' : 'No Active Queued Training'}
+                description={hasQueuedTraining
+                    ? `These edited settings can be sent to queued training "${queuedTrainingName}".`
+                    : 'Create or resume a new training first, then come back here to send these settings forward.'}
+                type={hasQueuedTraining ? 'success' : 'warning'}
                 showIcon
                 style={{ marginBottom: '20px' }}
             />

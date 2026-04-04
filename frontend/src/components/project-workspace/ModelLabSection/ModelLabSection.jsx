@@ -6,6 +6,7 @@ import TrainingList from './TrainingList/TrainingList';
 import OverviewView from './OverviewView/OverviewView';
 import { projectsAPI, handleAPIError } from '../../../services/api';
 import { logInfo, logError } from '../../../utils/professional_logger';
+import { clearModelLabGuideState, mergeModelLabGuideState } from './modellabGuideState';
 import './ModelLabSection.css';
 
 const { Title } = Typography;
@@ -86,6 +87,43 @@ const ModelLabSection = ({ projectId }) => {
 
         fetchTrainings();
     }, [projectId, location.search]);
+
+    useEffect(() => {
+        const hasTrainings = trainings.length > 0;
+        const basePatch = {
+            hasTrainings,
+            trainingsCount: trainings.length,
+            selectedTrainingId: selectedTraining?.id || null,
+            selectedTrainingName: selectedTraining?.name || null,
+            selectedTrainingTaskType: selectedTraining?.taskType || null,
+            leftPanelTitle: 'Trained Models',
+            rightPanelReady: !!selectedTraining
+        };
+
+        if (!hasTrainings) {
+            mergeModelLabGuideState({
+                ...basePatch,
+                stateKey: 'modellab-no-trainings',
+                activeTopLevelTab: null,
+            }, { forceRefresh: true });
+            return;
+        }
+
+        if (!selectedTraining) {
+            mergeModelLabGuideState({
+                ...basePatch,
+                stateKey: 'modellab-empty',
+                activeTopLevelTab: null,
+            }, { forceRefresh: true });
+            return;
+        }
+
+        mergeModelLabGuideState(basePatch);
+    }, [trainings, selectedTraining]);
+
+    useEffect(() => () => {
+        clearModelLabGuideState();
+    }, []);
 
     const handleTrainingSelect = (training) => {
         setSelectedTraining(training);

@@ -17,6 +17,7 @@ import {
 } from '@ant-design/icons';
 
 import ManualClassPopup from './ManualClassPopup';
+import { mergeModelLabGuideState } from '../modellabGuideState';
 
 const { Text } = Typography;
 
@@ -259,6 +260,24 @@ const ImageViewerModal = ({
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [showHelp]);
+
+    React.useEffect(() => {
+        if (!visible) return;
+
+        mergeModelLabGuideState({
+            predictionViewerOpen: true,
+            predictionHelpOpen: showHelp,
+            classifyMissingOpen: showClassPopup,
+            currentPredictionImageName: currentFileName || null,
+            activePredictionImageIndex: currentIndex >= 0 ? currentIndex + 1 : null,
+            predictionImageCount: images?.length || 0,
+            stateKey: showClassPopup
+                ? 'modellab-prediction-classify-missing'
+                : showHelp
+                    ? 'modellab-prediction-help'
+                    : 'modellab-prediction-image-viewer',
+        }, { forceRefresh: true });
+    }, [visible, showHelp, showClassPopup, currentFileName, currentIndex, images?.length]);
 
     // Phase 6.9: Keyboard Navigation (Arrow Keys)
     React.useEffect(() => {
