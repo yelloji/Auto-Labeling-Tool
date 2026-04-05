@@ -115,6 +115,14 @@ function getStopTrainingLabel(lang) {
   return lang === 'it' ? 'Stop Training' : 'Stop Training';
 }
 
+function getConfirmStopLabel(lang) {
+  return lang === 'it' ? 'Si, ferma il training' : 'Yes, stop training';
+}
+
+function getCancelStopLabel(lang) {
+  return lang === 'it' ? 'Annulla' : 'Cancel';
+}
+
 function getResultsHelpLabel(lang) {
   return lang === 'it' ? 'Come leggo questi risultati?' : 'How do I read these results?';
 }
@@ -457,6 +465,8 @@ export function handleTrainingAnswer(step, value, lang, refs, setters) {
   const openAiConsoleLabel = getOpenAiConsoleLabel(lang);
   const hideAiConsoleLabel = getHideAiConsoleLabel(lang);
   const stopTrainingLabel = getStopTrainingLabel(lang);
+  const confirmStopLabel = getConfirmStopLabel(lang);
+  const cancelStopLabel = getCancelStopLabel(lang);
 
   function closeBot() {
     setWizardMode(false);
@@ -604,17 +614,33 @@ export function handleTrainingAnswer(step, value, lang, refs, setters) {
   }
 
   if (value === stopTrainingLabel) {
+    wizard(
+      lang === 'it'
+        ? 'Stai per fermare il training in corso. Il processo salvera l ultimo checkpoint prima di fermarsi — troverai best.pt e last.pt in Model Lab → Model Manager. Sei sicuro di voler fermare?'
+        : 'You are about to stop the running training. The process will save the last checkpoint before stopping — you will find best.pt and last.pt in Model Lab → Model Manager. Are you sure you want to stop?',
+      [confirmStopLabel, cancelStopLabel],
+      'training-stop-confirm'
+    );
+    return;
+  }
+
+  if (value === confirmStopLabel) {
     const clicked = clickTrainingAction({ text: 'Stop Training' });
     explain(
       clicked
         ? (lang === 'it'
-          ? 'Ho cliccato Stop Training. Il processo si ferma dopo aver salvato l ultimo checkpoint. Trovi best.pt e last.pt in Model Manager.'
-          : 'I clicked Stop Training. The process will stop after saving the last checkpoint. You will find best.pt and last.pt in Model Lab — Model Manager.')
+          ? 'Ho cliccato Stop Training. Il training si sta fermando. Controlla la scheda Status — quando lo stato cambia, il run e terminato. Trovi best.pt e last.pt in Model Lab → Model Manager.'
+          : 'I clicked Stop Training. The training is now stopping. Watch the Status tab — when the status changes the run is done. You will find best.pt and last.pt in Model Lab → Model Manager.')
         : (lang === 'it'
           ? 'Non ho trovato il pulsante Stop Training. Assicurati di essere nella scheda Status mentre il training e in esecuzione.'
-          : 'I could not find the Stop Training button. Make sure you are in the Status tab while training is running.'),
+          : 'I could not find the Stop Training button. Make sure you are on the Status tab while training is running.'),
       'training-stop-help'
     );
+    return;
+  }
+
+  if (value === cancelStopLabel) {
+    applyFreshTrainingSnapshot(lang, refs, setters);
     return;
   }
 
