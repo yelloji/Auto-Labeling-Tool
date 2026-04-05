@@ -609,6 +609,58 @@ export default function GuideBot() {
     return currentWorkspaceSectionRef.current || detectWorkspaceSection();
   }
 
+  function applyWorkspaceSnapshotForSection(section, lang, refs, setters) {
+    if (section === '/workspace/upload') {
+      const uploadState = checkUploadPageState(lang, refs, setters);
+      if (uploadState) { applyWizardState(uploadState); return true; }
+      return false;
+    }
+
+    if (section === '/workspace/management') {
+      const mgmtState = checkManagementPageState(lang, refs, setters);
+      if (mgmtState) { applyWizardState(mgmtState); return true; }
+      return false;
+    }
+
+    if (section === '/workspace/dataset') {
+      const datasetState = checkDatasetPageState(lang, refs, setters);
+      if (datasetState) { applyWizardState(datasetState); return true; }
+      return false;
+    }
+
+    if (section === '/workspace/analytics') {
+      const analyticsState = checkAnalyticsPageState(lang, refs, setters);
+      if (analyticsState) { applyWizardState(analyticsState); return true; }
+      return false;
+    }
+
+    if (section === '/workspace/models') {
+      const localModelsState = checkLocalModelPageState(lang, refs, setters);
+      if (localModelsState) { applyWizardState(localModelsState); return true; }
+      return false;
+    }
+
+    if (section === '/workspace/versions') {
+      const releaseState = checkReleasePageState(lang, refs, setters);
+      if (releaseState) { applyWizardState(releaseState); return true; }
+      return false;
+    }
+
+    if (section === '/workspace/model-training') {
+      const trainingState = checkTrainingPageState(lang, refs, setters);
+      if (trainingState) { applyWizardState(trainingState); return true; }
+      return false;
+    }
+
+    if (section === '/workspace/model-lab') {
+      const modelLabState = checkModelLabPageState(lang, refs, setters);
+      if (modelLabState) { applyWizardState(modelLabState); return true; }
+      return false;
+    }
+
+    return false;
+  }
+
   function reopenForCurrentContext(pathname = location.pathname, sectionOverride = null) {
     const s = makeSetters();
     const r = makeRefs();
@@ -632,30 +684,7 @@ export default function GuideBot() {
         : getActiveWorkspaceSection();
 
       setScriptKey(nextScriptKey);
-
-      const uploadState = checkUploadPageState(lang, r, s);
-      if (uploadState) { applyWizardState(uploadState); return; }
-
-      const mgmtState = checkManagementPageState(lang, r, s);
-      if (mgmtState) { applyWizardState(mgmtState); return; }
-
-      const datasetState = checkDatasetPageState(lang, r, s);
-      if (datasetState) { applyWizardState(datasetState); return; }
-
-      const analyticsState = checkAnalyticsPageState(lang, r, s);
-      if (analyticsState) { applyWizardState(analyticsState); return; }
-
-      const localModelsState = checkLocalModelPageState(lang, r, s);
-      if (localModelsState) { applyWizardState(localModelsState); return; }
-
-      const releaseState = checkReleasePageState(lang, r, s);
-      if (releaseState) { applyWizardState(releaseState); return; }
-
-      const trainingState = checkTrainingPageState(lang, r, s);
-      if (trainingState) { applyWizardState(trainingState); return; }
-
-      const modelLabState = checkModelLabPageState(lang, r, s);
-      if (modelLabState) { applyWizardState(modelLabState); return; }
+      if (applyWorkspaceSnapshotForSection(nextScriptKey, lang, r, s)) return;
 
       setIsOpen(true);
       return;
@@ -691,35 +720,11 @@ export default function GuideBot() {
 
     if (location.pathname.includes('/workspace')) {
       // Sync scriptKey to the actual active section so Cancel shows the right script
-      setScriptKey(getActiveWorkspaceSection());
+      const activeSection = getActiveWorkspaceSection();
+      setScriptKey(activeSection);
       const s = makeSetters();
       const r = makeRefs();
-
-      // Check Upload page state first
-      const uploadState = checkUploadPageState(lang, r, s);
-      if (uploadState) { applyWizardState(uploadState); return; }
-
-      // Check Management page state
-      const mgmtState = checkManagementPageState(lang, r, s);
-      if (mgmtState) { applyWizardState(mgmtState); return; }
-
-      const datasetState = checkDatasetPageState(lang, r, s);
-      if (datasetState) { applyWizardState(datasetState); return; }
-
-      const analyticsState = checkAnalyticsPageState(lang, r, s);
-      if (analyticsState) { applyWizardState(analyticsState); return; }
-
-      const localModelsState = checkLocalModelPageState(lang, r, s);
-      if (localModelsState) { applyWizardState(localModelsState); return; }
-
-      const releaseState = checkReleasePageState(lang, r, s);
-      if (releaseState) { applyWizardState(releaseState); return; }
-
-      const trainingState = checkTrainingPageState(lang, r, s);
-      if (trainingState) { applyWizardState(trainingState); return; }
-
-      const modelLabState = checkModelLabPageState(lang, r, s);
-      if (modelLabState) { applyWizardState(modelLabState); return; }
+      if (applyWorkspaceSnapshotForSection(activeSection, lang, r, s)) return;
     }
 
     if (location.pathname.startsWith('/annotate-progress/')) {
