@@ -214,7 +214,14 @@ class ProfessionalLogger:
             full_log_path = os.path.join(self.log_dir, log_file_path)
             
             # Create directory structure automatically
-            os.makedirs(os.path.dirname(full_log_path), exist_ok=True)
+            try:
+                os.makedirs(os.path.dirname(full_log_path), exist_ok=True)
+            except PermissionError:
+                # Fallback to AppData if log_dir is not writable (e.g. Program Files in exe mode)
+                app_data = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+                fallback_dir = os.path.join(app_data, 'Gevis AI Studio', 'logs')
+                full_log_path = os.path.join(fallback_dir, log_file_path)
+                os.makedirs(os.path.dirname(full_log_path), exist_ok=True)
             
             # Get rotation settings from config
             max_bytes = self.config.get("log_rotation_size_mb", 100) * 1024 * 1024
@@ -254,7 +261,10 @@ class ProfessionalLogger:
             # print(f"✅ Created {logger_type} logger: {logger_name} -> {full_log_path}")
             
         except Exception as e:
-            print(f"❌ Failed to create logger {logger_name}: {e}")
+            try:
+                print(f"[WARN] Failed to create logger {logger_name}: {e}")
+            except Exception:
+                pass
     
     def _create_log_entry(self, level: str, message: str, category: str, 
                          operation: str = None, details: Dict = None) -> Dict[str, Any]:
@@ -327,8 +337,11 @@ class ProfessionalLogger:
         
         # Check if this is a valid category from our 17-log-file plan
         if category not in self.loggers:
-            print(f"❌ INVALID LOG CATEGORY: '{category}' is not in the 17-log-file plan!")
-            print(f"📋 Valid categories: {list(self.loggers.keys())}")
+            try:
+                print(f"[WARN] INVALID LOG CATEGORY: '{category}' is not in the 17-log-file plan!")
+                print(f"[WARN] Valid categories: {list(self.loggers.keys())}")
+            except Exception:
+                pass
             return
         
         # Get the logger for this category

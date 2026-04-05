@@ -1805,7 +1805,11 @@ async def trigger_validation(
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
-        
+        # Ensure exe mode flag is explicitly set so multiprocessing worker processes
+        # spawned by Ultralytics also use AppData paths for logging (not Program Files)
+        if os.environ.get("GEVIS_EXE_MODE") == "1":
+            env["GEVIS_EXE_MODE"] = "1"
+
         command = [
             sys.executable,
             executor_path,
@@ -2534,7 +2538,9 @@ async def trigger_prediction(
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
-        
+        if os.environ.get("GEVIS_EXE_MODE") == "1":
+            env["GEVIS_EXE_MODE"] = "1"
+
         command = [
             sys.executable,
             executor_path,
