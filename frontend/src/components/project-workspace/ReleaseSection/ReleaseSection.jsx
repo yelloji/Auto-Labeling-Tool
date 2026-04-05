@@ -428,6 +428,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
   const [showReleaseDetails, setShowReleaseDetails] = useState(false);
   const [releaseImages, setReleaseImages] = useState([]);
   const [releaseLoading, setReleaseLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     const prev = window.__releaseGuideState || {};
@@ -893,6 +894,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
       function: 'handleCreateRelease'
     });
 
+    setIsGenerating(true);
     try {
       // Show loading message
       const loadingMessage = message.loading('Creating release...', 0);
@@ -1077,6 +1079,8 @@ const ReleaseSection = ({ projectId, datasetId }) => {
       });
       console.error('Error creating release:', error);
       message.error('Failed to create release. Please try again.');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -1534,6 +1538,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
                     selectedDatasets={Array.isArray(selectedDatasets) ? selectedDatasets : []}
                     currentReleaseVersion={currentReleaseVersion}
                     onReleaseVersionChange={setCurrentReleaseVersion}
+                    isGenerating={isGenerating}
                   />
                 </div>
               )}

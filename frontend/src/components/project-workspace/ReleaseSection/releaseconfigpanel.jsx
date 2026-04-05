@@ -6,7 +6,7 @@ import { logInfo, logError, logUserClick } from '../../../utils/professional_log
 
 const { Option } = Select;
 
-const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selectedDatasets = [], currentReleaseVersion, onReleaseVersionChange }) => {
+const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selectedDatasets = [], currentReleaseVersion, onReleaseVersionChange, isGenerating = false }) => {
   console.log('🔥 UPDATED COMPONENT LOADED - VERSION 2.0 🔥');
   
   // Log component initialization
@@ -1122,7 +1122,7 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
             Preview Output
           </Button>
           
-          <Button 
+          <Button
             type="primary"
             icon={<RocketOutlined />}
             onClick={() => {
@@ -1136,7 +1136,8 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
               });
               handleGenerate();
             }}
-            disabled={!previewData}
+            disabled={!previewData || isGenerating}
+            loading={isGenerating}
             style={{ minWidth: 140 }}
           >
             Create Release

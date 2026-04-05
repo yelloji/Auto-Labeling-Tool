@@ -201,6 +201,8 @@ export default function GuideBot() {
       setConversation([]);
       setWizardStep(null);
       const section = e.detail?.section;
+      if (section !== 'model-training') window.__trainingGuideState = undefined;
+      if (section !== 'model-lab') window.__modellabGuideState = undefined;
       if (section && SECTION_SCRIPT[section]) setScriptKey(SECTION_SCRIPT[section]);
       if (shouldReopen) {
         pendingReopenRef.current = false;
