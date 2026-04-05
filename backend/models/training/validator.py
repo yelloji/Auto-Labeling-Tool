@@ -118,7 +118,7 @@ class UltralyticsValidator(BaseValidator):
                     name='', 
                     save=True,
                     save_json=True,
-                    plots=True
+                    plots=False
                 )
             finally:
                 # Clean up temporary YAML file
