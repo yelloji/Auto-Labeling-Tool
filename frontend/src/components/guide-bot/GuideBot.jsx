@@ -464,7 +464,12 @@ export default function GuideBot() {
       if (detectWorkspaceSection() !== '/workspace/model-lab') return;
 
       const forceRefresh = !!e.detail?.forceRefresh;
-      const shouldRefresh = isOpenRef.current || pendingReopenRef.current || forceRefresh;
+      // Model Lab should not auto-open from a stale cross-section reopen flag.
+      // It should refresh only when already open or when the page explicitly forces it.
+      if (pendingReopenRef.current && !isOpenRef.current && !forceRefresh) {
+        pendingReopenRef.current = false;
+      }
+      const shouldRefresh = isOpenRef.current || forceRefresh;
       if (!shouldRefresh) return;
 
       const s = makeSetters();
@@ -910,6 +915,9 @@ export default function GuideBot() {
           (wizardType && wizardType.startsWith('modellab-')) ||
           wizardType === 'local-upload-model' ||
           (wizardType && wizardType.startsWith('manual-labeling-'))) {
+        pendingReopenRef.current = false;
+        isOpenRef.current = false;
+        wizardTypeRef.current = null;
         setWizardMode(false);
         setWizardType(null);
         setConversation([]);

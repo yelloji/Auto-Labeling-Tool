@@ -9,6 +9,7 @@ import sys
 import os
 import json
 import argparse
+import traceback
 from pathlib import Path
 from datetime import datetime
 import shutil
@@ -127,12 +128,15 @@ def run_executor():
                     
                     # Now safe to remove the empty temp folder
                     shutil.rmtree(abs_source_dir)
-                    logger.info("operations.cleanup", f"Moved uploads to permanent folder: {experiment.dataset_path}", "prediction_persistence_success")
+                    logger.info("operations.training", f"Moved uploads to permanent folder: {experiment.dataset_path}", "prediction_persistence_success")
                 except Exception as persist_err:
+                    print(f"Prediction persistence warning: {persist_err}", file=sys.stderr, flush=True)
                     logger.warning("errors.system", f"Failed to persist uploaded images {abs_source_dir}: {persist_err}", "prediction_persistence_failed")
 
     except Exception as e:
-        logger.error("errors.prediction", f"Prediction subprocess failed: {str(e)}", "prediction_subprocess_error", {
+        print(f"Prediction subprocess failed: {e}", file=sys.stderr, flush=True)
+        print(traceback.format_exc(), file=sys.stderr, flush=True)
+        logger.error("errors.system", f"Prediction subprocess failed: {str(e)}", "prediction_subprocess_error", {
             "experiment_id": args.experiment_id,
             "error": str(e)
         })

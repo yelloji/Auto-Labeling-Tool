@@ -27,6 +27,7 @@ import yaml
 import shutil
 import subprocess
 import sys
+import stat
 from core.config import settings
 from database.models import ModelExperiment, Project
 from models.training.validator import ValidatorRegistry
@@ -1985,6 +1986,13 @@ async def get_experiment_original_image(
 @router.delete("/experiments/{experiment_id}")
 async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
     """Delete an experiment record (DB only for now, filesystem cleanup TODO)."""
+    def force_remove_readonly(func, path, _):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except Exception:
+            raise
+
     exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
     if not exp:
         raise HTTPException(status_code=404, detail="Experiment not found")
@@ -2027,7 +2035,7 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
             if is_inside_projects and is_in_experiments and full_path.exists() and full_path.is_dir():
                 try:
                     logger.info("operations.training", f"Deleting experiment folder: {full_path}", "experiment_folder_deleted")
-                    shutil.rmtree(full_path)
+                    shutil.rmtree(full_path, onerror=force_remove_readonly)
                 except Exception as e:
                     logger.error("errors.system", f"Failed to delete experiment folder: {str(e)}", "experiment_folder_delete_failure")
             else:
@@ -2042,7 +2050,7 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
             if "prediction_temp" in str(full_temp_path.as_posix()) and full_temp_path.exists() and full_temp_path.is_dir():
                 try:
                     logger.info("operations.training", f"Deleting temporary source folder: {full_temp_path}", "temp_source_deleted")
-                    shutil.rmtree(full_temp_path)
+                    shutil.rmtree(full_temp_path, onerror=force_remove_readonly)
                 except Exception as e:
                     logger.error("errors.system", f"Failed to delete temp source: {str(e)}", "temp_source_delete_failure")
 

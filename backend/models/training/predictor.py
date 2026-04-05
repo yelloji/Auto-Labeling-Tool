@@ -1,6 +1,7 @@
 import os
 import json
 import gc
+import traceback
 import torch
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
@@ -245,7 +246,9 @@ class UltralyticsPredictor(BasePredictor):
             }
             
         except Exception as e:
-            logger.error("errors.prediction", f"Ultralytics prediction task hit a critical error: {str(e)}", "prediction_critical_error")
+            print(f"Ultralytics prediction task hit a critical error: {e}", file=sys.stderr, flush=True)
+            print(traceback.format_exc(), file=sys.stderr, flush=True)
+            logger.error("errors.system", f"Ultralytics prediction task hit a critical error: {str(e)}", "prediction_critical_error")
             raise
         finally:
             # Absolute cleanup to ensure next run starts fresh
