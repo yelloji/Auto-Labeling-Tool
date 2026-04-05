@@ -614,12 +614,12 @@ export function handleTrainingAnswer(step, value, lang, refs, setters) {
   }
 
   if (value === stopTrainingLabel) {
-    wizard(
+    explain(
       lang === 'it'
         ? 'Stai per fermare il training in corso. Il processo salvera l ultimo checkpoint prima di fermarsi — troverai best.pt e last.pt in Model Lab → Model Manager. Sei sicuro di voler fermare?'
         : 'You are about to stop the running training. The process will save the last checkpoint before stopping — you will find best.pt and last.pt in Model Lab → Model Manager. Are you sure you want to stop?',
-      [confirmStopLabel, cancelStopLabel],
-      'training-stop-confirm'
+      'training-stop-confirm',
+      [confirmStopLabel, cancelStopLabel]
     );
     return;
   }
