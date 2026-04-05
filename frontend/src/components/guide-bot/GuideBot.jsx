@@ -75,6 +75,7 @@ export default function GuideBot() {
   const processingObserverRef  = useRef(null);
   const isOpenRef              = useRef(false);
   const pendingReopenRef       = useRef(false);
+  const wizardTypeRef          = useRef(null);
   const dragStateRef           = useRef({ active: false, offsetX: 0, offsetY: 0, moved: false, startX: 0, startY: 0 });
   const isMainPage             = MAIN_PAGES.includes(location.pathname);
 
@@ -97,6 +98,10 @@ export default function GuideBot() {
   useEffect(() => {
     isOpenRef.current = isOpen;
   }, [isOpen]);
+
+  useEffect(() => {
+    wizardTypeRef.current = wizardType;
+  }, [wizardType]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -410,7 +415,8 @@ export default function GuideBot() {
 
       if (isOpenRef.current && trainingState) {
         pendingReopenRef.current = false;
-        if (forceRefresh) {
+        const typeChanged = trainingState.wizardType !== wizardTypeRef.current;
+        if (forceRefresh || typeChanged) {
           setWizardMode(true);
           setWizardType(trainingState.wizardType);
           setConversation(trainingState.conversation);
