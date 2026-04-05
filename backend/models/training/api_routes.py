@@ -1275,6 +1275,48 @@ async def delete_training_session(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/projects/{project_id}/training/sessions/{session_id}/stop")
+async def stop_training_session(
+    project_id: int,
+    session_id: str,
+    db: Session = Depends(get_db)
+):
+    """Stop a running training session by terminating its subprocess."""
+    exp = db.query(TrainingSession).filter(TrainingSession.id == session_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    if exp.status != "running":
+        raise HTTPException(status_code=400, detail="Training session is not currently running")
+
+    if not exp.process_pid:
+        raise HTTPException(status_code=400, detail="No process PID found for this session")
+
+    try:
+        process = psutil.Process(exp.process_pid)
+        if process.is_running():
+            process.terminate()
+            process.wait(timeout=5)
+    except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+        pass
+    except Exception:
+        try:
+            os.kill(exp.process_pid, signal.SIGTERM)
+        except Exception:
+            pass
+
+    exp.status = "stopped"
+    exp.process_pid = None
+    db.commit()
+
+    logger.info("operations.training", f"Training session {session_id} stopped by user", "training_stop", {
+        "session_id": session_id,
+        "project_id": project_id,
+    })
+
+    return {"message": "Training stopped successfully"}
+
+
 @router.get("/projects/{project_id}/training/{training_id}/confusion_matrix.png")
 async def get_confusion_matrix(
     project_id: int,

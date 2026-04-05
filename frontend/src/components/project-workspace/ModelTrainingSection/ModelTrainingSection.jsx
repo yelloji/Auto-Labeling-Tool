@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Typography, Card, Button, Row, Col, ConfigProvider, Affix, Steps, Tabs, Tag } from 'antd';
-import { ThunderboltOutlined } from '@ant-design/icons';
+import { ThunderboltOutlined, StopOutlined } from '@ant-design/icons';
 import { logInfo } from '../../../utils/professional_logger';
 import ModeToggle from './ModeToggle/ModeToggle';
 import IdentitySection from './Identity/IdentitySection';
@@ -60,6 +60,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
 
   const [form, setForm] = useState({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
+  const [isStopping, setIsStopping] = useState(false);
   const [activeTab, setActiveTab] = useState('config');
   const [serverConfig, setServerConfig] = useState({});
   const isTraining = form.status === 'running';
@@ -747,6 +748,18 @@ const ModelTrainingSection = ({ projectId, project }) => {
     return Object.keys(metrics?.training || {}).length > 0 || Object.keys(metrics?.validation || {}).length > 0;
   }, [form.liveMetrics]);
 
+  const handleStopTraining = async () => {
+    if (!form.projectId || !form.sessionId) return;
+    setIsStopping(true);
+    try {
+      await trainingAPI.stopSession(form.projectId, form.sessionId);
+    } catch (e) {
+      // ignore — status polling will reflect the real state
+    } finally {
+      setIsStopping(false);
+    }
+  };
+
   const showInitializing = activeTab === 'status' &&
     form.status === 'running' &&
     (!form.liveMetrics || !form.liveMetrics.training || !form.liveMetrics.training.epoch);
@@ -1029,6 +1042,19 @@ const ModelTrainingSection = ({ projectId, project }) => {
                       label: 'Status',
                       children: (
                         <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4 }}>
+                          {form.status === 'running' && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                              <Button
+                                danger
+                                icon={<StopOutlined />}
+                                loading={isStopping}
+                                disabled={isStopping}
+                                onClick={handleStopTraining}
+                              >
+                                Stop Training
+                              </Button>
+                            </div>
+                          )}
                           {form.status === 'running' && (!form.liveMetrics || !form.liveMetrics.training || !form.liveMetrics.training.epoch) ? (
                             <TrainingInitializing />
                           ) : (

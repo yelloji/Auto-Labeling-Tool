@@ -410,10 +410,12 @@ export default function GuideBot() {
 
       if (isOpenRef.current && trainingState) {
         pendingReopenRef.current = false;
-        setWizardMode(true);
-        setWizardType(trainingState.wizardType);
-        setConversation(trainingState.conversation);
-        setWizardStep(trainingState.step);
+        if (forceRefresh) {
+          setWizardMode(true);
+          setWizardType(trainingState.wizardType);
+          setConversation(trainingState.conversation);
+          setWizardStep(trainingState.step);
+        }
         return;
       }
 

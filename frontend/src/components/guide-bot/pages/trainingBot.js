@@ -111,6 +111,10 @@ function getLiveMetricsLabel(lang) {
   return lang === 'it' ? 'Come leggo le metriche live?' : 'How do I read the live metrics?';
 }
 
+function getStopTrainingLabel(lang) {
+  return lang === 'it' ? 'Stop Training' : 'Stop Training';
+}
+
 function getResultsHelpLabel(lang) {
   return lang === 'it' ? 'Come leggo questi risultati?' : 'How do I read these results?';
 }
@@ -338,9 +342,9 @@ export function checkTrainingPageState(lang, refs, setters) {
       return makeState(
         key,
         lang === 'it'
-          ? 'Il training e in esecuzione. La scheda Status mostra avanzamento, losses, memoria GPU e metriche di validazione mentre il run procede.'
-          : 'Training is running. The Status tab is showing progress, losses, GPU memory, and validation metrics while the run continues.',
-        [liveMetricsLabel, statusHelpLabel],
+          ? 'Il training e in esecuzione. La scheda Status mostra avanzamento, losses, memoria GPU e metriche di validazione mentre il run procede. Se vuoi interrompere il training usa il pulsante Stop Training in alto a destra nella scheda Status.'
+          : 'Training is running. The Status tab is showing progress, losses, GPU memory, and validation metrics while the run continues. If you want to stop the training, use the Stop Training button at the top right of the Status tab.',
+        [liveMetricsLabel, statusHelpLabel, getStopTrainingLabel(lang)],
         key
       );
 
@@ -452,6 +456,7 @@ export function handleTrainingAnswer(step, value, lang, refs, setters) {
   const startTrainingLabel = getStartTrainingLabel(lang);
   const openAiConsoleLabel = getOpenAiConsoleLabel(lang);
   const hideAiConsoleLabel = getHideAiConsoleLabel(lang);
+  const stopTrainingLabel = getStopTrainingLabel(lang);
 
   function closeBot() {
     setWizardMode(false);
@@ -594,6 +599,21 @@ export function handleTrainingAnswer(step, value, lang, refs, setters) {
         ? 'Leggi le metriche live in tre livelli: avanzamento dell epoch, losses durante il training e metriche di validazione. Per segmentation controlla anche i blocchi box e mask separatamente.'
         : 'Read the live metrics in three layers: epoch progress, training losses, and validation metrics. For segmentation, also watch the separate box and mask result blocks.',
       'training-live-metrics-help'
+    );
+    return;
+  }
+
+  if (value === stopTrainingLabel) {
+    const clicked = clickTrainingAction({ text: 'Stop Training' });
+    explain(
+      clicked
+        ? (lang === 'it'
+          ? 'Ho cliccato Stop Training. Il processo si ferma dopo aver salvato l ultimo checkpoint. Trovi best.pt e last.pt in Model Manager.'
+          : 'I clicked Stop Training. The process will stop after saving the last checkpoint. You will find best.pt and last.pt in Model Lab — Model Manager.')
+        : (lang === 'it'
+          ? 'Non ho trovato il pulsante Stop Training. Assicurati di essere nella scheda Status mentre il training e in esecuzione.'
+          : 'I could not find the Stop Training button. Make sure you are in the Status tab while training is running.'),
+      'training-stop-help'
     );
     return;
   }

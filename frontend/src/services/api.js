@@ -998,6 +998,10 @@ export const trainingAPI = {
       name,
     });
     return response.data;
+  },
+  stopSession: async (projectId, sessionId) => {
+    const response = await api.post(`/api/v1/projects/${projectId}/training/sessions/${sessionId}/stop`);
+    return response.data;
   }
 };
 
