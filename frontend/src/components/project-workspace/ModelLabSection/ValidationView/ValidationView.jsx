@@ -187,13 +187,15 @@ const ValidationView = ({ training }) => {
     const [isWaitingForCompletion, setIsWaitingForCompletion] = useState(false);
 
     useEffect(() => {
+        const status = activeExperiment?.status || null;
+        const isTerminalUpdate = status === 'running' || status === 'completed' || status === 'failed';
         mergeModelLabGuideState({
             validationExperimentName: params.name || '',
             validationNameValid: params.name.trim().length >= 3,
             validationResultExists: !!activeExperiment,
             activeValidationExperimentId: activeExperiment?.id || null,
-            activeValidationStatus: activeExperiment?.status || null,
-        }, { forceRefresh: true });
+            activeValidationStatus: status,
+        }, isTerminalUpdate ? { forceRefresh: true } : {});
     }, [params.name, activeExperiment]);
 
     // Compute available dataset splits from training session

@@ -376,6 +376,18 @@ export function checkModelLabPageState(lang) {
     return makeState('modellab-model-manager', getCurrentViewText(state, lang), options, 'modellab-model-manager');
   }
 
+  if (state.activeTopLevelTab === 'validation' && state.activeValidationStatus === 'running') {
+    const trainingName = state.selectedTrainingName || 'this training';
+    return makeState(
+      'modellab-validation-running',
+      lang === 'it'
+        ? `La validation "${state.validationExperimentName || ''}" e in esecuzione su ${trainingName}. Attendi il completamento — i risultati appariranno automaticamente nella scheda e nella Experiment History.`
+        : `Validation "${state.validationExperimentName || ''}" is running for ${trainingName}. Wait for it to complete — results will appear automatically in the view and in Experiment History.`,
+      [getBackLabel(lang)],
+      'modellab-validation-running'
+    );
+  }
+
   if (state.activeTopLevelTab === 'validation') {
     const options = [getValidationHelpLabel(lang)];
     if (state.validationNameValid) options.push(getRunValidationLabel(lang));
