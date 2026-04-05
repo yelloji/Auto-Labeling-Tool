@@ -870,7 +870,12 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
               name="exportFormat"
               tooltip="Select the export format"
             >
-              <Select>
+              <Select
+                onChange={(val) => {
+                  if (val === 'yolo_detection') form.setFieldsValue({ taskType: 'object_detection' });
+                  else if (val === 'yolo_segmentation') form.setFieldsValue({ taskType: 'segmentation' });
+                }}
+              >
                 <Option value="yolo_detection">YOLO Detection</Option>
                 <Option value="yolo_segmentation">YOLO Segmentation</Option>
                 <Option value="coco">COCO</Option>
@@ -885,10 +890,18 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
               name="taskType"
               tooltip="What task the model is trained for"
             >
-              <Select>
-                <Option value="object_detection">Object Detection</Option>
-                <Option value="segmentation">Instance Segmentation</Option>
-              </Select>
+              <Form.Item noStyle shouldUpdate={(prev, curr) => prev.exportFormat !== curr.exportFormat}>
+                {({ getFieldValue }) => {
+                  const fmt = getFieldValue('exportFormat');
+                  const locked = fmt === 'yolo_detection' || fmt === 'yolo_segmentation';
+                  return (
+                    <Select disabled={locked}>
+                      <Option value="object_detection">Object Detection</Option>
+                      <Option value="segmentation">Instance Segmentation</Option>
+                    </Select>
+                  );
+                }}
+              </Form.Item>
             </Form.Item>
           </Col>
         </Row>
