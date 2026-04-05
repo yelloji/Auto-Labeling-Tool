@@ -40,7 +40,8 @@ def run_executor():
     parser = argparse.ArgumentParser(description="Run model prediction in a separate process.")
     parser.add_argument("--experiment_id", required=True, help="UUID of the experiment record")
     parser.add_argument("--weights_path", required=True, help="Absolute path to model weights")
-    parser.add_argument("--images_json", required=True, help="JSON string array of image paths")
+    parser.add_argument("--images_json", help="JSON string array of image paths")
+    parser.add_argument("--images_manifest", help="Path to JSON file containing image paths")
     parser.add_argument("--output_folder", required=True, help="Absolute path to output folder")
     parser.add_argument("--params_json", required=True, help="JSON string of prediction parameters")
     
@@ -62,7 +63,13 @@ def run_executor():
         db.commit()
 
         # 2. Parse arguments
-        images = json.loads(args.images_json)
+        if args.images_manifest:
+            with open(args.images_manifest, "r", encoding="utf-8") as manifest_file:
+                images = json.load(manifest_file)
+        elif args.images_json:
+            images = json.loads(args.images_json)
+        else:
+            raise ValueError("Prediction executor requires either --images_manifest or --images_json")
         params = json.loads(args.params_json)
         
         # 3. Run Prediction

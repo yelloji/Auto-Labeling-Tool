@@ -2537,7 +2537,9 @@ async def trigger_prediction(
             params.update(payload.custom_params)
         
         params_json = json.dumps(params)
-        images_json = json.dumps(images_list)
+        images_manifest_path = abs_output_dir / "prediction_inputs.json"
+        with open(images_manifest_path, "w", encoding="utf-8") as manifest_file:
+            json.dump(images_list, manifest_file, ensure_ascii=False)
         
         log_file_path = abs_output_dir / "prediction.log"
         log_file = open(log_file_path, "w", encoding="utf-8")
@@ -2554,7 +2556,7 @@ async def trigger_prediction(
             executor_path,
             "--experiment_id", str(experiment.id),
             "--weights_path", weights_path,
-            "--images_json", images_json,
+            "--images_manifest", images_manifest_path.as_posix(),
             "--output_folder", abs_output_dir.as_posix(),
             "--params_json", params_json
         ]
