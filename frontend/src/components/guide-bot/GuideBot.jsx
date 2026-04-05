@@ -209,7 +209,11 @@ export default function GuideBot() {
       if (section !== 'model-training') window.__trainingGuideState = undefined;
       if (section !== 'model-lab') window.__modellabGuideState = undefined;
       if (section && SECTION_SCRIPT[section]) setScriptKey(SECTION_SCRIPT[section]);
-      if (shouldReopen) {
+      // Do not auto-reopen when switching into model-lab or model-training —
+      // those sections have their own event-driven open logic (forceRefresh / typeChanged).
+      // Auto-reopen only for sections that have deterministic snapshot states.
+      const noAutoReopen = section === 'model-lab' || section === 'model-training';
+      if (shouldReopen && !noAutoReopen) {
         pendingReopenRef.current = false;
         setTimeout(() => reopenForCurrentContext(location.pathname, section), 200);
       }

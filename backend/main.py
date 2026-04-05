@@ -484,6 +484,28 @@ async def startup_event():
     await init_db()
     logger.info("app.database", "✅ Database initialized successfully", "database_initialized")
     
+    # Reset orphaned running sessions left from a previously killed process
+    try:
+        from database.database import SessionLocal
+        from database.models import TrainingSession, ModelExperiment
+        _db = SessionLocal()
+        try:
+            orphaned_trainings = _db.query(TrainingSession).filter(TrainingSession.status == 'running').all()
+            for t in orphaned_trainings:
+                t.status = 'failed'
+                t.process_pid = None
+            orphaned_experiments = _db.query(ModelExperiment).filter(ModelExperiment.status == 'running').all()
+            for ex in orphaned_experiments:
+                ex.status = 'failed'
+                ex.process_pid = None
+            _db.commit()
+            if orphaned_trainings or orphaned_experiments:
+                logger.info("app.startup", f"Reset {len(orphaned_trainings)} orphaned trainings and {len(orphaned_experiments)} orphaned experiments to failed", "orphan_reset")
+        finally:
+            _db.close()
+    except Exception as e:
+        logger.error("app.startup", f"Failed to reset orphaned sessions: {str(e)}", "orphan_reset_error")
+
     # Start training health checker
     try:
         from models.training.health_checker import start_training_health_checker
