@@ -76,6 +76,7 @@ export default function GuideBot() {
   const isOpenRef              = useRef(false);
   const pendingReopenRef       = useRef(false);
   const wizardTypeRef          = useRef(null);
+  const currentWorkspaceSectionRef = useRef('/workspace/upload');
   const dragStateRef           = useRef({ active: false, offsetX: 0, offsetY: 0, moved: false, startX: 0, startY: 0 });
   const isMainPage             = MAIN_PAGES.includes(location.pathname);
 
@@ -212,14 +213,15 @@ export default function GuideBot() {
       setConversation([]);
       setWizardStep(null);
       const section = e.detail?.section;
+      if (section && SECTION_SCRIPT[section]) {
+        currentWorkspaceSectionRef.current = SECTION_SCRIPT[section];
+      }
       if (section !== 'model-training') window.__trainingGuideState = undefined;
       if (section !== 'model-lab') window.__modellabGuideState = undefined;
       if (section && SECTION_SCRIPT[section]) setScriptKey(SECTION_SCRIPT[section]);
-      // Do not auto-reopen when switching into model-lab or model-training —
-      // those sections have their own event-driven open logic (forceRefresh / typeChanged).
-      // Auto-reopen only for sections that have deterministic snapshot states.
-      const noAutoReopen = section === 'model-lab' || section === 'model-training';
-      if (shouldReopen && !noAutoReopen) {
+      // Reopen only if the bot was already open before the section switch.
+      // Closed bots must stay closed; open bots should follow the user into the new section.
+      if (shouldReopen) {
         pendingReopenRef.current = false;
         setTimeout(() => reopenForCurrentContext(location.pathname, section), 200);
       }
@@ -413,7 +415,7 @@ export default function GuideBot() {
   useEffect(() => {
     const handler = (e) => {
       if (!location.pathname.includes('/workspace')) return;
-      if (detectWorkspaceSection() !== '/workspace/model-training') return;
+      if (getActiveWorkspaceSection() !== '/workspace/model-training') return;
 
       const forceRefresh = !!e.detail?.forceRefresh;
       const shouldRefresh = isOpenRef.current || pendingReopenRef.current || forceRefresh;
@@ -461,7 +463,7 @@ export default function GuideBot() {
   useEffect(() => {
     const handler = (e) => {
       if (!location.pathname.includes('/workspace')) return;
-      if (detectWorkspaceSection() !== '/workspace/model-lab') return;
+      if (getActiveWorkspaceSection() !== '/workspace/model-lab') return;
 
       const forceRefresh = !!e.detail?.forceRefresh;
       // Model Lab should not auto-open from a stale cross-section reopen flag.
@@ -603,6 +605,10 @@ export default function GuideBot() {
     return '/workspace/upload';
   }
 
+  function getActiveWorkspaceSection() {
+    return currentWorkspaceSectionRef.current || detectWorkspaceSection();
+  }
+
   function reopenForCurrentContext(pathname = location.pathname, sectionOverride = null) {
     const s = makeSetters();
     const r = makeRefs();
@@ -623,7 +629,7 @@ export default function GuideBot() {
 
       const nextScriptKey = sectionOverride
         ? (sectionMap[sectionOverride] || '/workspace/upload')
-        : detectWorkspaceSection();
+        : getActiveWorkspaceSection();
 
       setScriptKey(nextScriptKey);
 
@@ -685,7 +691,7 @@ export default function GuideBot() {
 
     if (location.pathname.includes('/workspace')) {
       // Sync scriptKey to the actual active section so Cancel shows the right script
-      setScriptKey(detectWorkspaceSection());
+      setScriptKey(getActiveWorkspaceSection());
       const s = makeSetters();
       const r = makeRefs();
 
