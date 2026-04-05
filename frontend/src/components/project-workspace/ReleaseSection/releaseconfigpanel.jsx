@@ -144,34 +144,19 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
               }
             }
             
-            // Get class information
-            if (data.recent_images) {
-              logInfo('app.frontend.interactions', 'fetching_annotations_for_classes', 'Fetching annotations for class counting', {
-                timestamp: new Date().toISOString(),
-                datasetId: ds.id,
-                datasetName: ds.name,
-                recentImagesCount: data.recent_images.length,
-                function: 'fetchDatasetInfo'
-              });
-
-              for (const img of data.recent_images) {
-                try {
-                  const aRes = await fetch(`http://localhost:12000/api/v1/images/${img.id}/annotations`);
-                  if (aRes.ok) {
-                    const anns = await aRes.json();
-                    anns.forEach(a => { if (a.class_name) uniqueClasses.add(a.class_name); });
-                  }
-                } catch (e) { 
-                  logError('app.frontend.interactions', 'annotation_fetch_error', 'Failed to fetch annotations for class counting', {
-                    timestamp: new Date().toISOString(),
-                    datasetId: ds.id,
-                    imageId: img.id,
-                    error: e.message,
-                    function: 'fetchDatasetInfo'
+            // Get class information from summary (covers ALL annotations, not just recent images)
+            try {
+              const summaryRes = await fetch(`http://localhost:12000/api/dataset-management/dataset-summary/${ds.id}`);
+              if (summaryRes.ok) {
+                const summaryData = await summaryRes.json();
+                if (summaryData.class_distribution) {
+                  Object.keys(summaryData.class_distribution).forEach(className => {
+                    if (className) uniqueClasses.add(className);
                   });
-                  console.error('Annotation fetch error:', img.id, e); 
                 }
               }
+            } catch (e) {
+              console.error('Dataset summary fetch error:', ds.id, e);
             }
           } else {
             logError('app.frontend.interactions', 'dataset_fetch_failed', 'Failed to fetch dataset details', {

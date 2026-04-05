@@ -80,50 +80,14 @@ const DatasetStats = ({ selectedDatasets = [] }) => {
             function: 'fetchStats'
           });
 
-          const res = await fetch(`http://localhost:12000/api/v1/datasets/${ds.id}`);
-          if (res.ok) {
-            const data = await res.json();
-            logInfo('app.frontend.interactions', 'fetch_dataset_details_success', 'Dataset details fetched successfully', {
-              timestamp: new Date().toISOString(),
-              datasetId: ds.id,
-              datasetName: ds.name,
-              recentImagesCount: data.recent_images?.length || 0,
-              function: 'fetchStats'
-            });
-
-            if (data.recent_images) {
-              for (const img of data.recent_images) {
-                try {
-                  logInfo('app.frontend.interactions', 'fetch_image_annotations_started', 'Fetching image annotations', {
-                    timestamp: new Date().toISOString(),
-                    imageId: img.id,
-                    datasetId: ds.id,
-                    function: 'fetchStats'
-                  });
-
-                  const aRes = await fetch(`http://localhost:12000/api/v1/images/${img.id}/annotations`);
-                  if (aRes.ok) {
-                    const anns = await aRes.json();
-                    anns.forEach(a => { if (a.class_name) uniqueClasses.add(a.class_name); });
-                    
-                    logInfo('app.frontend.interactions', 'fetch_image_annotations_success', 'Image annotations fetched successfully', {
-                      timestamp: new Date().toISOString(),
-                      imageId: img.id,
-                      annotationsCount: anns.length,
-                      uniqueClassesCount: uniqueClasses.size,
-                      function: 'fetchStats'
-                    });
-                  }
-                } catch (e) { 
-                  logError('app.frontend.interactions', 'fetch_image_annotations_failed', 'Failed to fetch image annotations', {
-                    timestamp: new Date().toISOString(),
-                    imageId: img.id,
-                    error: e.message,
-                    function: 'fetchStats'
-                  });
-                  console.error('Annotation fetch error:', img.id, e); 
-                }
-              }
+          // Get class information from summary (covers ALL annotations, not just recent images)
+          const summaryRes = await fetch(`http://localhost:12000/api/dataset-management/dataset-summary/${ds.id}`);
+          if (summaryRes.ok) {
+            const summaryData = await summaryRes.json();
+            if (summaryData.class_distribution) {
+              Object.keys(summaryData.class_distribution).forEach(className => {
+                if (className) uniqueClasses.add(className);
+              });
             }
           }
         } catch (e) { 
