@@ -200,6 +200,12 @@ export default function GuideBot() {
       const shouldReopen = isOpenRef.current || pendingReopenRef.current;
       if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
       if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
+      // Update ref immediately — do not wait for React state effect.
+      // This prevents race conditions where mounted section components fire
+      // state events before setIsOpen(false) has propagated to isOpenRef.
+      isOpenRef.current = false;
+      pendingReopenRef.current = false;
+      wizardTypeRef.current = null;
       setIsOpen(false);
       setWizardMode(false);
       setWizardType(null);
