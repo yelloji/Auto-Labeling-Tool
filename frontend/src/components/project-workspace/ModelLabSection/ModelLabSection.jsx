@@ -105,7 +105,7 @@ const ModelLabSection = ({ projectId }) => {
                 ...basePatch,
                 stateKey: 'modellab-no-trainings',
                 activeTopLevelTab: null,
-            }, { forceRefresh: true });
+            });
             return;
         }
 
@@ -114,7 +114,7 @@ const ModelLabSection = ({ projectId }) => {
                 ...basePatch,
                 stateKey: 'modellab-empty',
                 activeTopLevelTab: null,
-            }, { forceRefresh: true });
+            });
             return;
         }
 

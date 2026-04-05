@@ -44,7 +44,7 @@ const OverviewView = ({ training }) => {
             activeConfigTab,
             confusionMatrixOpen: confusionModalOpen,
             stateKey: confusionModalOpen ? 'modellab-confusion-modal' : (topLevelStateMap[activeTopLevelTab] || 'modellab-overview'),
-        }, { forceRefresh: true });
+        }, confusionModalOpen ? { forceRefresh: true } : {});
     }, [training, activeTopLevelTab, activeConfigTab, confusionModalOpen]);
 
     if (!training) {

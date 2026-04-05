@@ -753,7 +753,7 @@ const ComparisonEngineView = ({ currentTraining }) => {
             comparisonChallengerExperimentId: challengerId || null,
             comparisonViewerType: galleryVisible ? galleryConfig.type || null : null,
             stateKey: galleryVisible ? 'modellab-comparison-viewer' : 'modellab-comparison-engine',
-        }, { forceRefresh: true });
+        }, galleryVisible ? { forceRefresh: true } : {});
     }, [galleryVisible, galleryConfig.type, baselineId, challengerId, challengerCId, isCompareReady, modelCEnabled, comparisonData]);
 
     const handleCompare = async () => {

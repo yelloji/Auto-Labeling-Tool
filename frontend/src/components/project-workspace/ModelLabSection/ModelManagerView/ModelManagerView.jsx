@@ -32,7 +32,7 @@ const ModelManagerView = ({ projectId, trainingId, sessionName }) => {
       modelManagerHasBestModel: !!models?.best_model,
       modelManagerHasLastModel: !!models?.last_model,
       modelManagerAdditionalFilesCount: models?.additional_files?.length || 0,
-    }, { forceRefresh: true });
+    });
   }, [models]);
 
   const loadModels = async () => {

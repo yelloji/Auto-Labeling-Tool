@@ -33,13 +33,16 @@ const { Title, Text, Paragraph } = Typography;
 const AnalyticsModal = ({ visible, onCancel, training, experiment, verifications = [], projectLabels = [], trainingClasses = [] }) => {
     const [activeTab, setActiveTab] = useState('overview');
 
+    const prevVisibleRef = React.useRef(false);
     useEffect(() => {
-        if (!visible) return;
+        if (!visible) { prevVisibleRef.current = false; return; }
+        const justOpened = !prevVisibleRef.current;
+        prevVisibleRef.current = true;
         mergeModelLabGuideState({
             predictionAnalyticsOpen: true,
             activePredictionAnalyticsTab: activeTab,
             stateKey: `modellab-prediction-analytics-${activeTab}`,
-        }, { forceRefresh: true });
+        }, justOpened ? { forceRefresh: true } : {});
     }, [visible, activeTab]);
 
     // Calculate insights - with safety checks

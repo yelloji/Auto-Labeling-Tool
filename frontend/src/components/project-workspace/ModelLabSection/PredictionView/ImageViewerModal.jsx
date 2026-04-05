@@ -276,7 +276,7 @@ const ImageViewerModal = ({
                 : showHelp
                     ? 'modellab-prediction-help'
                     : 'modellab-prediction-image-viewer',
-        }, { forceRefresh: true });
+        }, (showClassPopup || showHelp) ? { forceRefresh: true } : {});
     }, [visible, showHelp, showClassPopup, currentFileName, currentIndex, images?.length]);
 
     // Phase 6.9: Keyboard Navigation (Arrow Keys)

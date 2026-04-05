@@ -313,7 +313,7 @@ const PredictionView = ({ training }) => {
                 : analyticsVisible
                     ? 'modellab-prediction-analytics'
                     : 'modellab-prediction',
-        }, { forceRefresh: true });
+        }, previewVisible || analyticsVisible ? { forceRefresh: true } : {});
     }, [selectedExp, previewVisible, analyticsVisible]);
 
 

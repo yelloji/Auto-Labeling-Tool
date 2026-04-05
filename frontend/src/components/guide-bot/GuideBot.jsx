@@ -463,10 +463,13 @@ export default function GuideBot() {
 
       if (isOpenRef.current && modelLabState) {
         pendingReopenRef.current = false;
-        setWizardMode(true);
-        setWizardType(modelLabState.wizardType);
-        setConversation(modelLabState.conversation);
-        setWizardStep(modelLabState.step);
+        const typeChanged = modelLabState.wizardType !== wizardTypeRef.current;
+        if (forceRefresh || typeChanged) {
+          setWizardMode(true);
+          setWizardType(modelLabState.wizardType);
+          setConversation(modelLabState.conversation);
+          setWizardStep(modelLabState.step);
+        }
         return;
       }
 

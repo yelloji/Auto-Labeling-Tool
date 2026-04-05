@@ -89,7 +89,7 @@ const AdvancedConfigEditor = ({ training }) => {
                 mergeModelLabGuideState({
                     advancedConfigCanSendToTraining: !!queuedTraining,
                     advancedConfigQueuedTrainingName: queuedTraining?.name || null,
-                }, { forceRefresh: true });
+                });
             } catch (error) {
                 if (!active) return;
 
@@ -98,7 +98,7 @@ const AdvancedConfigEditor = ({ training }) => {
                 mergeModelLabGuideState({
                     advancedConfigCanSendToTraining: false,
                     advancedConfigQueuedTrainingName: null,
-                }, { forceRefresh: true });
+                });
             }
         };
 
@@ -195,7 +195,7 @@ const AdvancedConfigEditor = ({ training }) => {
                         mergeModelLabGuideState({
                             advancedConfigCanSendToTraining: true,
                             advancedConfigQueuedTrainingName: queuedTraining.name,
-                        }, { forceRefresh: true });
+                        });
                     } catch (error) {
                         message.error('Failed to apply config: ' + error.message);
                     }
