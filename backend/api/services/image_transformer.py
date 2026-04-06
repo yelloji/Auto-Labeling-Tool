@@ -213,18 +213,14 @@ class ImageTransformer:
                         'type': 'select', 
                         'options': [
                             'stretch_to',
-                            'fill_center_crop', 
                             'fit_within',
-                            'fit_reflect_edges',
                             'fit_black_edges',
                             'fit_white_edges'
                         ], 
                         'default': 'stretch_to',
                         'labels': {
                             'stretch_to': 'Stretch to',
-                            'fill_center_crop': 'Fill (with center crop)',
                             'fit_within': 'Fit within',
-                            'fit_reflect_edges': 'Fit (reflect edges)',
                             'fit_black_edges': 'Fit (black edges)',
                             'fit_white_edges': 'Fit (white edges)'
                         }

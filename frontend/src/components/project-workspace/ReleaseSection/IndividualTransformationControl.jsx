@@ -495,6 +495,10 @@ const IndividualTransformationControl = ({
       function: 'renderParameterControl'
     });
 
+    if (paramKey === 'preset_resolution') {
+      return null;
+    }
+
     if (paramDef.type === 'number') {
       // For numeric parameters, render the enhanced single slider
       return renderEnhancedSingleSlider(paramKey, paramDef, value, isSpecialParameter);

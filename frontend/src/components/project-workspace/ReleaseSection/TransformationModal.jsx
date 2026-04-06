@@ -892,7 +892,9 @@ const TransformationModal = ({
         <div className="parameters-section">
           <h4>Parameters</h4>
           <div className="parameters-container">
-            {Object.entries(parameters).map(([paramKey, paramDef]) => {
+            {Object.entries(parameters)
+              .filter(([paramKey]) => paramKey !== 'preset_resolution')
+              .map(([paramKey, paramDef]) => {
               // Helper function to format parameter label with units
               const formatParameterLabel = (key, def) => {
                 const baseLabel = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
