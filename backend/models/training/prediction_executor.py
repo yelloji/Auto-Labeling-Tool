@@ -13,6 +13,7 @@ import traceback
 from pathlib import Path
 from datetime import datetime
 import shutil
+from PIL import Image
 
 # Add parent directory to path so we can import from backend
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -92,15 +93,25 @@ def run_executor():
         experiment.analytics_summary = results['analytics_summary']
         experiment.image_count = results['image_count']
 
-        # NEW: Hashing Foundation (Media Identity)
-        # Store {image_name: md5_hash} for 100% stable identity
+        # Store stable per-image metadata for matching and review:
+        # md5 for identity plus final rendered image dimensions for GT conversion.
         image_metadata = {}
         for img_path_str in images:
             img_path = Path(img_path_str)
             if img_path.exists():
                 md5 = calculate_md5(img_path_str)
+                try:
+                    with Image.open(img_path_str) as img:
+                        width, height = img.size
+                except Exception:
+                    width, height = None, None
+
                 if md5:
-                    image_metadata[img_path.name] = md5
+                    image_metadata[img_path.name] = {
+                        "md5": md5,
+                        "width": width,
+                        "height": height,
+                    }
         experiment.input_images = image_metadata
         
         # Ensure path uses forward slashes
