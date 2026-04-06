@@ -471,7 +471,9 @@ export default function GuideBot() {
       if (pendingReopenRef.current && !isOpenRef.current && !forceRefresh) {
         pendingReopenRef.current = false;
       }
-      const shouldRefresh = isOpenRef.current || forceRefresh;
+      // Model Lab modal/viewer state should update an already-open bot,
+      // but should not reopen a bot that the user intentionally closed.
+      const shouldRefresh = isOpenRef.current || pendingReopenRef.current;
       if (!shouldRefresh) return;
 
       const s = makeSetters();
@@ -502,7 +504,7 @@ export default function GuideBot() {
         if (modelLabState) {
           pendingReopenRef.current = false;
           applyWizardState(modelLabState);
-        } else if (forceRefresh) {
+        } else if (pendingReopenRef.current) {
           pendingReopenRef.current = false;
           setIsOpen(true);
         }
