@@ -1664,7 +1664,7 @@ const PredictionView = ({ training }) => {
                                                                     <svg
                                                                         className="detection-overlay-svg"
                                                                         viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
-                                                                        preserveAspectRatio="none"
+                                                                        preserveAspectRatio="xMidYMid meet"
                                                                     >
                                                                         {dets.map((d, i) => {
                                                                             if (!d.bbox) return null;
