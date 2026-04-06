@@ -1,6 +1,6 @@
 from typing import Optional, List, Any, Dict
 from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks, File, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from starlette.background import BackgroundTask
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import stat
+import io
 from core.config import settings
 from database.models import ModelExperiment, Project
 from models.training.validator import ValidatorRegistry
@@ -36,6 +37,7 @@ from utils.analytics_engine import calculate_experiment_quality
 import re
 import psutil
 import signal
+from PIL import Image
 from logging_system.professional_logger import get_professional_logger
 
 logger = get_professional_logger()
@@ -1910,6 +1912,8 @@ async def get_experiment_original_image(
     experiment_id: str, 
     filename: str, 
     download: bool = False,
+    thumbnail: bool = False,
+    size: int = 256,
     db: Session = Depends(get_db)
 ):
     """
@@ -1979,7 +1983,28 @@ async def get_experiment_original_image(
             filename=filename,
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
-        
+
+    if thumbnail:
+        try:
+            thumb_size = max(32, min(size, 1024))
+            with Image.open(original_path) as img:
+                if img.mode not in ("RGB", "RGBA"):
+                    img = img.convert("RGB")
+                img.thumbnail((thumb_size, thumb_size), Image.Resampling.LANCZOS)
+                output = io.BytesIO()
+                save_format = "PNG" if img.mode == "RGBA" else "JPEG"
+                img.save(output, format=save_format, quality=85, optimize=True)
+                output.seek(0)
+            media_type = "image/png" if save_format == "PNG" else "image/jpeg"
+            return StreamingResponse(output, media_type=media_type)
+        except Exception as e:
+            logger.warning(
+                "errors.system",
+                f"Failed to generate prediction thumbnail for {filename}: {e}",
+                "prediction_thumbnail_generation_failed",
+                {"experiment_id": experiment_id, "filename": filename, "size": size}
+            )
+
     return FileResponse(str(original_path))
 
 

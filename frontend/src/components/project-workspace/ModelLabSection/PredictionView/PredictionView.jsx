@@ -1641,11 +1641,20 @@ const PredictionView = ({ training }) => {
                                                     const matchId = duplicateMatchMap[displayName] || duplicateMatchMap[imgName];
                                                     // Render detection overlay for filtered detections
                                                     const DetectionOverlay = ({ dets, imgKey }) => {
-                                                        const [dimensions, setDimensions] = useState({ width: 640, height: 640 });
+                                                        const rawMetadata = selectedExp?.input_images?.[displayName];
+                                                        const metadata = rawMetadata && typeof rawMetadata === 'object' && !Array.isArray(rawMetadata)
+                                                            ? rawMetadata
+                                                            : null;
+                                                        const hasOriginalDimensions = !!(metadata?.width && metadata?.height);
+                                                        const [dimensions, setDimensions] = useState({
+                                                            width: metadata?.width || 640,
+                                                            height: metadata?.height || 640
+                                                        });
 
-                                                        // This effect handles getting the image's natural dimensions once loaded
-                                                        // to ensure the SVG coordinates scale perfectly.
+                                                        // Only fall back to the loaded image size for older experiments
+                                                        // that do not have stored original width/height metadata.
                                                         const handleImgLoad = (e) => {
+                                                            if (hasOriginalDimensions) return;
                                                             setDimensions({
                                                                 width: e.target.naturalWidth || 640,
                                                                 height: e.target.naturalHeight || 640
@@ -1655,7 +1664,7 @@ const PredictionView = ({ training }) => {
                                                         return (
                                                             <div className="prediction-image-container">
                                                                 <img
-                                                                    src={imageUrl}
+                                                                    src={`${imageUrl}?thumbnail=true&size=320`}
                                                                     alt={imgName}
                                                                     loading="lazy"
                                                                     onLoad={handleImgLoad}
