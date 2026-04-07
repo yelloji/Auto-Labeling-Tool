@@ -3286,13 +3286,13 @@ def create_complete_release_zip(
                                                     image_name=aug_filename
                                                 )
                                                 
-                                                logger.info("operations.debug", f"Debug tracking saved for augmented image", "debug_tracking_saved", {
+                                                logger.info("operations.releases", f"Debug tracking saved for augmented image", "debug_tracking_saved", {
                                                     'aug_filename': aug_filename,
                                                     'annotation_count': len(transformed_annotations),
                                                     'transformations': list(debug_info.get('transformation_config', {}).keys())
                                                 })
                                             except Exception as debug_e:
-                                                logger.warning("errors.debug", f"Failed to save debug tracking for augmented image", "debug_save_warning", {
+                                                logger.warning("errors.system", f"Failed to save debug tracking for augmented image", "debug_save_warning", {
                                                     'aug_filename': aug_filename,
                                                     'error': str(debug_e)
                                                 })

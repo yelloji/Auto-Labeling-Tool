@@ -99,10 +99,15 @@ const ImageViewerModal = ({
     // Phase 7.1: Missed Ground Truth Detections
     const [missedDetections, setMissedDetections] = useState([]);
     const [showMissed, setShowMissed] = useState(true);
-    const [iouThreshold, setIouThreshold] = useState(0.3);
+    const [iouThreshold, setIouThreshold] = useState(experiment?.iou_threshold ?? 0.45);
     const [fpIndices, setFpIndices] = useState([]); // Phase 7.2: Unmatched prediction indices (False Positives)
+    const hasGroundTruth = experiment?.dataset_source && experiment.dataset_source !== 'upload';
 
     const currentIndex = images.indexOf(currentImage);
+
+    React.useEffect(() => {
+        setIouThreshold(experiment?.iou_threshold ?? 0.45);
+    }, [experiment?.id, experiment?.iou_threshold]);
 
     // Helper to get detections (handles both full path and filename only)
     const getDetectionsForImage = (name) => {
@@ -1143,8 +1148,9 @@ const ImageViewerModal = ({
                     </Tooltip>
 
                     {/* Phase 7.1: Missed Detections Toggle */}
-                    {missedDetections.length > 0 && (
+                    {hasGroundTruth && (
                         <>
+                            {missedDetections.length > 0 && (
                             <Tooltip title="Show/Hide Missed Ground Truth Detections">
                                 <Button
                                     className="premium-action-btn"
@@ -1172,8 +1178,9 @@ const ImageViewerModal = ({
                                     MISSED ({missedDetections.length})
                                 </Button>
                             </Tooltip>
+                            )}
 
-                            {showMissed && (
+                            {(showMissed || missedDetections.length === 0) && (
                                 <div style={{
                                     display: 'flex',
                                     alignItems: 'center',

@@ -76,6 +76,7 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
         # Aggregate IoU tracking
         iou_sum = 0.0
         iou_count = 0
+        match_iou_threshold = float(getattr(experiment, "iou_threshold", None) or 0.45)
 
         # 7. Process Image by Image
         # Key in annotations is "images/val/image.jpg"
@@ -110,7 +111,7 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
                 width,
                 height,
                 label_mapping,
-                iou_threshold=0.5
+                iou_threshold=match_iou_threshold
             )
             
             missed = comp_result.get("missed", [])
@@ -127,7 +128,7 @@ def calculate_experiment_quality(experiment: Any, project_root: Path) -> Dict[st
                 for g_box in gt_bboxes:
                     cur_iou = calculate_iou(g_box, p_det['bbox'])
                     if cur_iou > best_p_iou: best_p_iou = cur_iou
-                if best_p_iou >= 0.3: # Match threshold
+                if best_p_iou >= match_iou_threshold:
                     local_matches[p_idx] = best_p_iou
 
             total_false_negatives += len(missed)
