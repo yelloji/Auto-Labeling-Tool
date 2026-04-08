@@ -870,66 +870,14 @@ const ManualLabeling = () => {
         localStorage.setItem(`project_labels_${projectId}`, JSON.stringify(formattedLabels));
         localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(formattedLabels));
       } else {
-        logInfo('app.frontend.ui', 'no_api_labels_found', 'No labels found from API, checking local storage', {
+        logInfo('app.frontend.ui', 'no_api_labels_found', 'No labels found from API; clearing stale label cache', {
           datasetId,
           projectId,
           timestamp: new Date().toISOString()
         });
-        // If no labels from API, try to get from local storage (check both project and dataset ID)
-        const storedLabelsStr = localStorage.getItem(`project_labels_${projectId}`) ||
-          localStorage.getItem(`project_labels_${datasetId}`);
-
-        if (storedLabelsStr) {
-          try {
-            const storedLabels = JSON.parse(storedLabelsStr);
-            console.log('Loaded project labels from local storage:', storedLabels);
-            setProjectLabels(storedLabels);
-            logInfo('app.frontend.ui', 'labels_loaded_from_storage', 'Project labels loaded from local storage', {
-              datasetId,
-              storedLabelCount: storedLabels.length,
-              timestamp: new Date().toISOString()
-            });
-
-            // CRITICAL: Save these labels to the database one by one
-            for (const label of storedLabels) {
-              try {
-                console.log(`Saving local label to database: ${label.name}`);
-                await axios.post(`${API_BASE}/projects/${projectId}/labels`, {
-                  name: label.name,
-                  color: label.color || AnnotationAPI.generateLabelColor(label.name),
-                  project_id: parseInt(projectId)
-                });
-              } catch (e) {
-                console.error(`Failed to save local label to database: ${label.name}`, e);
-              }
-            }
-
-            // After saving all labels, refresh from server to get IDs
-            try {
-              const refreshResponse = await axios.get(`${API_BASE}/projects/${projectId}/labels`);
-              const refreshedLabels = Array.isArray(refreshResponse.data) ? refreshResponse.data : [];
-
-              if (refreshedLabels.length > 0) {
-                const updatedLabels = refreshedLabels.map(label => ({
-                  id: label.id,
-                  name: label.name,
-                  color: label.color || AnnotationAPI.generateLabelColor(label.name),
-                  count: label.count || 0,
-                  projectCount: label.count || 0,
-                  project_id: projectId
-                }));
-
-                setProjectLabels(updatedLabels);
-                localStorage.setItem(`project_labels_${projectId}`, JSON.stringify(updatedLabels));
-                localStorage.setItem(`project_labels_${datasetId}`, JSON.stringify(updatedLabels));
-              }
-            } catch (refreshError) {
-              console.error('Error refreshing labels after save:', refreshError);
-            }
-          } catch (e) {
-            console.error('Failed to parse stored labels:', e);
-          }
-        }
+        localStorage.removeItem(`project_labels_${projectId}`);
+        localStorage.removeItem(`project_labels_${datasetId}`);
+        setProjectLabels([]);
       }
     } catch (error) {
       logError('app.frontend.validation', 'project_labels_load_failed', 'Failed to load project labels', error, {
@@ -950,35 +898,14 @@ const ManualLabeling = () => {
         console.log('Could not get project ID from error response');
       }
 
-      // Try to get from local storage as fallback, checking multiple possible keys
-      const possibleKeys = [
-        projectId ? `project_labels_${projectId}` : null,
-        `project_labels_${datasetId}`
-      ].filter(Boolean);
-
-      console.log('Trying local storage keys:', possibleKeys);
-
-      let storedLabels = null;
-
-      // Try each possible key until we find stored labels
-      for (const key of possibleKeys) {
-        const storedLabelsStr = localStorage.getItem(key);
-        if (storedLabelsStr) {
-          try {
-            storedLabels = JSON.parse(storedLabelsStr);
-            console.log(`Loaded project labels from local storage key ${key}:`, storedLabels);
-            break;
-          } catch (e) {
-            console.error(`Failed to parse stored labels from key ${key}:`, e);
-          }
-        }
+      // Do not revive labels from local storage after API failures.
+      // Project labels should come only from the server to avoid cross-project leaks.
+      if (projectId) {
+        localStorage.removeItem(`project_labels_${projectId}`);
       }
-
-      if (storedLabels) {
-        setProjectLabels(storedLabels);
-      } else {
-        console.warn('Could not load any project labels from local storage');
-      }
+      localStorage.removeItem(`project_labels_${datasetId}`);
+      setProjectLabels([]);
+      console.warn('Project labels not loaded from API; cleared stale local cache instead of restoring it.');
     }
   };
 
