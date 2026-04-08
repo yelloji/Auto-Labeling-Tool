@@ -165,8 +165,12 @@ const LabelSelectionPopup = React.memo(({
 
     try {
       if (isCreatingNew) {
-        // Using the new label name directly
-        labelToUse = newLabelName.trim();
+        const trimmedLabelName = newLabelName.trim();
+        const existingTypedLabel = findExistingLabel(trimmedLabelName);
+
+        // If the user typed only a case variant of an existing label,
+        // snap to the canonical project label name instead of creating a duplicate.
+        labelToUse = existingTypedLabel?.name || trimmedLabelName;
         console.log('Using new label name:', labelToUse);
       } else {
         // Find the selected label object by ID

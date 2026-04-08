@@ -82,7 +82,19 @@ def get_labels(
         labels = db.query(Label).filter(
             Label.project_id == project_id,
             Label.name != 'null'  # Filter out reserved null label
-        ).all()
+        ).order_by(Label.id.asc()).all()
+
+        # Keep only one label per case-insensitive name so stale duplicates
+        # like "scratch" / "SCRATCH" do not show up as separate classes.
+        deduped_labels = []
+        seen_label_names = set()
+        for label in labels:
+            normalized_name = (label.name or '').lower()
+            if normalized_name in seen_label_names:
+                continue
+            seen_label_names.add(normalized_name)
+            deduped_labels.append(label)
+        labels = deduped_labels
         
         logger.info("operations.operations", f"Labels retrieved successfully", "labels_retrieved", {
             "project_id": project_id,
@@ -107,17 +119,26 @@ def get_labels(
             Dataset.project_id == project_id
         ).all()
         
-        annotation_classes = set(ann[0] for ann in annotations_query if ann[0] and ann[0].lower() != 'null')
+        annotation_classes = {}
+        for ann in annotations_query:
+            class_name = ann[0]
+            if not class_name or class_name.lower() == 'null':
+                continue
+            annotation_classes.setdefault(class_name.lower(), class_name)
         
         logger.debug("operations.operations", f"Annotation classes analysis", "annotation_analysis", {
             "project_id": project_id,
             "annotation_class_count": len(annotation_classes),
-            "annotation_classes": list(annotation_classes)
+            "annotation_classes": list(annotation_classes.values())
         })
-        
+
         # Check if there are any class names not in the labels table
-        existing_label_names = set(label.name for label in labels)
-        missing_labels = annotation_classes - existing_label_names
+        existing_label_names = set((label.name or '').lower() for label in labels)
+        missing_labels = [
+            class_name
+            for normalized_name, class_name in annotation_classes.items()
+            if normalized_name not in existing_label_names
+        ]
     
         # If we found labels used in annotations but not in the labels table,
         # generate and add them
@@ -157,7 +178,20 @@ def get_labels(
             })
             
             db.commit()
-            labels = db.query(Label).filter(Label.project_id == project_id).all()
+            labels = db.query(Label).filter(
+                Label.project_id == project_id,
+                Label.name != 'null'
+            ).order_by(Label.id.asc()).all()
+
+            deduped_labels = []
+            seen_label_names = set()
+            for label in labels:
+                normalized_name = (label.name or '').lower()
+                if normalized_name in seen_label_names:
+                    continue
+                seen_label_names.add(normalized_name)
+                deduped_labels.append(label)
+            labels = deduped_labels
             
             logger.info("operations.operations", f"Missing labels created successfully", "missing_labels_success", {
                 "project_id": project_id,

@@ -1188,11 +1188,12 @@ const ManualLabeling = () => {
   const handleLabelAssignment = useCallback(async (labelName) => {
     // Check if we're editing an existing annotation or creating a new one
     const isEditing = !!editingAnnotation;
+    const requestedLabelName = typeof labelName === 'string' ? labelName.trim() : labelName;
 
     logInfo('app.frontend.interactions', 'label_assignment_started', 'Label assignment started', {
       datasetId,
       imageId: imageData?.id,
-      labelName,
+      labelName: requestedLabelName,
       isEditing,
       hasPendingShape: !!pendingShape,
       timestamp: new Date().toISOString()
@@ -1208,20 +1209,20 @@ const ManualLabeling = () => {
       return;
     }
 
-    if (!labelName || typeof labelName !== 'string') {
+    if (!requestedLabelName || typeof labelName !== 'string') {
       logError('app.frontend.validation', 'invalid_label_name', 'Invalid label name provided', null, {
         datasetId,
         imageId: imageData?.id,
-        labelName,
+        labelName: requestedLabelName,
         timestamp: new Date().toISOString()
       });
-      console.error('Invalid label name:', labelName);
+      console.error('Invalid label name:', requestedLabelName);
       throw new Error('Invalid label name');
     }
 
     // CRITICAL: Block any manual assignment of the reserved 'null' label
     // Use lowercase check to be robust
-    if (labelName.trim().toLowerCase() === 'null') {
+    if (requestedLabelName.toLowerCase() === 'null') {
       message.warning('The "null" label is reserved for system use. Please use a different name.');
       logInfo('app.frontend.validation', 'null_label_assignment_blocked', 'Manual assignment of null label blocked', {
         datasetId, imageId: imageData?.id
@@ -1235,19 +1236,19 @@ const ManualLabeling = () => {
         imageId: imageData?.id,
         annotationId: editingAnnotation.id,
         oldLabel: editingAnnotation.label,
-        newLabel: labelName,
+        newLabel: requestedLabelName,
         timestamp: new Date().toISOString()
       });
-      console.log('Editing annotation with new label:', labelName, 'annotation:', editingAnnotation);
+      console.log('Editing annotation with new label:', requestedLabelName, 'annotation:', editingAnnotation);
     } else {
       logInfo('app.frontend.interactions', 'creating_new_annotation', 'Creating new annotation', {
         datasetId,
         imageId: imageData?.id,
-        labelName,
+        labelName: requestedLabelName,
         shapeType: pendingShape?.type,
         timestamp: new Date().toISOString()
       });
-      console.log('Assigning label:', labelName, 'to shape:', pendingShape);
+      console.log('Assigning label:', requestedLabelName, 'to shape:', pendingShape);
     }
 
     try {
@@ -1255,20 +1256,21 @@ const ManualLabeling = () => {
       logInfo('app.frontend.interactions', 'saving_project_label', 'Saving project label', {
         datasetId,
         imageId: imageData?.id,
-        labelName,
+        labelName: requestedLabelName,
         timestamp: new Date().toISOString()
       });
-      console.log(`Saving label "${labelName}" to dataset ${datasetId}`);
+      console.log(`Saving label "${requestedLabelName}" to dataset ${datasetId}`);
       const savedLabel = await AnnotationAPI.saveProjectLabel(datasetId, {
-        name: labelName,
-        color: resolveLabelColor(labelName)
+        name: requestedLabelName,
+        color: resolveLabelColor(requestedLabelName)
       });
+      const canonicalLabelName = savedLabel?.name || findProjectLabelByName(requestedLabelName)?.name || requestedLabelName;
 
       console.log('Label saved to project:', savedLabel);
       logInfo('app.frontend.interactions', 'project_label_saved_success', 'Project label saved successfully', {
         datasetId,
         imageId: imageData?.id,
-        labelName,
+        labelName: canonicalLabelName,
         savedLabelId: savedLabel.id,
         timestamp: new Date().toISOString()
       });
@@ -1286,9 +1288,9 @@ const ManualLabeling = () => {
         setAnnotations(prev => prev.map(ann =>
           ann.id === editingAnnotation.id ? {
             ...ann,
-            label: labelName,
-            class_name: labelName,
-            color: resolveLabelColor(labelName, savedLabel.color)
+            label: canonicalLabelName,
+            class_name: canonicalLabelName,
+            color: resolveLabelColor(canonicalLabelName, savedLabel.color)
           } : ann
         ));
 
@@ -1298,19 +1300,19 @@ const ManualLabeling = () => {
             datasetId,
             imageId: imageData?.id,
             annotationId: editingAnnotation.id,
-            newLabel: labelName,
+            newLabel: canonicalLabelName,
             timestamp: new Date().toISOString()
           });
           await AnnotationAPI.updateAnnotation(editingAnnotation.id, {
-            class_name: labelName
+            class_name: canonicalLabelName
           });
 
-          message.success(`Annotation updated to "${labelName}"`);
+          message.success(`Annotation updated to "${canonicalLabelName}"`);
           logInfo('app.frontend.interactions', 'annotation_update_success', 'Annotation updated successfully', {
             datasetId,
             imageId: imageData?.id,
             annotationId: editingAnnotation.id,
-            newLabel: labelName,
+            newLabel: canonicalLabelName,
             timestamp: new Date().toISOString()
           });
         } catch (error) {
@@ -1318,7 +1320,7 @@ const ManualLabeling = () => {
             datasetId,
             imageId: imageData?.id,
             annotationId: editingAnnotation.id,
-            newLabel: labelName,
+            newLabel: canonicalLabelName,
             errorMessage: error.message,
             timestamp: new Date().toISOString()
           });
@@ -1339,8 +1341,8 @@ const ManualLabeling = () => {
       // Now create the annotation
       const annotation = {
         image_id: imageData.id,
-        class_name: labelName,
-        label: labelName,
+        class_name: canonicalLabelName,
+        label: canonicalLabelName,
         confidence: 1.0
       };
 
@@ -1406,7 +1408,7 @@ const ManualLabeling = () => {
         datasetId,
         imageId: imageData?.id,
         annotationType: annotation.type,
-        labelName,
+        labelName: canonicalLabelName,
         timestamp: new Date().toISOString()
       });
       console.log('Saving annotation:', annotation);
@@ -1417,7 +1419,7 @@ const ManualLabeling = () => {
         imageId: imageData?.id,
         annotationId: response.annotation?.id || response.id,
         annotationType: annotation.type,
-        labelName,
+        labelName: canonicalLabelName,
         timestamp: new Date().toISOString()
       });
       const savedAnnotation = response.annotation || response;
@@ -1427,7 +1429,7 @@ const ManualLabeling = () => {
         class_name: savedAnnotation.class_name || savedAnnotation.label,
         label: savedAnnotation.class_name || savedAnnotation.label,
         confidence: savedAnnotation.confidence || 1.0,
-        color: resolveLabelColor(labelName, savedLabel.color)
+        color: resolveLabelColor(canonicalLabelName, savedLabel.color)
       };
 
       // CRITICAL: Set the type explicitly based on the annotation we just created
@@ -1547,24 +1549,28 @@ const ManualLabeling = () => {
         return newAnnotations;
       });
       // Check if the label already exists in the project
-      const existingProjectLabel = findProjectLabelByName(labelName);
+      const existingProjectLabel = findProjectLabelByName(canonicalLabelName);
 
       // Check if the label already exists in the image
-      const existingImageLabel = imageLabels.find(l => l.name === labelName);
+      const existingImageLabel = imageLabels.find(
+        l => (l.name || '').toLowerCase() === canonicalLabelName.toLowerCase()
+      );
 
       // Generate a consistent color for the label
-      const labelColor = resolveLabelColor(labelName, savedLabel.color);
+      const labelColor = resolveLabelColor(canonicalLabelName, savedLabel.color);
 
       // Update image labels
       if (existingImageLabel) {
         // Update the count for the existing label
         setImageLabels(prev => prev.map(l =>
-          l.name === labelName ? { ...l, count: l.count + 1 } : l
+          (l.name || '').toLowerCase() === canonicalLabelName.toLowerCase()
+            ? { ...l, count: l.count + 1 }
+            : l
         ));
       } else {
         const newImageLabel = {
-          id: existingProjectLabel?.id || labelName,
-          name: labelName,
+          id: existingProjectLabel?.id || canonicalLabelName,
+          name: canonicalLabelName,
           color: labelColor,
           count: 1
         };
@@ -1574,8 +1580,8 @@ const ManualLabeling = () => {
       // Update project labels if needed
       if (!existingProjectLabel) {
         const newProjectLabel = {
-          id: labelName,
-          name: labelName,
+          id: canonicalLabelName,
+          name: canonicalLabelName,
           color: labelColor,
           count: 1,
           projectCount: 1
@@ -1588,13 +1594,15 @@ const ManualLabeling = () => {
       } else {
         // Update the project-wide count
         setProjectLabels(prev => prev.map(l =>
-          l.name === labelName ? { ...l, count: l.count + 1, projectCount: (l.projectCount || 0) + 1 } : l
+          (l.name || '').toLowerCase() === canonicalLabelName.toLowerCase()
+            ? { ...l, count: l.count + 1, projectCount: (l.projectCount || 0) + 1 }
+            : l
         ));
       }
 
       // CRITICAL: Make sure the label is saved to the database and updated in UI
       try {
-        console.log('UPDATING PROJECT LABELS with label:', labelName);
+        console.log('UPDATING PROJECT LABELS with label:', canonicalLabelName);
 
         // CRITICAL: Use the project ID resolved by the API service
         const projectId = savedLabel?.project_id;
@@ -1606,7 +1614,7 @@ const ManualLabeling = () => {
 
         // Force save the label to the database again to ensure it's there
         const projectLabel = {
-          name: labelName,
+          name: canonicalLabelName,
           color: labelColor, // Use the labelColor we defined earlier
           project_id: projectId
         };
@@ -1626,13 +1634,13 @@ const ManualLabeling = () => {
         }
 
         // Case-insensitive search for existing label in UI state
-        const existingProjectLabel = findProjectLabelByName(labelName);
+        const existingProjectLabel = findProjectLabelByName(canonicalLabelName);
 
         if (!existingProjectLabel) {
           // Add the new label to project labels UI state
           const newProjectLabel = {
             id: (savedLabelFromDb && savedLabelFromDb.id) || Date.now(),
-            name: labelName,
+            name: canonicalLabelName,
             color: (savedLabelFromDb && savedLabelFromDb.color) || labelColor,
             count: 1
           };
@@ -1643,7 +1651,7 @@ const ManualLabeling = () => {
           // Update existing label count
           console.log('UPDATING EXISTING PROJECT LABEL COUNT:', existingProjectLabel);
           setProjectLabels(prev => prev.map(l =>
-            l.name.toLowerCase() === labelName.toLowerCase()
+            l.name.toLowerCase() === canonicalLabelName.toLowerCase()
               ? { ...l, count: (l.count || 0) + 1 }
               : l
           ));
@@ -1694,14 +1702,14 @@ const ManualLabeling = () => {
         console.error('FAILED TO UPDATE PROJECT LABELS:', error);
 
         // Even if updating the database fails, ensure the label is in the UI
-        const existingProjectLabel = findProjectLabelByName(labelName);
+        const existingProjectLabel = findProjectLabelByName(canonicalLabelName);
 
         if (!existingProjectLabel) {
           // Add the new label to project labels
           const newProjectLabel = {
             id: savedLabel.id || Date.now(),
-            name: labelName,
-            color: resolveLabelColor(labelName, savedLabel.color),
+            name: canonicalLabelName,
+            color: resolveLabelColor(canonicalLabelName, savedLabel.color),
             count: 1
           };
 
@@ -1727,11 +1735,11 @@ const ManualLabeling = () => {
         setImageData(prev => ({ ...prev, is_labeled: true }));
         setImageList(prev => prev.map(img => img.id === imageData.id ? { ...img, is_labeled: true } : img));
       }
-      message.success(`Annotation saved with label "${labelName}"`);
+      message.success(`Annotation saved with label "${canonicalLabelName}"`);
       logInfo('app.frontend.interactions', 'annotation_complete', 'Annotation process completed', {
         datasetId,
         imageId: imageData?.id,
-        labelName,
+        labelName: canonicalLabelName,
         annotationType: pendingShape?.type,
         timestamp: new Date().toISOString()
       });
@@ -1743,7 +1751,7 @@ const ManualLabeling = () => {
       logError('app.frontend.validation', 'annotation_save_failed', 'Failed to save annotation', error, {
         datasetId,
         imageId: imageData?.id,
-        labelName,
+        labelName: requestedLabelName,
         errorMessage: error.message,
         timestamp: new Date().toISOString()
       });
