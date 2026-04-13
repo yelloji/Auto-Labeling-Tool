@@ -982,12 +982,18 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                     y_min, y_max = min(ys), max(ys)
                     print(f"   new bounds: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}")
                     
-                    # Calculate new canvas size after rotation
-                    angle_rad = math.radians(angle)
-                    cos_a = abs(math.cos(angle_rad))
-                    sin_a = abs(math.sin(angle_rad))
-                    new_width = current_width * cos_a + current_height * sin_a
-                    new_height = current_width * sin_a + current_height * cos_a
+                    # Calculate new canvas size after rotation. Prefer PIL's
+                    # actual expanded canvas to avoid annotation/image drift.
+                    actual_final_size = actual_params.get('final_size') if actual_params else None
+                    if actual_final_size and len(actual_final_size) >= 2:
+                        new_width = float(actual_final_size[0])
+                        new_height = float(actual_final_size[1])
+                    else:
+                        angle_rad = math.radians(angle)
+                        cos_a = abs(math.cos(angle_rad))
+                        sin_a = abs(math.sin(angle_rad))
+                        new_width = current_width * cos_a + current_height * sin_a
+                        new_height = current_width * sin_a + current_height * cos_a
                     
                     # Calculate translation to center the rotated content in new canvas
                     old_center_x, old_center_y = current_width / 2, current_height / 2
@@ -1372,10 +1378,16 @@ def _transform_segmentation_points(segmentation_data, transformation_config: Dic
                     x = cx + dx * cos_a + dy * sin_a
                     y = cy - dx * sin_a + dy * cos_a
                     
-                    # Update canvas size after rotation (same as bbox rotation)
-                    abs_cos = abs(cos_a); abs_sin = abs(sin_a)
-                    new_w = temp_w * abs_cos + temp_h * abs_sin
-                    new_h = temp_w * abs_sin + temp_h * abs_cos
+                    # Update canvas size after rotation (same as bbox rotation).
+                    # Prefer PIL's actual expanded canvas to avoid annotation/image drift.
+                    actual_final_size = actual_params.get('final_size') if actual_params else None
+                    if actual_final_size and len(actual_final_size) >= 2:
+                        new_w = float(actual_final_size[0])
+                        new_h = float(actual_final_size[1])
+                    else:
+                        abs_cos = abs(cos_a); abs_sin = abs(sin_a)
+                        new_w = temp_w * abs_cos + temp_h * abs_sin
+                        new_h = temp_w * abs_sin + temp_h * abs_cos
                     
                     # Calculate translation to center the rotated content in new canvas
                     old_center_x, old_center_y = temp_w / 2.0, temp_h / 2.0
@@ -1583,7 +1595,22 @@ def _transform_polygon(polygon: Polygon, transformation_config: Dict[str, Any],
                         new_y = -x_centered * sin_a + y_centered * cos_a + center_y
                         rotated_points.append((new_x, new_y))
                     
-                    points = rotated_points
+                    # Match PIL rotate(expand=True): after rotating around the
+                    # old center, move points into the expanded canvas.
+                    actual_final_size = actual_params.get('final_size') if actual_params else None
+                    if actual_final_size and len(actual_final_size) >= 2:
+                        new_width = float(actual_final_size[0])
+                        new_height = float(actual_final_size[1])
+                    else:
+                        abs_cos = abs(cos_a)
+                        abs_sin = abs(sin_a)
+                        new_width = current_width * abs_cos + current_height * abs_sin
+                        new_height = current_width * abs_sin + current_height * abs_cos
+
+                    translate_x = (new_width / 2.0) - center_x
+                    translate_y = (new_height / 2.0) - center_y
+                    points = [(x + translate_x, y + translate_y) for (x, y) in rotated_points]
+                    current_width, current_height = new_width, new_height
 
             elif transform_name == 'crop':
                 # Use actual parameters if available (calculated during image transformation)
@@ -2161,6 +2188,5 @@ def transform_segmentation_annotations_to_yolo(
                  "yolo_segmentation_conversion_complete", {'total_converted': len(yolo_lines)})
 
     return yolo_lines
-
 
 
