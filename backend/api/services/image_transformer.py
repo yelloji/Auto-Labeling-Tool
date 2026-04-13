@@ -276,7 +276,8 @@ class ImageTransformer:
                 'category': 'basic',
                 'parameters': {
                     'horizontal': {'type': 'bool', 'default': False},
-                    'vertical': {'type': 'bool', 'default': False}
+                    'vertical': {'type': 'bool', 'default': False},
+                    'both': {'type': 'bool', 'default': False}
                 }
             },
             'crop': {
@@ -821,8 +822,9 @@ class ImageTransformer:
         """Flip image horizontally and/or vertically"""
         try:
             original_size = image.size
-            horizontal = params.get('horizontal', False)
-            vertical = params.get('vertical', False)
+            both = params.get('both', False)
+            horizontal = params.get('horizontal', False) or both
+            vertical = params.get('vertical', False) or both
             
             logger.info("operations.transformations", f"Applying flip transformation", "flip_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",

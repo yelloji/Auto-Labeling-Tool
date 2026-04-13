@@ -182,6 +182,7 @@ class ImageTransformer:
                 'parameters': {
                     'horizontal': {'type': 'boolean', 'default': True},
                     'vertical': {'type': 'boolean', 'default': False},
+                    'both': {'type': 'boolean', 'default': False},
                     'h_probability': {'type': 'number', 'min': 0, 'max': 1, 'default': 0.5, 'step': 0.1},
                     'v_probability': {'type': 'number', 'min': 0, 'max': 1, 'default': 0.2, 'step': 0.1}
                 }
@@ -507,8 +508,9 @@ class ImageTransformer:
         try:
             original_size = image.size
             # Get parameters from central config (flip uses probability-based defaults)
-            horizontal = params.get('horizontal', True)  # Match frontend default
-            vertical = params.get('vertical', False)
+            both = params.get('both', False)
+            horizontal = params.get('horizontal', True) or both  # Match frontend default
+            vertical = params.get('vertical', False) or both
 
             # Determine probabilities: if UI toggles a flip without providing probability, default to 1.0
             if horizontal:

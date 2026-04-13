@@ -1062,7 +1062,7 @@ useEffect(() => {
                           case 'rotate': return typeof params.angle === 'number' ? `Rotate image by ${params.angle}°.` : 'Rotate image.';
                           case 'flip': {
                             let direction = '';
-                            if (params.horizontal && params.vertical) direction = 'horizontally and vertically';
+                            if (params.both || (params.horizontal && params.vertical)) direction = 'horizontally and vertically';
                             else if (params.horizontal) direction = 'horizontally';
                             else if (params.vertical) direction = 'vertically';
                             return direction ? `Flip image ${direction}.` : 'Flip image.';

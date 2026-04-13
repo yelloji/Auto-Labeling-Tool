@@ -949,9 +949,23 @@ def calculate_max_images_per_original(transformations: list) -> dict:
     # Count dual-value and regular transformations
     # IMPORTANT: 'resize' is a mandatory baseline, not combinatorial → exclude from counts
     dual_value_count = 0
-    regular_count = 0
+    regular_group_variant_counts = []
     disabled_count = 0
     resize_count = 0
+
+    def _regular_variant_count(transformation: dict) -> int:
+        tool_type = transformation.get('transformation_type') or transformation.get('tool_type')
+        if tool_type != 'flip':
+            return 1
+        params = transformation.get('parameters') or {}
+        count = 0
+        if params.get('horizontal', False):
+            count += 1
+        if params.get('vertical', False):
+            count += 1
+        if params.get('both', False):
+            count += 1
+        return max(1, count)
     
     logger.info("operations.transformations", f"Analyzing transformation types", "transformation_analysis_start", {
         'total_transformations': len(transformations)
@@ -969,11 +983,15 @@ def calculate_max_images_per_original(transformations: list) -> dict:
         if is_dual_value_transformation(tool_type):
             dual_value_count += 1
         else:
-            regular_count += 1
+            regular_group_variant_counts.append(_regular_variant_count(transformation))
+
+    regular_count = len(regular_group_variant_counts)
+    regular_variant_count = sum(regular_group_variant_counts)
     
     logger.info("operations.transformations", f"Transformation analysis completed", "transformation_analysis_complete", {
         'dual_value_count': dual_value_count,
         'regular_count': regular_count,
+        'regular_variant_count': regular_variant_count,
         'disabled_count': disabled_count,
         'resize_count': resize_count
     })
@@ -989,7 +1007,7 @@ def calculate_max_images_per_original(transformations: list) -> dict:
         # Priority 1: User values (individual) = dual_value_count
         # Priority 2: Auto values (individual) = dual_value_count  
         # Priority 3: Combinations (if multiple tools) + regular tool combinations
-        priority1_count = dual_value_count
+        priority1_count = dual_value_count + regular_variant_count
         priority2_count = dual_value_count
         priority3_count = 0
         
@@ -1000,8 +1018,7 @@ def calculate_max_images_per_original(transformations: list) -> dict:
         
         # Add regular tool combinations with dual-value variants
         if regular_count > 0:
-            total_dual_combinations = priority1_count + priority2_count + priority3_count
-            priority3_count += regular_count * (1 + min(total_dual_combinations, 4))
+            priority3_count += dual_value_count * regular_variant_count * 2
         
         variants = priority1_count + priority2_count + priority3_count
         min_images = 1 + variants  # Include original image (baseline_original = 1)
@@ -1035,15 +1052,18 @@ def calculate_max_images_per_original(transformations: list) -> dict:
         # Use Priority structure like dual system but for single-value tools
         if regular_count > 0:
             # Priority 1: Each tool applied individually to original image
-            priority1_count = regular_count
+            priority1_count = regular_variant_count
             
             # Priority 2: No auto values for single-value tools
             priority2_count = 0
             
             # Priority 3: Tool combinations (2^n - 1 - n) = combinations beyond individual tools
             # Total combinations = 2^n - 1, minus individual tools = 2^n - 1 - n
-            total_combinations = (2 ** regular_count) - 1
-            priority3_count = total_combinations - regular_count
+            total_combinations = 1
+            for variant_count in regular_group_variant_counts:
+                total_combinations *= (1 + variant_count)
+            total_combinations -= 1
+            priority3_count = total_combinations - regular_variant_count
             
             max_images = 1 + priority1_count + priority2_count + priority3_count  # Include original image
         else:
@@ -1082,4 +1102,3 @@ logger.info("app.backend", "Transformation configuration loaded successfully", "
     'dual_value_transformations': len(DUAL_VALUE_TRANSFORMATIONS),
     'symmetric_transformations': len(SYMMETRIC_TRANSFORMATIONS)
 })
-

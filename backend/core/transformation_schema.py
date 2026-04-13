@@ -114,6 +114,31 @@ class TransformationSchema:
         logger.info("operations.transformations", f"Maximum possible combinations: {combination_count}", "combination_count_calculated", {
             'combination_count': combination_count
         })
+
+    def _expand_transformation_variants(self, transformation: TransformationConfig) -> List[Tuple[str, Dict[str, Any]]]:
+        """Expand one UI tool into concrete release variants."""
+        if transformation.tool_type != 'flip':
+            return [(transformation.tool_type, transformation.parameters.copy())]
+
+        params = transformation.parameters or {}
+        variants = []
+
+        if params.get('horizontal', False):
+            variant = params.copy()
+            variant.update({'horizontal': True, 'vertical': False, 'both': False})
+            variants.append((transformation.tool_type, variant))
+
+        if params.get('vertical', False):
+            variant = params.copy()
+            variant.update({'horizontal': False, 'vertical': True, 'both': False})
+            variants.append((transformation.tool_type, variant))
+
+        if params.get('both', False):
+            variant = params.copy()
+            variant.update({'horizontal': True, 'vertical': True, 'both': True})
+            variants.append((transformation.tool_type, variant))
+
+        return variants or [(transformation.tool_type, params.copy())]
     
     def generate_single_value_combinations(self) -> List[Dict[str, Any]]:
         """
@@ -158,16 +183,20 @@ class TransformationSchema:
             'tool_count': len(regular_transformations)
         })
         
+        regular_transformation_groups = []
         for transformation in regular_transformations:
-            individual_combination = {
-                transformation.tool_type: transformation.parameters.copy()
-            }
-            combinations.append(individual_combination)
-            logger.info("operations.transformations", f"✅ PRIORITY 1 - Added individual tool: {transformation.tool_type}", "priority1_added", {
-                'tool_type': transformation.tool_type,
-                'parameters': transformation.parameters,
-                'combination': individual_combination
-            })
+            variants = self._expand_transformation_variants(transformation)
+            regular_transformation_groups.append(variants)
+            for tool_type, variant_params in variants:
+                individual_combination = {
+                    tool_type: variant_params.copy()
+                }
+                combinations.append(individual_combination)
+                logger.info("operations.transformations", f"✅ PRIORITY 1 - Added individual tool: {tool_type}", "priority1_added", {
+                    'tool_type': tool_type,
+                    'parameters': variant_params,
+                    'combination': individual_combination
+                })
         
         # PRIORITY 2: No auto-generated values for single-value tools
         # (Single-value tools don't have opposite values like dual-value tools)
@@ -183,28 +212,29 @@ class TransformationSchema:
         # Generate all combinations of 2 or more tools
         from itertools import combinations as iter_combinations
         
-        for r in range(2, len(regular_transformations) + 1):  # 2, 3, 4, ... tools
-            for tool_combo in iter_combinations(regular_transformations, r):
-                combination = {}
-                tool_names = []
-                
-                for transformation in tool_combo:
-                    combination[transformation.tool_type] = transformation.parameters.copy()
-                    tool_names.append(transformation.tool_type)
-                
-                combinations.append(combination)
-                logger.info("operations.transformations", f"✅ PRIORITY 3 - Added tool combination: {'+'.join(tool_names)}", "priority3_added", {
-                    'tools': tool_names,
-                    'combination_size': len(tool_combo),
-                    'combination': combination
-                })
+        for r in range(2, len(regular_transformation_groups) + 1):  # 2, 3, 4, ... tools
+            for group_combo in iter_combinations(regular_transformation_groups, r):
+                for variant_combo in itertools.product(*group_combo):
+                    combination = {}
+                    tool_names = []
+
+                    for tool_type, variant_params in variant_combo:
+                        combination[tool_type] = variant_params.copy()
+                        tool_names.append(tool_type)
+
+                    combinations.append(combination)
+                    logger.info("operations.transformations", f"✅ PRIORITY 3 - Added tool combination: {'+'.join(tool_names)}", "priority3_added", {
+                        'tools': tool_names,
+                        'combination_size': len(variant_combo),
+                        'combination': combination
+                    })
         
         logger.info("operations.transformations", f"Generated {len(combinations)} single-value combinations using Priority structure", "single_value_combinations_generated", {
             'combination_count': len(combinations),
             'regular_transformations': len(regular_transformations),
-            'priority1_count': len(regular_transformations),
+            'priority1_count': sum(len(group) for group in regular_transformation_groups),
             'priority2_count': 0,
-            'priority3_count': len(combinations) - len(regular_transformations)
+            'priority3_count': len(combinations) - sum(len(group) for group in regular_transformation_groups)
         })
         return combinations
     
@@ -286,13 +316,17 @@ class TransformationSchema:
         logger.info("operations.transformations", "Adding single-value transformations to Priority 1", "priority1_single_value_start", {
             'regular_count': len(regular_transformations)
         })
+        regular_transformation_groups = []
         for transformation in regular_transformations:
-            combination = {transformation.tool_type: transformation.parameters.copy()}
-            combinations.append(combination)
-            logger.info("operations.transformations", f"✅ PRIORITY 1 - Added single-value combination: {combination}", "priority1_single_combination", {
-                'tool_type': transformation.tool_type,
-                'combination': combination
-            })
+            variants = self._expand_transformation_variants(transformation)
+            regular_transformation_groups.append(variants)
+            for tool_type, variant_params in variants:
+                combination = {tool_type: variant_params.copy()}
+                combinations.append(combination)
+                logger.info("operations.transformations", f"✅ PRIORITY 1 - Added single-value combination: {combination}", "priority1_single_combination", {
+                    'tool_type': tool_type,
+                    'combination': combination
+                })
         
         # PRIORITY 2: Auto-Generated Values (opposite values)
         logger.info("operations.transformations", "Generating Priority 2: Auto-Generated Values", "priority2_start", {
@@ -420,31 +454,32 @@ class TransformationSchema:
                                 # Non-numeric parameter, keep original value
                                 dual_auto_params[param_name] = param_value
                     
-                    # Combine with each single-value tool
-                    for single_transformation in regular_transformations:
-                        # Dual-value (user) + Single-value combination
-                        combo1 = {
-                            dual_transformation.tool_type: dual_user_params,
-                            single_transformation.tool_type: single_transformation.parameters.copy()
-                        }
-                        additional_combinations.append(combo1)
-                        logger.info("operations.transformations", f"🎲 PRIORITY 3 - Added dual(user)+single combination: {combo1}", "priority3_dual_user_single", {
-                            'dual_tool': dual_transformation.tool_type,
-                            'single_tool': single_transformation.tool_type,
-                            'combination': combo1
-                        })
+                    # Combine with each single-value tool variant
+                    for single_group in regular_transformation_groups:
+                        for single_tool_type, single_params in single_group:
+                            # Dual-value (user) + Single-value combination
+                            combo1 = {
+                                dual_transformation.tool_type: dual_user_params,
+                                single_tool_type: single_params.copy()
+                            }
+                            additional_combinations.append(combo1)
+                            logger.info("operations.transformations", f"🎲 PRIORITY 3 - Added dual(user)+single combination: {combo1}", "priority3_dual_user_single", {
+                                'dual_tool': dual_transformation.tool_type,
+                                'single_tool': single_tool_type,
+                                'combination': combo1
+                            })
                         
-                        # Dual-value (auto) + Single-value combination  
-                        combo2 = {
-                            dual_transformation.tool_type: dual_auto_params,
-                            single_transformation.tool_type: single_transformation.parameters.copy()
-                        }
-                        additional_combinations.append(combo2)
-                        logger.info("operations.transformations", f"🎲 PRIORITY 3 - Added dual(auto)+single combination: {combo2}", "priority3_dual_auto_single", {
-                            'dual_tool': dual_transformation.tool_type,
-                            'single_tool': single_transformation.tool_type,
-                            'combination': combo2
-                        })
+                            # Dual-value (auto) + Single-value combination
+                            combo2 = {
+                                dual_transformation.tool_type: dual_auto_params,
+                                single_tool_type: single_params.copy()
+                            }
+                            additional_combinations.append(combo2)
+                            logger.info("operations.transformations", f"🎲 PRIORITY 3 - Added dual(auto)+single combination: {combo2}", "priority3_dual_auto_single", {
+                                'dual_tool': dual_transformation.tool_type,
+                                'single_tool': single_tool_type,
+                                'combination': combo2
+                            })
             
             # Add random combinations up to the limit
             random.shuffle(additional_combinations)
@@ -835,5 +870,3 @@ if __name__ == "__main__":
         print(f"\n{image_id}:")
         for config in image_configs:
             print(f"  Config {config['order']}: {config['transformations']}")
-
-

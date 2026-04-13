@@ -647,10 +647,11 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                 }
             
             if transform_name == 'flip':
-                if params.get('horizontal', False):
+                both = params.get('both', False)
+                if params.get('horizontal', False) or both:
                     x_min, x_max = current_width - x_max, current_width - x_min
                     
-                if params.get('vertical', False):
+                if params.get('vertical', False) or both:
                     y_min, y_max = current_height - y_max, current_height - y_min
 
             elif transform_name == 'resize':
@@ -749,8 +750,8 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                     
                     rotated = []
                     for i, (x, y) in enumerate(corners):
-                        new_x = x * cos_a - y * sin_a + center_x
-                        new_y = x * sin_a + y * cos_a + center_y
+                        new_x = x * cos_a + y * sin_a + center_x
+                        new_y = -x * sin_a + y * cos_a + center_y
                         rotated.append((new_x, new_y))
                     
                     xs = [p[0] for p in rotated]; ys = [p[1] for p in rotated]
@@ -1064,9 +1065,10 @@ def _transform_segmentation_points(segmentation_data, transformation_config: Dic
 
             elif transform_name == 'flip':
                 # accept both boolean flags and legacy 'direction'
-                if params.get('horizontal', False) or params.get('direction') == 'horizontal':
+                both = params.get('both', False)
+                if params.get('horizontal', False) or both or params.get('direction') == 'horizontal':
                     x = temp_w - x
-                if params.get('vertical', False) or params.get('direction') == 'vertical':
+                if params.get('vertical', False) or both or params.get('direction') == 'vertical':
                     y = temp_h - y
 
             elif transform_name in ('rotation', 'rotate'):
@@ -1081,8 +1083,8 @@ def _transform_segmentation_points(segmentation_data, transformation_config: Dic
                     cos_a = math.cos(ang); sin_a = math.sin(ang)
                     cx, cy = temp_w / 2.0, temp_h / 2.0
                     dx, dy = (x - cx), (y - cy)
-                    x = cx + dx * cos_a - dy * sin_a
-                    y = cy + dx * sin_a + dy * cos_a
+                    x = cx + dx * cos_a + dy * sin_a
+                    y = cy - dx * sin_a + dy * cos_a
                     
                     # Update canvas size after rotation (same as bbox rotation)
                     abs_cos = abs(cos_a); abs_sin = abs(sin_a)
@@ -1207,9 +1209,10 @@ def _transform_polygon(polygon: Polygon, transformation_config: Dict[str, Any],
                 }
 
             if transform_name == 'flip':
-                if params.get('horizontal', False):
+                both = params.get('both', False)
+                if params.get('horizontal', False) or both:
                     points = [(current_width - x, y) for x, y in points]
-                if params.get('vertical', False):
+                if params.get('vertical', False) or both:
                     points = [(x, current_height - y) for x, y in points]
 
             elif transform_name == 'resize':
@@ -1283,8 +1286,8 @@ def _transform_polygon(polygon: Polygon, transformation_config: Dict[str, Any],
                         # Translate to origin, rotate, translate back
                         x_centered = x - center_x
                         y_centered = y - center_y
-                        new_x = x_centered * cos_a - y_centered * sin_a + center_x
-                        new_y = x_centered * sin_a + y_centered * cos_a + center_y
+                        new_x = x_centered * cos_a + y_centered * sin_a + center_x
+                        new_y = -x_centered * sin_a + y_centered * cos_a + center_y
                         rotated_points.append((new_x, new_y))
                     
                     points = rotated_points
@@ -1789,8 +1792,6 @@ def transform_segmentation_annotations_to_yolo(
                  "yolo_segmentation_conversion_complete", {'total_converted': len(yolo_lines)})
 
     return yolo_lines
-
-
 
 
 

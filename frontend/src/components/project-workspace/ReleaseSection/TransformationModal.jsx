@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Button, Row, Col, Card, message, Spin, Alert, Divider, Slider, Space, Select } from 'antd';
+import { Modal, Form, Input, Button, Row, Col, Card, message, Spin, Alert, Divider, Slider, Space, Select, Tabs } from 'antd';
 import { SettingOutlined, EyeOutlined, SaveOutlined, ArrowLeftOutlined, RocketOutlined } from '@ant-design/icons';
 import IndividualTransformationControl from './IndividualTransformationControl';
 import { augmentationAPI } from '../../../services/api';
@@ -56,6 +56,54 @@ const TransformationModal = ({
   const [validationErrors, setValidationErrors] = useState([]);
   const [currentSelectedImage, setCurrentSelectedImage] = useState(null); // Store the current image for reuse
   const [combinationCount, setCombinationCount] = useState(1); // Track number of possible combinations
+  const [activeFlipPreviewVariant, setActiveFlipPreviewVariant] = useState('horizontal');
+
+  const getFlipPreviewVariants = (config = {}) => {
+    const variants = [];
+
+    if (config.horizontal) {
+      variants.push({
+        key: 'horizontal',
+        label: 'Horizontal',
+        config: { ...config, horizontal: true, vertical: false, both: false }
+      });
+    }
+
+    if (config.vertical) {
+      variants.push({
+        key: 'vertical',
+        label: 'Vertical',
+        config: { ...config, horizontal: false, vertical: true, both: false }
+      });
+    }
+
+    if (config.both) {
+      variants.push({
+        key: 'both',
+        label: 'Both',
+        config: { ...config, horizontal: true, vertical: true, both: true }
+      });
+    }
+
+    return variants.length > 0
+      ? variants
+      : [{ key: 'preview', label: 'Preview', config }];
+  };
+
+  const getFlipPreviewConfig = (type, config = {}, variantKey = activeFlipPreviewVariant) => {
+    if (type !== 'flip') return config;
+
+    const variants = getFlipPreviewVariants(config);
+    const activeVariant = variants.find((variant) => variant.key === variantKey) || variants[0];
+    return activeVariant.config;
+  };
+
+  const getValidFlipPreviewVariant = (config = {}, preferredVariant = activeFlipPreviewVariant) => {
+    const variants = getFlipPreviewVariants(config);
+    return variants.some((variant) => variant.key === preferredVariant)
+      ? preferredVariant
+      : variants[0].key;
+  };
 
   useEffect(() => {
     const prev = window.__releaseGuideState || {};
@@ -97,6 +145,12 @@ const TransformationModal = ({
 
     let totalCombinations = 1;
     const parameters = transformationDetails.parameters;
+
+    if (parameters.horizontal && parameters.vertical && parameters.both) {
+      const selectedFlipVariants = ['horizontal', 'vertical', 'both']
+        .filter((key) => config[key]).length;
+      return Math.max(1, selectedFlipVariants);
+    }
 
     Object.entries(parameters).forEach(([paramKey, paramDef]) => {
       // Check if this parameter has ranges enabled
@@ -179,6 +233,7 @@ const TransformationModal = ({
       setSelectedTransformation(null);
       setPreviewImage(null);
       setOriginalImage(null);
+      setActiveFlipPreviewVariant('horizontal');
       setCurrentSelectedImage(null); // Clear stored image when modal opens
     }
   }, [visible, editingTransformation, form]);
@@ -331,6 +386,10 @@ const TransformationModal = ({
     
     // Initialize configuration with default values if available
     const defaultConfig = transformationDetails.default_config || {};
+    const initialPreviewVariant = transformationType === 'flip'
+      ? getValidFlipPreviewVariant(defaultConfig, 'horizontal')
+      : 'horizontal';
+    setActiveFlipPreviewVariant(initialPreviewVariant);
     setTransformationConfig({
       ...transformationConfig,
       [transformationType]: defaultConfig
@@ -343,7 +402,7 @@ const TransformationModal = ({
     // First load the original image, then generate the preview
     loadOriginalImage().then((selectedImage) => {
       // Generate a preview with the selected transformation
-      generatePreview(transformationType, defaultConfig, selectedImage);
+      generatePreview(transformationType, getFlipPreviewConfig(transformationType, defaultConfig, initialPreviewVariant), selectedImage);
     }).catch(error => {
       logError('app.frontend.interactions', 'transformation_preview_initialization_failed', 'Failed to initialize transformation preview', {
         timestamp: new Date().toISOString(),
@@ -367,6 +426,7 @@ const TransformationModal = ({
     setPreviewImage(null);
     setOriginalImage(null);
     setPreviewError(null);
+    setActiveFlipPreviewVariant('horizontal');
   };
 
   const handleParameterChange = (paramKey, value) => {
@@ -387,6 +447,13 @@ const TransformationModal = ({
       [paramKey]: value,
       enabled: true
     };
+    const previewVariant = type === 'flip'
+      ? getValidFlipPreviewVariant(updatedConfig, paramKey)
+      : activeFlipPreviewVariant;
+    if (type === 'flip') {
+      setActiveFlipPreviewVariant(previewVariant);
+    }
+    const previewConfig = getFlipPreviewConfig(type, updatedConfig, previewVariant);
     
     setTransformationConfig(prev => ({
       ...prev,
@@ -404,22 +471,22 @@ const TransformationModal = ({
     if (currentSelectedImage) {
       console.log('Using stored image:', currentSelectedImage.id);
       // Generate preview with updated parameters using the same image
-      generatePreview(type, updatedConfig, currentSelectedImage);
+      generatePreview(type, previewConfig, currentSelectedImage);
     } else if (originalImage) {
       // Extract image ID from URL and create image object
-      const match = originalImage.match(/\/api\/images\/([^\/]+)$/);
+      const match = originalImage.match(/\/api\/images\/([^/]+)$/);
       if (match && match[1]) {
         const imageId = match[1];
         const imageObject = { id: imageId };
         console.log('Using image from URL:', imageId);
-        generatePreview(type, updatedConfig, imageObject);
+        generatePreview(type, previewConfig, imageObject);
       } else {
         console.log('Could not extract image ID from URL, falling back to new selection');
-        generatePreview(type, updatedConfig);
+        generatePreview(type, previewConfig);
       }
     } else {
       console.log('No stored image or original image URL, falling back to new selection');
-      generatePreview(type, updatedConfig);
+      generatePreview(type, previewConfig);
     }
   };
 
@@ -668,6 +735,27 @@ const TransformationModal = ({
     }
   };
 
+  const handleFlipPreviewTabChange = (variantKey) => {
+    if (!selectedTransformation || selectedTransformation.type !== 'flip') return;
+
+    const config = transformationConfig.flip || {};
+    setActiveFlipPreviewVariant(variantKey);
+    const previewConfig = getFlipPreviewConfig('flip', config, variantKey);
+
+    if (currentSelectedImage) {
+      generatePreview('flip', previewConfig, currentSelectedImage);
+    } else if (originalImage) {
+      const match = originalImage.match(/\/api\/images\/([^/]+)$/);
+      if (match && match[1]) {
+        generatePreview('flip', previewConfig, { id: match[1] });
+      } else {
+        generatePreview('flip', previewConfig);
+      }
+    } else {
+      generatePreview('flip', previewConfig);
+    }
+  };
+
   const handleContinue = () => {
     logUserClick('continue_to_release_config_button_clicked', 'User clicked continue to release config button');
     logInfo('app.frontend.navigation', 'continue_to_release_config_triggered', 'Continue to release configuration triggered', {
@@ -856,6 +944,18 @@ const TransformationModal = ({
             <Col span={12}>
               <div className="preview-container">
                 <h4>Preview</h4>
+                {type === 'flip' && getFlipPreviewVariants(config).length > 1 && (
+                  <Tabs
+                    size="small"
+                    activeKey={activeFlipPreviewVariant}
+                    onChange={handleFlipPreviewTabChange}
+                    items={getFlipPreviewVariants(config).map((variant) => ({
+                      key: variant.key,
+                      label: variant.label
+                    }))}
+                    style={{ marginBottom: 8 }}
+                  />
+                )}
                 <div className="image-preview transformed-preview">
                   {previewLoading ? (
                     <div className="preview-loading">

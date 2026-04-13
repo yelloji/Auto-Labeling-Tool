@@ -4564,11 +4564,13 @@ def generate_descriptive_suffix(transformations: dict) -> str:
                 'operation': 'file_suffix_generation'
             })
         elif tool_type == 'flip':
-            horizontal = params.get('horizontal', False)
-            vertical = params.get('vertical', False)
+            both = params.get('both', False)
+            horizontal = params.get('horizontal', False) or both
+            vertical = params.get('vertical', False) or both
             logger.debug("operations.operations", f"Processing flip transformation for file suffix", "flip_suffix_processing", {
                 'horizontal': horizontal,
                 'vertical': vertical,
+                'both': both,
                 'operation': 'file_suffix_generation'
             })
             if horizontal and vertical:
