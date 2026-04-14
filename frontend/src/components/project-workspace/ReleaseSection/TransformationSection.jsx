@@ -31,6 +31,8 @@ const getTransformationIcon = (type) => {
   return fallbackIcons[type] || '⚙️';
 };
 
+const HIDDEN_TRANSFORMATION_TYPES = new Set(["affine_transform"]);
+
 // Helper function to format transformation parameters for display
 const formatParameters = (config) => {
   if (!config) return '';
@@ -169,7 +171,9 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       const basic = [];
       const advanced = [];
       
-      transformations.forEach(transform => {
+      transformations
+        .filter(transform => !HIDDEN_TRANSFORMATION_TYPES.has(transform.transformation_type))
+        .forEach(transform => {
         // Convert database format to UI format
         const uiTransform = {
           id: transform.id,

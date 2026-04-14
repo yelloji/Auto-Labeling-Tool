@@ -828,14 +828,19 @@ const TransformationModal = ({
       const transformations = availableTransformations.transformations;
       const categories = availableTransformations.categories || {
         basic: ["resize", "rotate", "flip", "crop", "brightness", "contrast", "blur", "noise"],
-        advanced: ["color_jitter", "cutout", "random_zoom", "affine_transform", "perspective_warp", "grayscale", "shear", "gamma_correction", "equalize", "clahe"]
+        advanced: ["color_jitter", "cutout", "random_zoom", "perspective_warp", "grayscale", "shear", "gamma_correction", "equalize", "clahe"]
       };
+      const hiddenTransformations = new Set(["affine_transform"]);
       
       const basicTransformations = {};
       const advancedTransformations = {};
       
       // Sort transformations into basic and advanced categories
       Object.entries(transformations).forEach(([key, transformation]) => {
+        if (hiddenTransformations.has(key)) {
+          return;
+        }
+
         if (categories.basic.includes(key)) {
           basicTransformations[key] = transformation;
         } else if (categories.advanced.includes(key)) {
