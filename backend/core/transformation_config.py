@@ -29,12 +29,12 @@ SHEAR_UNIT = "degrees"
 SHEAR_DESCRIPTION = "Shear angle in degrees"
 
 # Rotation parameters (ENHANCED: Added unit display)
-ROTATION_ANGLE_MIN = -180
-ROTATION_ANGLE_MAX = 180
+ROTATION_ANGLE_MIN = -45
+ROTATION_ANGLE_MAX = 45
 ROTATION_ANGLE_DEFAULT = 0
 ROTATION_ANGLE_STEP = 0.1
 ROTATION_UNIT = "degrees"
-ROTATION_DESCRIPTION = "Rotation angle in degrees"
+ROTATION_DESCRIPTION = "Rotation angle in degrees. For most real datasets, keep rotation close to the normal camera angle."
 
 # Brightness parameters (UPDATED: Factor → Percentage for better UX)
 # OLD: factor (0.5-1.5) → NEW: percentage (-50% to +50%)

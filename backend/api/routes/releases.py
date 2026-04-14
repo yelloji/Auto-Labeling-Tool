@@ -2740,6 +2740,16 @@ def create_complete_release_zip(
                     dest_path = os.path.join(staging_dir, "images", safe_split, output_filename)
                     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
+                    # Decide output label mode before image transformations because
+                    # rotation canvas behavior depends on detection vs segmentation.
+                    try:
+                        if config and getattr(config, 'task_type', None) == 'segmentation' and getattr(config, 'export_format', '').lower() in ["yolo", "yolo_segmentation"]:
+                            label_mode = "yolo_segmentation"
+                        else:
+                            label_mode = "yolo_detection"
+                    except Exception as e:
+                        label_mode = "yolo_detection"
+
                     # 🔄 STEP 11: Transformation tracking system (for annotation coordinate conversion)
                     # 📊 Purpose: Tracks geometric transformations to properly convert annotation coordinates
                     # 🎯 Key functions:
@@ -2833,6 +2843,10 @@ def create_complete_release_zip(
                                         # Add enabled flag
                                         transform_params['enabled'] = True
                                         config_dict[transform_type] = transform_params
+
+                                    for rotate_key in ("rotate", "rotation"):
+                                        if isinstance(config_dict.get(rotate_key), dict):
+                                            config_dict[rotate_key]["expand"] = label_mode != "yolo_detection"
                                     
                                     augmented_image = transformer.apply_transformations(pil_img, config_dict)
                                     transformation_list = transformations
@@ -3154,6 +3168,9 @@ def create_complete_release_zip(
                             resize_params_for_aug = resize_baseline_params
                             if resize_params_for_aug:
                                 config_dict["resize"] = resize_params_for_aug
+                            for rotate_key in ("rotate", "rotation"):
+                                if isinstance(config_dict.get(rotate_key), dict):
+                                    config_dict[rotate_key]["expand"] = label_mode != "yolo_detection"
                             # Load PIL image and apply
                             from PIL import Image as PILImage
                             pil_img = PILImage.open(original_path).convert('RGB')

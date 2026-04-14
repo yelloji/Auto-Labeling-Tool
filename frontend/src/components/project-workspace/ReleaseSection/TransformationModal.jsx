@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Button, Row, Col, Card, message, Spin, Alert, Divider, Slider, Space, Select, Tabs } from 'antd';
+import { Modal, Form, Input, Button, Row, Col, Card, message, Spin, Alert, Divider, Slider, Space, Select, Tabs, Radio } from 'antd';
 import { SettingOutlined, EyeOutlined, SaveOutlined, ArrowLeftOutlined, RocketOutlined } from '@ant-design/icons';
 import IndividualTransformationControl from './IndividualTransformationControl';
 import { augmentationAPI } from '../../../services/api';
@@ -57,6 +57,12 @@ const TransformationModal = ({
   const [currentSelectedImage, setCurrentSelectedImage] = useState(null); // Store the current image for reuse
   const [combinationCount, setCombinationCount] = useState(1); // Track number of possible combinations
   const [activeFlipPreviewVariant, setActiveFlipPreviewVariant] = useState('horizontal');
+  const [rotatePreviewMode, setRotatePreviewMode] = useState('object_detection');
+
+  const getRotateAngle = (config = {}) => {
+    const angle = config.angle;
+    return typeof angle === 'number' ? angle : parseFloat(angle || 0);
+  };
 
   const getFlipPreviewVariants = (config = {}) => {
     const variants = [];
@@ -234,6 +240,7 @@ const TransformationModal = ({
       setPreviewImage(null);
       setOriginalImage(null);
       setActiveFlipPreviewVariant('horizontal');
+      setRotatePreviewMode('object_detection');
       setCurrentSelectedImage(null); // Clear stored image when modal opens
     }
   }, [visible, editingTransformation, form]);
@@ -390,6 +397,9 @@ const TransformationModal = ({
       ? getValidFlipPreviewVariant(defaultConfig, 'horizontal')
       : 'horizontal';
     setActiveFlipPreviewVariant(initialPreviewVariant);
+    if (transformationType === 'rotate') {
+      setRotatePreviewMode('object_detection');
+    }
     setTransformationConfig({
       ...transformationConfig,
       [transformationType]: defaultConfig
@@ -427,6 +437,7 @@ const TransformationModal = ({
     setOriginalImage(null);
     setPreviewError(null);
     setActiveFlipPreviewVariant('horizontal');
+    setRotatePreviewMode('object_detection');
   };
 
   const handleParameterChange = (paramKey, value) => {
@@ -490,7 +501,7 @@ const TransformationModal = ({
     }
   };
 
-  const generatePreview = async (transformationType, config, providedImage = null) => {
+  const generatePreview = async (transformationType, config, providedImage = null, previewModeOverride = null) => {
     logInfo('app.frontend.interactions', 'generate_preview_started', 'Generate preview started', {
       timestamp: new Date().toISOString(),
       transformationType: transformationType,
@@ -593,6 +604,9 @@ const TransformationModal = ({
       const formData = new FormData();
       formData.append('image_id', selectedImage.id.toString());
       formData.append('transformations', JSON.stringify(transformConfig));
+      if (transformationType === 'rotate') {
+        formData.append('preview_mode', previewModeOverride || rotatePreviewMode);
+      }
       
       const previewResponse = await fetch('http://localhost:12000/api/transformation/preview-with-image-id', {
         method: 'POST',
@@ -753,6 +767,27 @@ const TransformationModal = ({
       }
     } else {
       generatePreview('flip', previewConfig);
+    }
+  };
+
+  const handleRotatePreviewModeChange = (event) => {
+    if (!selectedTransformation || selectedTransformation.type !== 'rotate') return;
+
+    const nextMode = event.target.value;
+    const config = transformationConfig.rotate || {};
+    setRotatePreviewMode(nextMode);
+
+    if (currentSelectedImage) {
+      generatePreview('rotate', config, currentSelectedImage, nextMode);
+    } else if (originalImage) {
+      const match = originalImage.match(/\/api\/images\/([^/]+)$/);
+      if (match && match[1]) {
+        generatePreview('rotate', config, { id: match[1] }, nextMode);
+      } else {
+        generatePreview('rotate', config, null, nextMode);
+      }
+    } else {
+      generatePreview('rotate', config, null, nextMode);
     }
   };
 
@@ -955,6 +990,35 @@ const TransformationModal = ({
                     }))}
                     style={{ marginBottom: 8 }}
                   />
+                )}
+                {type === 'rotate' && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                      Preview Mode
+                    </div>
+                    <Radio.Group
+                      size="small"
+                      value={rotatePreviewMode}
+                      onChange={handleRotatePreviewModeChange}
+                      optionType="button"
+                      buttonStyle="solid"
+                    >
+                      <Radio.Button value="object_detection">Object Detection</Radio.Button>
+                      <Radio.Button value="segmentation">Segmentation</Radio.Button>
+                    </Radio.Group>
+                    <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+                      Object Detection keeps the same frame. Segmentation keeps the full rotated image.
+                    </div>
+                    {Math.abs(getRotateAngle(config)) > 15 && (
+                      <Alert
+                        type="warning"
+                        showIcon
+                        message="Large rotation angle"
+                        description="Angles above 15 degrees can create stronger crops or empty corners. Use only if this matches your real inspection images."
+                        style={{ marginTop: 8 }}
+                      />
+                    )}
+                  </div>
                 )}
                 <div className="image-preview transformed-preview">
                   {previewLoading ? (

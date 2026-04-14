@@ -761,15 +761,19 @@ def _transform_bbox(bbox: BoundingBox, transformation_config: Dict[str, Any],
                     # Calculate new canvas size after rotation. Prefer PIL's
                     # actual expanded canvas to avoid annotation/image drift.
                     actual_final_size = actual_params.get('final_size') if actual_params else None
+                    expand = bool(actual_params.get('expand', params.get('expand', True))) if actual_params else bool(params.get('expand', True))
                     if actual_final_size and len(actual_final_size) >= 2:
                         new_width = float(actual_final_size[0])
                         new_height = float(actual_final_size[1])
-                    else:
+                    elif expand:
                         angle_rad = math.radians(angle)
                         cos_a = abs(math.cos(angle_rad))
                         sin_a = abs(math.sin(angle_rad))
                         new_width = current_width * cos_a + current_height * sin_a
                         new_height = current_width * sin_a + current_height * cos_a
+                    else:
+                        new_width = current_width
+                        new_height = current_height
                     
                     # Calculate translation to center the rotated content in new canvas
                     old_center_x, old_center_y = current_width / 2, current_height / 2
@@ -1819,5 +1823,3 @@ def transform_segmentation_annotations_to_yolo(
                  "yolo_segmentation_conversion_complete", {'total_converted': len(yolo_lines)})
 
     return yolo_lines
-
-

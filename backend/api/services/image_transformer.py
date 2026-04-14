@@ -764,11 +764,13 @@ class ImageTransformer:
             rotation_params = self._get_rotation_params()
             angle = params.get('angle', rotation_params['default'])
             fill_color = params.get('fill_color', 'white')
+            expand = bool(params.get('expand', True))
             
             logger.info("operations.transformations", f"Applying rotate transformation", "rotate_start", {
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'angle': angle,
                 'fill_color': fill_color,
+                'expand': expand,
                 'params': params
             })
             
@@ -785,7 +787,7 @@ class ImageTransformer:
             result = image.rotate(
                 angle, 
                 resample=Image.Resampling.BICUBIC,  # High-quality interpolation
-                expand=True, 
+                expand=expand,
                 fillcolor=fill_color
             )
             
@@ -793,7 +795,7 @@ class ImageTransformer:
             actual_rotation_params = {
                 'actual_angle': angle,
                 'fill_color': fill_color,
-                'expand': True,
+                'expand': expand,
                 'original_size': original_size,
                 'final_size': result.size
             }
@@ -805,6 +807,7 @@ class ImageTransformer:
                 'original_size': f"{original_size[0]}x{original_size[1]}",
                 'final_size': f"{result.size[0]}x{result.size[1]}",
                 'angle': angle,
+                'expand': expand,
                 'size_change': f"{((result.size[0] * result.size[1]) / (original_size[0] * original_size[1])):.2f}x"
             })
             

@@ -444,7 +444,8 @@ async def get_transformation_presets():
 @router.post("/preview-with-image-id")
 async def generate_preview_with_image_id(
     image_id: str = Form(...),
-    transformations: str = Form(...)
+    transformations: str = Form(...),
+    preview_mode: str = Form("object_detection")
 ):
     """
     Generate transformation preview using image ID from database
@@ -470,6 +471,18 @@ async def generate_preview_with_image_id(
                 "raw_transformations": transformations[:100] + "..." if len(transformations) > 100 else transformations
             })
             raise HTTPException(status_code=400, detail="Invalid transformations JSON")
+
+        normalized_preview_mode = (preview_mode or "object_detection").strip().lower().replace("-", "_")
+        rotate_expand = normalized_preview_mode not in {
+            "object_detection",
+            "detection",
+            "yolo_detection",
+        }
+        for rotate_key in ("rotate", "rotation"):
+            if isinstance(transform_config.get(rotate_key), dict):
+                rotate_config = dict(transform_config[rotate_key])
+                rotate_config["expand"] = rotate_expand
+                transform_config[rotate_key] = rotate_config
         
         # Get image from database using image_id
         from core.file_handler import file_handler
@@ -553,7 +566,8 @@ async def generate_preview_with_image_id(
         # Apply transformations using the ImageTransformer class
         logger.debug("operations.transformations", "Applying transformations to image from database", "database_image_transformations_start", {
             "transformation_count": len(transform_config),
-            "transformation_types": list(transform_config.keys())
+            "transformation_types": list(transform_config.keys()),
+            "preview_mode": normalized_preview_mode
         })
         
         transformed_image = transformer.apply_transformations(pil_image, transform_config)
@@ -1006,4 +1020,3 @@ async def get_supported_image_formats():
 
 # Import time for timestamps
 import time
-
