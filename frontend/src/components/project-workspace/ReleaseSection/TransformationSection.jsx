@@ -31,7 +31,7 @@ const getTransformationIcon = (type) => {
   return fallbackIcons[type] || '⚙️';
 };
 
-const HIDDEN_TRANSFORMATION_TYPES = new Set(["affine_transform"]);
+const HIDDEN_TRANSFORMATION_TYPES = new Set(["affine_transform", "perspective_warp"]);
 
 // Helper function to format transformation parameters for display
 const formatParameters = (config) => {
