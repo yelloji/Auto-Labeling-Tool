@@ -24,3 +24,12 @@ Read the following before doing anything:
 
 Then tell me: what was the last thing we did, and what is the next step?
 ```
+
+
+C:\Users\venka\.claude\primer.md
+C:\Users\venka\.claude\projects\v--stage-1-labeling-app-app-3-fix-release-system-422-error\memory\
+  MEMORY.md
+  project_status.md
+  user_profile.md
+  feedback_rules.md
+  guide_bot_architecture.md   ← new this session
