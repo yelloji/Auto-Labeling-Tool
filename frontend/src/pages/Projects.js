@@ -36,6 +36,8 @@ import {
   SearchOutlined,
   TeamOutlined,
   CopyOutlined,
+  DownloadOutlined,
+  UploadOutlined,
   MergeCellsOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -53,6 +55,13 @@ const Projects = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('date_edited');
   const [openDropdownId, setOpenDropdownId] = useState(null);
+  const [importModalVisible, setImportModalVisible] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importSummary, setImportSummary] = useState(null);
+  const [importProjectName, setImportProjectName] = useState('');
+  const [transferBlockingMessage, setTransferBlockingMessage] = useState('');
+  const importInputRef = React.useRef(null);
   const [form] = Form.useForm();
 
   // Load projects
@@ -169,6 +178,119 @@ const Projects = () => {
     );
   };
 
+  const handleExportProject = async (project) => {
+    const hideLoading = message.loading(`Preparing export for "${project.name}"...`, 0);
+    setTransferBlockingMessage(`Preparing export for "${project.name}". Please wait until the download starts.`);
+    try {
+      logUserClick('Projects', 'export_project', { projectId: project.id, projectName: project.name });
+      const { blob, filename } = await projectsAPI.exportProject(project.id);
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/zip' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || `${project.name || 'project'}_export.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+
+      logInfo('app.frontend.interactions', 'Project export downloaded', 'export_project', {
+        projectId: project.id,
+        projectName: project.name,
+        filename: link.download,
+      });
+      message.success(`Project export downloaded: ${link.download}`);
+    } catch (error) {
+      const errorInfo = handleAPIError(error);
+      logError('app.frontend.interactions', 'Failed to export project', error, {
+        projectId: project.id,
+        projectName: project.name,
+        errorInfo,
+      });
+      message.error(`Failed to export project: ${errorInfo.message}`);
+    } finally {
+      setTransferBlockingMessage('');
+      hideLoading();
+    }
+  };
+
+  const handleImportFileSelected = async (event) => {
+    const file = event.target.files?.[0];
+    if (event.target) {
+      event.target.value = '';
+    }
+    if (!file) {
+      return;
+    }
+
+    const hideLoading = message.loading(`Checking "${file.name}"...`, 0);
+    setTransferBlockingMessage(`Checking import package "${file.name}". Please wait until the import form is ready.`);
+    try {
+      logUserClick('Projects', 'validate_project_import', { filename: file.name });
+      const summary = await projectsAPI.validateProjectImport(file);
+      const suggestedName = summary.name_conflict
+        ? `${summary.project_name} imported`
+        : summary.project_name;
+      setImportFile(file);
+      setImportSummary(summary);
+      setImportProjectName(suggestedName);
+      setImportModalVisible(true);
+      logInfo('app.frontend.interactions', 'Project import package validated', 'validate_project_import', {
+        filename: file.name,
+        projectName: summary.project_name,
+        nameConflict: summary.name_conflict,
+      });
+    } catch (error) {
+      const errorInfo = handleAPIError(error);
+      logError('app.frontend.interactions', 'Failed to validate project import', error, {
+        filename: file.name,
+        errorInfo,
+      });
+      message.error(`Import package is not valid: ${errorInfo.message}`);
+    } finally {
+      setTransferBlockingMessage('');
+      hideLoading();
+    }
+  };
+
+  const handleImportProject = async () => {
+    if (!importFile || !importSummary) {
+      message.warning('Please select a project export ZIP first');
+      return;
+    }
+    const finalName = (importProjectName || '').trim();
+    if (!finalName) {
+      message.warning('Please enter a project name');
+      return;
+    }
+
+    setImporting(true);
+    setTransferBlockingMessage(`Importing "${finalName}". Please wait until the project is restored.`);
+    try {
+      logUserClick('Projects', 'import_project', {
+        filename: importFile.name,
+        projectName: finalName,
+      });
+      const result = await projectsAPI.importProjectPackage(importFile, finalName);
+      message.success(`Project imported: ${result.project_name}`);
+      setImportModalVisible(false);
+      setImportFile(null);
+      setImportSummary(null);
+      setImportProjectName('');
+      await loadProjects();
+    } catch (error) {
+      const errorInfo = handleAPIError(error);
+      logError('app.frontend.interactions', 'Failed to import project', error, {
+        filename: importFile.name,
+        projectName: finalName,
+        errorInfo,
+      });
+      message.error(`Failed to import project: ${errorInfo.message}`);
+    } finally {
+      setTransferBlockingMessage('');
+      setImporting(false);
+    }
+  };
+
   const renderProjectCard = (project) => {
     const typeInfo = getProjectTypeInfo(project.project_type);
     const { progress } = getProgressInfo(project);
@@ -247,6 +369,16 @@ const Projects = () => {
           }}
         >
           Duplicate Project
+        </Menu.Item>
+        <Menu.Item
+          key="export"
+          icon={<DownloadOutlined />}
+          onClick={() => {
+            setOpenDropdownId(null);
+            handleExportProject(project);
+          }}
+        >
+          Export Project
         </Menu.Item>
         <Menu.Item 
           key="merge" 
@@ -531,8 +663,29 @@ const Projects = () => {
           Projects
         </Title>
         <Space size="middle">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            style={{ display: 'none' }}
+            onChange={handleImportFileSelected}
+          />
+          <Button
+            icon={<UploadOutlined />}
+            loading={importing || Boolean(transferBlockingMessage)}
+            disabled={Boolean(transferBlockingMessage)}
+            style={{
+              borderRadius: '6px',
+              height: '36px',
+              fontSize: '14px'
+            }}
+            onClick={() => importInputRef.current?.click()}
+          >
+            Import Project
+          </Button>
           <Button 
             icon={<TeamOutlined />}
+            disabled={Boolean(transferBlockingMessage)}
             style={{ 
               borderRadius: '6px',
               height: '36px',
@@ -546,6 +699,7 @@ const Projects = () => {
             type="primary" 
             icon={<PlusOutlined />}
             onClick={handleCreate}
+            disabled={Boolean(transferBlockingMessage)}
             style={{ 
               borderRadius: '6px',
               height: '36px',
@@ -592,7 +746,8 @@ const Projects = () => {
         <Button 
           icon={<ReloadOutlined />}
           onClick={loadProjects}
-          loading={loading}
+          loading={loading || Boolean(transferBlockingMessage)}
+          disabled={Boolean(transferBlockingMessage)}
           style={{ 
             borderRadius: '6px',
             height: '36px'
@@ -702,6 +857,84 @@ const Projects = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      <Modal
+        title="Import Project"
+        open={importModalVisible}
+        onOk={handleImportProject}
+        onCancel={() => {
+          setImportModalVisible(false);
+          setImportFile(null);
+          setImportSummary(null);
+          setImportProjectName('');
+        }}
+        confirmLoading={importing}
+        okText="Import Project"
+        width={620}
+      >
+        {importSummary && (
+          <div>
+            <Paragraph>
+              This ZIP contains project <Text strong>{importSummary.project_name}</Text>.
+            </Paragraph>
+            <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+              <Col span={8}><Tag color="blue">Files: {importSummary.project_file_count}</Tag></Col>
+              <Col span={8}><Tag color="green">Images: {importSummary.database_counts?.images || 0}</Tag></Col>
+              <Col span={8}><Tag color="purple">Annotations: {importSummary.database_counts?.annotations || 0}</Tag></Col>
+            </Row>
+            {importSummary.name_conflict && (
+              <Paragraph style={{ color: '#d48806' }}>
+                A project with this name already exists. Please enter a new name for the imported project.
+              </Paragraph>
+            )}
+            <Form layout="vertical">
+              <Form.Item label="Imported Project Name" required>
+                <Input
+                  value={importProjectName}
+                  onChange={(event) => setImportProjectName(event.target.value)}
+                  placeholder="Enter project name"
+                />
+              </Form.Item>
+            </Form>
+          </div>
+        )}
+      </Modal>
+
+      {transferBlockingMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0, 13, 26, 0.52)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'auto'
+          }}
+        >
+          <div
+            style={{
+              width: 460,
+              maxWidth: 'calc(100vw - 48px)',
+              padding: '28px 32px',
+              borderRadius: 12,
+              background: '#ffffff',
+              boxShadow: '0 18px 48px rgba(0, 0, 0, 0.28)',
+              textAlign: 'center'
+            }}
+          >
+            <Spin size="large" />
+            <Title level={4} style={{ marginTop: 18, marginBottom: 8 }}>
+              Project transfer in progress
+            </Title>
+            <Text type="secondary">
+              {transferBlockingMessage}
+            </Text>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

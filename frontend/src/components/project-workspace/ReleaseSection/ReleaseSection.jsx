@@ -429,6 +429,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
   const [releaseImages, setReleaseImages] = useState([]);
   const [releaseLoading, setReleaseLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [releaseBlockingMessage, setReleaseBlockingMessage] = useState('');
 
   useEffect(() => {
     const prev = window.__releaseGuideState || {};
@@ -895,9 +896,11 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     });
 
     setIsGenerating(true);
+    setReleaseBlockingMessage(`Creating release "${releaseConfig.name}". Please wait until the download window is ready.`);
+    let loadingMessage = null;
     try {
       // Show loading message
-      const loadingMessage = message.loading('Creating release...', 0);
+      loadingMessage = message.loading('Creating release...', 0);
       
       // Normalize transformations from UI shape to backend `{ type, params }`
       const normalizedTransformations = (transformations || [])
@@ -978,9 +981,6 @@ const ReleaseSection = ({ projectId, datasetId }) => {
         body: JSON.stringify(releaseData),
       });
 
-      // Close the loading message
-      loadingMessage();
-
       if (response.ok) {
         const responseData = await response.json();
         console.log('Release created successfully:', JSON.stringify(responseData, null, 2));
@@ -1028,6 +1028,7 @@ const ReleaseSection = ({ projectId, datasetId }) => {
           isExporting: true,
           exportProgress: { percentage: 0, step: 'initializing' }
         });
+        setReleaseBlockingMessage('');
         
         // Force refresh transformation section after successful release creation
         setTransformationKey(prev => prev + 1);
@@ -1080,7 +1081,11 @@ const ReleaseSection = ({ projectId, datasetId }) => {
       console.error('Error creating release:', error);
       message.error('Failed to create release. Please try again.');
     } finally {
+      if (loadingMessage) {
+        loadingMessage();
+      }
       setIsGenerating(false);
+      setReleaseBlockingMessage('');
     }
   };
 
@@ -1885,6 +1890,41 @@ const ReleaseSection = ({ projectId, datasetId }) => {
             isExporting={downloadModal.isExporting}
             exportProgress={downloadModal.exportProgress}
           />
+          {releaseBlockingMessage && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 9999,
+                background: 'rgba(0, 13, 26, 0.52)',
+                backdropFilter: 'blur(2px)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'auto'
+              }}
+            >
+              <div
+                style={{
+                  width: 460,
+                  maxWidth: 'calc(100vw - 48px)',
+                  padding: '28px 32px',
+                  borderRadius: 12,
+                  background: '#ffffff',
+                  boxShadow: '0 18px 48px rgba(0, 0, 0, 0.28)',
+                  textAlign: 'center'
+                }}
+              >
+                <Spin size="large" />
+                <h3 style={{ marginTop: 18, marginBottom: 8 }}>
+                  Release creation in progress
+                </h3>
+                <p style={{ margin: 0, color: '#667085' }}>
+                  {releaseBlockingMessage}
+                </p>
+              </div>
+            </div>
+          )}
             </>
           )}
         </Content>

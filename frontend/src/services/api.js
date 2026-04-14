@@ -402,6 +402,52 @@ export const projectsAPI = {
     return response.data;
   },
 
+  // Export complete project package for transfer to another machine
+  exportProject: async (projectId) => {
+    const response = await api.post(`/api/v1/projects/${projectId}/export`, null, {
+      responseType: 'blob',
+      timeout: 0, // Full project exports can include releases and training data.
+    });
+
+    const contentDisposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+    let filename = `project_${projectId}_export.zip`;
+    if (contentDisposition) {
+      const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition);
+      const plainMatch = /filename="?([^";]+)"?/i.exec(contentDisposition);
+      const rawFilename = utf8Match?.[1] || plainMatch?.[1];
+      if (rawFilename) {
+        filename = decodeURIComponent(rawFilename);
+      }
+    }
+
+    return { blob: response.data, filename };
+  },
+
+  // Validate a project export ZIP before importing
+  validateProjectImport: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/api/v1/projects/import/validate', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0,
+    });
+    return response.data;
+  },
+
+  // Import a full project export ZIP
+  importProjectPackage: async (file, newProjectName = null) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (newProjectName) {
+      formData.append('new_project_name', newProjectName);
+    }
+    const response = await api.post('/api/v1/projects/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0,
+    });
+    return response.data;
+  },
+
   // Get project management data (datasets organized by status)
   getProjectManagementData: async (projectId) => {
     const response = await api.get(`/api/v1/projects/${projectId}/management`);
