@@ -86,12 +86,25 @@ const Projects = () => {
     logInfo('app.frontend.navigation', 'Projects page loaded', 'page_view', { component: 'Projects' });
     logInfo('app.frontend.ui', 'Projects component mounted', 'component_mount', { component: 'Projects' });
     loadProjects();
-    
+
     // Cleanup function for component unmount
     return () => {
       logInfo('app.frontend.ui', 'Projects component unmounted', 'component_unmount', { component: 'Projects' });
+      window.__projectsGuideState = undefined;
     };
   }, []);
+
+  // Publish guide state so the bot can react to import modal and transfer overlay
+  useEffect(() => {
+    window.__projectsGuideState = {
+      transferring: Boolean(transferBlockingMessage),
+      importModalVisible,
+      nameConflict: importSummary?.name_conflict || false,
+      hasProjects: projects.length > 0,
+      importSummary,
+    };
+    window.dispatchEvent(new CustomEvent('projectsGuideStateChanged'));
+  }, [transferBlockingMessage, importModalVisible, importSummary, projects.length]);
 
   // Delete project
   const handleDeleteProject = async (projectId) => {

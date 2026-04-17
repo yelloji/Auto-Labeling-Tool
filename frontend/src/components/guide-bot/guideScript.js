@@ -98,6 +98,48 @@ const guideScript = {
         label: { en: 'What is a project?', it: "Cos'è un progetto?" },
         action: { type: 'message', key: 'projects-explain' },
       },
+      {
+        label: { en: 'Export a project', it: 'Esporta un progetto' },
+        action: { type: 'message', key: 'projects-export-explain' },
+      },
+      {
+        label: { en: 'Import a project', it: 'Importa un progetto' },
+        action: { type: 'message', key: 'projects-import-explain' },
+      },
+    ],
+  },
+
+  'projects-export-explain': {
+    message: {
+      en: 'To export a project, click the ⋯ button on any project card and choose Export Project. The app will prepare a full backup ZIP — images, labels, releases, training results, and all database records. The ZIP downloads automatically when ready. Large projects may take a few minutes.',
+      it: 'Per esportare un progetto, clicca ⋯ sulla scheda del progetto e scegli Esporta Progetto. L\'app prepara un backup ZIP completo. Il file viene scaricato automaticamente al termine.',
+    },
+    options: [
+      {
+        label: { en: 'How do I import a project?', it: 'Come importo un progetto?' },
+        action: { type: 'message', key: 'projects-import-explain' },
+      },
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/projects' },
+      },
+    ],
+  },
+
+  'projects-import-explain': {
+    message: {
+      en: 'To import a project, click Import Project at the top of this page and select a project export ZIP. The app checks the file, shows you a summary of what is inside, and asks you to confirm the project name. If a project with the same name already exists, you will be asked to rename it before the import proceeds.',
+      it: 'Per importare un progetto, clicca Importa Progetto in cima alla pagina e seleziona un file ZIP. L\'app controlla il file, mostra un riepilogo e chiede conferma del nome prima di procedere.',
+    },
+    options: [
+      {
+        label: { en: 'How do I export a project?', it: 'Come esporto un progetto?' },
+        action: { type: 'message', key: 'projects-export-explain' },
+      },
+      {
+        label: { en: 'Go back', it: 'Torna indietro' },
+        action: { type: 'message', key: '/projects' },
+      },
     ],
   },
 

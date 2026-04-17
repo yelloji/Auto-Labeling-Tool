@@ -23,7 +23,7 @@ import './GuideBot.css';
 import { checkUploadPageState, startUploadFilesWizard, startUploadFolderWizard,
          startUploadFolderLabelsWizard, startUploadVideoWizard, handleUploadAnswer } from './pages/uploadBot';
 import { startUploadModelWizard, handleModelAnswer } from './pages/modelBot';
-import { startCreateProjectWizard, handleCreateProjectAnswer } from './pages/projectBot';
+import { startCreateProjectWizard, handleCreateProjectAnswer, checkProjectsPageState, handleProjectAnswer } from './pages/projectBot';
 import { checkManagementPageState, handleManagementAnswer } from './pages/managementBot';
 import { checkAnnotateProgressPageState, handleAnnotateProgressAnswer } from './pages/annotateProgressBot';
 import { checkManualLabelingPageState, handleManualLabelingAnswer } from './pages/manualLabelingBot';
@@ -515,11 +515,52 @@ export default function GuideBot() {
     return () => window.removeEventListener('modellabGuideStateChanged', handler);
   }, [location.pathname, lang]);
 
+  useEffect(() => {
+    const handler = () => {
+      if (location.pathname !== '/projects') return;
+      const shouldRefresh = isOpenRef.current || pendingReopenRef.current;
+      if (!shouldRefresh) return;
+
+      const s = makeSetters();
+      const projectsState = checkProjectsPageState(lang);
+
+      if (isOpenRef.current && projectsState) {
+        const typeChanged = projectsState.wizardType !== wizardTypeRef.current;
+        if (typeChanged) {
+          setWizardMode(true);
+          setWizardType(projectsState.wizardType);
+          setConversation(projectsState.conversation);
+          setWizardStep(projectsState.step);
+        }
+        return;
+      }
+
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
+      setIsOpen(false);
+      setWizardMode(false);
+      setWizardType(null);
+      setConversation([]);
+      setWizardStep(null);
+
+      setTimeout(() => {
+        if (projectsState) {
+          pendingReopenRef.current = false;
+          applyWizardState(projectsState);
+        }
+      }, 180);
+    };
+
+    window.addEventListener('projectsGuideStateChanged', handler);
+    return () => window.removeEventListener('projectsGuideStateChanged', handler);
+  }, [location.pathname, lang]);
+
   // When URL changes → close bot and reset everything
   // Bot must be closed so the next open triggers a fresh snapshot check for the new page
   useEffect(() => {
     const key = getScriptKey(location.pathname);
     const shouldReopen = isOpenRef.current || pendingReopenRef.current;
+    if (location.pathname !== '/projects') window.__projectsGuideState = undefined;
     setScriptKey(key);
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
     if (processingObserverRef.current) { processingObserverRef.current.disconnect(); processingObserverRef.current = null; }
@@ -720,6 +761,11 @@ export default function GuideBot() {
   function handleBotOpen() {
     if (dragStateRef.current.moved) return;
 
+    if (location.pathname === '/projects') {
+      const projectsState = checkProjectsPageState(lang);
+      if (projectsState) { applyWizardState(projectsState); return; }
+    }
+
     if (location.pathname.includes('/workspace')) {
       // Sync scriptKey to the actual active section so Cancel shows the right script
       const activeSection = getActiveWorkspaceSection();
@@ -780,6 +826,11 @@ export default function GuideBot() {
 
     if (wizardType === 'create-project') {
       handleCreateProjectAnswer(step, value, lang, s);
+      return;
+    }
+
+    if (wizardType && wizardType.startsWith('project-')) {
+      handleProjectAnswer(step, value, lang, s);
       return;
     }
 

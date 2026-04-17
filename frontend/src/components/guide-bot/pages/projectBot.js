@@ -1,7 +1,9 @@
 /**
- * projectBot.js — Create Project wizard for the guide bot.
+ * projectBot.js — Projects page guide bot logic.
  *
  * Exports:
+ *   checkProjectsPageState(lang, refs, setters)   — snapshot check for import modal / transfer states
+ *   handleProjectAnswer(step, value, lang, setters) — handles project-* wizard answers
  *   getCreateProjectWizardSteps(lang)
  *   startCreateProjectWizard(lang, setters)
  *   handleCreateProjectAnswer(step, value, lang, setters)
@@ -10,6 +12,64 @@
  */
 
 import { setReactInputValue } from './botUtils';
+
+// ---------------------------------------------------------------------------
+// Projects page state check — import modal / transfer overlay
+// ---------------------------------------------------------------------------
+export function checkProjectsPageState(lang) {
+  const state = window.__projectsGuideState || {};
+
+  if (state.transferring) {
+    const text = lang === 'it'
+      ? 'Trasferimento progetto in corso. Non chiudere l\'app — attendi che l\'operazione si completi. Potrebbe richiedere qualche minuto per progetti grandi.'
+      : 'Project transfer is in progress. Please do not close the app — wait until the operation completes. This may take a few minutes for large projects.';
+    return {
+      wizardType: 'project-transferring',
+      step: 'project-transferring',
+      conversation: [{ role: 'bot', text, inputType: 'buttons', options: ['OK, I will wait'], step: 'project-transferring' }],
+    };
+  }
+
+  if (state.importModalVisible && state.nameConflict) {
+    const projectName = state.importSummary?.project_name || 'this project';
+    const text = lang === 'it'
+      ? `Esiste già un progetto con il nome "${projectName}". Inserisci un nome diverso nel campo in basso, poi clicca Importa Progetto per continuare.`
+      : `A project named "${projectName}" already exists on this PC. Enter a different name in the field below the summary, then click Import Project to continue.`;
+    return {
+      wizardType: 'project-import-conflict',
+      step: 'project-import-conflict',
+      conversation: [{ role: 'bot', text, inputType: 'buttons', options: ['Got it'], step: 'project-import-conflict' }],
+    };
+  }
+
+  if (state.importModalVisible) {
+    const summary = state.importSummary || {};
+    const projectName = summary.project_name || 'this project';
+    const images = summary.database_counts?.images || 0;
+    const annotations = summary.database_counts?.annotations || 0;
+    const files = summary.project_file_count || 0;
+    const text = lang === 'it'
+      ? `Questo pacchetto contiene il progetto "${projectName}" — ${images} immagini, ${annotations} annotazioni, ${files} file. Controlla il nome del progetto, poi clicca Importa Progetto.`
+      : `This package contains project "${projectName}" — ${images} images, ${annotations} annotations, ${files} files. Confirm the project name below, then click Import Project to restore it.`;
+    return {
+      wizardType: 'project-import-modal',
+      step: 'project-import-modal',
+      conversation: [{ role: 'bot', text, inputType: 'buttons', options: ['Got it'], step: 'project-import-modal' }],
+    };
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Handle project-* wizard answers (all just close the wizard after acknowledge)
+// ---------------------------------------------------------------------------
+export function handleProjectAnswer(step, value, lang, setters) {
+  const { setWizardMode, setWizardType, setWizardStep } = setters;
+  setWizardMode(false);
+  setWizardType(null);
+  setWizardStep(null);
+}
 
 // ---------------------------------------------------------------------------
 // Wizard step definitions
