@@ -130,9 +130,9 @@ def get_retraining_reference(project_id: int, db: Session = Depends(get_db)):
                 "output_format": release_config.get("output_format"),
                 "transformations": release_config.get("transformations", []),
                 "images_per_original": release_config.get("images_per_original", 1),
-                "train_ratio": rel.train_ratio,
-                "val_ratio": rel.val_ratio,
-                "test_ratio": rel.test_ratio,
+                "train_image_count": rel.train_image_count,
+                "val_image_count": rel.val_image_count,
+                "test_image_count": rel.test_image_count,
             }
 
     return {
@@ -289,9 +289,9 @@ def create_retraining_release(
             "output_format": release_config.get("output_format", "original"),
             "transformations": release_config.get("transformations", []),
             "images_per_original": release_config.get("images_per_original", 1),
-            "train_ratio": ref_release.train_ratio,
-            "val_ratio": ref_release.val_ratio,
-            "test_ratio": ref_release.test_ratio,
+            "train_image_count": ref_release.train_image_count,
+            "val_image_count": ref_release.val_image_count,
+            "test_image_count": ref_release.test_image_count,
         }
     }
 
