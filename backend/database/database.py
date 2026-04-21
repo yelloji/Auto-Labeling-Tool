@@ -49,7 +49,7 @@ async def init_db():
             Label, DatasetSplit, LabelAnalytics,
             Release, ImageTransformation, ImageVariant,
             AiModel, TrainingSession, DevModeSetting,
-            ModelExperiment
+            ModelExperiment, RetrainingReference
         )
         from .operations import AiModelOperations
         
@@ -214,6 +214,26 @@ async def init_db():
             logger.warning("errors.system", f"Model experiments verification/migration failed: {me_err}", "model_experiments_verification_failed", {"error": str(me_err)})
 
         
+
+        # Retraining references table (User Retraining Mode)
+        try:
+            with engine.begin() as conn:
+                tables = {t[0] for t in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+                if "retraining_references" not in tables:
+                    conn.execute(text("""
+                        CREATE TABLE retraining_references (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+                            training_session_id INTEGER REFERENCES training_sessions(id) ON DELETE SET NULL,
+                            release_id TEXT REFERENCES releases(id) ON DELETE SET NULL,
+                            assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            notes TEXT
+                        )
+                    """))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_retraining_references_project ON retraining_references(project_id)"))
+                    logger.info("app.database", "Created retraining_references table", "retraining_references_created")
+        except Exception as rr_err:
+            logger.warning("errors.system", f"retraining_references migration failed: {rr_err}", "retraining_references_migration_failed", {"error": str(rr_err)})
 
         # Create directories if they don't exist
         logger.info("app.database", "Creating required directories", "directories_creation_start", {
