@@ -25,17 +25,17 @@ Reference plan: `RETRAINING_MODE_PLAN.md`
 ## PHASE 2 — Mode Toggle
 
 ### Task 2.1 — AppModeContext
-- [ ] Create `frontend/src/context/AppModeContext.jsx`
-- [ ] State: `fullMode` / `retrainingMode`
-- [ ] Persist mode in localStorage
-- [ ] Wrap app with context provider
+- [x] Create `frontend/src/context/AppModeContext.jsx`
+- [x] State: `fullMode` / `retrainingMode`
+- [x] Persist mode in localStorage
+- [x] Wrap app with context provider
 
 ### Task 2.2 — Nav Bar Toggle
-- [ ] Add mode toggle switch to top navigation bar — labels: `Full Mode` | `User Retraining Mode`
-- [ ] Add tooltip on hover: *"Simplified mode for operators to retrain existing models"*
-- [ ] Style consistent with existing app color scheme (purple/blue theme)
-- [ ] "Gevis AI Studio" branding consistent across all Retraining Mode pages
-- [ ] Switching mode refreshes current page
+- [x] Add mode toggle switch to top navigation bar — labels: `Full Mode` | `User Retraining Mode`
+- [x] Add tooltip on hover: *"Simplified mode for operators to retrain existing models"*
+- [x] Style consistent with existing app color scheme (purple/blue theme, highlighted when active)
+- [x] "Gevis AI Studio" branding consistent — unchanged in Navbar
+- [x] Switching mode persists via localStorage, refreshes on next navigation
 
 ---
 
