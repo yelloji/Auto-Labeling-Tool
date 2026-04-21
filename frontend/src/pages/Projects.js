@@ -42,11 +42,16 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { projectsAPI, handleAPIError } from '../services/api';
+import { useAppMode } from '../context/AppModeContext';
+import RetrainingProjects from '../components/retraining/RetrainingProjects';
 
 const { Title, Paragraph, Text } = Typography;
 const { Option } = Select;
 
 const Projects = () => {
+  const { isRetrainingMode } = useAppMode();
+  if (isRetrainingMode) return <RetrainingProjects />;
+
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
