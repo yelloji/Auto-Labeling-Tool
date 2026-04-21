@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Card, Typography, Table, Tag, Tooltip, Tabs, Modal, Button, message } from 'antd';
-import { TrophyOutlined } from '@ant-design/icons';
+import { TrophyOutlined, DisconnectOutlined } from '@ant-design/icons';
 import AnalyticsView from '../AnalyticsView/AnalyticsView';
 import ViewConfig from '../ConfigurationView/ViewConfig';
 import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
@@ -28,6 +28,7 @@ const OverviewView = ({ training, projectId }) => {
     const [activeConfigTab, setActiveConfigTab] = useState('view');
     const [confusionModalOpen, setConfusionModalOpen] = useState(false);
     const [assigning, setAssigning] = useState(false);
+    const [unassigning, setUnassigning] = useState(false);
     const [isProduction, setIsProduction] = useState(false);
 
     // Check if this training is already the production reference
@@ -65,6 +66,32 @@ const OverviewView = ({ training, projectId }) => {
                     message.error('Failed to assign production reference.');
                 } finally {
                     setAssigning(false);
+                }
+            },
+        });
+    };
+
+    const handleUnassignProduction = () => {
+        if (!projectId) return;
+        Modal.confirm({
+            title: 'Remove Production Reference',
+            content: `Remove "${training.name}" as the production reference? Operators will no longer be able to retrain using this project's settings until a new reference is assigned.`,
+            okText: 'Remove Reference',
+            okButtonProps: { danger: true },
+            cancelText: 'Cancel',
+            onOk: async () => {
+                setUnassigning(true);
+                try {
+                    const res = await fetch(`/api/v1/retraining/${projectId}/unassign-production`, {
+                        method: 'DELETE',
+                    });
+                    if (!res.ok) throw new Error('Failed');
+                    setIsProduction(false);
+                    message.success('Production reference removed.');
+                } catch {
+                    message.error('Failed to remove production reference.');
+                } finally {
+                    setUnassigning(false);
                 }
             },
         });
@@ -307,25 +334,47 @@ const OverviewView = ({ training, projectId }) => {
                         {training.status?.toUpperCase()}
                     </Tag>
                     {training.status === 'completed' && projectId && (
-                        <Tooltip title={isProduction ? 'This training is already the production reference' : 'Set as production reference for User Retraining Mode'}>
-                            <Button
-                                size="small"
-                                icon={<TrophyOutlined />}
-                                loading={assigning}
-                                disabled={isProduction}
-                                onClick={handleAssignToProduction}
-                                style={{
-                                    background: isProduction ? 'rgba(109,40,217,0.15)' : 'linear-gradient(135deg, #7c3aed, #5b21b6)',
-                                    border: isProduction ? '1px solid #7c3aed' : 'none',
-                                    color: '#fff',
-                                    fontWeight: 600,
-                                    fontSize: '0.75rem',
-                                    borderRadius: '6px',
-                                }}
-                            >
-                                {isProduction ? 'Production Reference' : 'Assign to Production'}
-                            </Button>
-                        </Tooltip>
+                        <>
+                            <Tooltip title={isProduction ? 'This training is the current production reference' : 'Set as production reference for User Retraining Mode'}>
+                                <Button
+                                    size="small"
+                                    icon={<TrophyOutlined />}
+                                    loading={assigning}
+                                    disabled={isProduction}
+                                    onClick={handleAssignToProduction}
+                                    style={{
+                                        background: isProduction ? 'rgba(109,40,217,0.15)' : 'linear-gradient(135deg, #7c3aed, #5b21b6)',
+                                        border: isProduction ? '1px solid #7c3aed' : 'none',
+                                        color: '#fff',
+                                        fontWeight: 600,
+                                        fontSize: '0.75rem',
+                                        borderRadius: '6px',
+                                    }}
+                                >
+                                    {isProduction ? 'Production Reference' : 'Assign to Production'}
+                                </Button>
+                            </Tooltip>
+                            {isProduction && (
+                                <Tooltip title="Remove this training as the production reference">
+                                    <Button
+                                        size="small"
+                                        icon={<DisconnectOutlined />}
+                                        loading={unassigning}
+                                        onClick={handleUnassignProduction}
+                                        style={{
+                                            background: 'rgba(220,38,38,0.1)',
+                                            border: '1px solid rgba(220,38,38,0.4)',
+                                            color: '#f87171',
+                                            fontWeight: 600,
+                                            fontSize: '0.75rem',
+                                            borderRadius: '6px',
+                                        }}
+                                    >
+                                        Unassign
+                                    </Button>
+                                </Tooltip>
+                            )}
+                        </>
                     )}
                 </div>
             </div>

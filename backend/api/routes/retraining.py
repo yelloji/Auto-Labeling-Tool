@@ -214,6 +214,32 @@ def assign_production(
 
 
 # ---------------------------------------------------------------------------
+# DELETE /api/v1/retraining/{project_id}/unassign-production
+# Removes the production reference — project becomes locked in Retraining Mode.
+# ---------------------------------------------------------------------------
+@router.delete("/retraining/{project_id}/unassign-production")
+def unassign_production(project_id: int, db: Session = Depends(get_db)):
+    """
+    Removes the retraining reference for this project.
+    Project will appear locked in User Retraining Mode until reassigned.
+    """
+    ref = db.query(RetrainingReference).filter(
+        RetrainingReference.project_id == project_id
+    ).first()
+
+    if not ref:
+        raise HTTPException(status_code=404, detail="No production reference found for this project.")
+
+    db.delete(ref)
+    db.commit()
+
+    logger.info("app.retraining", f"Removed production reference for project {project_id}",
+                "unassign_production", {"project_id": project_id})
+
+    return {"success": True, "project_id": project_id}
+
+
+# ---------------------------------------------------------------------------
 # POST /api/v1/retraining/{project_id}/create-release
 # Creates a new release using the reference release config automatically.
 # Operator does not see or configure anything.
