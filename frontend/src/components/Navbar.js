@@ -83,38 +83,72 @@ const Navbar = () => {
         style={{ flex: 1, minWidth: 0 }}
       />
 
-      {/* Mode Toggle — right side of nav bar */}
+      {/* Mode Toggle — segmented switcher, both options always visible */}
       <Tooltip
-        title="Simplified mode for operators to retrain existing models"
+        title="Switch between Full Mode and User Retraining Mode"
         placement="bottomRight"
       >
-        <div
-          onClick={() => {
-            logUserClick('mode_toggle_clicked', `Switched to ${isRetrainingMode ? 'Full Mode' : 'User Retraining Mode'}`);
-            toggleMode();
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            cursor: 'pointer',
-            padding: '0.35rem 0.85rem',
-            borderRadius: '6px',
-            marginRight: '1.25rem',
-            background: isRetrainingMode ? '#531dab' : 'rgba(255,255,255,0.08)',
-            border: isRetrainingMode ? '1.5px solid #7c3aed' : '1.5px solid rgba(255,255,255,0.18)',
-            color: '#fff',
-            fontSize: '0.8rem',
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-            transition: 'all 0.2s',
-            userSelect: 'none',
-          }}
-        >
-          {isRetrainingMode
-            ? <><ReloadOutlined style={{ fontSize: '0.85rem' }} /> User Retraining Mode</>
-            : <><ToolOutlined style={{ fontSize: '0.85rem' }} /> Full Mode</>
-          }
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          background: 'rgba(0,0,0,0.35)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: '8px',
+          padding: '3px',
+          marginRight: '1.25rem',
+          gap: '2px',
+          userSelect: 'none',
+        }}>
+          {/* Full Mode segment */}
+          <div
+            onClick={() => {
+              if (isRetrainingMode) {
+                logUserClick('mode_toggle_clicked', 'Switched to Full Mode');
+                toggleMode();
+              }
+            }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+              padding: '0.28rem 0.75rem',
+              borderRadius: '6px',
+              cursor: isRetrainingMode ? 'pointer' : 'default',
+              background: !isRetrainingMode ? 'rgba(255,255,255,0.12)' : 'transparent',
+              color: !isRetrainingMode ? '#fff' : 'rgba(255,255,255,0.4)',
+              fontWeight: !isRetrainingMode ? 600 : 400,
+              fontSize: '0.78rem',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.18s',
+            }}
+          >
+            <ToolOutlined style={{ fontSize: '0.78rem' }} />
+            Full Mode
+          </div>
+
+          {/* User Retraining Mode segment */}
+          <div
+            onClick={() => {
+              if (!isRetrainingMode) {
+                logUserClick('mode_toggle_clicked', 'Switched to User Retraining Mode');
+                toggleMode();
+              }
+            }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+              padding: '0.28rem 0.75rem',
+              borderRadius: '6px',
+              cursor: !isRetrainingMode ? 'pointer' : 'default',
+              background: isRetrainingMode ? '#6d28d9' : 'transparent',
+              boxShadow: isRetrainingMode ? '0 0 0 1px #7c3aed' : 'none',
+              color: isRetrainingMode ? '#fff' : 'rgba(255,255,255,0.4)',
+              fontWeight: isRetrainingMode ? 600 : 400,
+              fontSize: '0.78rem',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.18s',
+            }}
+          >
+            <ReloadOutlined style={{ fontSize: '0.78rem' }} />
+            User Retraining Mode
+          </div>
         </div>
       </Tooltip>
     </div>
