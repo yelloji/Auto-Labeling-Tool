@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from 'antd';
 import 'antd/dist/reset.css';
 
@@ -18,7 +18,17 @@ import AnnotateProgress from './pages/annotation/AnnotateProgress';
 import ManualLabeling from './pages/annotation/ManualLabeling';
 import GlobalTrainingNotification from './components/GlobalTrainingNotification';
 import GuideBot from './components/guide-bot';
-import { AppModeProvider } from './context/AppModeContext';
+import { AppModeProvider, useAppMode } from './context/AppModeContext';
+
+// In Retraining Mode, redirect Dashboard and Models to Projects
+function RetrainingGuard({ children }) {
+  const { isRetrainingMode } = useAppMode();
+  const location = useLocation();
+  if (isRetrainingMode && (location.pathname === '/' || location.pathname === '/models')) {
+    return <Navigate to="/projects" replace />;
+  }
+  return children;
+}
 // Removed: Datasets, DatasetDetailModern, ActiveLearningDashboard, Annotate (old)
 // These will be integrated into Projects
 
@@ -99,6 +109,7 @@ function App() {
               <Navbar />
             </Header>
             <Content style={{ padding: 0, background: '#001529' }}>
+              <RetrainingGuard>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/models" element={<ModelsModern />} />
@@ -111,6 +122,7 @@ function App() {
                 {/* Removed standalone routes: /datasets, /active-learning, /projects/:projectId/annotate */}
                 {/* These features will be integrated within project workflows */}
               </Routes>
+              </RetrainingGuard>
             </Content>
           </Layout>
         } />

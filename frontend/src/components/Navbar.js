@@ -24,7 +24,14 @@ const Navbar = () => {
     function: 'component_initialization'
   });
 
-  const menuItems = [
+  // In User Retraining Mode: only Projects is visible
+  const menuItems = isRetrainingMode ? [
+    {
+      key: '/projects',
+      icon: <ProjectOutlined />,
+      label: 'Projects',
+    },
+  ] : [
     {
       key: '/',
       icon: <DashboardOutlined />,
