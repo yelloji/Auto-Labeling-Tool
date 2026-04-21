@@ -13,12 +13,12 @@ Reference plan: `RETRAINING_MODE_PLAN.md`
 - [x] Verify table created on app startup
 
 ### Task 1.2 — Backend Routes (`retraining.py`)
-- [ ] `GET /api/v1/retraining/projects` — only projects with a reference row
-- [ ] `GET /api/v1/retraining/{project_id}/reference` — get reference params
-- [ ] `POST /api/v1/retraining/{project_id}/assign-production` — set training as reference
-- [ ] `POST /api/v1/retraining/{project_id}/create-release` — auto-copy config from reference
-- [ ] `POST /api/v1/retraining/{project_id}/start-training` — copy all params, user gives name only
-- [ ] Register routes in main app
+- [x] `GET /api/v1/retraining/projects` — only projects with a reference row
+- [x] `GET /api/v1/retraining/{project_id}/reference` — get reference params
+- [x] `POST /api/v1/retraining/{project_id}/assign-production` — set training as reference
+- [x] `POST /api/v1/retraining/{project_id}/create-release` — auto-copy config from reference
+- [x] `POST /api/v1/retraining/{project_id}/start-training` — copy all params, user gives name only
+- [x] Register routes in main app
 
 ---
 
