@@ -83,7 +83,7 @@ const Navbar = () => {
         style={{ flex: 1, minWidth: 0 }}
       />
 
-      {/* Mode Toggle — segmented switcher, both options always visible */}
+      {/* Mode Toggle — premium segmented switcher */}
       <Tooltip
         title="Switch between Full Mode and User Retraining Mode"
         placement="bottomRight"
@@ -91,14 +91,16 @@ const Navbar = () => {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          background: 'rgba(0,0,0,0.35)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: '8px',
+          background: 'rgba(0,0,0,0.45)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '10px',
           padding: '3px',
           marginRight: '1.25rem',
-          gap: '2px',
+          gap: '1px',
           userSelect: 'none',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)',
         }}>
+
           {/* Full Mode segment */}
           <div
             onClick={() => {
@@ -108,21 +110,30 @@ const Navbar = () => {
               }
             }}
             style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.28rem 0.75rem',
-              borderRadius: '6px',
+              display: 'flex', alignItems: 'center', gap: '0.45rem',
+              padding: '0.32rem 0.9rem',
+              borderRadius: '7px',
               cursor: isRetrainingMode ? 'pointer' : 'default',
-              background: !isRetrainingMode ? 'rgba(255,255,255,0.12)' : 'transparent',
-              color: !isRetrainingMode ? '#fff' : 'rgba(255,255,255,0.4)',
+              background: !isRetrainingMode
+                ? 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 100%)'
+                : 'transparent',
+              boxShadow: !isRetrainingMode
+                ? '0 1px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.12)'
+                : 'none',
+              color: !isRetrainingMode ? '#fff' : 'rgba(255,255,255,0.3)',
               fontWeight: !isRetrainingMode ? 600 : 400,
               fontSize: '0.78rem',
+              letterSpacing: '0.01em',
               whiteSpace: 'nowrap',
-              transition: 'all 0.18s',
+              transition: 'all 0.2s cubic-bezier(0.4,0,0.2,1)',
             }}
           >
-            <ToolOutlined style={{ fontSize: '0.78rem' }} />
+            <ToolOutlined style={{ fontSize: '0.75rem', opacity: !isRetrainingMode ? 1 : 0.4 }} />
             Full Mode
           </div>
+
+          {/* Divider */}
+          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.07)', flexShrink: 0 }} />
 
           {/* User Retraining Mode segment */}
           <div
@@ -133,22 +144,28 @@ const Navbar = () => {
               }
             }}
             style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.28rem 0.75rem',
-              borderRadius: '6px',
+              display: 'flex', alignItems: 'center', gap: '0.45rem',
+              padding: '0.32rem 0.9rem',
+              borderRadius: '7px',
               cursor: !isRetrainingMode ? 'pointer' : 'default',
-              background: isRetrainingMode ? '#6d28d9' : 'transparent',
-              boxShadow: isRetrainingMode ? '0 0 0 1px #7c3aed' : 'none',
-              color: isRetrainingMode ? '#fff' : 'rgba(255,255,255,0.4)',
+              background: isRetrainingMode
+                ? 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
+                : 'transparent',
+              boxShadow: isRetrainingMode
+                ? '0 1px 8px rgba(109,40,217,0.55), inset 0 1px 0 rgba(255,255,255,0.15)'
+                : 'none',
+              color: isRetrainingMode ? '#fff' : 'rgba(255,255,255,0.3)',
               fontWeight: isRetrainingMode ? 600 : 400,
               fontSize: '0.78rem',
+              letterSpacing: '0.01em',
               whiteSpace: 'nowrap',
-              transition: 'all 0.18s',
+              transition: 'all 0.2s cubic-bezier(0.4,0,0.2,1)',
             }}
           >
-            <ReloadOutlined style={{ fontSize: '0.78rem' }} />
+            <ReloadOutlined style={{ fontSize: '0.75rem', opacity: isRetrainingMode ? 1 : 0.4 }} />
             User Retraining Mode
           </div>
+
         </div>
       </Tooltip>
     </div>
