@@ -976,8 +976,8 @@ def calculate_max_images_per_original(transformations: list) -> dict:
             disabled_count += 1
             continue
         tool_type = transformation.get('transformation_type') or transformation.get('tool_type')
-        if tool_type == 'resize':
-            # Baseline resize applies to all images; do not increase combinations
+        if tool_type in ('resize', 'tile'):
+            # Baseline transforms — apply to all images; do not increase combinations
             resize_count += 1
             continue
         if is_dual_value_transformation(tool_type):
