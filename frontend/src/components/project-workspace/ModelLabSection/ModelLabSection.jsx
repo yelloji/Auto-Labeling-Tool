@@ -202,7 +202,7 @@ const ModelLabSection = ({ projectId }) => {
                 {/* Right Panel - Details */}
                 <div className="model-lab-right-panel">
                     {selectedTraining ? (
-                        <OverviewView training={selectedTraining} />
+                        <OverviewView training={selectedTraining} projectId={projectId} />
                     ) : (
                         <div className="model-lab-empty-state">
                             <div className="empty-state-icon">

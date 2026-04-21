@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Card, Typography, Table, Tag, Tooltip, Tabs, Modal } from 'antd';
+import { Card, Typography, Table, Tag, Tooltip, Tabs, Modal, Button, message } from 'antd';
+import { TrophyOutlined } from '@ant-design/icons';
 import AnalyticsView from '../AnalyticsView/AnalyticsView';
 import ViewConfig from '../ConfigurationView/ViewConfig';
 import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
@@ -22,10 +23,52 @@ const { Title, Text } = Typography;
  * - Class-wise breakdown
  * - Confusion Matrix
  */
-const OverviewView = ({ training }) => {
+const OverviewView = ({ training, projectId }) => {
     const [activeTopLevelTab, setActiveTopLevelTab] = useState('overview');
     const [activeConfigTab, setActiveConfigTab] = useState('view');
     const [confusionModalOpen, setConfusionModalOpen] = useState(false);
+    const [assigning, setAssigning] = useState(false);
+    const [isProduction, setIsProduction] = useState(false);
+
+    // Check if this training is already the production reference
+    useEffect(() => {
+        if (!projectId || !training?.id) return;
+        fetch(`/api/v1/retraining/${projectId}/reference`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (data?.training_info?.id === training.id) setIsProduction(true);
+                else setIsProduction(false);
+            })
+            .catch(() => setIsProduction(false));
+    }, [projectId, training?.id]);
+
+    const handleAssignToProduction = () => {
+        if (!projectId || !training?.id) return;
+        Modal.confirm({
+            title: 'Assign to Production',
+            content: `Set "${training.name}" as the production reference for User Retraining Mode? Operators will use its parameters for all future retraining.`,
+            okText: 'Assign to Production',
+            okButtonProps: { style: { background: '#6d28d9', borderColor: '#7c3aed' } },
+            cancelText: 'Cancel',
+            onOk: async () => {
+                setAssigning(true);
+                try {
+                    const res = await fetch(`/api/v1/retraining/${projectId}/assign-production`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ training_session_id: training.id }),
+                    });
+                    if (!res.ok) throw new Error('Failed');
+                    setIsProduction(true);
+                    message.success(`"${training.name}" is now the production reference.`);
+                } catch {
+                    message.error('Failed to assign production reference.');
+                } finally {
+                    setAssigning(false);
+                }
+            },
+        });
+    };
 
     useEffect(() => {
         if (!training) return;
@@ -259,9 +302,32 @@ const OverviewView = ({ training }) => {
                         Created {new Date(training.date).toLocaleDateString()}
                     </Text>
                 </div>
-                <Tag color={training.status === 'completed' ? 'success' : 'default'}>
-                    {training.status?.toUpperCase()}
-                </Tag>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <Tag color={training.status === 'completed' ? 'success' : 'default'}>
+                        {training.status?.toUpperCase()}
+                    </Tag>
+                    {training.status === 'completed' && projectId && (
+                        <Tooltip title={isProduction ? 'This training is already the production reference' : 'Set as production reference for User Retraining Mode'}>
+                            <Button
+                                size="small"
+                                icon={<TrophyOutlined />}
+                                loading={assigning}
+                                disabled={isProduction}
+                                onClick={handleAssignToProduction}
+                                style={{
+                                    background: isProduction ? 'rgba(109,40,217,0.15)' : 'linear-gradient(135deg, #7c3aed, #5b21b6)',
+                                    border: isProduction ? '1px solid #7c3aed' : 'none',
+                                    color: '#fff',
+                                    fontWeight: 600,
+                                    fontSize: '0.75rem',
+                                    borderRadius: '6px',
+                                }}
+                            >
+                                {isProduction ? 'Production Reference' : 'Assign to Production'}
+                            </Button>
+                        </Tooltip>
+                    )}
+                </div>
             </div>
 
             {/* Tabs */}
