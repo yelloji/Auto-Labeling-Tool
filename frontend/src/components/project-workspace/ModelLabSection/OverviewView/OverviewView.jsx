@@ -37,8 +37,8 @@ const OverviewView = ({ training, projectId }) => {
         fetch(`/api/v1/retraining/${projectId}/reference`)
             .then(r => r.ok ? r.json() : null)
             .then(data => {
-                if (data?.training_info?.id === training.id) setIsProduction(true);
-                else setIsProduction(false);
+                const refTrainingId = data?.training_info?.id;
+                setIsProduction(refTrainingId != null && Number(refTrainingId) === Number(training.id));
             })
             .catch(() => setIsProduction(false));
     }, [projectId, training?.id]);
