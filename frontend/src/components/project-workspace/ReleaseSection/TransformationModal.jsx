@@ -59,6 +59,7 @@ const TransformationModal = ({
   const [combinationCount, setCombinationCount] = useState(1); // Track number of possible combinations
   const [activeFlipPreviewVariant, setActiveFlipPreviewVariant] = useState('horizontal');
   const [rotatePreviewMode, setRotatePreviewMode] = useState('object_detection');
+  const [activeTilePreviewTab, setActiveTilePreviewTab] = useState('grid');
 
   const getRotateAngle = (config = {}) => {
     const angle = config.angle;
@@ -401,6 +402,9 @@ const TransformationModal = ({
     if (transformationType === 'rotate') {
       setRotatePreviewMode('object_detection');
     }
+    if (transformationType === 'tile') {
+      setActiveTilePreviewTab('grid');
+    }
     setTransformationConfig({
       ...transformationConfig,
       [transformationType]: defaultConfig
@@ -439,6 +443,7 @@ const TransformationModal = ({
     setPreviewError(null);
     setActiveFlipPreviewVariant('horizontal');
     setRotatePreviewMode('object_detection');
+    setActiveTilePreviewTab('grid');
   };
 
   const handleParameterChange = (paramKey, value) => {
@@ -608,12 +613,15 @@ const TransformationModal = ({
       if (transformationType === 'rotate') {
         formData.append('preview_mode', previewModeOverride || rotatePreviewMode);
       }
-      
+      if (transformationType === 'tile') {
+        formData.append('preview_mode', previewModeOverride || activeTilePreviewTab);
+      }
+
       const previewResponse = await fetch('http://localhost:12000/api/transformation/preview-with-image-id', {
         method: 'POST',
         body: formData
       });
-      
+
       if (!previewResponse.ok) {
         logError('app.frontend.interactions', 'preview_api_failed', 'Preview API call failed', {
           timestamp: new Date().toISOString(),
@@ -625,9 +633,9 @@ const TransformationModal = ({
         });
         throw new Error('Failed to generate transformation preview');
       }
-      
+
       const previewResult = await previewResponse.json();
-      
+
       if (!previewResult.success) {
         logError('app.frontend.interactions', 'preview_backend_failed', 'Backend failed to generate preview', {
           timestamp: new Date().toISOString(),
@@ -638,10 +646,10 @@ const TransformationModal = ({
         });
         throw new Error('Backend failed to generate preview');
       }
-      
+
       // Set the preview image from the backend response
       setPreviewImage(previewResult.data.preview_image);
-      
+
       // Only set the original image if we're NOT using a provided image
       // This prevents the original image from changing when parameters are updated
       if (!providedImage) {
@@ -789,6 +797,24 @@ const TransformationModal = ({
       }
     } else {
       generatePreview('rotate', config, null, nextMode);
+    }
+  };
+
+  const handleTilePreviewTabChange = (tabKey) => {
+    if (!selectedTransformation || selectedTransformation.type !== 'tile') return;
+    setActiveTilePreviewTab(tabKey);
+    const config = transformationConfig.tile || {};
+    if (currentSelectedImage) {
+      generatePreview('tile', config, currentSelectedImage, tabKey);
+    } else if (originalImage) {
+      const match = originalImage.match(/\/api\/images\/([^/]+)$/);
+      if (match && match[1]) {
+        generatePreview('tile', config, { id: match[1] }, tabKey);
+      } else {
+        generatePreview('tile', config, null, tabKey);
+      }
+    } else {
+      generatePreview('tile', config, null, tabKey);
     }
   };
 
@@ -994,6 +1020,18 @@ const TransformationModal = ({
                       key: variant.key,
                       label: variant.label
                     }))}
+                    style={{ marginBottom: 8 }}
+                  />
+                )}
+                {type === 'tile' && (
+                  <Tabs
+                    size="small"
+                    activeKey={activeTilePreviewTab}
+                    onChange={handleTilePreviewTabChange}
+                    items={[
+                      { key: 'grid', label: 'Grid Layout' },
+                      { key: 'tile', label: 'Sample Tile' },
+                    ]}
                     style={{ marginBottom: 8 }}
                   />
                 )}

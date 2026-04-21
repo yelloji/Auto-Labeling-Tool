@@ -483,7 +483,11 @@ async def generate_preview_with_image_id(
                 rotate_config = dict(transform_config[rotate_key])
                 rotate_config["expand"] = rotate_expand
                 transform_config[rotate_key] = rotate_config
-        
+
+        # Pass preview_mode into tile config so _apply_tile knows grid vs single-tile
+        if isinstance(transform_config.get("tile"), dict):
+            transform_config["tile"]["_preview_mode"] = normalized_preview_mode
+
         # Get image from database using image_id
         from core.file_handler import file_handler
         import cv2

@@ -994,11 +994,13 @@ class ImageTransformer:
     
     def _apply_tile(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
         """
-        For preview: return the full image with grid lines drawn on it showing
-        how it will be divided into cols x rows tiles.
-        Actual multi-tile splitting is handled in releases.py at release generation time.
+        For preview:
+          _preview_mode='grid'  → full image with white grid lines (for the Original panel)
+          anything else         → one randomly-chosen tile (for the Preview panel)
+        Actual multi-tile splitting at release time is handled in releases.py.
         """
         try:
+            import random
             from PIL import ImageDraw
             cols = max(1, int(params.get('cols', 2)))
             rows = max(1, int(params.get('rows', 2)))
@@ -1006,26 +1008,31 @@ class ImageTransformer:
             tile_w = orig_w // cols
             tile_h = orig_h // rows
 
-            # Draw grid lines on a copy of the full image
-            preview = image.copy().convert('RGBA')
-            overlay = Image.new('RGBA', preview.size, (0, 0, 0, 0))
-            draw = ImageDraw.Draw(overlay)
+            preview_mode = params.get('_preview_mode', 'tile')
 
-            line_color = (255, 255, 255, 200)
-            line_width = max(2, orig_w // 200)
-
-            # Vertical lines
-            for c in range(1, cols):
-                x = c * tile_w
-                draw.line([(x, 0), (x, orig_h)], fill=line_color, width=line_width)
-
-            # Horizontal lines
-            for r in range(1, rows):
-                y = r * tile_h
-                draw.line([(0, y), (orig_w, y)], fill=line_color, width=line_width)
-
-            result = Image.alpha_composite(preview, overlay).convert('RGB')
-            return result
+            if preview_mode == 'grid':
+                # Full image with grid lines drawn on it
+                result = image.copy().convert('RGBA')
+                overlay = Image.new('RGBA', result.size, (0, 0, 0, 0))
+                draw = ImageDraw.Draw(overlay)
+                line_color = (255, 255, 255, 210)
+                line_width = max(2, orig_w // 200)
+                for c in range(1, cols):
+                    x = c * tile_w
+                    draw.line([(x, 0), (x, orig_h)], fill=line_color, width=line_width)
+                for r in range(1, rows):
+                    y = r * tile_h
+                    draw.line([(0, y), (orig_w, y)], fill=line_color, width=line_width)
+                return Image.alpha_composite(result, overlay).convert('RGB')
+            else:
+                # Return one randomly chosen tile
+                r = random.randint(0, rows - 1)
+                c = random.randint(0, cols - 1)
+                tx = c * tile_w
+                ty = r * tile_h
+                tw = tile_w if c < cols - 1 else orig_w - tx
+                th = tile_h if r < rows - 1 else orig_h - ty
+                return image.crop((tx, ty, tx + tw, ty + th))
         except Exception as e:
             logger.error("errors.system", f"Tile preview failed: {str(e)}", "tile_error", {
                 'error': str(e),
