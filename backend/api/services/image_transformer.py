@@ -994,18 +994,38 @@ class ImageTransformer:
     
     def _apply_tile(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
         """
-        Return the top-left tile of the image for preview purposes.
+        For preview: return the full image with grid lines drawn on it showing
+        how it will be divided into cols x rows tiles.
         Actual multi-tile splitting is handled in releases.py at release generation time.
         """
         try:
+            from PIL import ImageDraw
             cols = max(1, int(params.get('cols', 2)))
             rows = max(1, int(params.get('rows', 2)))
             orig_w, orig_h = image.size
             tile_w = orig_w // cols
             tile_h = orig_h // rows
-            # Return tile (0, 0) — top-left — as the preview tile
-            tile = image.crop((0, 0, tile_w, tile_h))
-            return tile
+
+            # Draw grid lines on a copy of the full image
+            preview = image.copy().convert('RGBA')
+            overlay = Image.new('RGBA', preview.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(overlay)
+
+            line_color = (255, 255, 255, 200)
+            line_width = max(2, orig_w // 200)
+
+            # Vertical lines
+            for c in range(1, cols):
+                x = c * tile_w
+                draw.line([(x, 0), (x, orig_h)], fill=line_color, width=line_width)
+
+            # Horizontal lines
+            for r in range(1, rows):
+                y = r * tile_h
+                draw.line([(0, y), (orig_w, y)], fill=line_color, width=line_width)
+
+            result = Image.alpha_composite(preview, overlay).convert('RGB')
+            return result
         except Exception as e:
             logger.error("errors.system", f"Tile preview failed: {str(e)}", "tile_error", {
                 'error': str(e),
