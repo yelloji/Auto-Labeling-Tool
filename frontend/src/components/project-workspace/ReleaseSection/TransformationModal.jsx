@@ -28,9 +28,10 @@ const getTransformationIcon = (type) => {
     shear: '📊',
     gamma_correction: '💡',
     equalize: '⚖️',
-    clahe: '🔆'
+    clahe: '🔆',
+    tile: '⊞'
   };
-  
+
   return <span className="transformation-icon-fallback" style={{ fontSize: '24px' }}>{fallbackIcons[type] || '⚙️'}</span>;
 };
 

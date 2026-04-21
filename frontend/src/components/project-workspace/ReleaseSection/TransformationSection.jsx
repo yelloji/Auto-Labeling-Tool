@@ -25,7 +25,8 @@ const getTransformationIcon = (type) => {
     shear: '📊',
     gamma_correction: '💡',
     equalize: '⚖️',
-    clahe: '🔆'
+    clahe: '🔆',
+    tile: '⊞'
   };
   
   return fallbackIcons[type] || '⚙️';

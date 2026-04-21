@@ -99,7 +99,8 @@ class ImageTransformer:
             'shear': self._apply_shear,
             'gamma_correction': self._apply_gamma_correction,
             'equalize': self._apply_equalize,
-            'clahe': self._apply_clahe
+            'clahe': self._apply_clahe,
+            'tile': self._apply_tile,
         }
     
     def apply_transformations(self, image: Image.Image, config: Dict[str, Any]) -> Image.Image:
@@ -306,6 +307,28 @@ class ImageTransformer:
                             'bottom_right': 'Bottom-Right Corner'
                         },
                         'description': 'Choose crop position'
+                    }
+                }
+            },
+            'tile': {
+                'name': 'Tile',
+                'category': 'basic',
+                'parameters': {
+                    'cols': {
+                        'type': 'int',
+                        'min': 1,
+                        'max': 10,
+                        'default': 2,
+                        'step': 1,
+                        'description': 'Number of columns to split the image into'
+                    },
+                    'rows': {
+                        'type': 'int',
+                        'min': 1,
+                        'max': 10,
+                        'default': 2,
+                        'step': 1,
+                        'description': 'Number of rows to split the image into'
                     }
                 }
             },
@@ -969,6 +992,27 @@ class ImageTransformer:
             })
             raise
     
+    def _apply_tile(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
+        """
+        Return the top-left tile of the image for preview purposes.
+        Actual multi-tile splitting is handled in releases.py at release generation time.
+        """
+        try:
+            cols = max(1, int(params.get('cols', 2)))
+            rows = max(1, int(params.get('rows', 2)))
+            orig_w, orig_h = image.size
+            tile_w = orig_w // cols
+            tile_h = orig_h // rows
+            # Return tile (0, 0) — top-left — as the preview tile
+            tile = image.crop((0, 0, tile_w, tile_h))
+            return tile
+        except Exception as e:
+            logger.error("errors.system", f"Tile preview failed: {str(e)}", "tile_error", {
+                'error': str(e),
+                'params': params
+            })
+            return image
+
     def _apply_brightness(self, image: Image.Image, params: Dict[str, Any]) -> Image.Image:
         """Adjust image brightness using centralized config bridge"""
         try:

@@ -2750,6 +2750,136 @@ def create_complete_release_zip(
                     except Exception as e:
                         label_mode = "yolo_detection"
 
+                    # ============================================================
+                    # TILING: Split image into N×M tiles, each gets resize applied
+                    # ============================================================
+                    _tile_transform = next((t for t in (transformations or []) if t.get('type') == 'tile'), None)
+                    if _tile_transform:
+                        _tile_cols = max(1, int(_tile_transform.get('params', {}).get('cols', 2)))
+                        _tile_rows = max(1, int(_tile_transform.get('params', {}).get('rows', 2)))
+                        _remaining_transforms = [t for t in (transformations or []) if t.get('type') != 'tile']
+                        _tiling_success = False
+                        try:
+                            from PIL import Image as PILImage
+                            _pil_orig = PILImage.open(original_path).convert('RGB')
+                            _orig_w, _orig_h = _pil_orig.size
+                            _base_tw = _orig_w // _tile_cols
+                            _base_th = _orig_h // _tile_rows
+
+                            for _tr in range(_tile_rows):
+                                for _tc in range(_tile_cols):
+                                    _tx = _tc * _base_tw
+                                    _ty = _tr * _base_th
+                                    _tw = _base_tw if _tc < _tile_cols - 1 else _orig_w - _tx
+                                    _th = _base_th if _tr < _tile_rows - 1 else _orig_h - _ty
+
+                                    _tile_img = _pil_orig.crop((_tx, _ty, _tx + _tw, _ty + _th))
+                                    _tile_base = f"{_base_name}_tile_{_tr}_{_tc}"
+                                    _tile_out_fn = f"{_tile_base}.{_target_ext}"
+                                    _tile_dest = os.path.join(staging_dir, "images", safe_split, _tile_out_fn)
+                                    os.makedirs(os.path.dirname(_tile_dest), exist_ok=True)
+
+                                    # Apply remaining transforms (flip, etc.) + resize to this tile
+                                    from ..services.image_transformer import ImageTransformer as _TileTransformer
+                                    _tile_tr = _TileTransformer()
+                                    _transformed_tile = _tile_img
+                                    if _remaining_transforms:
+                                        _tcfg = {}
+                                        for _t in _remaining_transforms:
+                                            _tt = _t.get('type')
+                                            _tp = dict(_t.get('params', {}))
+                                            _tp['enabled'] = True
+                                            _tcfg[_tt] = _tp
+                                        for _rk in ("rotate", "rotation"):
+                                            if isinstance(_tcfg.get(_rk), dict):
+                                                _tcfg[_rk]["expand"] = label_mode != "yolo_detection"
+                                        _transformed_tile = _tile_tr.apply_transformations(_tile_img, _tcfg)
+                                    _final_tile_dims = _transformed_tile.size if _transformed_tile else _tile_img.size
+
+                                    # Inject tile crop into actual_geometry_params for annotation tracking
+                                    _tile_tr._actual_geometry_params['crop'] = {
+                                        'x': _tx, 'y': _ty, 'width': _tw, 'height': _th
+                                    }
+                                    _tracking_transforms = [
+                                        {'type': 'crop', 'params': {'x': _tx, 'y': _ty, 'width': _tw, 'height': _th}}
+                                    ] + _remaining_transforms
+                                    _tile_tracking = track_transformations_for_annotations(
+                                        transformations=_tracking_transforms,
+                                        original_dims=(_orig_w, _orig_h),
+                                        final_dims=_final_tile_dims,
+                                        transformer=_tile_tr
+                                    )
+
+                                    # Save tile image
+                                    try:
+                                        if _transformed_tile:
+                                            if image_format_engine is not None:
+                                                image_format_engine._save_image_with_format(_transformed_tile, _tile_dest, config.output_format)
+                                            else:
+                                                _transformed_tile.save(_tile_dest)
+                                            _transformed_tile.close()
+                                        else:
+                                            _tile_img.copy().save(_tile_dest)
+                                    except Exception as _tse:
+                                        try:
+                                            _tile_img.copy().save(_tile_dest)
+                                        except Exception:
+                                            pass
+                                    _tile_img.close()
+
+                                    # Generate label for tile
+                                    _tile_lbl_fn = _tile_base + ".txt"
+                                    _tile_lbl_path = os.path.join(staging_dir, "labels", safe_split, _tile_lbl_fn)
+                                    os.makedirs(os.path.dirname(_tile_lbl_path), exist_ok=True)
+                                    try:
+                                        _ttmp = PILImage.open(_tile_dest)
+                                        _tile_img_w, _tile_img_h = _ttmp.size
+                                        _ttmp.close()
+                                    except Exception:
+                                        _tile_img_w, _tile_img_h = _final_tile_dims
+
+                                    _tile_yolo_lines = []
+                                    if _tile_tracking and _tile_tracking.get("has_geometric_transforms", False):
+                                        _tori = _tile_tracking.get("original_dims")
+                                        _tcfg2 = _tile_tracking.get("transformation_config")
+                                        try:
+                                            if label_mode == "yolo_detection":
+                                                from core.annotation_transformer import transform_detection_annotations_to_yolo
+                                                _tile_yolo_lines = transform_detection_annotations_to_yolo(
+                                                    annotations=img_data["annotations"],
+                                                    img_w=_tile_img_w, img_h=_tile_img_h,
+                                                    transform_config=_tcfg2,
+                                                    original_dims=_tori,
+                                                    class_index_resolver=resolve_class_index,
+                                                    label_mode=label_mode
+                                                )
+                                            else:
+                                                from core.annotation_transformer import transform_segmentation_annotations_to_yolo
+                                                _tile_yolo_lines = transform_segmentation_annotations_to_yolo(
+                                                    annotations=img_data["annotations"],
+                                                    img_w=_tile_img_w, img_h=_tile_img_h,
+                                                    transform_config=_tcfg2,
+                                                    original_dims=_tori,
+                                                    class_index_resolver=resolve_class_index,
+                                                    label_mode=label_mode
+                                                )
+                                        except Exception as _tle:
+                                            _tile_yolo_lines = []
+                                    with open(_tile_lbl_path, 'w') as _tf:
+                                        _tf.write("\n".join(_tile_yolo_lines))
+
+                                    final_image_count += 1
+
+                            _pil_orig.close()
+                            _tiling_success = True
+                        except Exception as _tile_e:
+                            logger.warning("errors.system", "Tiling failed, falling back to normal processing",
+                                           "tile_fallback", {'error': str(_tile_e), 'filename': original_filename})
+
+                        if _tiling_success:
+                            continue  # Skip normal single-image processing
+                    # ============================================================
+
                     # 🔄 STEP 11: Transformation tracking system (for annotation coordinate conversion)
                     # 📊 Purpose: Tracks geometric transformations to properly convert annotation coordinates
                     # 🎯 Key functions:
