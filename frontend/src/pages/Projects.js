@@ -50,8 +50,6 @@ const { Option } = Select;
 
 const Projects = () => {
   const { isRetrainingMode } = useAppMode();
-  if (isRetrainingMode) return <RetrainingProjects />;
-
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -643,6 +641,9 @@ const Projects = () => {
       handleCreateProject(values);
     });
   };
+
+  // All hooks above — safe to early return here
+  if (isRetrainingMode) return <RetrainingProjects />;
 
   if (loading) {
     return (
