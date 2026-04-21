@@ -2751,16 +2751,33 @@ def create_complete_release_zip(
                         label_mode = "yolo_detection"
 
                     # ============================================================
-                    # TILING: Split image into N×M tiles, each gets resize applied
+                    # TILING: Split image into N×M tiles.
+                    # Tile is a base transform (like resize). Augmentation tools
+                    # (flip, rotate, etc.) generate separate variants PER tile.
                     # ============================================================
                     _tile_transform = next((t for t in (transformations or []) if t.get('type') == 'tile'), None)
                     if _tile_transform:
                         _tile_cols = max(1, int(_tile_transform.get('params', {}).get('cols', 2)))
                         _tile_rows = max(1, int(_tile_transform.get('params', {}).get('rows', 2)))
+                        # Base transforms (resize only) applied to every tile including originals.
+                        # Aug transforms (flip, rotate, etc.) generate additional variants per tile.
                         _remaining_transforms = [t for t in (transformations or []) if t.get('type') != 'tile']
+                        _base_only_transforms = [t for t in _remaining_transforms if t.get('type') == 'resize']
+                        # Build aug plan from schema (schema already excludes tile from combinations)
+                        _tile_aug_plan = []
+                        if schema:
+                            try:
+                                _tile_schema_count = schema.get_combination_count_estimate()
+                                _tile_num_aug = max(0, _tile_schema_count - 1)
+                                if _tile_num_aug > 0:
+                                    _tile_img_id = os.path.splitext(original_filename)[0]
+                                    _tile_aug_plan = schema.generate_transformation_configs_for_image(_tile_img_id)[:_tile_num_aug]
+                            except Exception:
+                                _tile_aug_plan = []
                         _tiling_success = False
                         try:
                             from PIL import Image as PILImage
+                            from ..services.image_transformer import ImageTransformer as _TileTransformer
                             _pil_orig = PILImage.open(original_path).convert('RGB')
                             _orig_w, _orig_h = _pil_orig.size
                             _base_tw = _orig_w // _tile_cols
@@ -2779,21 +2796,17 @@ def create_complete_release_zip(
                                     _tile_dest = os.path.join(staging_dir, "images", safe_split, _tile_out_fn)
                                     os.makedirs(os.path.dirname(_tile_dest), exist_ok=True)
 
-                                    # Apply remaining transforms (flip, etc.) + resize to this tile
-                                    from ..services.image_transformer import ImageTransformer as _TileTransformer
+                                    # Apply BASE transforms ONLY (resize) to this tile
                                     _tile_tr = _TileTransformer()
-                                    _transformed_tile = _tile_img
-                                    if _remaining_transforms:
-                                        _tcfg = {}
-                                        for _t in _remaining_transforms:
+                                    _transformed_tile = _tile_img.copy()
+                                    if _base_only_transforms:
+                                        _tcfg_base = {}
+                                        for _t in _base_only_transforms:
                                             _tt = _t.get('type')
                                             _tp = dict(_t.get('params', {}))
                                             _tp['enabled'] = True
-                                            _tcfg[_tt] = _tp
-                                        for _rk in ("rotate", "rotation"):
-                                            if isinstance(_tcfg.get(_rk), dict):
-                                                _tcfg[_rk]["expand"] = label_mode != "yolo_detection"
-                                        _transformed_tile = _tile_tr.apply_transformations(_tile_img, _tcfg)
+                                            _tcfg_base[_tt] = _tp
+                                        _transformed_tile = _tile_tr.apply_transformations(_tile_img.copy(), _tcfg_base)
                                     _final_tile_dims = _transformed_tile.size if _transformed_tile else _tile_img.size
 
                                     # Inject tile crop into actual_geometry_params for annotation tracking
@@ -2802,7 +2815,7 @@ def create_complete_release_zip(
                                     }
                                     _tracking_transforms = [
                                         {'type': 'crop', 'params': {'x': _tx, 'y': _ty, 'width': _tw, 'height': _th}}
-                                    ] + _remaining_transforms
+                                    ] + _base_only_transforms
                                     _tile_tracking = track_transformations_for_annotations(
                                         transformations=_tracking_transforms,
                                         original_dims=(_orig_w, _orig_h),
@@ -2810,7 +2823,10 @@ def create_complete_release_zip(
                                         transformer=_tile_tr
                                     )
 
-                                    # Save tile image
+                                    # Keep a copy for aug variants before saving/closing
+                                    _base_tile_for_aug = _transformed_tile.copy() if _transformed_tile else _tile_img.copy()
+
+                                    # Save original tile image
                                     try:
                                         if _transformed_tile:
                                             if image_format_engine is not None:
@@ -2825,12 +2841,8 @@ def create_complete_release_zip(
                                             _tile_img.copy().save(_tile_dest)
                                         except Exception:
                                             pass
-                                    _tile_img.close()
 
-                                    # Generate label for tile
-                                    _tile_lbl_fn = _tile_base + ".txt"
-                                    _tile_lbl_path = os.path.join(staging_dir, "labels", safe_split, _tile_lbl_fn)
-                                    os.makedirs(os.path.dirname(_tile_lbl_path), exist_ok=True)
+                                    # Get saved tile dims for label
                                     try:
                                         _ttmp = PILImage.open(_tile_dest)
                                         _tile_img_w, _tile_img_h = _ttmp.size
@@ -2838,6 +2850,10 @@ def create_complete_release_zip(
                                     except Exception:
                                         _tile_img_w, _tile_img_h = _final_tile_dims
 
+                                    # Generate label for original tile
+                                    _tile_lbl_fn = _tile_base + ".txt"
+                                    _tile_lbl_path = os.path.join(staging_dir, "labels", safe_split, _tile_lbl_fn)
+                                    os.makedirs(os.path.dirname(_tile_lbl_path), exist_ok=True)
                                     _tile_yolo_lines = []
                                     if _tile_tracking and _tile_tracking.get("has_geometric_transforms", False):
                                         _tori = _tile_tracking.get("original_dims")
@@ -2863,12 +2879,117 @@ def create_complete_release_zip(
                                                     class_index_resolver=resolve_class_index,
                                                     label_mode=label_mode
                                                 )
-                                        except Exception as _tle:
+                                        except Exception:
                                             _tile_yolo_lines = []
                                     with open(_tile_lbl_path, 'w') as _tf:
                                         _tf.write("\n".join(_tile_yolo_lines))
-
                                     final_image_count += 1
+
+                                    # --- Augmentation variants for this tile ---
+                                    # Each aug plan entry (flip, rotate, etc.) becomes a
+                                    # separate image: {tile_base}_{suffix}.ext
+                                    for _aug_variant in _tile_aug_plan:
+                                        _aug_tdict = _aug_variant.get('transformations', {})
+                                        _aug_suffix = generate_descriptive_suffix(_aug_tdict)
+                                        _aug_tile_fn = f"{_tile_base}_{_aug_suffix}.{_target_ext}"
+                                        _aug_tile_dest = os.path.join(staging_dir, "images", safe_split, _aug_tile_fn)
+
+                                        # Apply aug transforms to the already-resized base tile
+                                        _aug_tr = _TileTransformer()
+                                        _aug_cfg = {}
+                                        for _ak, _av in _aug_tdict.items():
+                                            _ac = dict(_av)
+                                            _ac['enabled'] = True
+                                            _aug_cfg[_ak] = _ac
+                                        for _rk in ("rotate", "rotation"):
+                                            if isinstance(_aug_cfg.get(_rk), dict):
+                                                _aug_cfg[_rk]["expand"] = label_mode != "yolo_detection"
+                                        _aug_tile_img = _aug_tr.apply_transformations(_base_tile_for_aug.copy(), _aug_cfg)
+                                        if not _aug_tile_img:
+                                            continue
+                                        _aug_final_dims = _aug_tile_img.size
+
+                                        # Tracking: crop + base_only + aug transforms
+                                        _aug_tracking_list = [
+                                            {'type': 'crop', 'params': {'x': _tx, 'y': _ty, 'width': _tw, 'height': _th}}
+                                        ] + _base_only_transforms + [
+                                            {'type': _ak, 'params': {kk: vv for kk, vv in _av.items() if kk != 'enabled'}}
+                                            for _ak, _av in _aug_tdict.items()
+                                        ]
+                                        _aug_tr_state = _TileTransformer()
+                                        _aug_tr_state._actual_geometry_params['crop'] = {
+                                            'x': _tx, 'y': _ty, 'width': _tw, 'height': _th
+                                        }
+                                        for _gk, _gv in (_aug_tr._actual_geometry_params or {}).items():
+                                            if _gk != 'crop':
+                                                _aug_tr_state._actual_geometry_params[_gk] = _gv
+                                        _aug_tile_tracking = track_transformations_for_annotations(
+                                            transformations=_aug_tracking_list,
+                                            original_dims=(_orig_w, _orig_h),
+                                            final_dims=_aug_final_dims,
+                                            transformer=_aug_tr_state
+                                        )
+
+                                        # Save aug tile image
+                                        try:
+                                            if image_format_engine is not None:
+                                                image_format_engine._save_image_with_format(_aug_tile_img, _aug_tile_dest, config.output_format)
+                                            else:
+                                                _aug_tile_img.save(_aug_tile_dest)
+                                        except Exception:
+                                            try:
+                                                _aug_tile_img.save(_aug_tile_dest)
+                                            except Exception:
+                                                _aug_tile_img.close()
+                                                continue
+
+                                        # Get aug tile dims for label
+                                        try:
+                                            _atmp = PILImage.open(_aug_tile_dest)
+                                            _aug_tile_w, _aug_tile_h = _atmp.size
+                                            _atmp.close()
+                                        except Exception:
+                                            _aug_tile_w, _aug_tile_h = _aug_final_dims
+
+                                        # Generate label for aug tile
+                                        _aug_lbl_fn = os.path.splitext(_aug_tile_fn)[0] + ".txt"
+                                        _aug_lbl_path = os.path.join(staging_dir, "labels", safe_split, _aug_lbl_fn)
+                                        os.makedirs(os.path.dirname(_aug_lbl_path), exist_ok=True)
+                                        _aug_yolo_lines = []
+                                        if _aug_tile_tracking and _aug_tile_tracking.get("has_geometric_transforms", False):
+                                            _aug_tori = _aug_tile_tracking.get("original_dims")
+                                            _aug_tcfg2 = _aug_tile_tracking.get("transformation_config")
+                                            try:
+                                                if label_mode == "yolo_detection":
+                                                    from core.annotation_transformer import transform_detection_annotations_to_yolo
+                                                    _aug_yolo_lines = transform_detection_annotations_to_yolo(
+                                                        annotations=img_data["annotations"],
+                                                        img_w=_aug_tile_w, img_h=_aug_tile_h,
+                                                        transform_config=_aug_tcfg2,
+                                                        original_dims=_aug_tori,
+                                                        class_index_resolver=resolve_class_index,
+                                                        label_mode=label_mode
+                                                    )
+                                                else:
+                                                    from core.annotation_transformer import transform_segmentation_annotations_to_yolo
+                                                    _aug_yolo_lines = transform_segmentation_annotations_to_yolo(
+                                                        annotations=img_data["annotations"],
+                                                        img_w=_aug_tile_w, img_h=_aug_tile_h,
+                                                        transform_config=_aug_tcfg2,
+                                                        original_dims=_aug_tori,
+                                                        class_index_resolver=resolve_class_index,
+                                                        label_mode=label_mode
+                                                    )
+                                            except Exception:
+                                                _aug_yolo_lines = []
+                                        with open(_aug_lbl_path, 'w') as _af:
+                                            _af.write("\n".join(_aug_yolo_lines))
+                                        _aug_tile_img.close()
+                                        final_image_count += 1
+                                    # --- end aug variants for this tile ---
+
+                                    _base_tile_for_aug.close()
+                                    _tile_img.close()
 
                             _pil_orig.close()
                             _tiling_success = True
