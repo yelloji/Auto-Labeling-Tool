@@ -3682,6 +3682,18 @@ def create_complete_release_zip(
             'zip_path': str(zip_path),
             'final_image_count': final_image_count
         })
+
+        # Update the release DB record with the real output image count
+        try:
+            _release_row = db.query(Release).filter(Release.id == release_id).first()
+            if _release_row:
+                _release_row.final_image_count = final_image_count
+                db.commit()
+        except Exception as _ue:
+            logger.warning("errors.system", "Failed to update release final_image_count after ZIP", "release_count_update_failed", {
+                'release_id': release_id, 'error': str(_ue)
+            })
+
     finally:
         # Force cleanup staging directory with proper file handle management
         try:

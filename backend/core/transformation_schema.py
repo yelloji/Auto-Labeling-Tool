@@ -167,11 +167,11 @@ class TransformationSchema:
         
         combinations = []
         
-        # Separate resize from other transformations (resize is baseline, skip from combinations)
+        # Separate resize/tile from other transformations (baseline transforms, skip from combinations)
         regular_transformations = []
         for transformation in enabled_transformations:
-            if transformation.tool_type == 'resize':
-                logger.info("operations.transformations", f"⏭️ Skipping resize from combination generation (baseline transformation)", "skip_resize_baseline", {
+            if transformation.tool_type in ('resize', 'tile'):
+                logger.info("operations.transformations", f"⏭️ Skipping {transformation.tool_type} from combination generation (baseline transformation)", "skip_baseline", {
                     'tool_type': transformation.tool_type
                 })
                 continue
@@ -279,9 +279,9 @@ class TransformationSchema:
             })
         
         for transformation in enabled_transformations:
-            # Skip resize as it's a baseline transformation applied to all images
-            if transformation.tool_type == 'resize':
-                logger.info("operations.transformations", f"⏭️ Skipping resize from combination generation (baseline transformation)", "skip_resize_baseline", {
+            # Skip resize and tile — both are baseline transforms, not augmentation variants
+            if transformation.tool_type in ('resize', 'tile'):
+                logger.info("operations.transformations", f"⏭️ Skipping {transformation.tool_type} from combination generation (baseline transformation)", "skip_baseline", {
                     'tool_type': transformation.tool_type
                 })
                 continue
