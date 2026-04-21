@@ -338,7 +338,7 @@ async def get_available_transformations():
             "data": {
                 "transformations": transformations,
                 "categories": {
-                    "basic": ["resize", "rotate", "flip", "crop", "brightness", "contrast", "blur", "noise"],
+                    "basic": ["resize", "rotate", "flip", "crop", "tile", "brightness", "contrast", "blur", "noise"],
                     "advanced": ["color_jitter", "cutout", "random_zoom", "affine_transform", "perspective_warp", "grayscale", "shear", "gamma_correction", "equalize", "clahe"]
                 }
             }

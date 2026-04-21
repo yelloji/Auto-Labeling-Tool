@@ -828,7 +828,7 @@ const TransformationModal = ({
       
       const transformations = availableTransformations.transformations;
       const categories = availableTransformations.categories || {
-        basic: ["resize", "rotate", "flip", "crop", "brightness", "contrast", "blur", "noise"],
+        basic: ["resize", "rotate", "flip", "crop", "tile", "brightness", "contrast", "blur", "noise"],
         advanced: ["color_jitter", "cutout", "random_zoom", "grayscale", "shear", "gamma_correction", "equalize", "clahe"]
       };
       const hiddenTransformations = new Set(["affine_transform", "perspective_warp"]);
