@@ -10,7 +10,7 @@ const { Text } = Typography;
 
 const API_BASE = '/api/v1';
 
-const RetrainingLabeling = ({ projectId, onNext, onBack }) => {
+const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('new');
     const [newImages, setNewImages] = useState([]);   // unassigned + annotating datasets/images
@@ -199,7 +199,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack }) => {
             />
 
             {/* Navigation */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+            {!hideNav && <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', borderTop: '1px solid #e8e8e8', paddingTop: '1rem' }}>
                 <Button
                     icon={<ArrowLeftOutlined />}
                     onClick={onBack}
@@ -228,7 +228,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack }) => {
                         Next: Create Release
                     </Button>
                 </div>
-            </div>
+            </div>}
         </div>
     );
 };
