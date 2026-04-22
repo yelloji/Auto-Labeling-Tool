@@ -13,6 +13,7 @@ import ModelsModern from './pages/ModelsModern';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
 import ProjectWorkspace from './pages/project-workspace/ProjectWorkspace';
+import RetrainingWorkspace from './components/retraining/RetrainingWorkspace';
 import AnnotateLauncher from './pages/annotation/AnnotateLauncher';
 import AnnotateProgress from './pages/annotation/AnnotateProgress';
 import ManualLabeling from './pages/annotation/ManualLabeling';
@@ -101,6 +102,9 @@ function App() {
       <Routes>
         {/* Project Workspace - Full screen layout without navbar */}
         <Route path="/projects/:projectId/workspace" element={<ProjectWorkspace />} />
+
+        {/* Retraining Workspace - Full screen layout without navbar */}
+        <Route path="/retraining/:projectId" element={<RetrainingWorkspace />} />
 
         {/* Main app layout with navbar */}
         <Route path="/*" element={
