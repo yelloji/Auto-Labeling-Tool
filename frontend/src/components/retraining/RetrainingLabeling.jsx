@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 const { Text } = Typography;
 
 const API_BASE = '/api/v1';
+const IMAGE_PAGE_SIZE = 50;
 
 const getClassColor = (classId) => {
     const colors = [
@@ -263,13 +264,39 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
     const [newDatasets, setNewDatasets] = useState([]);
     const [oldDatasets, setOldDatasets] = useState([]);
     const [datasetImages, setDatasetImages] = useState({});
+    const [datasetImageTotals, setDatasetImageTotals] = useState({});
+    const [datasetPages, setDatasetPages] = useState({});
     const [loadingDatasets, setLoadingDatasets] = useState(true);
     const [loadingImages, setLoadingImages] = useState({});
+
+    const loadDatasetImagesPage = useCallback(async (ds, page = 1) => {
+        setLoadingImages(prev => ({ ...prev, [ds.id]: true }));
+        try {
+            const skip = (page - 1) * IMAGE_PAGE_SIZE;
+            const r = await fetch(`${API_BASE}/datasets/${ds.id}/images?skip=${skip}&limit=${IMAGE_PAGE_SIZE}`);
+            if (!r.ok) throw new Error();
+            const data = await r.json();
+            const list = Array.isArray(data) ? data : (data.images || []);
+            const total = Array.isArray(data)
+                ? (ds.total_images || list.length)
+                : (data.total ?? data.total_images ?? ds.total_images ?? list.length);
+
+            setDatasetImages(prev => ({ ...prev, [ds.id]: list }));
+            setDatasetImageTotals(prev => ({ ...prev, [ds.id]: total }));
+            setDatasetPages(prev => ({ ...prev, [ds.id]: page }));
+        } catch {
+            setDatasetImages(prev => ({ ...prev, [ds.id]: [] }));
+            setDatasetImageTotals(prev => ({ ...prev, [ds.id]: ds.total_images || 0 }));
+            setDatasetPages(prev => ({ ...prev, [ds.id]: page }));
+        } finally {
+            setLoadingImages(prev => ({ ...prev, [ds.id]: false }));
+        }
+    }, []);
 
     const loadAll = useCallback(async () => {
         setLoadingDatasets(true);
         try {
-            const res = await fetch(`${API_BASE}/projects/${projectId}/datasets?limit=200`);
+            const res = await fetch(`${API_BASE}/projects/${projectId}/datasets`);
             if (!res.ok) throw new Error();
             const data = await res.json();
             const datasets = Array.isArray(data) ? data : (data.datasets || data.items || []);
@@ -284,26 +311,24 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
             const loadingMap = {};
             all.forEach(d => { loadingMap[d.id] = true; });
             setLoadingImages(loadingMap);
+            setDatasetPages(prev => {
+                const next = { ...prev };
+                all.forEach(d => { if (!next[d.id]) next[d.id] = 1; });
+                return next;
+            });
+            setDatasetImageTotals(prev => {
+                const next = { ...prev };
+                all.forEach(d => { next[d.id] = d.total_images || 0; });
+                return next;
+            });
 
-            await Promise.all(all.map(async (ds) => {
-                try {
-                    const r = await fetch(`${API_BASE}/datasets/${ds.id}/images?limit=200`);
-                    if (!r.ok) return;
-                    const imgs = await r.json();
-                    const list = Array.isArray(imgs) ? imgs : (imgs.images || []);
-                    setDatasetImages(prev => ({ ...prev, [ds.id]: list }));
-                } catch {
-                    setDatasetImages(prev => ({ ...prev, [ds.id]: [] }));
-                } finally {
-                    setLoadingImages(prev => ({ ...prev, [ds.id]: false }));
-                }
-            }));
+            await Promise.all(all.map(ds => loadDatasetImagesPage(ds, 1)));
         } catch {
             message.error('Failed to load images');
         } finally {
             setLoadingDatasets(false);
         }
-    }, [projectId]);
+    }, [projectId, loadDatasetImagesPage]);
 
     useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -311,19 +336,17 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
         navigate(`/annotate/${datasetId}/manual`);
     };
 
-    const allNewImages = newDatasets.flatMap(d => datasetImages[d.id] || []);
-    const allNewLabeled = allNewImages.length > 0 && allNewImages.every(img => img.is_labeled);
-
-    const totalNew = newDatasets.reduce((s, d) => s + (datasetImages[d.id]?.length || 0), 0);
-    const totalOld = oldDatasets.reduce((s, d) => s + (datasetImages[d.id]?.length || 0), 0);
-    const labeledNew = newDatasets.reduce((s, d) => s + (datasetImages[d.id]?.filter(i => i.is_labeled).length || 0), 0);
-    const labeledOld = oldDatasets.reduce((s, d) => s + (datasetImages[d.id]?.filter(i => i.is_labeled).length || 0), 0);
+    const totalNew = newDatasets.reduce((s, d) => s + (datasetImageTotals[d.id] ?? d.total_images ?? 0), 0);
+    const totalOld = oldDatasets.reduce((s, d) => s + (datasetImageTotals[d.id] ?? d.total_images ?? 0), 0);
+    const labeledNew = newDatasets.reduce((s, d) => s + (d.labeled_images ?? 0), 0);
+    const labeledOld = oldDatasets.reduce((s, d) => s + (d.labeled_images ?? 0), 0);
+    const allNewLabeled = totalNew > 0 && labeledNew >= totalNew;
     const remainingNew = Math.max(totalNew - labeledNew, 0);
 
     const getDatasetStats = (ds) => {
         const imgs = datasetImages[ds.id] || [];
-        const labeled = imgs.filter(i => i.is_labeled).length;
-        const total = imgs.length;
+        const labeled = ds.labeled_images ?? imgs.filter(i => i.is_labeled).length;
+        const total = datasetImageTotals[ds.id] ?? ds.total_images ?? imgs.length;
         const percent = total > 0 ? Math.round((labeled / total) * 100) : 0;
         const allDone = total > 0 && labeled >= total;
         return { imgs, labeled, total, percent, allDone };
@@ -408,6 +431,10 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
         return datasets.map(ds => {
             const isLoading = loadingImages[ds.id];
             const { imgs, labeled, total, percent, allDone } = getDatasetStats(ds);
+            const currentPage = datasetPages[ds.id] || 1;
+            const totalPages = Math.max(1, Math.ceil(total / IMAGE_PAGE_SIZE));
+            const startImage = total > 0 ? ((currentPage - 1) * IMAGE_PAGE_SIZE) + 1 : 0;
+            const endImage = Math.min(currentPage * IMAGE_PAGE_SIZE, total);
             const accent = allDone ? '#10b981' : isNew ? '#f59e0b' : '#6366f1';
             const softAccent = allDone ? 'rgba(16,185,129,0.08)' : isNew ? 'rgba(245,158,11,0.08)' : 'rgba(99,102,241,0.08)';
 
@@ -516,21 +543,59 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
                             No images in this batch.
                         </div>
                     ) : (
-                        <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-                            gap: '1rem',
-                        }}>
-                            {imgs.map(img => (
-                                <RetrainingImageCard
-                                    key={img.id}
-                                    img={img}
-                                    isNew={isNew}
-                                    openLabeling={openLabeling}
-                                    datasetId={ds.id}
-                                />
-                            ))}
-                        </div>
+                        <>
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                                gap: '1rem',
+                            }}>
+                                {imgs.map(img => (
+                                    <RetrainingImageCard
+                                        key={img.id}
+                                        img={img}
+                                        isNew={isNew}
+                                        openLabeling={openLabeling}
+                                        datasetId={ds.id}
+                                    />
+                                ))}
+                            </div>
+
+                            {total > IMAGE_PAGE_SIZE && (
+                                <div style={{
+                                    marginTop: '1rem',
+                                    paddingTop: '0.9rem',
+                                    borderTop: '1px solid #e2e8f0',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '1rem',
+                                    flexWrap: 'wrap',
+                                }}>
+                                    <Text style={{ color: '#64748b', fontSize: '0.82rem', fontWeight: 600 }}>
+                                        Showing {startImage}-{endImage} of {total} images
+                                    </Text>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                        <Button
+                                            size="small"
+                                            disabled={currentPage <= 1 || isLoading}
+                                            onClick={() => loadDatasetImagesPage(ds, currentPage - 1)}
+                                        >
+                                            Previous
+                                        </Button>
+                                        <Text style={{ color: '#334155', fontSize: '0.82rem', fontWeight: 700 }}>
+                                            Page {currentPage} of {totalPages}
+                                        </Text>
+                                        <Button
+                                            size="small"
+                                            disabled={currentPage >= totalPages || isLoading}
+                                            onClick={() => loadDatasetImagesPage(ds, currentPage + 1)}
+                                        >
+                                            Next
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             );
@@ -636,7 +701,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
                     </Button>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        {allNewImages.length > 0 && !allNewLabeled && (
+                        {totalNew > 0 && !allNewLabeled && (
                             <Text style={{ color: '#b45309', fontSize: '0.8rem', fontWeight: 600 }}>
                                 Label all new images before continuing
                             </Text>
@@ -644,10 +709,10 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
                         <Button
                             type="primary"
                             icon={<ArrowRightOutlined />}
-                            disabled={allNewImages.length > 0 && !allNewLabeled}
+                            disabled={totalNew > 0 && !allNewLabeled}
                             onClick={onNext}
                             style={{
-                                background: (allNewImages.length === 0 || allNewLabeled)
+                                background: (totalNew === 0 || allNewLabeled)
                                     ? 'linear-gradient(135deg, #7c3aed, #5b21b6)'
                                     : undefined,
                                 border: 'none',

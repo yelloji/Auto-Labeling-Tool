@@ -42,19 +42,18 @@ Showing **50 images per page** is a UI/UX rule, not a data-size limit. The app s
 ### User Retraining Mode
 
 - RetrainingLabeling
-  - Current known issue: dataset image fetch uses `limit=200`.
-  - This is not acceptable when a New or Old dataset/batch has more than 200 images.
-  - New Images tab and Old Images tab must remain 50-per-page.
+  - Current status: fixed for the review UI.
+  - Dataset image fetch now uses `skip` plus `limit=50`.
+  - New Images tab and Old Images tab remain 50-per-page.
   - Do not render all uploaded or old dataset images at once.
   - Every image in each dataset/batch must be reachable through pagination.
-  - Old Images can show summary first, then paginated review.
   - Annotation overlays should be fetched only for visible cards.
 
 ## Known Hard Limits To Remove
 
 - Full Mode Annotation Progress: remove current `1000` image fetch limit.
 - Full Mode Dataset Section: remove current `10000` image fetch limit.
-- User Retraining Mode Labeling: remove current `200` image fetch limit.
+- User Retraining Mode Labeling: fixed current `200` image fetch limit in RetrainingLabeling.
 - Release Detail View: verify package/release image loading has no hidden hard limit.
 
 ## Implementation Safety
@@ -67,4 +66,4 @@ Showing **50 images per page** is a UI/UX rule, not a data-size limit. The app s
 
 ## Status
 
-Deferred until User Retraining Mode flow is complete and stable.
+User Retraining Mode review pagination is fixed. Full Mode large dataset backend pagination is still deferred until the Retraining Mode flow is complete and stable.

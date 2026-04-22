@@ -13,7 +13,7 @@ from database.operations import (
     DatasetOperations, ProjectOperations, ImageOperations, 
     AutoLabelJobOperations
 )
-from database.models import Annotation
+from database.models import Annotation, Image
 from core.file_handler import file_handler
 from core.auto_labeler import auto_labeler
 from models.model_manager import model_manager
@@ -604,6 +604,12 @@ async def get_dataset_images(
             })
             raise HTTPException(status_code=404, detail="Dataset not found")
         
+        # Get total count with the same filtering so paginated UIs can reach every image.
+        count_query = db.query(Image).filter(Image.dataset_id == dataset_id)
+        if labeled_only is not None:
+            count_query = count_query.filter(Image.is_labeled == labeled_only)
+        total_images = count_query.count()
+
         # Get images
         logger.debug("app.database", f"Fetching images for dataset {dataset_id}", "database_query")
         images = ImageOperations.get_images_by_dataset(
@@ -633,6 +639,7 @@ async def get_dataset_images(
         logger.info("operations.datasets", f"Dataset images retrieved successfully", "dataset_images_retrieved", {
             "dataset_id": dataset_id,
             "image_count": len(image_list),
+            "total_images": total_images,
             "skip": skip,
             "limit": limit
         })
@@ -640,6 +647,8 @@ async def get_dataset_images(
         return {
             "dataset_id": dataset_id,
             "images": image_list,
+            "total": total_images,
+            "total_images": total_images,
             "total_returned": len(image_list),
             "skip": skip,
             "limit": limit

@@ -93,16 +93,26 @@ Reference plan: `RETRAINING_MODE_PLAN.md`
 - [x] Green badge overlay on labeled images, `is_labeled` field used
 - [x] "Label Batch" button per dataset → navigates to `/annotate/:datasetId/manual`
 - [x] Clicking any image also opens the same manual labeling view
-- [x] Next button disabled until `allNewImages.every(img => img.is_labeled)`
+- [x] Next button disabled until all New Images are labeled, using full dataset totals
 - [x] UI redesign complete: card-based premium operator layout
   - Added top stat bar for New Images and Old Images
   - Added card-per-dataset design with colored left borders, progress bars, and clear status tags
   - Kept existing filtering, image grid, manual labeling navigation, and Next gating logic unchanged
-- [ ] DEFERRED scalability task: add real backend pagination for large datasets
-  - UI page size should remain 50 images per page
-  - Do not treat 50 as a dataset limit; datasets may contain 10,000 to 50,000+ images
-  - Fetch/render only the current page and load annotation overlays only for visible cards
-  - Track shared Full Mode work in `docs/LARGE_DATASET_PAGINATION_PLAN.md`
+- [x] CURRENT FIX complete: per-dataset/batch image pagination in RetrainingLabeling
+  - Removed current `limit=200` display risk for New Images and Old Images
+  - No project, dataset, or batch image limit in UI logic
+  - Each dataset/batch stays separate
+  - Each selected dataset/batch shows 50 images per page
+  - All images in that dataset/batch are reachable through page numbers / next-prev
+  - Annotation overlays load only for the currently visible 50 cards
+- [ ] NEXT UI improvement: add dynamic dataset-name tabs inside New Images / Old Images
+  - When a tab has multiple datasets/batches, do not show one long stacked page
+  - Show dataset-name tabs such as `custom-train`, `custom-val`, `custom-test`
+  - Selecting a dataset tab shows only that dataset/batch image grid
+  - Keep each dataset/batch separate and keep 50 images per page
+  - Do not crop images or change image card behavior
+- [ ] DEFERRED backend scalability task: real backend pagination for very large datasets
+  - Track shared Full Mode + Retraining Mode work in `docs/LARGE_DATASET_PAGINATION_PLAN.md`
 
 ### Task 4.4 — Create Release (auto)
 - [ ] "Create Release" button → calls `POST /retraining/{project_id}/create-release`
@@ -218,11 +228,12 @@ Reference plan: `RETRAINING_MODE_PLAN.md`
 - DATASETS table has NO stage column — this is a common confusion point
 
 ### Datasets API response
-- `GET /api/v1/projects/{projectId}/datasets?limit=200` returns upload_source per dataset
-- `GET /api/v1/datasets/{datasetId}/images?limit=200` returns images with `is_labeled`, `thumbnail_url`
+- `GET /api/v1/projects/{projectId}/datasets` returns upload_source per dataset
+- `GET /api/v1/datasets/{datasetId}/images?skip={offset}&limit=50` returns current image page with `is_labeled`, `thumbnail_url`, and total count
 
 ### Next immediate step
-- Task 4.0: decide split ratio strategy for auto create-release
+- Finish Task 4.3 UI improvement: dynamic dataset-name tabs inside New Images / Old Images
+- Then Task 4.0: decide split ratio strategy for auto create-release
 - Then Task 4.4: implement Create Release auto step in RetrainingWorkspace
 
 ### Large Dataset Pagination Rule
