@@ -86,12 +86,23 @@ Reference plan: `RETRAINING_MODE_PLAN.md`
 ### Task 4.3 — RetrainingLabeling
 - [x] Create `frontend/src/components/retraining/RetrainingLabeling.jsx`
 - [x] Two tabs:
-  - `New Images` — unassigned/annotating batches (need labeling)
-  - `Old Images` — dataset stage batches (already labeled)
-- [x] Image count + labeled count shown per batch
-- [x] Label button → navigates to existing annotation progress page (reuse)
-- [x] Next button disabled until all new images are fully labeled
-- [ ] "Add to Dataset" with auto split — pending split ratio decision
+  - `New Images` — filtered by `upload_source === 'user_retraining'` (correct isolation)
+  - `Old Images` — filtered by `split_type === 'dataset'` (already labeled and split)
+- [x] Image thumbnails shown in grid per dataset (fetched via `GET /api/v1/datasets/{id}/images`)
+- [x] Labeled count per dataset shown as Tag
+- [x] Green badge overlay on labeled images, `is_labeled` field used
+- [x] "Label Batch" button per dataset → navigates to `/annotate/:datasetId/manual`
+- [x] Clicking any image also opens the same manual labeling view
+- [x] Next button disabled until `allNewImages.every(img => img.is_labeled)`
+- [x] UI redesign complete: card-based premium operator layout
+  - Added top stat bar for New Images and Old Images
+  - Added card-per-dataset design with colored left borders, progress bars, and clear status tags
+  - Kept existing filtering, image grid, manual labeling navigation, and Next gating logic unchanged
+- [ ] DEFERRED scalability task: add real backend pagination for large datasets
+  - UI page size should remain 50 images per page
+  - Do not treat 50 as a dataset limit; datasets may contain 10,000 to 50,000+ images
+  - Fetch/render only the current page and load annotation overlays only for visible cards
+  - Track shared Full Mode work in `docs/LARGE_DATASET_PAGINATION_PLAN.md`
 
 ### Task 4.4 — Create Release (auto)
 - [ ] "Create Release" button → calls `POST /retraining/{project_id}/create-release`
@@ -170,5 +181,53 @@ Reference plan: `RETRAINING_MODE_PLAN.md`
 - 2026-04-21 Phase 2 complete — `f93200a`, `b2b2267`, `34503a8`, `fd78415`, `3ff2971`
 - 2026-04-21 Phase 3 complete — `7971554`, `3ff2971`
 - 2026-04-21 Phase 7 complete — `269b9fd`, `cd60d2f`, `5b9bc65`, `9bcaddc`
-- 2026-04-22 Phase 4 partial — Tasks 4.1, 4.2, 4.3 complete — `9bea6f0`, `d8eb202`, operator upload filtering added
-- 2026-04-22 Phase 4 pending — Task 4.0 (split ratio decision) + Task 4.4 (Create Release auto) still pending
+- 2026-04-22 Phase 4 partial — Tasks 4.1, 4.2, 4.3 complete — commits below
+  - `9bea6f0` feat(retraining): add RetrainingWorkspace with Upload and Labeling steps
+  - `2c075e5` fix(retraining): match ProjectWorkspace layout
+  - `57f0474` fix(retraining): fix undefined AntLayout
+  - `d52b01d` fix(retraining): add workspace-sider class and CSS
+  - `d8eb202` feat(retraining): premium step layout sticky nav, dot progress, glow steps
+  - `b7ba9d7` feat(retraining): hide developer upload options via operatorMode prop
+  - `15e298a` feat(retraining): add upload_source column to datasets table
+  - `d662fa5` feat(debug): add retraining_references and upload_source to debug_database.py
+  - `26dd554` fix(retraining): save uploads to annotating/ folder when upload_source=user_retraining
+- 2026-04-22 Phase 4 update — RetrainingLabeling UI redesign complete; Task 4.0 (split ratio decision) + Task 4.4 (Create Release auto) still pending
+
+## Critical Technical Facts (for any Claude session picking this up)
+
+### upload_source column — how it works
+- `datasets.upload_source` = `'user_retraining'` when uploaded via Retraining Mode
+- NULL for all Full Mode uploads — no existing data disturbed
+- Migration in `backend/database/database.py` init_db block (ALTER TABLE IF NOT EXISTS pattern)
+- Model in `backend/database/models.py` — `Dataset.upload_source = Column(String(50), nullable=True)`
+- `create_dataset()` in `operations.py` accepts and saves `upload_source` param
+- Both upload endpoints in `projects.py` accept `upload_source: str = Form(None)` and pass it through
+
+### Upload folder routing — why it matters
+- When `upload_source == 'user_retraining'`, images MUST go to `annotating/` folder, NOT `unassigned/`
+- This is because in Retraining Mode there is no "Unassigned" step — images skip straight to annotating
+- Code in `projects.py` both single and bulk upload: compute `workflow_stage` from upload_source before path creation
+- `image_record.split_type = 'annotating'` set after image creation when upload_source == 'user_retraining'
+
+### RetrainingLabeling filtering logic
+- New Images tab: `d.upload_source === 'user_retraining'`
+- Old Images tab: `d.split_type === 'dataset'`
+- `split_type` on DATASETS is DERIVED from first image's split_type — returned in `GET /projects/{id}/datasets` response
+- `split_type` on IMAGES is actual workflow stage: `unassigned | annotating | dataset`
+- `split_section` on images is train/val/test split assignment (different concept)
+- DATASETS table has NO stage column — this is a common confusion point
+
+### Datasets API response
+- `GET /api/v1/projects/{projectId}/datasets?limit=200` returns upload_source per dataset
+- `GET /api/v1/datasets/{datasetId}/images?limit=200` returns images with `is_labeled`, `thumbnail_url`
+
+### Next immediate step
+- Task 4.0: decide split ratio strategy for auto create-release
+- Then Task 4.4: implement Create Release auto step in RetrainingWorkspace
+
+### Large Dataset Pagination Rule
+- Showing 50 images per page is a UX rule, not a data-size limit.
+- Retraining Mode and Full Mode must support datasets with 10,000 to 50,000+ images.
+- Current/near-term UI should render only visible page cards.
+- Future backend pagination work must cover both Retraining Mode and Full Mode safely.
+- Shared follow-up plan: `docs/LARGE_DATASET_PAGINATION_PLAN.md`

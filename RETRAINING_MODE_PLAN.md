@@ -193,3 +193,70 @@ All Retraining Mode UI elements must use the **same color scheme** as the existi
 - If no reference assigned for a project in Retraining Mode → show message:
   **"No production reference set for this project. Please contact your developer."**
   Project is visible in the list but locked — operator cannot proceed until developer assigns a reference in Full Mode.
+
+---
+
+## Implementation Progress (as of 2026-04-22)
+
+### What changed from the original plan
+
+#### `upload_source` column added (not in original plan)
+- `datasets.upload_source = 'user_retraining'` when uploaded via Retraining Mode
+- NULL for all Full Mode data — no existing data disturbed
+- This is what isolates New Images in the Labeling tab — NOT split_type
+- Without this, Full Mode batches in `annotating` stage would appear in the New Images tab
+
+#### Upload folder routing (decided during implementation)
+- Retraining Mode uploads skip `unassigned/` entirely
+- Images go directly to `annotating/` folder on disk
+- `image.split_type = 'annotating'` set immediately in DB
+- This means operator never has to deal with "Unassigned" concept
+
+#### RetrainingLabeling tab filtering (decided during implementation)
+- New Images tab: `dataset.upload_source === 'user_retraining'`
+- Old Images tab: `dataset.split_type === 'dataset'` (already labeled + split in past sessions)
+- NOTE: `split_type` on datasets API response is DERIVED from the first image's split_type — datasets table has no stage column
+
+### Phase completion status
+- ✅ Phase 1 — DB migration (`retraining_references` table)
+- ✅ Phase 2 — AppModeContext + nav toggle
+- ✅ Phase 3 — RetrainingProjects page
+- ✅ Phase 7 — "Assign to Production" + "Unassign" in Full Mode Model Lab Overview
+- ✅ Phase 4 (partial) — RetrainingWorkspace + Upload step + RetrainingLabeling premium image grid
+- ⏳ Phase 4 (remaining) — split ratio decision + Create Release step
+- ⏳ Phase 5 — RetrainingTraining
+- ⏳ Phase 6 — RetrainingResults
+- ⏳ Phase 8 — Guide Bot update
+
+---
+
+## RetrainingLabeling UI Redesign (completed 2026-04-22)
+
+### Problem
+Current UI is plain AntD white tabs — functional but not premium or operator-friendly.
+Full Mode Annotation Progress page has a much richer look: dark cards, gradient badges, progress bars, visual hierarchy.
+
+### Design direction (operator-focused, not a copy of Full Mode)
+The operator needs a **task checklist feel**, not a developer data dump.
+
+Proposed layout:
+1. **Stat bar at top** — two bold stat boxes side by side:
+   - "New Images: N (X labeled)" in orange if not all labeled, green when done
+   - "Old Images: N (all labeled)" in green
+2. **Each dataset as a card** (white card, subtle shadow):
+   - Colored left border: orange = needs labeling, green = fully labeled
+   - Card header: dataset name + "X / Y labeled" tag + progress bar
+   - "Label Batch" button on the card header right side — gradient purple, prominent
+   - Image thumbnails in a grid inside the card
+3. **Background**: very light gray `#f7f8fa` instead of pure white
+4. **Tabs remain**: "New Images" and "Old Images" — same structure, cards inside each tab
+5. **Next button**: stays at bottom, same gating logic (all new images must be labeled)
+
+### What stays the same
+- Click image or "Label Batch" → `/annotate/:datasetId/manual` — no change
+- Next button gated on `allNewImages.every(img => img.is_labeled)` — no change
+- API calls — no change
+
+### Status
+Completed in `frontend/src/components/retraining/RetrainingLabeling.jsx`.
+Verified with `npm run build` in `frontend/`; build passed with existing warnings.

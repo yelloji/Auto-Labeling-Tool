@@ -18,13 +18,18 @@ feature/professional-logging-system
 - [x] RetrainingWorkspace — premium step layout (Upload | Label | Release | Train | Results)
 - [x] RetrainingLabeling — New Images / Old Images tabs, label counts, Next gated on all-labeled
 - [x] Upload step — UploadSection reused with `operatorMode={true}` hiding developer tools
-- [ ] Task 4.0: Decide split ratio strategy for create-release (auto-copy from reference vs operator slider)
+- [x] `upload_source` column added to datasets table — isolates Retraining Mode uploads from Full Mode batches
+- [x] Images correctly saved to `annotating/` folder (not `unassigned/`) when upload_source=user_retraining
+- [x] debug_database.py updated with `--retraining-refs` and `--retraining` flags
+- [x] RetrainingLabeling UI redesign — premium stat bar, dataset cards, progress bars, colored borders
+- [ ] NEXT: Task 4.0: Decide split ratio strategy for create-release (auto-copy from reference vs operator slider)
 - [ ] Task 4.4: Create Release (auto) — calls `POST /retraining/{project_id}/create-release`, no config UI shown
 
 ### Upcoming Phases
 - [ ] Phase 5: RetrainingTraining — name input, model select, start, live status
 - [ ] Phase 6: RetrainingResults — prediction view, Assign to Production, Download
 - [ ] Phase 8: Guide Bot update for Retraining Mode
+- [ ] DEFERRED after Retraining Mode: large dataset backend pagination for Full Mode + Retraining Mode — see `docs/LARGE_DATASET_PAGINATION_PLAN.md`
 
 ## Completed This Branch
 - [x] Professional logging system (frontend + backend)
