@@ -261,6 +261,8 @@ const RetrainingImageCard = ({ img, isNew, openLabeling, datasetId }) => {
 const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('new');
+    const [activeNewDataset, setActiveNewDataset] = useState(null);
+    const [activeOldDataset, setActiveOldDataset] = useState(null);
     const [newDatasets, setNewDatasets] = useState([]);
     const [oldDatasets, setOldDatasets] = useState([]);
     const [datasetImages, setDatasetImages] = useState({});
@@ -306,6 +308,8 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
 
             setNewDatasets(newDs);
             setOldDatasets(oldDs);
+            setActiveNewDataset(prev => prev && newDs.find(d => d.id === prev) ? prev : (newDs[0]?.id ?? null));
+            setActiveOldDataset(prev => prev && oldDs.find(d => d.id === prev) ? prev : (oldDs[0]?.id ?? null));
 
             const all = [...newDs, ...oldDs];
             const loadingMap = {};
@@ -602,6 +606,39 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
         });
     };
 
+    const renderDatasetSubTabs = (datasets, isNew, activeDs, setActiveDs) => {
+        if (datasets.length <= 1) {
+            return renderImageGrid(datasets, isNew);
+        }
+        const subItems = datasets.map(ds => {
+            const { labeled, total, allDone } = getDatasetStats(ds);
+            return {
+                key: String(ds.id),
+                label: (
+                    <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                        {ds.name}
+                        <Tag
+                            style={{ marginLeft: 5, fontSize: '0.65rem' }}
+                            color={allDone ? 'success' : isNew ? 'warning' : 'processing'}
+                        >
+                            {labeled}/{total}
+                        </Tag>
+                    </span>
+                ),
+                children: renderImageGrid([ds], isNew),
+            };
+        });
+        return (
+            <Tabs
+                size="small"
+                activeKey={String(activeDs || datasets[0]?.id)}
+                onChange={setActiveDs}
+                items={subItems}
+                style={{ marginTop: '-0.25rem' }}
+            />
+        );
+    };
+
     const tabItems = [
         {
             key: 'new',
@@ -621,7 +658,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
                             </span>
                         )}
                     </Text>
-                    {renderImageGrid(newDatasets, true)}
+                    {renderDatasetSubTabs(newDatasets, true, activeNewDataset, setActiveNewDataset)}
                 </div>
             ),
         },
@@ -638,7 +675,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
                     <Text style={{ color: '#64748b', fontSize: '0.86rem', display: 'block', marginBottom: '1rem' }}>
                         Images already labeled from previous sessions. These stay available as reference project data.
                     </Text>
-                    {renderImageGrid(oldDatasets, false)}
+                    {renderDatasetSubTabs(oldDatasets, false, activeOldDataset, setActiveOldDataset)}
                 </div>
             ),
         },
