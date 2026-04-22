@@ -60,23 +60,24 @@ const RetrainingLabeling = ({ projectId, onNext, onBack }) => {
             <div
                 key={dataset.id}
                 style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${allLabeled ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                    background: '#fff',
+                    border: `1px solid ${allLabeled ? '#86efac' : '#e8e8e8'}`,
                     borderRadius: 8,
                     padding: '0.85rem 1rem',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.75rem',
                     marginBottom: '0.6rem',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
                 }}
             >
-                <PictureOutlined style={{ color: allLabeled ? '#4ade80' : '#a78bfa', fontSize: '1.2rem', flexShrink: 0 }} />
+                <PictureOutlined style={{ color: allLabeled ? '#22c55e' : '#7c3aed', fontSize: '1.2rem', flexShrink: 0 }} />
 
                 <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text strong style={{ color: '#fff', fontSize: '0.88rem', display: 'block' }}>
+                    <Text strong style={{ fontSize: '0.88rem', display: 'block' }}>
                         {dataset.name}
                     </Text>
-                    <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.76rem' }}>
+                    <Text type="secondary" style={{ fontSize: '0.76rem' }}>
                         {labeled} / {total} labeled
                         {dataset.stage && (
                             <Tag
@@ -140,7 +141,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack }) => {
             ),
             children: (
                 <div>
-                    <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem', display: 'block', marginBottom: '1rem' }}>
+                    <Text type="secondary" style={{ fontSize: '0.82rem', display: 'block', marginBottom: '1rem' }}>
                         Newly uploaded images that need to be labeled before adding to the dataset.
                     </Text>
                     {loading ? (
@@ -186,7 +187,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack }) => {
 
     return (
         <div>
-            <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.85rem', display: 'block', marginBottom: '1rem' }}>
+            <Text type="secondary" style={{ fontSize: '0.85rem', display: 'block', marginBottom: '1rem' }}>
                 Label all new images before proceeding. Old images are already labeled and will be included automatically.
             </Text>
 
@@ -202,7 +203,6 @@ const RetrainingLabeling = ({ projectId, onNext, onBack }) => {
                 <Button
                     icon={<ArrowLeftOutlined />}
                     onClick={onBack}
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
                 >
                     Back: Upload
                 </Button>
