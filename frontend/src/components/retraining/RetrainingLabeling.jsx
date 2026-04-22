@@ -158,7 +158,7 @@ const RetrainingImageCard = ({ img, isNew, openLabeling, datasetId, annotations:
 
     return (
         <div
-            onClick={() => isNew && openLabeling(datasetId)}
+            onClick={() => isNew && openLabeling(datasetId, img.id)}
             title={displayName}
             style={{
                 background: '#fff',
@@ -316,8 +316,11 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
 
     useEffect(() => { loadAll(); }, [loadAll]);
 
-    const openLabeling = (datasetId) => {
-        navigate(`/annotate/${datasetId}/manual`);
+    const openLabeling = (datasetId, imageId = null) => {
+        const url = imageId
+            ? `/annotate/${datasetId}/manual?imageId=${imageId}`
+            : `/annotate/${datasetId}/manual`;
+        navigate(url);
     };
 
     const totalNew = newDatasets.reduce((s, d) => s + (datasetImageTotals[d.id] ?? d.total_images ?? 0), 0);
