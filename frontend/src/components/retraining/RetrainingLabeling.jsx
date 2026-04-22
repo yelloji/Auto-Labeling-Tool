@@ -320,7 +320,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
         const url = imageId
             ? `/annotate/${datasetId}/manual?imageId=${imageId}`
             : `/annotate/${datasetId}/manual`;
-        navigate(url);
+        navigate(url, { state: { returnTo: `/retraining/${projectId}?step=1` } });
     };
 
     const totalNew = newDatasets.reduce((s, d) => s + (datasetImageTotals[d.id] ?? d.total_images ?? 0), 0);

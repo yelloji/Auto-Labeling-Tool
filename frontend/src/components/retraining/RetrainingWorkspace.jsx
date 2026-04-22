@@ -5,7 +5,7 @@ import {
     RocketOutlined, ExperimentOutlined, TrophyOutlined,
     CheckOutlined
 } from '@ant-design/icons';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import UploadSection from '../project-workspace/UploadSection/UploadSection';
 import RetrainingLabeling from './RetrainingLabeling';
 
@@ -22,7 +22,9 @@ const STEPS = [
 const RetrainingWorkspace = () => {
     const { projectId } = useParams();
     const navigate = useNavigate();
-    const [currentStep, setCurrentStep] = useState(0);
+    const location = useLocation();
+    const initialStep = parseInt(new URLSearchParams(location.search).get('step') || '0', 10);
+    const [currentStep, setCurrentStep] = useState(initialStep);
     const [completedSteps, setCompletedSteps] = useState(new Set());
     const [project, setProject] = useState(null);
     const [loading, setLoading] = useState(true);

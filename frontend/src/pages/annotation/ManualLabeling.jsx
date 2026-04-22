@@ -1986,8 +1986,9 @@ const ManualLabeling = () => {
       imageId: imageData?.id,
       timestamp: new Date().toISOString()
     });
-    // Go back to annotation progress page instead of projects
-    navigate(`/annotate-progress/${datasetId}`);
+    // Go back to returnTo location (Retraining Mode) or annotation progress (Full Mode)
+    const returnTo = location.state?.returnTo;
+    navigate(returnTo || `/annotate-progress/${datasetId}`);
   };
 
   if (loading && !imageData) {
