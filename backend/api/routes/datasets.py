@@ -583,6 +583,7 @@ async def get_dataset_images(
     skip: int = 0,
     limit: int = 50,
     labeled_only: Optional[bool] = None,
+    include_annotations: bool = False,
     db: Session = Depends(get_db)
 ):
     """Get images in a dataset"""
@@ -616,6 +617,30 @@ async def get_dataset_images(
             db, dataset_id, skip=skip, limit=limit, labeled_only=labeled_only
         )
         
+        # Batch-load annotations for all images in one query if requested
+        annotations_map = {}
+        if include_annotations:
+            image_ids = [img.id for img in images]
+            if image_ids:
+                all_annotations = db.query(Annotation).filter(
+                    Annotation.image_id.in_(image_ids)
+                ).all()
+                for ann in all_annotations:
+                    annotations_map.setdefault(ann.image_id, []).append({
+                        "id": ann.id,
+                        "class_id": ann.class_id,
+                        "class_name": getattr(ann, "class_name", None),
+                        "x_min": getattr(ann, "x_min", None),
+                        "y_min": getattr(ann, "y_min", None),
+                        "x_max": getattr(ann, "x_max", None),
+                        "y_max": getattr(ann, "y_max", None),
+                        "x": getattr(ann, "x", None),
+                        "y": getattr(ann, "y", None),
+                        "width": getattr(ann, "width", None),
+                        "height": getattr(ann, "height", None),
+                        "segmentation": getattr(ann, "segmentation", None),
+                    })
+
         image_list = []
         for image in images:
             image_data = {
@@ -626,13 +651,14 @@ async def get_dataset_images(
                 "height": image.height,
                 "file_size": image.file_size,
                 "split_type": image.split_type,
-                "split_section": getattr(image, "split_section", None),  # Add split_section field
+                "split_section": getattr(image, "split_section", None),
                 "is_labeled": image.is_labeled,
                 "is_auto_labeled": image.is_auto_labeled,
                 "is_verified": image.is_verified,
                 "created_at": image.created_at,
                 "url": image.normalized_file_path,
-                "thumbnail_url": f"/{image.thumbnail_path}" if image.thumbnail_path else None
+                "thumbnail_url": f"/{image.thumbnail_path}" if image.thumbnail_path else None,
+                "annotations": annotations_map.get(image.id, []) if include_annotations else None,
             }
             image_list.append(image_data)
         

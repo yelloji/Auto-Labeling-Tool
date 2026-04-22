@@ -142,34 +142,13 @@ const AnnotationOverlay = ({ image, annotations }) => {
     );
 };
 
-const RetrainingImageCard = ({ img, isNew, openLabeling, datasetId }) => {
-    const [annotations, setAnnotations] = useState([]);
+const RetrainingImageCard = ({ img, isNew, openLabeling, datasetId, annotations: propAnnotations }) => {
+    const annotations = Array.isArray(propAnnotations) ? propAnnotations : [];
+    const [imageLoaded, setImageLoaded] = useState(false);
 
     useEffect(() => {
-        let cancelled = false;
-
-        const loadAnnotations = async () => {
-            if (!img?.id || !img?.is_labeled) {
-                setAnnotations([]);
-                return;
-            }
-
-            try {
-                const response = await fetch(`${API_BASE}/images/${img.id}/annotations`);
-                if (!response.ok) return;
-                const data = await response.json();
-                if (!cancelled) setAnnotations(Array.isArray(data) ? data : []);
-            } catch {
-                if (!cancelled) setAnnotations([]);
-            }
-        };
-
-        loadAnnotations();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [img?.id, img?.is_labeled]);
+        setImageLoaded(false);
+    }, [img?.id]);
 
     const displayName = img.original_filename || img.filename || `Image ${img.id}`;
     const imageUrl = img.thumbnail_url || img.url;
@@ -216,13 +195,14 @@ const RetrainingImageCard = ({ img, isNew, openLabeling, datasetId }) => {
                         src={imageUrl}
                         alt={displayName}
                         loading="lazy"
+                        onLoad={() => setImageLoaded(true)}
                         style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                     />
                 ) : (
                     <PictureOutlined style={{ color: '#cbd5e1', fontSize: '2rem' }} />
                 )}
 
-                <AnnotationOverlay image={img} annotations={annotations} />
+                {imageLoaded && <AnnotationOverlay image={img} annotations={annotations} />}
 
             </div>
 
@@ -275,7 +255,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
         setLoadingImages(prev => ({ ...prev, [ds.id]: true }));
         try {
             const skip = (page - 1) * IMAGE_PAGE_SIZE;
-            const r = await fetch(`${API_BASE}/datasets/${ds.id}/images?skip=${skip}&limit=${IMAGE_PAGE_SIZE}`);
+            const r = await fetch(`${API_BASE}/datasets/${ds.id}/images?skip=${skip}&limit=${IMAGE_PAGE_SIZE}&include_annotations=true`);
             if (!r.ok) throw new Error();
             const data = await r.json();
             const list = Array.isArray(data) ? data : (data.images || []);
@@ -560,6 +540,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
                                         isNew={isNew}
                                         openLabeling={openLabeling}
                                         datasetId={ds.id}
+                                        annotations={img.annotations}
                                     />
                                 ))}
                             </div>
