@@ -2468,21 +2468,25 @@ async def upload_images_to_project(
             "safe_filename": safe_filename
         })
         
-        # Get proper storage path: projects/{project}/{dataset}/unassigned/
-        storage_path = path_manager.get_image_storage_path(project.name, default_dataset_name, "unassigned")
+        # Retraining Mode uploads go directly into annotating/ folder
+        workflow_stage = "annotating" if upload_source == "user_retraining" else "unassigned"
+
+        # Get proper storage path: projects/{project}/{workflow_stage}/{dataset}/
+        storage_path = path_manager.get_image_storage_path(project.name, default_dataset_name, workflow_stage)
         path_manager.ensure_directory_exists(storage_path)
-        
+
         logger.debug("operations.operations", f"Storage path prepared", "storage_path_prepared", {
             "storage_path": str(storage_path),
             "project_name": project.name,
-            "dataset_name": default_dataset_name
+            "dataset_name": default_dataset_name,
+            "workflow_stage": workflow_stage
         })
-        
+
         # Full file path for saving
         file_path = storage_path / safe_filename
-        
+
         # Relative path for database (for static serving)
-        relative_path = path_manager.get_relative_image_path(project.name, default_dataset_name, safe_filename, "unassigned")
+        relative_path = path_manager.get_relative_image_path(project.name, default_dataset_name, safe_filename, workflow_stage)
         
         logger.debug("operations.images", f"File paths prepared", "file_paths_prepared", {
             "full_file_path": str(file_path),
@@ -2799,13 +2803,17 @@ async def upload_multiple_images_to_project(
             "dataset_name": default_dataset_name
         })
         
+        # Retraining Mode uploads go directly into annotating/ folder
+        workflow_stage = "annotating" if upload_source == "user_retraining" else "unassigned"
+
         project_upload_dir = get_project_path(project.name)
-        dataset_upload_dir = project_upload_dir / "unassigned" / default_dataset_name
+        dataset_upload_dir = project_upload_dir / workflow_stage / default_dataset_name
         dataset_upload_dir.mkdir(parents=True, exist_ok=True)
-        
+
         logger.debug("operations.operations", f"Upload directories created successfully", "upload_directories_created", {
             "project_upload_dir": str(project_upload_dir),
-            "dataset_upload_dir": str(dataset_upload_dir)
+            "dataset_upload_dir": str(dataset_upload_dir),
+            "workflow_stage": workflow_stage
         })
         
         # Check if dataset with this name already exists
