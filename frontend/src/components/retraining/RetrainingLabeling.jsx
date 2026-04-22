@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Tabs, Button, Typography, Spin, Tag, Empty, message } from 'antd';
 import {
-    PictureOutlined, CheckCircleOutlined, TagsOutlined,
-    ArrowRightOutlined, ArrowLeftOutlined, EyeOutlined
+    CheckCircleOutlined, TagsOutlined,
+    ArrowRightOutlined, ArrowLeftOutlined, PictureOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
@@ -13,122 +13,229 @@ const API_BASE = '/api/v1';
 const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('new');
-    const [newImages, setNewImages] = useState([]);   // unassigned + annotating datasets/images
-    const [oldImages, setOldImages] = useState([]);   // dataset images (already split)
-    const [loading, setLoading] = useState(true);
+    const [newDatasets, setNewDatasets] = useState([]);   // unassigned + annotating
+    const [oldDatasets, setOldDatasets] = useState([]);   // dataset stage (already labeled)
+    const [datasetImages, setDatasetImages] = useState({}); // { datasetId: [images] }
+    const [loadingDatasets, setLoadingDatasets] = useState(true);
+    const [loadingImages, setLoadingImages] = useState({});  // { datasetId: bool }
 
-    const loadImages = useCallback(async () => {
-        setLoading(true);
+    // Load all datasets then fetch images for each
+    const loadAll = useCallback(async () => {
+        setLoadingDatasets(true);
         try {
-            // Load all datasets for this project
             const res = await fetch(`${API_BASE}/projects/${projectId}/datasets?limit=200`);
             if (!res.ok) throw new Error();
             const data = await res.json();
             const datasets = Array.isArray(data) ? data : (data.datasets || data.items || []);
 
-            // New = unassigned or annotating stage (not yet in dataset split)
-            const newDs = datasets.filter(d => d.stage === 'unassigned' || d.stage === 'annotating');
-            // Old = dataset stage (already labeled and split)
-            const oldDs = datasets.filter(d => d.stage === 'dataset');
+            const newDs = datasets.filter(d => d.upload_source === 'user_retraining');
+            const oldDs = datasets.filter(d => d.split_type === 'dataset');
 
-            setNewImages(newDs);
-            setOldImages(oldDs);
+            setNewDatasets(newDs);
+            setOldDatasets(oldDs);
+
+            // Fetch images for all datasets in parallel
+            const all = [...newDs, ...oldDs];
+            const loadingMap = {};
+            all.forEach(d => { loadingMap[d.id] = true; });
+            setLoadingImages(loadingMap);
+
+            await Promise.all(all.map(async (ds) => {
+                try {
+                    const r = await fetch(`${API_BASE}/datasets/${ds.id}/images?limit=200`);
+                    if (!r.ok) return;
+                    const imgs = await r.json();
+                    const list = Array.isArray(imgs) ? imgs : (imgs.images || []);
+                    setDatasetImages(prev => ({ ...prev, [ds.id]: list }));
+                } catch {
+                    setDatasetImages(prev => ({ ...prev, [ds.id]: [] }));
+                } finally {
+                    setLoadingImages(prev => ({ ...prev, [ds.id]: false }));
+                }
+            }));
         } catch {
             message.error('Failed to load images');
         } finally {
-            setLoading(false);
+            setLoadingDatasets(false);
         }
     }, [projectId]);
 
-    useEffect(() => { loadImages(); }, [loadImages]);
+    useEffect(() => { loadAll(); }, [loadAll]);
 
-    const totalNew = newImages.reduce((sum, d) => sum + (d.image_count || d.total_images || 0), 0);
-    const labeledNew = newImages.reduce((sum, d) => sum + (d.labeled_count || d.annotated_count || 0), 0);
-    const totalOld = oldImages.reduce((sum, d) => sum + (d.image_count || d.total_images || 0), 0);
-
-    const openLabeling = (dataset) => {
-        // Navigate to existing annotation progress page
-        navigate(`/annotate-progress/${dataset.id}`);
+    // Open manual labeling for the dataset this image belongs to
+    const openLabeling = (datasetId) => {
+        navigate(`/annotate/${datasetId}/manual`);
     };
 
-    const renderDatasetCard = (dataset, isNew) => {
-        const total = dataset.image_count || dataset.total_images || 0;
-        const labeled = dataset.labeled_count || dataset.annotated_count || 0;
-        const allLabeled = total > 0 && labeled >= total;
+    // All new images labeled → unlock Next
+    const allNewImages = newDatasets.flatMap(d => datasetImages[d.id] || []);
+    const allNewLabeled = allNewImages.length > 0 && allNewImages.every(img => img.is_labeled);
 
-        return (
-            <div
-                key={dataset.id}
-                style={{
-                    background: '#fff',
-                    border: `1px solid ${allLabeled ? '#86efac' : '#e8e8e8'}`,
-                    borderRadius: 8,
-                    padding: '0.85rem 1rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    marginBottom: '0.6rem',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                }}
-            >
-                <PictureOutlined style={{ color: allLabeled ? '#22c55e' : '#7c3aed', fontSize: '1.2rem', flexShrink: 0 }} />
+    const renderImageGrid = (datasets, isNew) => {
+        if (loadingDatasets) {
+            return <div style={{ textAlign: 'center', padding: '2rem' }}><Spin /></div>;
+        }
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text strong style={{ fontSize: '0.88rem', display: 'block' }}>
-                        {dataset.name}
-                    </Text>
-                    <Text type="secondary" style={{ fontSize: '0.76rem' }}>
-                        {labeled} / {total} labeled
-                        {dataset.stage && (
+        const allImages = datasets.flatMap(ds => {
+            const imgs = datasetImages[ds.id] || [];
+            return imgs.map(img => ({ ...img, _datasetId: ds.id, _datasetName: ds.name }));
+        });
+
+        if (allImages.length === 0 && !Object.values(loadingImages).some(Boolean)) {
+            return (
+                <Empty
+                    description={
+                        <span style={{ color: '#888' }}>
+                            {isNew
+                                ? 'No new images. Go back to Upload to add images.'
+                                : 'No existing labeled images found.'}
+                        </span>
+                    }
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                />
+            );
+        }
+
+        // Group by dataset
+        return datasets.map(ds => {
+            const imgs = datasetImages[ds.id] || [];
+            const isLoading = loadingImages[ds.id];
+            const labeled = imgs.filter(i => i.is_labeled).length;
+            const total = imgs.length;
+            const allDone = total > 0 && labeled >= total;
+
+            return (
+                <div key={ds.id} style={{ marginBottom: '1.5rem' }}>
+                    {/* Dataset header */}
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: '0.6rem',
+                        marginBottom: '0.6rem',
+                        paddingBottom: '0.4rem',
+                        borderBottom: '1px solid #e8e8e8',
+                    }}>
+                        <Text strong style={{ fontSize: '0.88rem' }}>{ds.name}</Text>
+                        <Tag
+                            style={{ fontSize: '0.68rem' }}
+                            color={allDone ? 'green' : isNew ? 'purple' : 'default'}
+                        >
+                            {labeled} / {total} labeled
+                        </Tag>
+                        {ds.split_type && (
                             <Tag
-                                style={{ marginLeft: 8, fontSize: '0.68rem' }}
-                                color={dataset.stage === 'dataset' ? 'green' : dataset.stage === 'annotating' ? 'blue' : 'default'}
+                                style={{ fontSize: '0.65rem' }}
+                                color={ds.split_type === 'dataset' ? 'green' : ds.split_type === 'annotating' ? 'blue' : 'default'}
                             >
-                                {dataset.stage}
+                                {ds.split_type}
                             </Tag>
                         )}
-                    </Text>
-                </div>
+                        {isNew && !allDone && (
+                            <Button
+                                size="small"
+                                icon={<TagsOutlined />}
+                                onClick={() => openLabeling(ds.id)}
+                                style={{
+                                    marginLeft: 'auto',
+                                    background: 'linear-gradient(135deg, #7c3aed, #5b21b6)',
+                                    border: 'none', color: '#fff', borderRadius: 6,
+                                    fontSize: '0.72rem',
+                                }}
+                            >
+                                Label Batch
+                            </Button>
+                        )}
+                    </div>
 
-                {allLabeled ? (
-                    <CheckCircleOutlined style={{ color: '#4ade80', fontSize: '1.1rem' }} />
-                ) : isNew ? (
-                    <Button
-                        size="small"
-                        icon={<TagsOutlined />}
-                        onClick={() => openLabeling(dataset)}
-                        style={{
-                            background: 'linear-gradient(135deg, #7c3aed, #5b21b6)',
-                            border: 'none', color: '#fff', borderRadius: 6,
-                            fontSize: '0.75rem',
-                        }}
-                    >
-                        Label
-                    </Button>
-                ) : (
-                    <Button
-                        size="small"
-                        icon={<EyeOutlined />}
-                        onClick={() => openLabeling(dataset)}
-                        style={{
-                            background: 'rgba(255,255,255,0.07)',
-                            border: '1px solid rgba(255,255,255,0.15)',
-                            color: '#fff', borderRadius: 6,
-                            fontSize: '0.75rem',
-                        }}
-                    >
-                        View
-                    </Button>
-                )}
-            </div>
-        );
+                    {/* Image grid */}
+                    {isLoading ? (
+                        <div style={{ padding: '1rem', textAlign: 'center' }}><Spin size="small" /></div>
+                    ) : imgs.length === 0 ? (
+                        <Text type="secondary" style={{ fontSize: '0.78rem' }}>No images in this batch.</Text>
+                    ) : (
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
+                            gap: '0.5rem',
+                        }}>
+                            {imgs.map(img => (
+                                <div
+                                    key={img.id}
+                                    onClick={() => isNew && openLabeling(ds.id)}
+                                    title={img.filename}
+                                    style={{
+                                        position: 'relative',
+                                        borderRadius: 6,
+                                        overflow: 'hidden',
+                                        border: img.is_labeled
+                                            ? '2px solid #4ade80'
+                                            : '2px solid #e0e0e0',
+                                        cursor: isNew ? 'pointer' : 'default',
+                                        background: '#f5f5f5',
+                                        aspectRatio: '1',
+                                        transition: 'transform 0.15s, box-shadow 0.15s',
+                                    }}
+                                    onMouseEnter={e => {
+                                        if (isNew) {
+                                            e.currentTarget.style.transform = 'scale(1.04)';
+                                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(124,58,237,0.3)';
+                                        }
+                                    }}
+                                    onMouseLeave={e => {
+                                        e.currentTarget.style.transform = 'scale(1)';
+                                        e.currentTarget.style.boxShadow = 'none';
+                                    }}
+                                >
+                                    {img.thumbnail_url ? (
+                                        <img
+                                            src={img.thumbnail_url}
+                                            alt={img.filename}
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                        />
+                                    ) : (
+                                        <div style={{
+                                            width: '100%', height: '100%',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                            <PictureOutlined style={{ color: '#ccc', fontSize: '1.4rem' }} />
+                                        </div>
+                                    )}
+
+                                    {/* Labeled badge */}
+                                    {img.is_labeled && (
+                                        <div style={{
+                                            position: 'absolute', top: 3, right: 3,
+                                            background: '#16a34a',
+                                            borderRadius: '50%',
+                                            width: 16, height: 16,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                            <CheckCircleOutlined style={{ color: '#fff', fontSize: '0.6rem' }} />
+                                        </div>
+                                    )}
+
+                                    {/* Hover overlay for new unlabeled images */}
+                                    {isNew && !img.is_labeled && (
+                                        <div style={{
+                                            position: 'absolute', inset: 0,
+                                            background: 'rgba(124,58,237,0.12)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            opacity: 0,
+                                            transition: 'opacity 0.15s',
+                                        }}
+                                            className="img-hover-overlay"
+                                        />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        });
     };
 
-    const allNewLabeled = newImages.length > 0 && newImages.every(d => {
-        const total = d.image_count || d.total_images || 0;
-        const labeled = d.labeled_count || d.annotated_count || 0;
-        return total > 0 && labeled >= total;
-    });
+    const totalNew = newDatasets.reduce((s, d) => s + (datasetImages[d.id]?.length || 0), 0);
+    const totalOld = oldDatasets.reduce((s, d) => s + (datasetImages[d.id]?.length || 0), 0);
+    const labeledNew = newDatasets.reduce((s, d) => s + (datasetImages[d.id]?.filter(i => i.is_labeled).length || 0), 0);
 
     const tabItems = [
         {
@@ -141,19 +248,15 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
             ),
             children: (
                 <div>
-                    <Text type="secondary" style={{ fontSize: '0.82rem', display: 'block', marginBottom: '1rem' }}>
-                        Newly uploaded images that need to be labeled before adding to the dataset.
+                    <Text type="secondary" style={{ fontSize: '0.82rem', display: 'block', marginBottom: '0.75rem' }}>
+                        Newly uploaded images — click any image to open manual labeling for that batch.
+                        {totalNew > 0 && (
+                            <span style={{ marginLeft: 8, color: allNewLabeled ? '#16a34a' : '#d97706', fontWeight: 600 }}>
+                                {labeledNew} / {totalNew} labeled
+                            </span>
+                        )}
                     </Text>
-                    {loading ? (
-                        <div style={{ textAlign: 'center', padding: '2rem' }}><Spin /></div>
-                    ) : newImages.length === 0 ? (
-                        <Empty
-                            description={<span style={{ color: 'rgba(255,255,255,0.35)' }}>No new images. Go back to Upload to add images.</span>}
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        />
-                    ) : (
-                        newImages.map(d => renderDatasetCard(d, true))
-                    )}
+                    {renderImageGrid(newDatasets, true)}
                 </div>
             ),
         },
@@ -167,19 +270,10 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
             ),
             children: (
                 <div>
-                    <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem', display: 'block', marginBottom: '1rem' }}>
-                        Images already labeled and added to the dataset in previous sessions.
+                    <Text type="secondary" style={{ fontSize: '0.82rem', display: 'block', marginBottom: '0.75rem' }}>
+                        Images already labeled from previous sessions — included automatically in the next release.
                     </Text>
-                    {loading ? (
-                        <div style={{ textAlign: 'center', padding: '2rem' }}><Spin /></div>
-                    ) : oldImages.length === 0 ? (
-                        <Empty
-                            description={<span style={{ color: 'rgba(255,255,255,0.35)' }}>No existing dataset images found.</span>}
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        />
-                    ) : (
-                        oldImages.map(d => renderDatasetCard(d, false))
-                    )}
+                    {renderImageGrid(oldDatasets, false)}
                 </div>
             ),
         },
@@ -187,48 +281,45 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
 
     return (
         <div>
-            <Text type="secondary" style={{ fontSize: '0.85rem', display: 'block', marginBottom: '1rem' }}>
-                Label all new images before proceeding. Old images are already labeled and will be included automatically.
-            </Text>
-
             <Tabs
                 activeKey={activeTab}
                 onChange={setActiveTab}
                 items={tabItems}
-                style={{ color: '#fff' }}
             />
 
             {/* Navigation */}
-            {!hideNav && <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', borderTop: '1px solid #e8e8e8', paddingTop: '1rem' }}>
-                <Button
-                    icon={<ArrowLeftOutlined />}
-                    onClick={onBack}
-                >
-                    Back: Upload
-                </Button>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    {newImages.length > 0 && !allNewLabeled && (
-                        <Text style={{ color: 'rgba(255,199,0,0.85)', fontSize: '0.8rem' }}>
-                            Label all new images before continuing
-                        </Text>
-                    )}
-                    <Button
-                        type="primary"
-                        icon={<ArrowRightOutlined />}
-                        disabled={newImages.length > 0 && !allNewLabeled}
-                        onClick={onNext}
-                        style={{
-                            background: (newImages.length === 0 || allNewLabeled)
-                                ? 'linear-gradient(135deg, #7c3aed, #5b21b6)'
-                                : undefined,
-                            border: 'none', borderRadius: 8,
-                        }}
-                    >
-                        Next: Create Release
+            {!hideNav && (
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    marginTop: '1.5rem', borderTop: '1px solid #e8e8e8', paddingTop: '1rem',
+                }}>
+                    <Button icon={<ArrowLeftOutlined />} onClick={onBack}>
+                        Back: Upload
                     </Button>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        {allNewImages.length > 0 && !allNewLabeled && (
+                            <Text style={{ color: '#d97706', fontSize: '0.8rem' }}>
+                                Label all new images before continuing
+                            </Text>
+                        )}
+                        <Button
+                            type="primary"
+                            icon={<ArrowRightOutlined />}
+                            disabled={allNewImages.length > 0 && !allNewLabeled}
+                            onClick={onNext}
+                            style={{
+                                background: (allNewImages.length === 0 || allNewLabeled)
+                                    ? 'linear-gradient(135deg, #7c3aed, #5b21b6)'
+                                    : undefined,
+                                border: 'none', borderRadius: 8,
+                            }}
+                        >
+                            Next: Create Release
+                        </Button>
+                    </div>
                 </div>
-            </div>}
+            )}
         </div>
     );
 };

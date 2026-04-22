@@ -67,6 +67,7 @@ class Dataset(Base):
     # Dataset settings
     auto_label_enabled = Column(Boolean, default=True)
     model_id = Column(String, nullable=True)  # Override project default
+    upload_source = Column(String(50), nullable=True)  # 'user_retraining' or None (Full Mode)
     
     # Relationships
     project = relationship("Project", back_populates="datasets")

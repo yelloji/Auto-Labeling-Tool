@@ -223,7 +223,8 @@ class DatasetOperations:
         project_id: str,
         description: str = "",
         auto_label_enabled: bool = True,
-        model_id: str = None
+        model_id: str = None,
+        upload_source: str = None
     ) -> Dataset:
         """Create a new dataset"""
         logger.info("app.database", "Creating new dataset", "dataset_creation_start", {
@@ -231,16 +232,18 @@ class DatasetOperations:
             "project_id": project_id,
             "description_length": len(description),
             "auto_label_enabled": auto_label_enabled,
-            "model_id": model_id
+            "model_id": model_id,
+            "upload_source": upload_source
         })
-        
+
         try:
             dataset = Dataset(
                 name=name,
                 project_id=project_id,
                 description=description,
                 auto_label_enabled=auto_label_enabled,
-                model_id=model_id
+                model_id=model_id,
+                upload_source=upload_source
             )
             db.add(dataset)
             db.commit()

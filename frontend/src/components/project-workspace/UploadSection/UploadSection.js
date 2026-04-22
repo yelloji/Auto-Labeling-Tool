@@ -319,6 +319,7 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('batch_name', batchNameToUse);
+    if (operatorMode) formData.append('upload_source', 'user_retraining');
 
     // Add dataset IDs if tags are selected
     if (tags.length > 0) {
@@ -390,6 +391,7 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
 
     formData.append('batch_name', batchNameToUse);
     formData.append('allow_duplicates', skipDedup ? 'true' : 'false');
+    if (operatorMode) formData.append('upload_source', 'user_retraining');
 
     // Add dataset IDs if tags are selected
     if (tags.length > 0) {

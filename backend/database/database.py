@@ -336,3 +336,14 @@ def get_db():
                     logger.info("app.database", "Added column project_name to ai_models", "ai_models_add_project_name")
         except Exception as mig_err:
             logger.warning("errors.system", f"Schema migration for ai_models project_name failed: {mig_err}", "ai_models_add_project_name_failed", {"error": str(mig_err)})
+
+        # Migration: add upload_source to datasets (tracks Retraining Mode uploads)
+        try:
+            with engine.begin() as conn:
+                cols = conn.execute(text("PRAGMA table_info(datasets)")).fetchall()
+                col_names = {c[1] for c in cols}
+                if "upload_source" not in col_names:
+                    conn.execute(text("ALTER TABLE datasets ADD COLUMN upload_source VARCHAR(50)"))
+                    logger.info("app.database", "Added column upload_source to datasets", "datasets_add_upload_source")
+        except Exception as mig_err:
+            logger.warning("errors.system", f"Schema migration for datasets upload_source failed: {mig_err}", "datasets_add_upload_source_failed", {"error": str(mig_err)})

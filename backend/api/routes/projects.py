@@ -705,6 +705,7 @@ async def get_project_datasets(project_id: str, db: Session = Depends(get_db)):
                 "auto_label_enabled": dataset.auto_label_enabled,
                 "model_id": dataset.model_id,
                 "split_type": dataset_stage,
+                "upload_source": getattr(dataset, 'upload_source', None),
                 "created_at": dataset.created_at,
                 "updated_at": dataset.updated_at
             }
@@ -2362,6 +2363,7 @@ async def upload_images_to_project(
     file: UploadFile = File(...),
     batch_name: str = Form(None),
     dataset_ids: str = Form("[]"),
+    upload_source: str = Form(None),
     db: Session = Depends(get_db)
 ):
     """Upload images directly to a project"""
@@ -2597,27 +2599,29 @@ async def upload_images_to_project(
                     db=db,
                     name=default_dataset_name,
                     description=f"Images uploaded to {project.name}",
-                    project_id=project_id
+                    project_id=project_id,
+                    upload_source=upload_source
                 )
 
                 logger.info("operations.datasets", f"New dataset created successfully", "new_dataset_created", {
                     "dataset_id": target_dataset.id,
                     "dataset_name": target_dataset.name,
-                    "project_id": project_id
+                    "project_id": project_id,
+                    "upload_source": upload_source
                 })
             else:
                 logger.debug("operations.datasets", f"Using existing dataset for upload", "existing_dataset_used", {
                     "dataset_id": target_dataset.id,
                     "dataset_name": target_dataset.name
                 })
-        
+
         # Create image record in database with RELATIVE path for static serving
         logger.debug("app.database", f"Creating image record in database", "image_record_creation", {
             "filename": safe_filename,
             "dataset_id": target_dataset.id,
             "file_path": relative_path
         })
-        
+
         image_record = ImageOperations.create_image(
             db=db,
             filename=safe_filename,
@@ -2631,6 +2635,9 @@ async def upload_images_to_project(
         )
         image_record.image_hash_md5 = md5
         image_record.thumbnail_path = thumbnail_relative_path
+        # Auto-promote to annotating for Retraining Mode uploads
+        if upload_source == 'user_retraining':
+            image_record.split_type = 'annotating'
         db.commit()
 
         logger.info("operations.images", f"Image record created successfully in database", "image_record_created", {
@@ -2711,6 +2718,7 @@ async def upload_multiple_images_to_project(
     batch_name: str = Form(None),
     dataset_ids: str = Form("[]"),
     allow_duplicates: str = Form("false"),
+    upload_source: str = Form(None),
     db: Session = Depends(get_db)
 ):
     """Upload multiple images to a project"""
@@ -2833,13 +2841,15 @@ async def upload_multiple_images_to_project(
                     db=db,
                     name=default_dataset_name,
                     description=f"Images uploaded to {project.name}",
-                    project_id=project_id
+                    project_id=project_id,
+                    upload_source=upload_source
                 )
 
                 logger.info("operations.datasets", f"New dataset created successfully for bulk upload", "new_dataset_created", {
                     "dataset_id": target_dataset.id,
                     "dataset_name": target_dataset.name,
-                    "project_id": project_id
+                    "project_id": project_id,
+                    "upload_source": upload_source
                 })
             else:
                 logger.debug("operations.datasets", f"Using existing dataset for bulk upload", "existing_dataset_used", {
@@ -3014,6 +3024,9 @@ async def upload_multiple_images_to_project(
                 )
                 image_record.image_hash_md5 = md5
                 image_record.thumbnail_path = bulk_thumbnail_path
+                # Auto-promote to annotating for Retraining Mode uploads
+                if upload_source == 'user_retraining':
+                    image_record.split_type = 'annotating'
                 db.commit()
 
                 logger.debug("operations.images", f"Image record created successfully", "image_record_created", {
