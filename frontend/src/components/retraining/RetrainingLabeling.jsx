@@ -336,25 +336,60 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
         return { imgs, labeled, total, percent, allDone };
     };
 
-    const renderStatCard = ({ title, value, detail, status, icon, accent }) => {
+    const renderStatCard = ({ title, value, detail, status, icon, accent, tabKey }) => {
         const done = status === 'complete';
+        const isActive = activeTab === tabKey;
         return (
-            <div style={{
-                flex: 1,
-                minWidth: 220,
-                background: '#fff',
-                border: `1px solid ${done ? 'rgba(16,185,129,0.24)' : 'rgba(245,158,11,0.26)'}`,
-                borderLeft: `4px solid ${accent}`,
-                borderRadius: 8,
-                padding: '1rem 1.1rem',
-                boxShadow: '0 8px 22px rgba(15,23,42,0.06)',
-            }}>
+            <div
+                onClick={() => setActiveTab(tabKey)}
+                style={{
+                    flex: 1,
+                    minWidth: 220,
+                    background: isActive
+                        ? `linear-gradient(135deg, ${accent}12 0%, ${accent}06 100%)`
+                        : '#fff',
+                    border: `${isActive ? '2px' : '1px'} solid ${isActive ? accent : done ? 'rgba(16,185,129,0.24)' : 'rgba(245,158,11,0.26)'}`,
+                    borderLeft: `5px solid ${accent}`,
+                    borderRadius: 10,
+                    padding: '1.1rem 1.2rem',
+                    boxShadow: isActive
+                        ? `0 12px 32px ${accent}40, 0 2px 8px ${accent}20`
+                        : '0 8px 22px rgba(15,23,42,0.06)',
+                    cursor: 'pointer',
+                    transition: 'all 0.22s ease',
+                    transform: isActive ? 'translateY(-3px)' : 'translateY(0)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                }}
+            >
+                {/* Active glow strip at bottom */}
+                {isActive && (
+                    <div style={{
+                        position: 'absolute',
+                        bottom: 0, left: 0, right: 0,
+                        height: 3,
+                        background: `linear-gradient(90deg, ${accent}, ${accent}80)`,
+                        borderRadius: '0 0 10px 10px',
+                    }} />
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start' }}>
                     <div>
-                        <Text style={{ color: '#64748b', fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                        <Text style={{
+                            color: isActive ? accent : '#64748b',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                        }}>
                             {title}
                         </Text>
-                        <div style={{ color: '#0f172a', fontSize: '1.7rem', fontWeight: 800, lineHeight: 1.1, marginTop: 4 }}>
+                        <div style={{
+                            color: '#0f172a',
+                            fontSize: '1.9rem',
+                            fontWeight: 800,
+                            lineHeight: 1.1,
+                            marginTop: 4,
+                        }}>
                             {value}
                         </div>
                         <Text style={{ color: done ? '#047857' : '#b45309', fontSize: '0.82rem', fontWeight: 600 }}>
@@ -362,15 +397,19 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
                         </Text>
                     </div>
                     <div style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 8,
+                        width: 44,
+                        height: 44,
+                        borderRadius: 10,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        background: done ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.12)',
+                        background: isActive
+                            ? `linear-gradient(135deg, ${accent}30, ${accent}15)`
+                            : done ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.12)',
                         color: accent,
-                        fontSize: '1.1rem',
+                        fontSize: '1.2rem',
+                        boxShadow: isActive ? `0 4px 12px ${accent}30` : 'none',
+                        transition: 'all 0.22s ease',
                     }}>
                         {icon}
                     </div>
@@ -620,55 +659,13 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
         );
     };
 
-    const tabItems = [
-        {
-            key: 'new',
-            label: (
-                <span style={{ fontWeight: 700 }}>
-                    New Images
-                    <Tag style={{ marginLeft: 6, fontSize: '0.7rem' }} color="purple">{totalNew}</Tag>
-                </span>
-            ),
-            children: (
-                <div style={{ paddingTop: '0.25rem' }}>
-                    <Text style={{ color: '#64748b', fontSize: '0.86rem', display: 'block', marginBottom: '1rem' }}>
-                        Newly uploaded images. Click any image or use Label Batch to open manual labeling for that batch.
-                        {totalNew > 0 && (
-                            <span style={{ marginLeft: 8, color: allNewLabeled ? '#047857' : '#b45309', fontWeight: 700 }}>
-                                {labeledNew} / {totalNew} labeled
-                            </span>
-                        )}
-                    </Text>
-                    {renderDatasetSubTabs(newDatasets, true, activeNewDataset, setActiveNewDataset)}
-                </div>
-            ),
-        },
-        {
-            key: 'old',
-            label: (
-                <span style={{ fontWeight: 700 }}>
-                    Old Images
-                    <Tag style={{ marginLeft: 6, fontSize: '0.7rem' }} color="green">{totalOld}</Tag>
-                </span>
-            ),
-            children: (
-                <div style={{ paddingTop: '0.25rem' }}>
-                    <Text style={{ color: '#64748b', fontSize: '0.86rem', display: 'block', marginBottom: '1rem' }}>
-                        Images already labeled from previous sessions. These stay available as reference project data.
-                    </Text>
-                    {renderDatasetSubTabs(oldDatasets, false, activeOldDataset, setActiveOldDataset)}
-                </div>
-            ),
-        },
-    ];
-
     return (
         <div style={{ background: '#f7f8fa', minHeight: '100%', padding: '1.4rem 2rem 1.25rem' }}>
             <div style={{
                 display: 'flex',
                 gap: '1rem',
                 flexWrap: 'wrap',
-                marginBottom: '1rem',
+                marginBottom: '1.25rem',
             }}>
                 {renderStatCard({
                     title: 'New Images',
@@ -681,14 +678,16 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
                     status: totalNew > 0 && allNewLabeled ? 'complete' : 'pending',
                     icon: allNewLabeled && totalNew > 0 ? <CheckCircleOutlined /> : <ClockCircleOutlined />,
                     accent: totalNew > 0 && allNewLabeled ? '#10b981' : '#f59e0b',
+                    tabKey: 'new',
                 })}
                 {renderStatCard({
-                    title: 'Old Images',
+                    title: 'Previous Training Images',
                     value: totalOld,
                     detail: totalOld > 0 ? `${labeledOld} labeled project images` : 'No previous dataset images',
                     status: 'complete',
                     icon: <FileImageOutlined />,
                     accent: '#10b981',
+                    tabKey: 'old',
                 })}
             </div>
 
@@ -697,13 +696,28 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
                 border: '1px solid #e2e8f0',
                 borderRadius: 8,
                 boxShadow: '0 12px 30px rgba(15,23,42,0.06)',
-                padding: '0.25rem 1rem 1rem',
+                padding: '1rem',
             }}>
-                <Tabs
-                    activeKey={activeTab}
-                    onChange={setActiveTab}
-                    items={tabItems}
-                />
+                {activeTab === 'new' ? (
+                    <div>
+                        <Text style={{ color: '#64748b', fontSize: '0.86rem', display: 'block', marginBottom: '1rem' }}>
+                            Newly uploaded images. Click any image or use Label Batch to open manual labeling.
+                            {totalNew > 0 && (
+                                <span style={{ marginLeft: 8, color: allNewLabeled ? '#047857' : '#b45309', fontWeight: 700 }}>
+                                    {labeledNew} / {totalNew} labeled
+                                </span>
+                            )}
+                        </Text>
+                        {renderDatasetSubTabs(newDatasets, true, activeNewDataset, setActiveNewDataset)}
+                    </div>
+                ) : (
+                    <div>
+                        <Text style={{ color: '#64748b', fontSize: '0.86rem', display: 'block', marginBottom: '1rem' }}>
+                            Images already labeled from previous sessions. Included automatically in the next release.
+                        </Text>
+                        {renderDatasetSubTabs(oldDatasets, false, activeOldDataset, setActiveOldDataset)}
+                    </div>
+                )}
             </div>
 
             {!hideNav && (
