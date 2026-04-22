@@ -58,7 +58,7 @@ const { Option } = Select;
  * UploadSection Component
  * @param {string} projectId - The ID of the current project
  */
-const UploadSection = ({ projectId }) => {
+const UploadSection = ({ projectId, operatorMode = false }) => {
   // ==================== STATE VARIABLES ====================
 
   // Batch naming and tagging
@@ -1006,22 +1006,24 @@ const UploadSection = ({ projectId }) => {
           >
             Select Folder
           </Button>
-          <Button
-            type="primary"
-            icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
-            disabled={!!tagWarning}
-            style={{ height: '2.25rem', fontSize: '0.875rem' }}
-            onClick={(e) => {
-              e.stopPropagation();
-              importLabelsRef.current?.triggerFolderSelect();
-            }}
-          >
-            Select Folder (images + labels)
-          </Button>
+          {!operatorMode && (
+            <Button
+              type="primary"
+              icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
+              disabled={!!tagWarning}
+              style={{ height: '2.25rem', fontSize: '0.875rem' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                importLabelsRef.current?.triggerFolderSelect();
+              }}
+            >
+              Select Folder (images + labels)
+            </Button>
+          )}
         </div>
 
         {/* Import with Labels status — shows below buttons when folder selected */}
-        <ImportWithLabelsSection ref={importLabelsRef} projectId={projectId} />
+        {!operatorMode && <ImportWithLabelsSection ref={importLabelsRef} projectId={projectId} />}
 
         {/* Upload result — shown after file/folder select upload */}
         {uploadResult && (
@@ -1428,25 +1430,27 @@ const UploadSection = ({ projectId }) => {
             </div>
           </Card>
 
-          {/* API and Cloud Provider Options */}
-          <Row gutter={['1rem', '1rem']}>
-            <Col span={12}>
-              <Card size="small">
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <ApiOutlined style={{ fontSize: '1.25rem', color: '#1890ff', marginRight: '0.75rem' }} />
-                  <Text strong style={{ fontSize: '0.8125rem' }}>Collect Images via the Upload API</Text>
-                </div>
-              </Card>
-            </Col>
-            <Col span={12}>
-              <Card size="small">
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <CloudOutlined style={{ fontSize: '1.25rem', color: '#52c41a', marginRight: '0.75rem' }} />
-                  <Text strong style={{ fontSize: '0.8125rem' }}>Import From Cloud Providers</Text>
-                </div>
-              </Card>
-            </Col>
-          </Row>
+          {/* API and Cloud Provider Options — hidden in Operator/Retraining Mode */}
+          {!operatorMode && (
+            <Row gutter={['1rem', '1rem']}>
+              <Col span={12}>
+                <Card size="small">
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <ApiOutlined style={{ fontSize: '1.25rem', color: '#1890ff', marginRight: '0.75rem' }} />
+                    <Text strong style={{ fontSize: '0.8125rem' }}>Collect Images via the Upload API</Text>
+                  </div>
+                </Card>
+              </Col>
+              <Col span={12}>
+                <Card size="small">
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <CloudOutlined style={{ fontSize: '1.25rem', color: '#52c41a', marginRight: '0.75rem' }} />
+                    <Text strong style={{ fontSize: '0.8125rem' }}>Import From Cloud Providers</Text>
+                  </div>
+                </Card>
+              </Col>
+            </Row>
+          )}
         </div>
       </Card>
 

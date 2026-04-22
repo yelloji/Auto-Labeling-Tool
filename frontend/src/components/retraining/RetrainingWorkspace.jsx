@@ -65,7 +65,7 @@ const RetrainingWorkspace = () => {
     const renderContent = () => {
         switch (currentStep) {
             case 0:
-                return <UploadSection projectId={projectId} />;
+                return <UploadSection projectId={projectId} operatorMode={true} />;
             case 1:
                 return (
                     <RetrainingLabeling
