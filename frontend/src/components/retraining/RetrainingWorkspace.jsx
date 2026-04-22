@@ -9,7 +9,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import UploadSection from '../project-workspace/UploadSection/UploadSection';
 import RetrainingLabeling from './RetrainingLabeling';
 
-const { Sider, Layout: AntLayout, Content } = Layout;
+const { Sider, Content } = Layout;
 const { Title, Text } = Typography;
 
 const menuItems = [
@@ -194,11 +194,11 @@ const RetrainingWorkspace = () => {
             </Sider>
 
             {/* Main content — same offset and background as ProjectWorkspace */}
-            <AntLayout style={{ marginLeft: '17.5rem', background: '#f5f5f5', minHeight: '100vh' }}>
+            <Layout style={{ marginLeft: '17.5rem', background: '#f5f5f5', minHeight: '100vh' }}>
                 <Content style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
                     {renderContent()}
                 </Content>
-            </AntLayout>
+            </Layout>
         </Layout>
     );
 };
