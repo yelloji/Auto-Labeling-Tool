@@ -8,6 +8,7 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import UploadSection from '../project-workspace/UploadSection/UploadSection';
 import RetrainingLabeling from './RetrainingLabeling';
+import '../../pages/project-workspace/ProjectWorkspace.css';
 
 const { Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -96,6 +97,7 @@ const RetrainingWorkspace = () => {
             {/* Sidebar — same style as ProjectWorkspace */}
             <Sider
                 width="17.5rem"
+                className="workspace-sider"
                 style={{
                     background: '#0C2132',
                     borderRight: '0.0625rem solid rgba(255,255,255,0.08)',
