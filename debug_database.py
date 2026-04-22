@@ -498,41 +498,53 @@ class DatabaseDebugger:
             if current_project != dataset['project_name']:
                 current_project = dataset['project_name']
                 self.print_subheader(f"PROJECT: {current_project}")
-            
+
             print(f"\n📁 DATASET: {dataset['name']} (ID: {dataset['id']})")
             print(f"   📝 Description: {dataset['description']}")
             print(f"   📅 Created: {dataset['created_at']}")
             print(f"   🔄 Updated: {dataset['updated_at']}")
-            
+
+            # upload_source column (Retraining Mode tracking)
+            try:
+                src = dataset['upload_source']
+                if src == 'user_retraining':
+                    print(f"   🔁 Upload Source: user_retraining  ← Retraining Mode upload")
+                elif src:
+                    print(f"   🔁 Upload Source: {src}")
+                else:
+                    print(f"   🔁 Upload Source: (Full Mode / not set)")
+            except Exception:
+                print(f"   🔁 Upload Source: column not found — run migration")
+
             # Get dataset statistics and split types
             cursor.execute("SELECT COUNT(*) FROM images WHERE dataset_id = ?", (dataset['id'],))
             total_images = cursor.fetchone()[0]
-            
+
             cursor.execute("SELECT COUNT(*) FROM images WHERE dataset_id = ? AND is_labeled = 1", (dataset['id'],))
             labeled_images = cursor.fetchone()[0]
-            
+
             cursor.execute("SELECT COUNT(*) FROM images WHERE dataset_id = ? AND is_labeled = 0", (dataset['id'],))
             unlabeled_images = cursor.fetchone()[0]
-            
+
             # Get split types for this dataset
             cursor.execute("SELECT split_type, COUNT(*) FROM images WHERE dataset_id = ? GROUP BY split_type", (dataset['id'],))
             split_types = cursor.fetchall()
-            
+
             print(f"   📊 Total Images: {total_images}")
             print(f"   ✅ Labeled: {labeled_images}")
             print(f"   ❌ Unlabeled: {unlabeled_images}")
-            
+
             if split_types:
-                print(f"   🔀 Split Sections:")
+                print(f"   🔀 Split Types (workflow stage):")
                 for split_type, count in split_types:
                     print(f"      - {split_type}: {count} images")
-                    
+
                     # Check if physical folder exists for each split type
                     expected_folder = f"projects/{dataset['project_name']}/{split_type}/{dataset['name']}"
                     folder_exists = os.path.exists(expected_folder)
                     print(f"        📂 Folder: {expected_folder} {'✅' if folder_exists else '❌'}")
             else:
-                print(f"   🔀 Split Sections: None")
+                print(f"   🔀 Split Types: None")
     
     def get_images_detailed(self):
         """Get detailed information about all images"""
@@ -1596,6 +1608,129 @@ class DatabaseDebugger:
         print(f"   📦 Unique Release Versions: {len(set(r['release_version'] for r in relationships if r['release_version']))}")
         print(f"   🚀 Linked Releases: {len(set(r['release_id'] for r in completed_transforms if r['release_id']))}")
 
+    def get_retraining_references_table(self):
+        """Show retraining_references table — which project has which production reference"""
+        cursor = self.conn.cursor()
+        self.print_header("RETRAINING REFERENCES TABLE (Production References)")
+
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='retraining_references'")
+        if not cursor.fetchone():
+            print("❌ retraining_references table does not exist!")
+            return
+
+        # Schema
+        print("\n📐 Schema:")
+        cursor.execute("PRAGMA table_info(retraining_references)")
+        for col in cursor.fetchall():
+            col_info = f"   - {col[1]} ({col[2]})"
+            if col[3]: col_info += " NOT NULL"
+            if col[4] is not None: col_info += f" DEFAULT {col[4]}"
+            if col[5]: col_info += " PRIMARY KEY"
+            print(col_info)
+
+        cursor.execute("SELECT COUNT(*) FROM retraining_references")
+        count = cursor.fetchone()[0]
+        print(f"\n📊 Total rows: {count}")
+
+        if count == 0:
+            print("\n   (No production references assigned yet)")
+            print("   Assign one via Full Mode → Model Lab → Overview → Assign to Production")
+            return
+
+        print(f"\n📋 ALL PRODUCTION REFERENCES:\n")
+        cursor.execute("""
+            SELECT
+                rr.id,
+                rr.project_id,
+                rr.training_session_id,
+                rr.release_id,
+                rr.assigned_at,
+                rr.notes,
+                p.name  AS project_name,
+                ts.name AS training_name,
+                r.name  AS release_name
+            FROM retraining_references rr
+            LEFT JOIN projects          p  ON rr.project_id         = p.id
+            LEFT JOIN training_sessions ts ON rr.training_session_id = ts.id
+            LEFT JOIN releases          r  ON rr.release_id          = r.id
+            ORDER BY rr.assigned_at DESC
+        """)
+        for row in cursor.fetchall():
+            print(f"   🏭 Project   : {row['project_name'] or 'Unknown'} (ID: {row['project_id']})")
+            print(f"   🧠 Training  : {row['training_name'] or 'Unknown'} (ID: {row['training_session_id']})")
+            print(f"   📦 Release   : {row['release_name'] or 'Unknown'} (ID: {row['release_id']})")
+            print(f"   📅 Assigned  : {row['assigned_at']}")
+            print(f"   📝 Notes     : {row['notes'] or '(none)'}")
+            print(f"   🆔 Row ID    : {row['id']}")
+            print()
+
+    def get_retraining_datasets(self):
+        """Show upload_source column — verify Retraining Mode uploads are tagged correctly"""
+        cursor = self.conn.cursor()
+        self.print_header("RETRAINING MODE — upload_source VERIFICATION")
+
+        # Check column exists
+        cursor.execute("PRAGMA table_info(datasets)")
+        cols = [c[1] for c in cursor.fetchall()]
+        if 'upload_source' not in cols:
+            print("❌ upload_source column NOT found in datasets table.")
+            print("   Run the backend once to apply the migration, or run:")
+            print("   ALTER TABLE datasets ADD COLUMN upload_source VARCHAR(50);")
+            return
+
+        print("✅ upload_source column EXISTS in datasets table\n")
+
+        # Summary counts
+        cursor.execute("SELECT COUNT(*) FROM datasets WHERE upload_source = 'user_retraining'")
+        rt_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM datasets WHERE upload_source IS NULL OR upload_source != 'user_retraining'")
+        full_count = cursor.fetchone()[0]
+
+        print(f"   🔁 Retraining Mode batches (upload_source='user_retraining'): {rt_count}")
+        print(f"   🖥️  Full Mode batches (upload_source=NULL):                    {full_count}")
+
+        # Show retraining batches in detail
+        cursor.execute("""
+            SELECT d.id, d.name, d.upload_source, p.name as project_name,
+                   COUNT(i.id) as total_images,
+                   SUM(CASE WHEN i.is_labeled=1 THEN 1 ELSE 0 END) as labeled,
+                   GROUP_CONCAT(DISTINCT i.split_type) as split_types
+            FROM datasets d
+            JOIN projects p ON d.project_id = p.id
+            LEFT JOIN images i ON i.dataset_id = d.id
+            WHERE d.upload_source = 'user_retraining'
+            GROUP BY d.id
+            ORDER BY p.name, d.name
+        """)
+        rows = cursor.fetchall()
+
+        if rows:
+            print(f"\n📋 RETRAINING BATCHES:")
+            for r in rows:
+                print(f"\n   🔁 {r['name']}  (Project: {r['project_name']})")
+                print(f"      upload_source : {r['upload_source']}")
+                print(f"      Images        : {r['total_images']} total, {r['labeled'] or 0} labeled")
+                print(f"      split_type(s) : {r['split_types'] or 'none'}")
+                print(f"      ID            : {r['id']}")
+        else:
+            print("\n   (No retraining batches yet — upload images in Retraining Mode to see them here)")
+
+        # Show all datasets with upload_source value for full picture
+        print(f"\n📋 ALL DATASETS — upload_source column:")
+        cursor.execute("""
+            SELECT d.name, d.upload_source, p.name as project_name,
+                   GROUP_CONCAT(DISTINCT i.split_type) as split_types
+            FROM datasets d
+            JOIN projects p ON d.project_id = p.id
+            LEFT JOIN images i ON i.dataset_id = d.id
+            GROUP BY d.id
+            ORDER BY p.name, d.name
+        """)
+        all_rows = cursor.fetchall()
+        for r in all_rows:
+            src_label = f"🔁 {r['upload_source']}" if r['upload_source'] else "  (Full Mode)"
+            print(f"   {src_label:30s}  {r['project_name']} / {r['name']}  [{r['split_types'] or 'no images'}]")
+
     def get_database_statistics(self):
         """Get overall database statistics"""
         cursor = self.conn.cursor()
@@ -1687,6 +1822,7 @@ class DatabaseDebugger:
             self.get_training_sessions_table()  # Training sessions table analysis
             self.get_projects_overview()
             self.get_datasets_detailed()
+            self.get_retraining_references_table()
             self.get_human_verifications_table()  # Show manual Pass/Fail reviews
             self.get_labels_table()  # Add labels table analysis
             self.get_releases_table()  # Add releases table analysis
@@ -1731,6 +1867,8 @@ def main():
     parser.add_argument('--schema', action='store_true', help='Show database schema information')
     parser.add_argument('--human-verify', action='store_true', help='Show human verifications (Pass/Fail)')
     parser.add_argument('--filesystem', action='store_true', help='Compare file system vs database')
+    parser.add_argument('--retraining', action='store_true', help='Show upload_source column — verify Retraining Mode uploads')
+    parser.add_argument('--retraining-refs', action='store_true', help='Show retraining_references table — production references')
     args = parser.parse_args()
     
     db_path = args.db
@@ -1763,6 +1901,8 @@ def main():
         args.schema,
         args.human_verify,
         args.filesystem,
+        args.retraining,
+        args.retraining_refs,
     ]
     if any(targets):
         if debugger.connect():
@@ -1800,6 +1940,10 @@ def main():
                 debugger.get_human_verifications_table()
             if args.filesystem:
                 debugger.get_file_system_vs_database()
+            if args.retraining:
+                debugger.get_retraining_datasets()
+            if args.retraining_refs:
+                debugger.get_retraining_references_table()
             debugger.close()
     else:
         debugger.run_full_debug()
