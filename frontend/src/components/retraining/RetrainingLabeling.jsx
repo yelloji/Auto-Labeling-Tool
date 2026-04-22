@@ -229,10 +229,23 @@ const RetrainingImageCard = ({ img, isNew, openLabeling, datasetId, annotations:
                         {statusText}
                     </Tag>
                 </div>
-                <Text style={{ color: '#64748b', fontSize: '0.82rem' }}>
-                    <FileImageOutlined style={{ marginRight: 5 }} />
-                    {dimensions}
-                </Text>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ color: '#64748b', fontSize: '0.82rem' }}>
+                        <FileImageOutlined style={{ marginRight: 5 }} />
+                        {dimensions}
+                    </Text>
+                    {img.split_section && (
+                        <Tag
+                            style={{
+                                margin: 0, border: 'none', fontWeight: 700, fontSize: '0.72rem',
+                                background: img.split_section === 'train' ? 'rgba(124,58,237,0.12)' : img.split_section === 'val' ? 'rgba(59,130,246,0.12)' : 'rgba(16,185,129,0.12)',
+                                color: img.split_section === 'train' ? '#7c3aed' : img.split_section === 'val' ? '#3b82f6' : '#10b981',
+                            }}
+                        >
+                            {img.split_section}
+                        </Tag>
+                    )}
+                </div>
             </div>
         </div>
     );
