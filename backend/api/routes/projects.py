@@ -2917,7 +2917,8 @@ async def upload_multiple_images_to_project(
                 base_filename = Path(file.filename).name
                 safe_filename = re.sub(r'[^\w\-_\.]', '_', base_filename)
                 file_path = os.path.join(dataset_upload_dir, safe_filename)
-                
+                relative_path = path_manager.get_relative_image_path(project.name, default_dataset_name, safe_filename, workflow_stage)
+
                 logger.debug("operations.images", f"Filename processed for bulk upload", "filename_processing", {
                     "original_filename": file.filename,
                     "base_filename": base_filename,
@@ -3023,7 +3024,7 @@ async def upload_multiple_images_to_project(
                     db=db,
                     filename=safe_filename,
                     original_filename=base_filename,
-                    file_path=file_path,
+                    file_path=relative_path,
                     dataset_id=target_dataset.id,
                     width=width,
                     height=height,
