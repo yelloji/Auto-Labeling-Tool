@@ -476,16 +476,16 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
 
                     <div style={{ padding: '1.2rem 1.25rem 1.25rem' }}>
                         {/* Row 1: Source images */}
-                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>
+                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '0.5rem' }}>
                             Source Images
                         </Text>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1.6fr', gap: '0.65rem', marginBottom: '1rem' }}>
                             <div style={statBox}>
-                                <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>Total</Text>
+                                <Text style={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total</Text>
                                 <div style={{ color: '#0f172a', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{previewOriginalCount ?? '-'}</div>
                                 {datasetStats?.total?.annotations != null && (
                                     <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                                        {datasetStats.total.annotations} annotations
+                                        {datasetStats.total.annotations} annots
                                     </div>
                                 )}
                             </div>
@@ -495,11 +495,11 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                 ['Test',  testSource,  formatPercent(referenceTestCount),  datasetStats?.test],
                             ].map(([label, value, refPct, stats]) => (
                                 <div key={label} style={statBox}>
-                                    <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>{label}</Text>
+                                    <Text style={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</Text>
                                     <div style={{ color: '#0f172a', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{value ?? '-'}</div>
                                     {stats?.annotations != null && (
                                         <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                                            {stats.annotations} annotations
+                                            {stats.annotations} annots
                                         </div>
                                     )}
                                     {refPct && <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 700, marginTop: 1 }}>ref {refPct}</div>}
@@ -540,29 +540,29 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                         </div>
 
                         {/* Row 2: Release images after multiplier */}
-                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>
+                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '0.5rem' }}>
                             Release Images (after augmentation)
                         </Text>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.65rem', marginBottom: '1rem' }}>
-                            <div style={statBox}>
-                                <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>Images per Original</Text>
+                            <div style={{ ...statBox, borderLeft: '3px solid rgba(16,185,129,0.45)' }}>
+                                <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Per Original</Text>
                                 <div style={{ color: '#059669', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>×{multiplier}</div>
                             </div>
                             {[
-                                ['Train',  trainRelease, '#6d28d9'],
-                                ['Val',    valRelease,   '#6d28d9'],
-                                ['Test',   testRelease,  '#6d28d9'],
+                                ['Train',  trainRelease,      '#7c3aed'],
+                                ['Val',    valRelease,        '#7c3aed'],
+                                ['Test',   testRelease,       '#7c3aed'],
                                 ['Total',  previewFinalCount, '#2563eb'],
                             ].map(([label, value, color]) => (
                                 <div key={label} style={statBox}>
-                                    <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>{label}</Text>
+                                    <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</Text>
                                     <div style={{ color, fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{value ?? '-'}</div>
                                 </div>
                             ))}
                         </div>
 
                         {/* Row 3: Config + Transformations */}
-                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>
+                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '0.5rem' }}>
                             Configuration & Transformations
                         </Text>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: transformations.length ? '0.65rem' : 0 }}>
@@ -571,17 +571,22 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                             <span style={chipStyle('green')}>{`output: ${releaseInfo.output_format || 'original'}`}</span>
                         </div>
                         {transformations.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.45rem', alignItems: 'stretch' }}>
                                 {transformations.map((t, i) => (
                                     <div key={`${t.type}-${i}`} style={{
-                                        background: '#f8fafc', border: '1px solid #e2e8f0',
-                                        borderRadius: 8, padding: '0.4rem 0.65rem',
+                                        background: 'rgba(124,58,237,0.05)',
+                                        border: '1px solid rgba(124,58,237,0.18)',
+                                        borderRadius: 8,
+                                        padding: '0.4rem 0.65rem',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        justifyContent: 'center',
                                     }}>
-                                        <Text strong style={{ color: '#111827', fontSize: '0.78rem', display: 'block' }}>
+                                        <Text strong style={{ color: '#6d28d9', fontSize: '0.78rem', display: 'block' }}>
                                             {TRANSFORM_LABELS[t.type] || t.type}
                                         </Text>
                                         {getTransformationSummary(t) && (
-                                            <Text style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                                            <Text style={{ color: '#7c3aed', fontSize: '0.72rem', opacity: 0.7 }}>
                                                 {getTransformationSummary(t)}
                                             </Text>
                                         )}
@@ -711,13 +716,13 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                         key={rel.id}
                                         onClick={() => setSelectedRelease(rel)}
                                         style={{
-                                            background: 'linear-gradient(135deg, #ffffff, #fbfaff)',
+                                            background: 'linear-gradient(135deg, #ffffff 0%, #f9f7ff 100%)',
                                             borderRadius: 10,
-                                            border: '1px solid rgba(124,58,237,0.18)',
+                                            border: '1px solid rgba(124,58,237,0.20)',
                                             borderLeft: '4px solid #7c3aed',
                                             padding: '0.8rem',
                                             cursor: 'pointer',
-                                            boxShadow: '0 6px 16px rgba(15,23,42,0.05)',
+                                            boxShadow: '0 4px 14px rgba(124,58,237,0.08)',
                                         }}
                                     >
                                         <div style={{ display: 'flex', gap: '0.72rem', alignItems: 'flex-start' }}>
@@ -725,24 +730,26 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                                 width: 38,
                                                 height: 38,
                                                 borderRadius: 9,
-                                                background: 'rgba(124,58,237,0.10)',
-                                                border: '1px solid rgba(124,58,237,0.20)',
+                                                background: 'linear-gradient(135deg, rgba(124,58,237,0.18), rgba(37,99,235,0.10))',
+                                                border: '1px solid rgba(124,58,237,0.25)',
                                                 color: '#7c3aed',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
                                                 flexShrink: 0,
+                                                fontSize: '1.05rem',
                                             }}>
                                                 <FileZipOutlined />
                                             </div>
                                             <div style={{ minWidth: 0, flex: 1 }}>
                                                 <Text strong style={{
-                                                    color: '#0f172a',
-                                                    fontSize: '0.9rem',
+                                                    color: '#1e293b',
+                                                    fontSize: '0.92rem',
                                                     display: 'block',
                                                     whiteSpace: 'nowrap',
                                                     overflow: 'hidden',
                                                     textOverflow: 'ellipsis',
+                                                    letterSpacing: '-0.01em',
                                                 }}>
                                                     {rel.name}
                                                 </Text>
