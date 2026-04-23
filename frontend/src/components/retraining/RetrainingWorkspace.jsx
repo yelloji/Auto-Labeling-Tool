@@ -9,6 +9,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import UploadSection from '../project-workspace/UploadSection/UploadSection';
 import RetrainingLabeling from './RetrainingLabeling';
 import RetrainingRelease from './RetrainingRelease';
+import RetrainingTraining from './RetrainingTraining';
 
 const { Title, Text } = Typography;
 
@@ -31,6 +32,7 @@ const RetrainingWorkspace = () => {
     const [loading, setLoading] = useState(true);
     const [labelReady, setLabelReady] = useState(false);
     const [releaseReady, setReleaseReady] = useState(false);
+    const [trainingReady, setTrainingReady] = useState(false);
 
     useEffect(() => {
         fetch(`/api/v1/projects/${projectId}`)
@@ -91,11 +93,10 @@ const RetrainingWorkspace = () => {
                 );
             case 3:
                 return (
-                    <div style={{ textAlign: 'center', padding: '5rem 2rem' }}>
-                        <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>⚗️</div>
-                        <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#1a1a2e', marginBottom: '0.5rem' }}>Training — Coming Soon</div>
-                        <Text type="secondary">Enter a name and the model trains automatically using the production reference parameters.</Text>
-                    </div>
+                    <RetrainingTraining
+                        projectId={projectId}
+                        onReadyChange={setTrainingReady}
+                    />
                 );
             case 4:
                 return (
@@ -320,15 +321,15 @@ const RetrainingWorkspace = () => {
                     type="primary"
                     size="large"
                     onClick={nextStep}
-                    disabled={currentStep === STEPS.length - 1 || (currentStep === 1 && !labelReady) || (currentStep === 2 && !releaseReady)}
+                    disabled={currentStep === STEPS.length - 1 || (currentStep === 1 && !labelReady) || (currentStep === 2 && !releaseReady) || (currentStep === 3 && !trainingReady)}
                     style={{
-                        background: (currentStep === STEPS.length - 1 || (currentStep === 1 && !labelReady) || (currentStep === 2 && !releaseReady)) ? undefined : 'linear-gradient(135deg, #7c3aed, #5b21b6)',
+                        background: (currentStep === STEPS.length - 1 || (currentStep === 1 && !labelReady) || (currentStep === 2 && !releaseReady) || (currentStep === 3 && !trainingReady)) ? undefined : 'linear-gradient(135deg, #7c3aed, #5b21b6)',
                         border: 'none',
                         borderRadius: 8,
                         fontWeight: 600,
                         paddingLeft: '2rem',
                         paddingRight: '2rem',
-                        boxShadow: (currentStep === STEPS.length - 1 || (currentStep === 1 && !labelReady) || (currentStep === 2 && !releaseReady)) ? 'none' : '0 4px 15px rgba(124,58,237,0.35)',
+                        boxShadow: (currentStep === STEPS.length - 1 || (currentStep === 1 && !labelReady) || (currentStep === 2 && !releaseReady) || (currentStep === 3 && !trainingReady)) ? 'none' : '0 4px 15px rgba(124,58,237,0.35)',
                     }}
                 >
                     {currentStep === STEPS.length - 1 ? 'Finish' : `Next: ${STEPS[currentStep + 1]?.label}`}
