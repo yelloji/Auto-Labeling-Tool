@@ -10,6 +10,7 @@ Does NOT modify any existing route or service — new pipeline only.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import Optional
 from datetime import datetime
 import json
@@ -18,7 +19,7 @@ import shutil
 
 from database.database import get_db
 from database.models import (
-    Project, RetrainingReference, TrainingSession, Release, Dataset, Image
+    Project, RetrainingReference, TrainingSession, Release, Dataset, Image, Annotation
 )
 from utils.path_utils import path_manager
 from logging_system.professional_logger import get_professional_logger
@@ -555,4 +556,84 @@ def auto_split_retraining_images(project_id: int, db: Session = Depends(get_db))
         db.rollback()
         logger.error("errors.system", f"Auto-split failed: {e}", "auto_split_error",
                      {"project_id": project_id, "error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/retraining/{project_id}/dataset-stats
+# Returns image + annotation counts per split section (train/val/test)
+# for all images in 'dataset' stage across ALL project datasets (old + new).
+# ---------------------------------------------------------------------------
+@router.get("/retraining/{project_id}/dataset-stats")
+def get_dataset_stats(project_id: int, db: Session = Depends(get_db)):
+    """
+    Returns per-split image and annotation counts for the full project dataset.
+    Covers both old (previous training) images and new (user_retraining) images.
+    Only counts images with split_type='dataset' (already split and ready).
+    """
+    try:
+        rows = (
+            db.query(
+                Image.split_section,
+                func.count(Image.id.distinct()).label("image_count"),
+                func.count(Annotation.id).label("annotation_count"),
+            )
+            .join(Dataset, Image.dataset_id == Dataset.id)
+            .outerjoin(Annotation, Annotation.image_id == Image.id)
+            .filter(
+                Dataset.project_id == project_id,
+                Image.split_type == "dataset",
+            )
+            .group_by(Image.split_section)
+            .all()
+        )
+
+        stats = {"train": None, "val": None, "test": None}
+        total_images = 0
+        total_annotations = 0
+
+        for row in rows:
+            section = row.split_section
+            if section in stats:
+                stats[section] = {
+                    "images": row.image_count,
+                    "annotations": row.annotation_count,
+                }
+                total_images += row.image_count
+                total_annotations += row.annotation_count
+
+        # Per-class annotation counts across all dataset images
+        class_rows = (
+            db.query(
+                Annotation.class_name,
+                func.count(Annotation.id).label("annotation_count"),
+            )
+            .join(Image, Annotation.image_id == Image.id)
+            .join(Dataset, Image.dataset_id == Dataset.id)
+            .filter(
+                Dataset.project_id == project_id,
+                Image.split_type == "dataset",
+            )
+            .group_by(Annotation.class_name)
+            .order_by(func.count(Annotation.id).desc())
+            .all()
+        )
+
+        per_class = [
+            {"class_name": row.class_name, "annotations": row.annotation_count}
+            for row in class_rows
+        ]
+
+        return {
+            "project_id": project_id,
+            "train": stats["train"],
+            "val":   stats["val"],
+            "test":  stats["test"],
+            "total": {"images": total_images, "annotations": total_annotations},
+            "per_class": per_class,
+        }
+
+    except Exception as e:
+        logger.error("errors.system", f"dataset-stats failed: {e}",
+                     "dataset_stats_error", {"project_id": project_id, "error": str(e)})
         raise HTTPException(status_code=500, detail=str(e))

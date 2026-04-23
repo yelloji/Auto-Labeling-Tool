@@ -4,8 +4,7 @@ import {
     RocketOutlined, CheckCircleOutlined, DownloadOutlined,
     FileZipOutlined, SettingOutlined, ThunderboltOutlined,
     ClockCircleOutlined, EditOutlined, DeleteOutlined,
-    ExclamationCircleOutlined, EyeOutlined, PartitionOutlined,
-    AppstoreOutlined, SafetyCertificateOutlined,
+    ExclamationCircleOutlined, EyeOutlined, SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import ReleaseDetailsView from '../project-workspace/ReleaseSection/ReleaseDetailsView';
 
@@ -85,13 +84,6 @@ const getTransformationSummary = (transformation) => {
     return entries.join(' | ');
 };
 
-const estimateSplitCounts = (total, ratios) => {
-    if (!total || !ratios) return { train: null, val: null, test: null };
-    const train = Math.round(total * ratios.train);
-    const val = Math.round(total * ratios.val);
-    const test = Math.max(total - train - val, 0);
-    return { train, val, test };
-};
 
 const ValueBox = ({ label, value, color = '#0f172a' }) => (
     <div style={statBox}>
@@ -108,6 +100,8 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
     const [reference, setReference] = useState(null);
     const [releases, setReleases] = useState([]);
     const [datasetSummary, setDatasetSummary] = useState({ sourceImages: null, labeledImages: null });
+    const [labels, setLabels] = useState([]);
+    const [datasetStats, setDatasetStats] = useState(null);
     const [name, setName] = useState(autoName());
     const [creating, setCreating] = useState(false);
     const [loadingRef, setLoadingRef] = useState(true);
@@ -155,7 +149,26 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
         }
     }, [projectId]);
 
-    useEffect(() => { loadReference(); loadReleases(); loadDatasetSummary(); }, [loadReference, loadReleases, loadDatasetSummary]);
+    const loadLabels = useCallback(async () => {
+        try {
+            const r = await fetch(`${API}/projects/${projectId}/labels`);
+            if (r.ok) {
+                const data = await r.json();
+                setLabels(Array.isArray(data) ? data : (data.labels || []));
+            }
+        } catch { /* non-blocking */ }
+    }, [projectId]);
+
+    const loadDatasetStats = useCallback(async () => {
+        try {
+            const r = await fetch(`${API}/retraining/${projectId}/dataset-stats`);
+            if (r.ok) setDatasetStats(await r.json());
+        } catch { /* non-blocking */ }
+    }, [projectId]);
+
+    useEffect(() => {
+        loadReference(); loadReleases(); loadDatasetSummary(); loadLabels(); loadDatasetStats();
+    }, [loadReference, loadReleases, loadDatasetSummary, loadLabels, loadDatasetStats]);
 
     useEffect(() => {
         if (onReadyChange) onReadyChange(releases.length > 0);
@@ -280,9 +293,6 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
         ?? releaseInfo.final_image_count
         ?? releaseInfo.total_images
         ?? (previewOriginalCount != null ? previewOriginalCount * multiplier : null);
-    const augmentedImageCount = activeRelease?.augmented_image_count
-        ?? activeRelease?.total_augmented_images
-        ?? (previewFinalCount != null && previewOriginalCount != null ? Math.max(previewFinalCount - previewOriginalCount, 0) : null);
     const referenceTrainCount = releaseInfo.train_image_count ?? null;
     const referenceValCount = releaseInfo.val_image_count ?? null;
     const referenceTestCount = releaseInfo.test_image_count ?? null;
@@ -298,15 +308,20 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
         val: (referenceValCount || 0) / referenceSplitTotal,
         test: (referenceTestCount || 0) / referenceSplitTotal,
     } : null;
-    const releaseSplitCounts = hasRelease ? {
-        train: activeRelease?.train_image_count ?? null,
-        val: activeRelease?.val_image_count ?? null,
-        test: activeRelease?.test_image_count ?? null,
-    } : estimateSplitCounts(previewFinalCount, referenceRatios);
-    const packagePlanTitle = hasRelease ? 'Created Release Summary' : 'Release Package Plan';
-    const releaseSummaryText = previewOriginalCount != null && previewFinalCount != null
-        ? `${previewOriginalCount} labeled source images -> x${multiplier} versions -> ${previewFinalCount} release images`
-        : null;
+    // Source split counts (actual from release ÷ multiplier, or estimated from reference ratios)
+    const trainSrcEst = referenceRatios && previewOriginalCount != null ? Math.round(previewOriginalCount * referenceRatios.train) : null;
+    const valSrcEst   = referenceRatios && previewOriginalCount != null ? Math.round(previewOriginalCount * referenceRatios.val)   : null;
+    const trainSource = activeRelease?.train_image_count != null ? Math.round(activeRelease.train_image_count / multiplier) : trainSrcEst;
+    const valSource   = activeRelease?.val_image_count   != null ? Math.round(activeRelease.val_image_count   / multiplier) : valSrcEst;
+    const testSource  = activeRelease?.test_image_count  != null
+        ? Math.round(activeRelease.test_image_count / multiplier)
+        : (previewOriginalCount != null && trainSrcEst != null && valSrcEst != null
+            ? Math.max(previewOriginalCount - trainSrcEst - valSrcEst, 0)
+            : null);
+    // Release split counts (actual or estimated)
+    const trainRelease = activeRelease?.train_image_count ?? (trainSource != null ? Math.round(trainSource * multiplier) : null);
+    const valRelease   = activeRelease?.val_image_count   ?? (valSource   != null ? Math.round(valSource   * multiplier) : null);
+    const testRelease  = activeRelease?.test_image_count  ?? (testSource  != null ? Math.round(testSource  * multiplier) : null);
 
     return (
         <div style={{ padding: '1.4rem 1.75rem 6.5rem', width: '100%' }}>
@@ -330,7 +345,8 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                     <Spin size="small" />
                 ) : (
                     <div style={{ display: 'grid', gap: '0.5rem' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: hasReferenceSplit ? 'repeat(4, minmax(140px, 1fr)) minmax(280px, 0.95fr)' : 'repeat(4, minmax(140px, 1fr))', gap: '0.55rem' }}>
+                        {/* Row 1 — 5 equal config cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.55rem', alignItems: 'stretch' }}>
                             {[
                                 ['Format', releaseInfo.export_format || 'YOLO', '#ddd6fe'],
                                 ['Task', releaseInfo.task_type || 'segmentation', '#bfdbfe'],
@@ -342,6 +358,9 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                     border: '1px solid rgba(255,255,255,0.10)',
                                     borderRadius: 9,
                                     padding: '0.42rem 0.58rem',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'center',
                                 }}>
                                     <Text style={{ color: 'rgba(255,255,255,0.40)', fontSize: '0.62rem', fontWeight: 800 }}>
                                         {label}
@@ -350,45 +369,48 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                 </div>
                             ))}
 
-                            {hasReferenceSplit && (
-                                <div style={{
-                                    background: 'rgba(255,255,255,0.055)',
-                                    border: '1px solid rgba(255,255,255,0.10)',
-                                    borderRadius: 9,
-                                    padding: '0.42rem 0.58rem',
-                                }}>
-                                    <Text style={{ color: 'rgba(255,255,255,0.40)', fontSize: '0.62rem', fontWeight: 800, display: 'block', marginBottom: 4 }}>
-                                        Reference Split Ratio
-                                    </Text>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                                        {[
-                                            ['Train', formatPercent(referenceTrainCount)],
-                                            ['Val', formatPercent(referenceValCount)],
-                                            ['Test', formatPercent(referenceTestCount)],
-                                        ].map(([label, value]) => (
-                                            <span key={label} style={{
-                                                background: 'rgba(255,255,255,0.055)',
-                                                border: '1px solid rgba(255,255,255,0.08)',
-                                                borderRadius: 999,
-                                                padding: '0.24rem 0.5rem',
-                                            }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.58rem', fontWeight: 800 }}>
-                                                    {label}
-                                                </Text>
-                                                <Text style={{ color: '#fff', fontWeight: 900, fontSize: '0.72rem', marginLeft: 6 }}>
-                                                    {value || '-'}
-                                                </Text>
-                                            </span>
-                                        ))}
-                                    </div>
+                            <div style={{
+                                background: 'rgba(255,255,255,0.055)',
+                                border: '1px solid rgba(255,255,255,0.10)',
+                                borderRadius: 9,
+                                padding: '0.42rem 0.58rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'center',
+                            }}>
+                                <Text style={{ color: 'rgba(255,255,255,0.40)', fontSize: '0.62rem', fontWeight: 800, display: 'block', marginBottom: 4 }}>
+                                    Reference Split Ratio
+                                </Text>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                                    {[
+                                        ['Train', formatPercent(referenceTrainCount)],
+                                        ['Val', formatPercent(referenceValCount)],
+                                        ['Test', formatPercent(referenceTestCount)],
+                                    ].map(([label, value]) => (
+                                        <span key={label} style={{
+                                            background: 'rgba(255,255,255,0.055)',
+                                            border: '1px solid rgba(255,255,255,0.08)',
+                                            borderRadius: 999,
+                                            padding: '0.24rem 0.5rem',
+                                        }}>
+                                            <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.58rem', fontWeight: 800 }}>
+                                                {label}
+                                            </Text>
+                                            <Text style={{ color: '#fff', fontWeight: 900, fontSize: '0.72rem', marginLeft: 6 }}>
+                                                {value || '-'}
+                                            </Text>
+                                        </span>
+                                    ))}
                                 </div>
-                            )}
+                            </div>
                         </div>
 
+                        {/* Row 2 — 5 equal transformation cards */}
                         <div style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                            gridTemplateColumns: 'repeat(5, 1fr)',
                             gap: '0.45rem',
+                            alignItems: 'stretch',
                         }}>
                             {transformations.length === 0 ? (
                                 <Text style={{ color: 'rgba(255,255,255,0.36)', fontSize: '0.74rem' }}>No transformations</Text>
@@ -398,6 +420,9 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                     border: '1px solid rgba(255,255,255,0.10)',
                                     borderRadius: 8,
                                     padding: '0.38rem 0.48rem',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'center',
                                 }}>
                                     <Text style={{ color: '#fff', fontSize: '0.68rem', fontWeight: 800, display: 'block', lineHeight: 1.15 }}>
                                         {TRANSFORM_LABELS[t.type] || t.type}
@@ -420,279 +445,152 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                 width: '100%',
             }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}>
-                    {hasRelease && (
                     <div style={{ ...panel, overflow: 'hidden', border: '1px solid rgba(124,58,237,0.16)' }}>
-                        <div style={{
-                            padding: '1.15rem 1.25rem',
-                            background: 'linear-gradient(135deg, #ffffff 0%, #f8f7ff 52%, #f8fafc 100%)',
-                            borderBottom: '1px solid #e7e5f4',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            gap: '1rem',
-                            alignItems: 'flex-start',
-                        }}>
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', marginBottom: 5 }}>
-                                    <div style={{
-                                        width: 34,
-                                        height: 34,
-                                        borderRadius: 9,
-                                        background: 'linear-gradient(135deg, rgba(124,58,237,0.16), rgba(37,99,235,0.10))',
-                                        border: '1px solid rgba(124,58,237,0.20)',
-                                        color: '#6d28d9',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                    }}>
-                                        <EyeOutlined />
-                                    </div>
-                                    <Text strong style={{ color: '#0f172a', fontSize: '1.02rem' }}>
-                                        Release Preview
-                                    </Text>
-                                </div>
-                                <Text style={{ color: '#64748b', fontSize: '0.84rem' }}>
-                                    Dataset package that will be prepared for retraining.
-                                </Text>
-                            </div>
-                            <Tag color={hasRelease ? 'success' : 'purple'} style={{ margin: 0, borderRadius: 14, fontWeight: 800 }}>
-                                {hasRelease ? 'Ready for training' : 'Ready to create'}
-                            </Tag>
-                        </div>
-
-                        <div style={{ padding: '1.2rem 1.25rem 1.25rem' }}>
-                            {releaseSummaryText && (
+                    {/* Header */}
+                    <div style={{
+                        padding: '1.15rem 1.25rem',
+                        background: 'linear-gradient(135deg, #ffffff 0%, #f8f7ff 52%, #f8fafc 100%)',
+                        borderBottom: '1px solid #e7e5f4',
+                        display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start',
+                    }}>
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', marginBottom: 5 }}>
                                 <div style={{
-                                    marginBottom: '1rem',
-                                    padding: '0.9rem 1rem',
-                                    background: 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(37,99,235,0.05))',
-                                    border: '1px solid rgba(124,58,237,0.14)',
-                                    borderRadius: 10,
+                                    width: 34, height: 34, borderRadius: 9,
+                                    background: 'linear-gradient(135deg, rgba(124,58,237,0.16), rgba(37,99,235,0.10))',
+                                    border: '1px solid rgba(124,58,237,0.20)', color: '#6d28d9',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 }}>
-                                    <Text strong style={{ color: '#312e81', fontSize: '0.94rem', display: 'block' }}>
-                                        {releaseSummaryText}
-                                    </Text>
-                                    <Text style={{ color: '#64748b', fontSize: '0.78rem' }}>
-                                        {hasRelease
-                                            ? 'These are the actual counts for the created release package.'
-                                            : 'This is the expected package size based on the current labeled dataset and copied release settings.'}
-                                    </Text>
+                                    <EyeOutlined />
                                 </div>
-                            )}
-
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(4, minmax(120px, 1fr))',
-                                gap: '0.75rem',
-                                marginBottom: '1rem',
-                            }}>
-                                <ValueBox label="Source Labeled Images" value={previewOriginalCount} />
-                                <ValueBox label="Release Package Images" value={previewFinalCount} color="#6d28d9" />
-                                <ValueBox label="Versions Per Image" value={`x${multiplier}`} color="#059669" />
-                                <ValueBox label="Added Images" value={augmentedImageCount} color="#2563eb" />
+                                <Text strong style={{ color: '#0f172a', fontSize: '1.02rem' }}>Release Preview</Text>
                             </div>
-
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: hasReferenceSplit ? '1fr 0.92fr' : '1fr',
-                                gap: '0.85rem',
-                            }}>
-                                <div style={{
-                                    background: '#fbfbff',
-                                    border: '1px solid #e7e5f4',
-                                    borderRadius: 10,
-                                    padding: '0.95rem',
-                                }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-                                    <AppstoreOutlined style={{ color: '#6d28d9' }} />
-                                    <Text strong style={{ color: '#111827', fontSize: '0.88rem' }}>
-                                        Release Package
-                                    </Text>
-                                </div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: 10 }}>
-                                        <span style={chipStyle('purple')}>{releaseInfo.export_format || 'yolo_segmentation'}</span>
-                                        <span style={chipStyle('blue')}>{releaseInfo.task_type || 'segmentation'}</span>
-                                        <span style={chipStyle('green')}>{`output: ${releaseInfo.output_format || 'original'}`}</span>
-                                        <span style={chipStyle('slate')}>{`multiplier: x${multiplier}`}</span>
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                                        {[
-                                            ['Train', releaseSplitCounts.train],
-                                            ['Val', releaseSplitCounts.val],
-                                            ['Test', releaseSplitCounts.test],
-                                        ].map(([label, value]) => (
-                                            <div key={label} style={{
-                                                background: '#fff',
-                                                border: '1px solid #e2e8f0',
-                                                borderRadius: 8,
-                                                padding: '0.55rem 0.4rem',
-                                                textAlign: 'center',
-                                            }}>
-                                                <Text style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 800 }}>{label}</Text>
-                                                <div style={{ color: '#0f172a', fontWeight: 900, fontSize: '1rem' }}>{value ?? '-'}</div>
-                                                <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700 }}>
-                                                    release imgs
-                                                </Text>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    )}
-
-                    <div style={{ ...panel, padding: '1.15rem 1.25rem' }}>
-                        <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '1rem',
-                            marginBottom: '0.9rem',
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                                <RocketOutlined style={{ color: '#7c3aed', fontSize: '1rem' }} />
-                                <Text strong style={{ color: '#0f172a', fontSize: '1rem' }}>Create Release</Text>
-                            </div>
-                            <Text style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>
-                                Name only. Configuration is copied from production.
+                            <Text style={{ color: '#64748b', fontSize: '0.84rem' }}>
+                                Dataset package that will be prepared for retraining.
                             </Text>
                         </div>
+                        <Tag color={hasRelease ? 'success' : 'purple'} style={{ margin: 0, borderRadius: 14, fontWeight: 800 }}>
+                            {hasRelease ? 'Ready for training' : 'Ready to create'}
+                        </Tag>
+                    </div>
 
-                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                            <Input
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                                placeholder="e.g. retraining-2026-04-23"
-                                disabled={creating}
-                                size="large"
-                                onPressEnter={handleCreate}
-                                style={{ borderRadius: 9, flex: 1, fontSize: '0.94rem' }}
-                            />
-                            <Button
-                                type="primary"
-                                size="large"
-                                icon={<RocketOutlined />}
-                                loading={creating}
-                                onClick={handleCreate}
-                                disabled={!name.trim()}
-                                style={{
-                                    background: name.trim() ? 'linear-gradient(135deg, #7c3aed, #5b21b6)' : undefined,
-                                    border: 'none',
-                                    borderRadius: 9,
-                                    fontWeight: 800,
-                                    minWidth: 170,
-                                    boxShadow: name.trim() ? '0 9px 20px rgba(124,58,237,0.28)' : 'none',
-                                    height: 40,
-                                }}
-                            >
-                                {creating ? 'Creating...' : 'Create Release'}
-                            </Button>
+                    <div style={{ padding: '1.2rem 1.25rem 1.25rem' }}>
+                        {/* Row 1: Source images */}
+                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>
+                            Source Images
+                        </Text>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1.6fr', gap: '0.65rem', marginBottom: '1rem' }}>
+                            <div style={statBox}>
+                                <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>Total</Text>
+                                <div style={{ color: '#0f172a', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{previewOriginalCount ?? '-'}</div>
+                                {datasetStats?.total?.annotations != null && (
+                                    <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600, marginTop: 2 }}>
+                                        {datasetStats.total.annotations} annotations
+                                    </div>
+                                )}
+                            </div>
+                            {[
+                                ['Train', trainSource, formatPercent(referenceTrainCount), datasetStats?.train],
+                                ['Val',   valSource,   formatPercent(referenceValCount),   datasetStats?.val],
+                                ['Test',  testSource,  formatPercent(referenceTestCount),  datasetStats?.test],
+                            ].map(([label, value, refPct, stats]) => (
+                                <div key={label} style={statBox}>
+                                    <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>{label}</Text>
+                                    <div style={{ color: '#0f172a', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{value ?? '-'}</div>
+                                    {stats?.annotations != null && (
+                                        <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600, marginTop: 2 }}>
+                                            {stats.annotations} annotations
+                                        </div>
+                                    )}
+                                    {refPct && <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 700, marginTop: 1 }}>ref {refPct}</div>}
+                                </div>
+                            ))}
+                            {/* Classes box */}
+                            <div style={statBox}>
+                                <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>Classes</Text>
+                                <div style={{ color: '#0f172a', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{labels.length || '-'}</div>
+                                {datasetStats?.per_class?.length > 0 ? (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                                        {datasetStats.per_class.map(c => (
+                                            <span key={c.class_name} style={{
+                                                background: 'rgba(124,58,237,0.08)',
+                                                border: '1px solid rgba(124,58,237,0.2)',
+                                                borderRadius: 5, padding: '1px 6px',
+                                                fontSize: '0.65rem', fontWeight: 700, color: '#6d28d9',
+                                            }}>
+                                                {c.class_name} ({c.annotations})
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : labels.length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                                        {labels.map(l => (
+                                            <span key={l.id ?? l.name} style={{
+                                                background: 'rgba(124,58,237,0.08)',
+                                                border: '1px solid rgba(124,58,237,0.2)',
+                                                borderRadius: 5, padding: '1px 6px',
+                                                fontSize: '0.65rem', fontWeight: 700, color: '#6d28d9',
+                                            }}>
+                                                {l.name}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
-                        <div style={{
-                            marginTop: '1rem',
-                            background: '#fbfbff',
-                            border: '1px solid #e7e5f4',
-                            borderRadius: 10,
-                            padding: '0.95rem',
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-                                <AppstoreOutlined style={{ color: '#6d28d9' }} />
-                                <Text strong style={{ color: '#111827', fontSize: '0.88rem' }}>
-                                    {packagePlanTitle}
-                                </Text>
+                        {/* Row 2: Release images after multiplier */}
+                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>
+                            Release Images (after augmentation)
+                        </Text>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.65rem', marginBottom: '1rem' }}>
+                            <div style={statBox}>
+                                <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>Images per Original</Text>
+                                <div style={{ color: '#059669', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>×{multiplier}</div>
                             </div>
+                            {[
+                                ['Train',  trainRelease, '#6d28d9'],
+                                ['Val',    valRelease,   '#6d28d9'],
+                                ['Test',   testRelease,  '#6d28d9'],
+                                ['Total',  previewFinalCount, '#2563eb'],
+                            ].map(([label, value, color]) => (
+                                <div key={label} style={statBox}>
+                                    <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>{label}</Text>
+                                    <div style={{ color, fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{value ?? '-'}</div>
+                                </div>
+                            ))}
+                        </div>
 
-                            {releaseSummaryText && (
-                                <Text style={{ color: '#475569', fontSize: '0.8rem', display: 'block', marginBottom: 10 }}>
-                                    {releaseSummaryText}
-                                </Text>
-                            )}
-
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(4, minmax(120px, 1fr))',
-                                gap: '0.65rem',
-                                marginBottom: '0.85rem',
-                            }}>
-                                <ValueBox label="Source Images" value={previewOriginalCount} />
-                                <ValueBox label="Release Images" value={previewFinalCount} color="#6d28d9" />
-                                <ValueBox label="Multiplier" value={`x${multiplier}`} color="#059669" />
-                                <ValueBox label="Added Images" value={augmentedImageCount} color="#2563eb" />
-                            </div>
-
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: 10 }}>
-                                <span style={chipStyle('purple')}>{releaseInfo.export_format || 'yolo_segmentation'}</span>
-                                <span style={chipStyle('blue')}>{releaseInfo.task_type || 'segmentation'}</span>
-                                <span style={chipStyle('green')}>{`output: ${releaseInfo.output_format || 'original'}`}</span>
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: transformations.length ? 10 : 0 }}>
-                                {[
-                                    ['Train', releaseSplitCounts.train],
-                                    ['Val', releaseSplitCounts.val],
-                                    ['Test', releaseSplitCounts.test],
-                                ].map(([label, value]) => (
-                                    <div key={label} style={{
-                                        background: '#fff',
-                                        border: '1px solid #e2e8f0',
-                                        borderRadius: 8,
-                                        padding: '0.55rem 0.4rem',
-                                        textAlign: 'center',
+                        {/* Row 3: Config + Transformations */}
+                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>
+                            Configuration & Transformations
+                        </Text>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: transformations.length ? '0.65rem' : 0 }}>
+                            <span style={chipStyle('blue')}>{releaseInfo.task_type || 'segmentation'}</span>
+                            <span style={chipStyle('purple')}>{releaseInfo.export_format || 'YOLO'}</span>
+                            <span style={chipStyle('green')}>{`output: ${releaseInfo.output_format || 'original'}`}</span>
+                        </div>
+                        {transformations.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+                                {transformations.map((t, i) => (
+                                    <div key={`${t.type}-${i}`} style={{
+                                        background: '#f8fafc', border: '1px solid #e2e8f0',
+                                        borderRadius: 8, padding: '0.4rem 0.65rem',
                                     }}>
-                                        <Text style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 800 }}>{label}</Text>
-                                        <div style={{ color: '#0f172a', fontWeight: 900, fontSize: '1rem' }}>{value ?? '-'}</div>
-                                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700 }}>
-                                            {hasRelease ? 'release imgs' : 'planned release imgs'}
+                                        <Text strong style={{ color: '#111827', fontSize: '0.78rem', display: 'block' }}>
+                                            {TRANSFORM_LABELS[t.type] || t.type}
                                         </Text>
+                                        {getTransformationSummary(t) && (
+                                            <Text style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                                                {getTransformationSummary(t)}
+                                            </Text>
+                                        )}
                                     </div>
                                 ))}
                             </div>
-
-                            {transformations.length > 0 && (
-                                <div>
-                                    <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, display: 'block', marginBottom: 6 }}>
-                                        Transformations And Parameters
-                                    </Text>
-                                    <div style={{ display: 'grid', gap: '0.45rem' }}>
-                                        {transformations.map((t, i) => (
-                                            <div key={`${t.type || 'transform'}-${i}`} style={{
-                                                background: '#fff',
-                                                border: '1px solid #e2e8f0',
-                                                borderRadius: 8,
-                                                padding: '0.6rem 0.75rem',
-                                            }}>
-                                                <Text strong style={{ color: '#111827', fontSize: '0.8rem', display: 'block' }}>
-                                                    {TRANSFORM_LABELS[t.type] || t.type}
-                                                </Text>
-                                                <Text style={{ color: '#64748b', fontSize: '0.76rem' }}>
-                                                    {getTransformationSummary(t) || 'No extra parameters'}
-                                                </Text>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {creating && (
-                            <div style={{
-                                marginTop: '0.9rem',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.6rem',
-                                padding: '0.65rem 0.85rem',
-                                background: 'rgba(124,58,237,0.06)',
-                                borderRadius: 9,
-                                border: '1px solid rgba(124,58,237,0.18)',
-                            }}>
-                                <ThunderboltOutlined style={{ color: '#7c3aed' }} />
-                                <Text style={{ color: '#5b21b6', fontSize: '0.84rem', fontWeight: 700 }}>
-                                    Preparing dataset package and applying release settings.
-                                </Text>
-                            </div>
                         )}
                     </div>
+                </div>
 
                     {hasRelease && (
                         <div style={{
@@ -732,6 +630,58 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}>
+                    {/* ── Create Release ── */}
+                    {!hasRelease && (
+                        <div style={{ ...panel, padding: '1.15rem 1.25rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                                    <RocketOutlined style={{ color: '#7c3aed', fontSize: '1rem' }} />
+                                    <Text strong style={{ color: '#0f172a', fontSize: '1rem' }}>Create Release</Text>
+                                </div>
+                                <Text style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: 700 }}>
+                                    Name only — config copied from production reference.
+                                </Text>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                <Input
+                                    value={name}
+                                    onChange={e => setName(e.target.value)}
+                                    placeholder="e.g. retraining-2026-04-23"
+                                    disabled={creating}
+                                    size="large"
+                                    onPressEnter={handleCreate}
+                                    style={{ borderRadius: 9, flex: 1, fontSize: '0.94rem' }}
+                                />
+                                <Button
+                                    type="primary"
+                                    size="large"
+                                    icon={<RocketOutlined />}
+                                    loading={creating}
+                                    onClick={handleCreate}
+                                    disabled={!name.trim()}
+                                    style={{
+                                        background: name.trim() ? 'linear-gradient(135deg, #7c3aed, #5b21b6)' : undefined,
+                                        border: 'none',
+                                        borderRadius: 9,
+                                        fontWeight: 800,
+                                        minWidth: 170,
+                                        boxShadow: name.trim() ? '0 9px 20px rgba(124,58,237,0.28)' : 'none',
+                                        height: 40,
+                                    }}
+                                >
+                                    {creating ? 'Creating…' : 'Create Release'}
+                                </Button>
+                            </div>
+                            {creating && (
+                                <div style={{ marginTop: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.65rem 0.85rem', background: 'rgba(124,58,237,0.06)', borderRadius: 9, border: '1px solid rgba(124,58,237,0.18)' }}>
+                                    <ThunderboltOutlined style={{ color: '#7c3aed' }} />
+                                    <Text style={{ color: '#5b21b6', fontSize: '0.84rem', fontWeight: 700 }}>Preparing dataset package and applying release settings…</Text>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Release History ── */}
                     <div style={{ ...panel, overflow: 'hidden' }}>
                         <div style={{
                             padding: '1rem 1.05rem',
