@@ -15,6 +15,8 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isRetrainingMode, toggleMode } = useAppMode();
+  const isTopLevelModeSwitchPage = ['/', '/models', '/projects'].includes(location.pathname);
+  const isModeToggleLocked = !isTopLevelModeSwitchPage;
 
   // Log component initialization
   logInfo('app.frontend.ui', 'navbar_initialized', 'Navbar component initialized', {
@@ -61,7 +63,7 @@ const Navbar = () => {
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+    <div style={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
       {(() => {
         logInfo('app.frontend.ui', 'navbar_rendered', 'Navbar component rendered', {
           timestamp: new Date().toISOString(),
@@ -92,7 +94,9 @@ const Navbar = () => {
 
       {/* Mode Toggle — premium segmented switcher */}
       <Tooltip
-        title="Switch between Full Mode and User Retraining Mode"
+        title={isModeToggleLocked
+          ? 'Mode switching is locked inside project workflow. Go back to the main UI to switch mode.'
+          : 'Switch between Full Mode and User Retraining Mode'}
         placement="bottomRight"
       >
         <div style={{
@@ -105,13 +109,14 @@ const Navbar = () => {
           marginRight: '1.25rem',
           gap: '1px',
           userSelect: 'none',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)',
+          boxShadow: '0 1px 6px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)',
+          opacity: isModeToggleLocked ? 0.62 : 1,
         }}>
 
           {/* Full Mode segment */}
           <div
             onClick={() => {
-              if (isRetrainingMode) {
+              if (!isModeToggleLocked && isRetrainingMode) {
                 logUserClick('mode_toggle_clicked', 'Switched to Full Mode');
                 toggleMode();
               }
@@ -120,12 +125,12 @@ const Navbar = () => {
               display: 'flex', alignItems: 'center', gap: '0.45rem',
               padding: '0.32rem 0.9rem',
               borderRadius: '7px',
-              cursor: isRetrainingMode ? 'pointer' : 'default',
+              cursor: !isModeToggleLocked && isRetrainingMode ? 'pointer' : 'default',
               background: !isRetrainingMode
                 ? 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 100%)'
                 : 'transparent',
               boxShadow: !isRetrainingMode
-                ? '0 1px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.12)'
+                ? 'inset 0 1px 0 rgba(255,255,255,0.12)'
                 : 'none',
               color: !isRetrainingMode ? '#fff' : 'rgba(255,255,255,0.3)',
               fontWeight: !isRetrainingMode ? 600 : 400,
@@ -145,7 +150,7 @@ const Navbar = () => {
           {/* User Retraining Mode segment */}
           <div
             onClick={() => {
-              if (!isRetrainingMode) {
+              if (!isModeToggleLocked && !isRetrainingMode) {
                 logUserClick('mode_toggle_clicked', 'Switched to User Retraining Mode');
                 toggleMode();
               }
@@ -154,12 +159,12 @@ const Navbar = () => {
               display: 'flex', alignItems: 'center', gap: '0.45rem',
               padding: '0.32rem 0.9rem',
               borderRadius: '7px',
-              cursor: !isRetrainingMode ? 'pointer' : 'default',
+              cursor: !isModeToggleLocked && !isRetrainingMode ? 'pointer' : 'default',
               background: isRetrainingMode
                 ? 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
                 : 'transparent',
               boxShadow: isRetrainingMode
-                ? '0 1px 8px rgba(109,40,217,0.55), inset 0 1px 0 rgba(255,255,255,0.15)'
+                ? 'inset 0 1px 0 rgba(255,255,255,0.15)'
                 : 'none',
               color: isRetrainingMode ? '#fff' : 'rgba(255,255,255,0.3)',
               fontWeight: isRetrainingMode ? 600 : 400,

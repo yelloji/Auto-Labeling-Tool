@@ -109,7 +109,7 @@ function App() {
         {/* Main app layout with navbar */}
         <Route path="/*" element={
           <Layout style={{ minHeight: '100vh' }}>
-            <Header style={{ padding: 0, background: '#001529', height: '4rem', lineHeight: '4rem' }}>
+            <Header style={{ padding: 0, background: '#001529', height: '4rem', lineHeight: '4rem', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
               <Navbar />
             </Header>
             <Content style={{ padding: 0, background: '#001529' }}>
