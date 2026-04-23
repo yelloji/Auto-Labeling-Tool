@@ -1056,7 +1056,11 @@ useEffect(() => {
                       const getFullDescription = (type, params) => {
                         if (!params) return 'No parameters specified.';
                         switch(type) {
-                          case 'resize': return params.width && params.height ? `Resize image to ${params.width} × ${params.height} pixels.` : 'Resize image.';
+                          case 'resize': {
+                            if (!params.width || !params.height) return 'Resize image.';
+                            const modeLabel = { stretch_to: 'Stretch to', fit_within: 'Fit within', fit_black: 'Fit (black edges)', fit_white: 'Fit (white edges)' }[params.resize_mode] || params.resize_mode || 'Resize to';
+                            return `${modeLabel} ${params.width} × ${params.height} pixels.`;
+                          }
                           case 'brightness': return typeof params.percentage === 'number' ? `Adjust brightness by ${params.percentage > 0 ? '+' : ''}${params.percentage}%.` : 'Adjust brightness.';
                           case 'contrast': return typeof params.percentage === 'number' ? `Adjust contrast by ${params.percentage > 0 ? '+' : ''}${params.percentage}%.` : 'Adjust contrast.';
                           case 'rotate': return typeof params.angle === 'number' ? `Rotate image by ${params.angle}°.` : 'Rotate image.';
