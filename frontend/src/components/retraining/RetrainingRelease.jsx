@@ -33,18 +33,30 @@ const TRANSFORM_LABELS = {
 };
 
 const panel = {
-    background: '#fff',
-    border: '1px solid #e2e8f0',
+    background: 'rgba(255,255,255,0.72)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    border: '1px solid rgba(255,255,255,0.55)',
     borderRadius: 12,
-    boxShadow: '0 12px 30px rgba(15,23,42,0.07)',
+    boxShadow: '0 8px 32px rgba(15,23,42,0.08), 0 1px 0 rgba(255,255,255,0.9) inset',
 };
 
 const statBox = {
-    background: '#f8fafc',
-    border: '1px solid #e2e8f0',
+    background: 'rgba(255,255,255,0.55)',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255,255,255,0.7)',
     borderRadius: 10,
     padding: '0.85rem 0.95rem',
     minHeight: 80,
+    boxShadow: '0 2px 8px rgba(15,23,42,0.04)',
+};
+
+const subtleGlassBox = {
+    background: 'rgba(255,255,255,0.42)',
+    border: '1px solid rgba(255,255,255,0.62)',
+    borderRadius: 8,
+    boxShadow: '0 1px 6px rgba(15,23,42,0.04)',
 };
 
 const chipStyle = (tone = 'slate') => {
@@ -324,7 +336,7 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
     const testRelease  = activeRelease?.test_image_count  ?? (testSource  != null ? Math.round(testSource  * multiplier) : null);
 
     return (
-        <div style={{ padding: '1.4rem 1.75rem 6.5rem', width: '100%' }}>
+        <div style={{ padding: '1.4rem 1.75rem 6.5rem', width: '100%', background: 'linear-gradient(135deg, #eef2ff 0%, #faf5ff 50%, #f0fdf4 100%)', minHeight: '100%' }}>
             <div style={{
                 background: 'linear-gradient(145deg, #10172a 0%, #1d1647 56%, #111827 100%)',
                 borderRadius: 12,
@@ -445,12 +457,12 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                 width: '100%',
             }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}>
-                    <div style={{ ...panel, overflow: 'hidden', border: '1px solid #e2e8f0', borderTop: '3px solid #7c3aed', boxShadow: '0 4px 20px rgba(15,23,42,0.08)' }}>
+                    <div style={{ ...panel, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.62)', borderTop: '3px solid #7c3aed', boxShadow: '0 10px 24px rgba(15,23,42,0.08)' }}>
                     {/* Header */}
                     <div style={{
                         padding: '1.15rem 1.25rem',
-                        background: '#fff',
-                        borderBottom: '1px solid #f1f5f9',
+                        background: 'rgba(255,255,255,0.34)',
+                        borderBottom: '1px solid rgba(226,232,240,0.72)',
                         display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center',
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
@@ -466,9 +478,9 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                     <div style={{ padding: '1.2rem 1.25rem 1.25rem' }}>
                         {/* Row 1: Source images */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.55rem' }}>
-                            <div style={{ height: 1, width: 16, background: '#cbd5e1' }} />
+                            <div style={{ height: 1, width: 16, background: 'rgba(148,163,184,0.55)' }} />
                             <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Source Images</Text>
-                            <div style={{ height: 1, flex: 1, background: '#f1f5f9' }} />
+                            <div style={{ height: 1, flex: 1, background: 'rgba(226,232,240,0.72)' }} />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1.6fr', gap: '0.65rem', marginBottom: '1.1rem' }}>
                             <div style={statBox}>
@@ -504,7 +516,7 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                                         {datasetStats.per_class.map(c => (
                                             <span key={c.class_name} style={{
-                                                background: '#f1f5f9', border: '1px solid #e2e8f0',
+                                                ...subtleGlassBox,
                                                 borderRadius: 5, padding: '1px 7px',
                                                 fontSize: '0.65rem', fontWeight: 700, color: '#374151',
                                             }}>
@@ -516,7 +528,7 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                                         {labels.map(l => (
                                             <span key={l.id ?? l.name} style={{
-                                                background: '#f1f5f9', border: '1px solid #e2e8f0',
+                                                ...subtleGlassBox,
                                                 borderRadius: 5, padding: '1px 7px',
                                                 fontSize: '0.65rem', fontWeight: 700, color: '#374151',
                                             }}>
@@ -530,9 +542,9 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
 
                         {/* Row 2: Release images after multiplier */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.55rem' }}>
-                            <div style={{ height: 1, width: 16, background: '#cbd5e1' }} />
+                            <div style={{ height: 1, width: 16, background: 'rgba(148,163,184,0.55)' }} />
                             <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Release Images (after augmentation)</Text>
-                            <div style={{ height: 1, flex: 1, background: '#f1f5f9' }} />
+                            <div style={{ height: 1, flex: 1, background: 'rgba(226,232,240,0.72)' }} />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.65rem', marginBottom: '1.1rem' }}>
                             <div style={statBox}>
@@ -554,9 +566,9 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
 
                         {/* Row 3: Config + Transformations */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.55rem' }}>
-                            <div style={{ height: 1, width: 16, background: '#cbd5e1' }} />
+                            <div style={{ height: 1, width: 16, background: 'rgba(148,163,184,0.55)' }} />
                             <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Configuration & Transformations</Text>
-                            <div style={{ height: 1, flex: 1, background: '#f1f5f9' }} />
+                            <div style={{ height: 1, flex: 1, background: 'rgba(226,232,240,0.72)' }} />
                         </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: transformations.length ? '0.65rem' : 0 }}>
                             <span style={chipStyle('slate')}>{releaseInfo.task_type || 'segmentation'}</span>
@@ -567,8 +579,7 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.45rem', alignItems: 'stretch' }}>
                                 {transformations.map((t, i) => (
                                     <div key={`${t.type}-${i}`} style={{
-                                        background: '#f8fafc',
-                                        border: '1px solid #e2e8f0',
+                                        ...subtleGlassBox,
                                         borderRadius: 8,
                                         padding: '0.4rem 0.65rem',
                                         display: 'flex',
@@ -630,7 +641,7 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}>
                     {/* ── Create Release ── */}
                     {!hasRelease && (
-                        <div style={{ ...panel, padding: '1.15rem 1.25rem', border: '1px solid #e2e8f0', borderTop: '3px solid #7c3aed' }}>
+                        <div style={{ ...panel, padding: '1.15rem 1.25rem', border: '1px solid rgba(255,255,255,0.62)', borderTop: '3px solid #7c3aed' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
                                     <RocketOutlined style={{ color: '#7c3aed', fontSize: '1rem' }} />
@@ -680,10 +691,10 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                     )}
 
                     {/* ── Release History ── */}
-                    <div style={{ ...panel, overflow: 'hidden', border: '1px solid #e2e8f0', borderTop: '3px solid #7c3aed' }}>
+                    <div style={{ ...panel, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.62)', borderTop: '3px solid #7c3aed' }}>
                         <div style={{
                             padding: '1rem 1.05rem',
-                            borderBottom: '1px solid #e2e8f0',
+                            borderBottom: '1px solid rgba(226,232,240,0.72)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
@@ -709,13 +720,15 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                         key={rel.id}
                                         onClick={() => setSelectedRelease(rel)}
                                         style={{
-                                            background: 'linear-gradient(135deg, #ffffff 0%, #f9f7ff 100%)',
+                                            background: 'rgba(255,255,255,0.5)',
+                                            backdropFilter: 'blur(14px)',
+                                            WebkitBackdropFilter: 'blur(14px)',
                                             borderRadius: 10,
-                                            border: '1px solid rgba(124,58,237,0.20)',
+                                            border: '1px solid rgba(255,255,255,0.7)',
                                             borderLeft: '4px solid #7c3aed',
                                             padding: '0.8rem',
                                             cursor: 'pointer',
-                                            boxShadow: '0 4px 14px rgba(124,58,237,0.08)',
+                                            boxShadow: '0 6px 18px rgba(15,23,42,0.06)',
                                         }}
                                     >
                                         <div style={{ display: 'flex', gap: '0.72rem', alignItems: 'flex-start' }}>
@@ -804,13 +817,16 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                     </div>
 
                     <div style={{
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
+                        background: 'rgba(255,255,255,0.48)',
+                        backdropFilter: 'blur(14px)',
+                        WebkitBackdropFilter: 'blur(14px)',
+                        border: '1px solid rgba(255,255,255,0.68)',
                         borderRadius: 12,
                         padding: '0.9rem 1rem',
                         display: 'flex',
                         gap: '0.7rem',
                         alignItems: 'flex-start',
+                        boxShadow: '0 4px 14px rgba(15,23,42,0.04)',
                     }}>
                         <SafetyCertificateOutlined style={{ color: '#059669', marginTop: 2 }} />
                         <Text style={{ color: '#475569', fontSize: '0.8rem', lineHeight: 1.55 }}>
