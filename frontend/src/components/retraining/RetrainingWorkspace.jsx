@@ -74,7 +74,6 @@ const RetrainingWorkspace = () => {
                         projectId={projectId}
                         onNext={nextStep}
                         onBack={prevStep}
-                        hideNav
                     />
                 );
             case 2:
