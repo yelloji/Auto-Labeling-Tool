@@ -445,47 +445,38 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                 width: '100%',
             }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}>
-                    <div style={{ ...panel, overflow: 'hidden', border: '1px solid rgba(124,58,237,0.16)' }}>
+                    <div style={{ ...panel, overflow: 'hidden', border: '1px solid #e2e8f0', borderTop: '3px solid #7c3aed', boxShadow: '0 4px 20px rgba(15,23,42,0.08)' }}>
                     {/* Header */}
                     <div style={{
                         padding: '1.15rem 1.25rem',
-                        background: 'linear-gradient(135deg, #ffffff 0%, #f8f7ff 52%, #f8fafc 100%)',
-                        borderBottom: '1px solid #e7e5f4',
-                        display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start',
+                        background: '#fff',
+                        borderBottom: '1px solid #f1f5f9',
+                        display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center',
                     }}>
-                        <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', marginBottom: 5 }}>
-                                <div style={{
-                                    width: 34, height: 34, borderRadius: 9,
-                                    background: 'linear-gradient(135deg, rgba(124,58,237,0.16), rgba(37,99,235,0.10))',
-                                    border: '1px solid rgba(124,58,237,0.20)', color: '#6d28d9',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                }}>
-                                    <EyeOutlined />
-                                </div>
-                                <Text strong style={{ color: '#0f172a', fontSize: '1.02rem' }}>Release Preview</Text>
-                            </div>
-                            <Text style={{ color: '#64748b', fontSize: '0.84rem' }}>
-                                Dataset package that will be prepared for retraining.
-                            </Text>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                            <EyeOutlined style={{ color: '#64748b', fontSize: '1rem' }} />
+                            <Text strong style={{ color: '#0f172a', fontSize: '1.02rem' }}>Release Preview</Text>
+                            <Text style={{ color: '#94a3b8', fontSize: '0.82rem' }}>— dataset package prepared for retraining</Text>
                         </div>
-                        <Tag color={hasRelease ? 'success' : 'purple'} style={{ margin: 0, borderRadius: 14, fontWeight: 800 }}>
+                        <Tag color={hasRelease ? 'success' : 'default'} style={{ margin: 0, borderRadius: 14, fontWeight: 700, fontSize: '0.78rem' }}>
                             {hasRelease ? 'Ready for training' : 'Ready to create'}
                         </Tag>
                     </div>
 
                     <div style={{ padding: '1.2rem 1.25rem 1.25rem' }}>
                         {/* Row 1: Source images */}
-                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '0.5rem' }}>
-                            Source Images
-                        </Text>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1.6fr', gap: '0.65rem', marginBottom: '1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.55rem' }}>
+                            <div style={{ height: 1, width: 16, background: '#cbd5e1' }} />
+                            <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Source Images</Text>
+                            <div style={{ height: 1, flex: 1, background: '#f1f5f9' }} />
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1.6fr', gap: '0.65rem', marginBottom: '1.1rem' }}>
                             <div style={statBox}>
-                                <Text style={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total</Text>
-                                <div style={{ color: '#0f172a', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{previewOriginalCount ?? '-'}</div>
+                                <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total</Text>
+                                <div style={{ color: '#0f172a', fontSize: '1.6rem', lineHeight: 1.1, fontWeight: 900, marginTop: 6 }}>{previewOriginalCount ?? '-'}</div>
                                 {datasetStats?.total?.annotations != null && (
-                                    <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                                        {datasetStats.total.annotations} annots
+                                    <div style={{ fontSize: '0.69rem', color: '#94a3b8', fontWeight: 600, marginTop: 3 }}>
+                                        {datasetStats.total.annotations} annotations
                                     </div>
                                 )}
                             </div>
@@ -495,28 +486,27 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                 ['Test',  testSource,  formatPercent(referenceTestCount),  datasetStats?.test],
                             ].map(([label, value, refPct, stats]) => (
                                 <div key={label} style={statBox}>
-                                    <Text style={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</Text>
-                                    <div style={{ color: '#0f172a', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{value ?? '-'}</div>
+                                    <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</Text>
+                                    <div style={{ color: '#0f172a', fontSize: '1.6rem', lineHeight: 1.1, fontWeight: 900, marginTop: 6 }}>{value ?? '-'}</div>
                                     {stats?.annotations != null && (
-                                        <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                                            {stats.annotations} annots
+                                        <div style={{ fontSize: '0.69rem', color: '#94a3b8', fontWeight: 600, marginTop: 3 }}>
+                                            {stats.annotations} annotations
                                         </div>
                                     )}
-                                    {refPct && <div style={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 700, marginTop: 1 }}>ref {refPct}</div>}
+                                    {refPct && <div style={{ fontSize: '0.69rem', color: '#64748b', fontWeight: 600, marginTop: 1 }}>split ratio {refPct}</div>}
                                 </div>
                             ))}
                             {/* Classes box */}
                             <div style={statBox}>
-                                <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>Classes</Text>
-                                <div style={{ color: '#0f172a', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{labels.length || '-'}</div>
+                                <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Classes</Text>
+                                <div style={{ color: '#0f172a', fontSize: '1.6rem', lineHeight: 1.1, fontWeight: 900, marginTop: 6 }}>{labels.length || '-'}</div>
                                 {datasetStats?.per_class?.length > 0 ? (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                                         {datasetStats.per_class.map(c => (
                                             <span key={c.class_name} style={{
-                                                background: 'rgba(124,58,237,0.08)',
-                                                border: '1px solid rgba(124,58,237,0.2)',
-                                                borderRadius: 5, padding: '1px 6px',
-                                                fontSize: '0.65rem', fontWeight: 700, color: '#6d28d9',
+                                                background: '#f1f5f9', border: '1px solid #e2e8f0',
+                                                borderRadius: 5, padding: '1px 7px',
+                                                fontSize: '0.65rem', fontWeight: 700, color: '#374151',
                                             }}>
                                                 {c.class_name} ({c.annotations})
                                             </span>
@@ -526,10 +516,9 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                                         {labels.map(l => (
                                             <span key={l.id ?? l.name} style={{
-                                                background: 'rgba(124,58,237,0.08)',
-                                                border: '1px solid rgba(124,58,237,0.2)',
-                                                borderRadius: 5, padding: '1px 6px',
-                                                fontSize: '0.65rem', fontWeight: 700, color: '#6d28d9',
+                                                background: '#f1f5f9', border: '1px solid #e2e8f0',
+                                                borderRadius: 5, padding: '1px 7px',
+                                                fontSize: '0.65rem', fontWeight: 700, color: '#374151',
                                             }}>
                                                 {l.name}
                                             </span>
@@ -540,53 +529,57 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                         </div>
 
                         {/* Row 2: Release images after multiplier */}
-                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '0.5rem' }}>
-                            Release Images (after augmentation)
-                        </Text>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.65rem', marginBottom: '1rem' }}>
-                            <div style={{ ...statBox, borderLeft: '3px solid rgba(16,185,129,0.45)' }}>
-                                <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Per Original</Text>
-                                <div style={{ color: '#059669', fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>×{multiplier}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.55rem' }}>
+                            <div style={{ height: 1, width: 16, background: '#cbd5e1' }} />
+                            <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Release Images (after augmentation)</Text>
+                            <div style={{ height: 1, flex: 1, background: '#f1f5f9' }} />
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.65rem', marginBottom: '1.1rem' }}>
+                            <div style={statBox}>
+                                <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Per Original</Text>
+                                <div style={{ color: '#059669', fontSize: '1.6rem', lineHeight: 1.1, fontWeight: 900, marginTop: 6 }}>×{multiplier}</div>
                             </div>
                             {[
-                                ['Train',  trainRelease,      '#7c3aed'],
-                                ['Val',    valRelease,        '#7c3aed'],
-                                ['Test',   testRelease,       '#7c3aed'],
-                                ['Total',  previewFinalCount, '#2563eb'],
+                                ['Train', trainRelease,      '#0f172a'],
+                                ['Val',   valRelease,        '#0f172a'],
+                                ['Test',  testRelease,       '#0f172a'],
+                                ['Total', previewFinalCount, '#2563eb'],
                             ].map(([label, value, color]) => (
                                 <div key={label} style={statBox}>
-                                    <Text style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</Text>
-                                    <div style={{ color, fontSize: '1.45rem', lineHeight: 1.15, fontWeight: 900, marginTop: 7 }}>{value ?? '-'}</div>
+                                    <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</Text>
+                                    <div style={{ color, fontSize: '1.6rem', lineHeight: 1.1, fontWeight: 900, marginTop: 6 }}>{value ?? '-'}</div>
                                 </div>
                             ))}
                         </div>
 
                         {/* Row 3: Config + Transformations */}
-                        <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '0.5rem' }}>
-                            Configuration & Transformations
-                        </Text>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.55rem' }}>
+                            <div style={{ height: 1, width: 16, background: '#cbd5e1' }} />
+                            <Text style={{ color: '#94a3b8', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Configuration & Transformations</Text>
+                            <div style={{ height: 1, flex: 1, background: '#f1f5f9' }} />
+                        </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: transformations.length ? '0.65rem' : 0 }}>
-                            <span style={chipStyle('blue')}>{releaseInfo.task_type || 'segmentation'}</span>
-                            <span style={chipStyle('purple')}>{releaseInfo.export_format || 'YOLO'}</span>
-                            <span style={chipStyle('green')}>{`output: ${releaseInfo.output_format || 'original'}`}</span>
+                            <span style={chipStyle('slate')}>{releaseInfo.task_type || 'segmentation'}</span>
+                            <span style={chipStyle('slate')}>{releaseInfo.export_format || 'YOLO'}</span>
+                            <span style={chipStyle('slate')}>{`output: ${releaseInfo.output_format || 'original'}`}</span>
                         </div>
                         {transformations.length > 0 && (
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.45rem', alignItems: 'stretch' }}>
                                 {transformations.map((t, i) => (
                                     <div key={`${t.type}-${i}`} style={{
-                                        background: 'rgba(124,58,237,0.05)',
-                                        border: '1px solid rgba(124,58,237,0.18)',
+                                        background: '#f8fafc',
+                                        border: '1px solid #e2e8f0',
                                         borderRadius: 8,
                                         padding: '0.4rem 0.65rem',
                                         display: 'flex',
                                         flexDirection: 'column',
                                         justifyContent: 'center',
                                     }}>
-                                        <Text strong style={{ color: '#6d28d9', fontSize: '0.78rem', display: 'block' }}>
+                                        <Text strong style={{ color: '#1e293b', fontSize: '0.78rem', display: 'block' }}>
                                             {TRANSFORM_LABELS[t.type] || t.type}
                                         </Text>
                                         {getTransformationSummary(t) && (
-                                            <Text style={{ color: '#7c3aed', fontSize: '0.72rem', opacity: 0.7 }}>
+                                            <Text style={{ color: '#64748b', fontSize: '0.72rem' }}>
                                                 {getTransformationSummary(t)}
                                             </Text>
                                         )}
@@ -637,7 +630,7 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}>
                     {/* ── Create Release ── */}
                     {!hasRelease && (
-                        <div style={{ ...panel, padding: '1.15rem 1.25rem' }}>
+                        <div style={{ ...panel, padding: '1.15rem 1.25rem', border: '1px solid #e2e8f0', borderTop: '3px solid #7c3aed' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
                                     <RocketOutlined style={{ color: '#7c3aed', fontSize: '1rem' }} />
@@ -687,7 +680,7 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                     )}
 
                     {/* ── Release History ── */}
-                    <div style={{ ...panel, overflow: 'hidden' }}>
+                    <div style={{ ...panel, overflow: 'hidden', border: '1px solid #e2e8f0', borderTop: '3px solid #7c3aed' }}>
                         <div style={{
                             padding: '1rem 1.05rem',
                             borderBottom: '1px solid #e2e8f0',
