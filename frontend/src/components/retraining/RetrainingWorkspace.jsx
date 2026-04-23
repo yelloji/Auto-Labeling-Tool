@@ -277,14 +277,14 @@ const RetrainingWorkspace = () => {
                 {renderContent()}
             </div>
 
-            {/* ── Bottom Nav — always sticky at bottom ── */}
+            {/* ── Bottom Nav — hidden on Label step (RetrainingLabeling handles its own nav) ── */}
             <div style={{
                 position: 'fixed',
                 bottom: 0, left: 0, right: 0,
                 background: '#fff',
                 borderTop: '1px solid #e8e8e8',
                 padding: '0.75rem 2rem',
-                display: 'flex',
+                display: showBottomNav ? 'flex' : 'none',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 zIndex: 100,

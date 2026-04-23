@@ -234,7 +234,7 @@ const RetrainingImageCard = ({ img, isNew, openLabeling, datasetId, annotations:
                         <FileImageOutlined style={{ marginRight: 5 }} />
                         {dimensions}
                     </Text>
-                    {img.split_section && (
+                    {img.split_type === 'dataset' && img.split_section && (
                         <Tag
                             style={{
                                 margin: 0, border: 'none', fontWeight: 700, fontSize: '0.72rem',
@@ -341,6 +341,8 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
     const labeledNew = newDatasets.reduce((s, d) => s + (d.labeled_images ?? 0), 0);
     const labeledOld = oldDatasets.reduce((s, d) => s + (d.labeled_images ?? 0), 0);
     const allNewLabeled = totalNew > 0 && labeledNew >= totalNew;
+    const allNewSplit = newDatasets.length > 0 && newDatasets.every(d => d.split_type === 'dataset');
+    const nextReleaseReady = allNewLabeled && allNewSplit;
     const remainingNew = Math.max(totalNew - labeledNew, 0);
 
     const getDatasetStats = (ds) => {
@@ -754,13 +756,18 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
                                 Label all new images before continuing
                             </Text>
                         )}
+                        {totalNew > 0 && allNewLabeled && !allNewSplit && (
+                            <Text style={{ color: '#b45309', fontSize: '0.8rem', fontWeight: 600 }}>
+                                Preparing dataset split...
+                            </Text>
+                        )}
                         <Button
                             type="primary"
                             icon={<ArrowRightOutlined />}
-                            disabled={totalNew > 0 && !allNewLabeled}
+                            disabled={totalNew > 0 && !nextReleaseReady}
                             onClick={onNext}
                             style={{
-                                background: (totalNew === 0 || allNewLabeled)
+                                background: (totalNew === 0 || nextReleaseReady)
                                     ? 'linear-gradient(135deg, #7c3aed, #5b21b6)'
                                     : undefined,
                                 border: 'none',
