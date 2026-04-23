@@ -40,6 +40,16 @@ const ManualLabeling = () => {
   const searchParams = new URLSearchParams(location.search);
   const imageId = searchParams.get('imageId');
   const navigate = useNavigate();
+  const returnToStorageKey = `manual_labeling_return_to_${datasetId}`;
+  const currentReturnTo = location.state?.returnTo || null;
+
+  useEffect(() => {
+    if (location.state?.returnTo) {
+      sessionStorage.setItem(returnToStorageKey, location.state.returnTo);
+    } else {
+      sessionStorage.removeItem(returnToStorageKey);
+    }
+  }, [location.state, returnToStorageKey]);
 
   // Core state
   const [imageList, setImageList] = useState([]);
@@ -49,7 +59,7 @@ const ManualLabeling = () => {
   const [loading, setLoading] = useState(true);
 
   // Image deletion handler
-  const handleDeleteImage = async () => {
+  const handleDeleteImage = useCallback(async () => {
     if (!imageData || !imageData.id) {
       console.error('No image data available for deletion');
       return;
@@ -69,18 +79,21 @@ const ManualLabeling = () => {
       const newImageList = imageList.filter(img => img.id !== imageData.id);
       setImageList(newImageList);
       if (newImageList.length === 0) {
-        navigate(`/annotate/${datasetId}/manual`);
+        navigate(`/annotate/${datasetId}/manual`, currentReturnTo ? { state: { returnTo: currentReturnTo } } : undefined);
         return;
       }
       const newIndex = Math.max(0, currentImageIndex - (currentImageIndex === newImageList.length ? 1 : 0));
       setCurrentImageIndex(newIndex);
       const newImage = newImageList[newIndex];
-      navigate(`/annotate/${datasetId}/manual?imageId=${newImage.id}`);
+      navigate(
+        `/annotate/${datasetId}/manual?imageId=${newImage.id}`,
+        currentReturnTo ? { state: { returnTo: currentReturnTo } } : undefined
+      );
     } catch (error) {
       message.error('Failed to delete image');
       console.error('Delete image error:', error);
     }
-  };
+  }, [imageData, imageList, currentImageIndex, navigate, datasetId, currentReturnTo]);
 
   // Mark as Null handler
   const handleMarkAsNull = async () => {
@@ -1948,9 +1961,12 @@ const ManualLabeling = () => {
         newIndex,
         timestamp: new Date().toISOString()
       });
-      navigate(`/annotate/${datasetId}/manual?imageId=${newImage.id}`);
+      navigate(
+        `/annotate/${datasetId}/manual?imageId=${newImage.id}`,
+        currentReturnTo ? { state: { returnTo: currentReturnTo } } : undefined
+      );
     }
-  }, [currentImageIndex, imageList, datasetId, navigate, imageData]);
+  }, [currentImageIndex, imageList, datasetId, navigate, imageData, currentReturnTo]);
 
   useEffect(() => {
     const handleArrowNavigation = (e) => {
@@ -1987,8 +2003,7 @@ const ManualLabeling = () => {
       timestamp: new Date().toISOString()
     });
     // Go back to returnTo location (Retraining Mode) or annotation progress (Full Mode)
-    const returnTo = location.state?.returnTo;
-    navigate(returnTo || `/annotate-progress/${datasetId}`);
+    navigate(currentReturnTo || `/annotate-progress/${datasetId}`);
   };
 
   if (loading && !imageData) {
