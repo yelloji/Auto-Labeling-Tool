@@ -251,7 +251,7 @@ const RetrainingImageCard = ({ img, isNew, openLabeling, datasetId, annotations:
     );
 };
 
-const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
+const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav, onReadyChange }) => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('new');
     const [activeNewDataset, setActiveNewDataset] = useState(null);
@@ -344,6 +344,10 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav }) => {
     const allNewSplit = newDatasets.length > 0 && newDatasets.every(d => d.split_type === 'dataset');
     const nextReleaseReady = allNewLabeled && allNewSplit;
     const remainingNew = Math.max(totalNew - labeledNew, 0);
+
+    useEffect(() => {
+        if (onReadyChange) onReadyChange(nextReleaseReady);
+    }, [nextReleaseReady, onReadyChange]);
 
     const getDatasetStats = (ds) => {
         const imgs = datasetImages[ds.id] || [];

@@ -28,6 +28,7 @@ const RetrainingWorkspace = () => {
     const [completedSteps, setCompletedSteps] = useState(new Set());
     const [project, setProject] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [labelReady, setLabelReady] = useState(false);
 
     useEffect(() => {
         fetch(`/api/v1/projects/${projectId}`)
@@ -74,6 +75,8 @@ const RetrainingWorkspace = () => {
                         projectId={projectId}
                         onNext={nextStep}
                         onBack={prevStep}
+                        hideNav
+                        onReadyChange={setLabelReady}
                     />
                 );
             case 2:
@@ -276,14 +279,14 @@ const RetrainingWorkspace = () => {
                 {renderContent()}
             </div>
 
-            {/* ── Bottom Nav — hidden on Label step (RetrainingLabeling handles its own nav) ── */}
+            {/* ── Bottom Nav — always fixed at bottom ── */}
             <div style={{
                 position: 'fixed',
                 bottom: 0, left: 0, right: 0,
                 background: '#fff',
                 borderTop: '1px solid #e8e8e8',
                 padding: '0.75rem 2rem',
-                display: showBottomNav ? 'flex' : 'none',
+                display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 zIndex: 100,
@@ -315,15 +318,15 @@ const RetrainingWorkspace = () => {
                     type="primary"
                     size="large"
                     onClick={nextStep}
-                    disabled={currentStep === STEPS.length - 1}
+                    disabled={currentStep === STEPS.length - 1 || (currentStep === 1 && !labelReady)}
                     style={{
-                        background: currentStep === STEPS.length - 1 ? undefined : 'linear-gradient(135deg, #7c3aed, #5b21b6)',
+                        background: (currentStep === STEPS.length - 1 || (currentStep === 1 && !labelReady)) ? undefined : 'linear-gradient(135deg, #7c3aed, #5b21b6)',
                         border: 'none',
                         borderRadius: 8,
                         fontWeight: 600,
                         paddingLeft: '2rem',
                         paddingRight: '2rem',
-                        boxShadow: currentStep === STEPS.length - 1 ? 'none' : '0 4px 15px rgba(124,58,237,0.35)',
+                        boxShadow: (currentStep === STEPS.length - 1 || (currentStep === 1 && !labelReady)) ? 'none' : '0 4px 15px rgba(124,58,237,0.35)',
                     }}
                 >
                     {currentStep === STEPS.length - 1 ? 'Finish' : `Next: ${STEPS[currentStep + 1]?.label}`}
