@@ -59,11 +59,43 @@ Reference plan: `RETRAINING_MODE_PLAN.md`
 
 ## PHASE 4 — Upload → Labeling → Release
 
-### Task 4.0 — Decision PENDING before coding
-- [ ] Decide split ratio strategy for auto-split when creating a release:
-  - Option A: Auto-copy ratio from reference release config (zero operator input)
-  - Option B: Show operator a simple slider pre-filled with reference ratio
-  - First check what keys the `Release.config` JSON actually stores for split ratios
+### Task 4.0 — Auto Dataset Split Design (DECIDED — ready to code)
+
+**Decision: auto-split silently, zero operator input. No "Add Dataset" button shown.**
+
+#### Split ratio calculation
+- Reference release `config` stores `split_counts: { train: N, val: N, test: N }` (augmented counts)
+- Calculate ratio from those counts:
+  - `total = train + val + test`
+  - `train_ratio = train / total`, `val_ratio = val / total`, `test_ratio = test / total`
+- Apply ratio to new image count → get new train/val/test counts for random split
+
+#### Auto-split trigger (backend call from frontend)
+- Triggered automatically when user returns to Label UI from manual labeling
+- Conditions that must ALL be true to run auto-split:
+  1. All new images (`upload_source = 'user_retraining'`) are labeled (is_labeled = True)
+  2. Those images are still in `annotating` stage (split_type = 'annotating')
+- If images already in `dataset` stage → skip auto-split, keep existing assignment
+- If not all labeled → skip auto-split, do nothing
+
+#### What auto-split does (same as "Add Dataset" button in Full Mode)
+1. Assigns `split_section = train / val / test` randomly per image using calculated ratio
+2. Moves images from `annotating` → `dataset` (sets split_type = 'dataset')
+3. Moves files on filesystem from `annotating/` folder → `dataset/` folder
+4. Updates DB records for all affected images
+
+#### Edge cases (all accepted behavior)
+- User edits labels after split → images stay in dataset, split stays untouched ✅
+- Developer in Full Mode moves images back to annotating → user returns to Retraining Mode → all labeled → auto-split runs again, reassigns randomly (overrides any manual per-image split) ✅
+- Developer manually changes per-image split in Full Mode while images are in dataset → safe, auto-split never runs on dataset images ✅
+- Only images with `upload_source = 'user_retraining'` are ever auto-split ✅
+
+#### "Next: Release" button lock condition
+- Locked unless ALL of:
+  1. All new images (`upload_source = 'user_retraining'`) are labeled
+  2. All new images are in `dataset` stage (split_type = 'dataset')
+- Button just navigates to Release step — does NOT create the release
+- Release creation happens inside the Release step itself
 
 ### Task 4.1 — Upload UI
 - [x] Operator can upload new images inside Retraining Mode project workspace
@@ -105,21 +137,90 @@ Reference plan: `RETRAINING_MODE_PLAN.md`
   - Each selected dataset/batch shows 50 images per page
   - All images in that dataset/batch are reachable through page numbers / next-prev
   - Annotation overlays load only for the currently visible 50 cards
-- [ ] NEXT UI improvement: add dynamic dataset-name tabs inside New Images / Old Images
-  - When a tab has multiple datasets/batches, do not show one long stacked page
-  - Show dataset-name tabs such as `custom-train`, `custom-val`, `custom-test`
-  - Selecting a dataset tab shows only that dataset/batch image grid
-  - Keep each dataset/batch separate and keep 50 images per page
-  - Do not crop images or change image card behavior
+- [x] Dataset-name sub-tabs inside New Images / Old Images — `d8170a9`
+  - Multiple datasets → sub-tabs by name with labeled/total tag per tab
+  - Single dataset → no sub-tabs, grid shown directly (no change)
+- [x] Annotations included in images API response — `d6ed54a`
+  - `include_annotations=true` param added to `GET /datasets/{id}/images`
+  - Batch loads all annotations in one query — eliminates 50 separate per-card fetches
+  - Image + overlay render together on first paint
+  - Full Mode callers unaffected (param defaults to false)
+- [x] Stat cards made clickable as tab selectors — `67ae60a`
+  - Clicking New Images or Previous Training Images card switches the grid below
+  - Small AntD tab bar removed — cards ARE the navigation
+  - Active card: gradient bg, stronger border, glow shadow, lift, bottom strip, icon glow
+  - "Old Images" renamed to "Previous Training Images"
+- [x] Bulk upload path bug fixed — `22a23d5`
+  - All upload options (Select Folder, Video frames) now save relative path from the start
+  - Previously saved absolute Windows path (V:\...) — broken on any other PC
+  - Fix: `path_manager.get_relative_image_path()` used in bulk upload same as single upload
+  - Single upload, Select Folder (images+labels) were already correct — only bulk was broken
+- [x] Clicking image in labeling grid opens annotator at correct image position — `f244586`
+  - `openLabeling(datasetId, img.id)` passes imageId — navigates with `?imageId=...`
+  - Previously always opened from image 1 regardless of which image was clicked
+- [x] Back button from manual labeling returns to Retraining Label step — `f9f8d49`
+  - RetrainingLabeling passes `state: { returnTo: /retraining/${projectId}?step=1 }`
+  - RetrainingWorkspace reads `?step` from URL to initialize at correct step
+  - ManualLabeling reads `location.state?.returnTo` — falls back to Full Mode behavior if not set
+  - Full Mode back button behavior completely unchanged
 - [ ] DEFERRED backend scalability task: real backend pagination for very large datasets
   - Track shared Full Mode + Retraining Mode work in `docs/LARGE_DATASET_PAGINATION_PLAN.md`
 
+### Task 4.0 — Auto Dataset Split
+- [x] Backend: `POST /retraining/{project_id}/auto-split` — `79f234b`
+  - Calculates ratio from reference release train/val/test_image_count
+  - Falls back to 70/20/10 if reference has no images
+  - Collects all annotating images from user_retraining datasets
+  - Skips if not all labeled, or already in dataset stage
+  - Shuffles, assigns split_section by ratio, copies files to dataset/{name}/{split}/
+  - Updates split_type='dataset', split_section, file_path in DB
+  - Removes annotating folder after successful move
+- [x] Frontend: loadAll in RetrainingLabeling triggers auto-split automatically — `79f234b`
+  - Checks: newDs with some not-yet-split AND all labeled
+  - Calls POST /retraining/{projectId}/auto-split silently
+  - Re-fetches datasets if split_done=true → allNewSplit becomes true → Next unlocks
+
 ### Task 4.4 — Create Release (auto)
-- [ ] "Create Release" button → calls `POST /retraining/{project_id}/create-release`
-- [ ] No transformation UI shown to operator
-- [ ] No release config shown — all copied from reference release automatically
-- [ ] No release history shown
-- [ ] On success → proceed to Training step
+
+#### Architecture decisions (finalised)
+- `release_source = 'user_retraining'` column added to releases table — same pattern as upload_source on datasets
+- Operator input: release NAME only — all else (transformations, format, task_type, multiplier) auto-copied from reference release
+- One active user_retraining release per project — on new creation, old unprotected user_retraining release is deleted (DB + ZIP file)
+- Production-protected exception: if a user_retraining release is currently pointed to by `retraining_references.release_id` → it is NOT deleted → stays until production is reassigned
+- Frontend calls two endpoints in sequence: `POST /retraining/{project_id}/create-release` → returns cleanup + full payload → then `POST /releases/create` with that payload
+- No download popup after creation — download available from history card
+- Release history shows only `release_source === 'user_retraining'` releases (max 1 visible normally, max 2 in production-protected edge case)
+- Click release card → opens same ReleaseDetailsView as Full Mode (no changes to that component)
+- Training step UI lock → user cannot reach Release step during training → no need to guard in this step
+- Delete old release BEFORE creating new one is acceptable — user just re-enters name if creation fails
+
+#### Backend changes
+- [ ] DB migration: `ALTER TABLE releases ADD COLUMN release_source VARCHAR(50)` in database.py init_db
+- [ ] models.py: `release_source = Column(String(50), nullable=True)` on Release class
+- [ ] releases.py: add `release_source: Optional[str] = None` to ReleaseCreate; save to Release object in create_release handler; include in get_project_releases response
+- [ ] retraining.py: rewrite `create-release` endpoint:
+  - Body: `{name: str}`
+  - Get reference release config (transformations, format, task_type, multiplier, output_format)
+  - Get ALL dataset IDs for this project
+  - Find + delete old unprotected user_retraining releases (DB + ZIP file on disk)
+  - Return: full ReleaseCreate payload with `release_source='user_retraining'` + `dataset_ids`
+
+#### Frontend
+- [ ] Create `frontend/src/components/retraining/RetrainingRelease.jsx`:
+  - Load `GET /retraining/{projectId}/reference` for preview (format, task_type, transformations)
+  - Load `GET /projects/{projectId}/releases` filtered by `release_source === 'user_retraining'` for history
+  - Name input field (default: auto-name with date e.g. `retraining-2026-04-23`)
+  - Config preview card: format, task_type, transformations list (read-only)
+  - Image count summary (from current datasets)
+  - "Create Release" button → spinner + locked during:
+    1. `POST /retraining/{projectId}/create-release` → get dataset_ids + payload
+    2. `POST /releases/create` with payload
+  - On success: reload release history → card appears → Next: Training unlocks
+  - No download popup
+  - Release history: custom filtered list (same card style as Full Mode)
+  - Click release card → open ReleaseDetailsView (reuse as-is)
+  - Download button on history card
+- [ ] RetrainingWorkspace case 2: replace placeholder with `<RetrainingRelease projectId={projectId} onNext={nextStep} />`
 
 ---
 

@@ -244,8 +244,9 @@ def unassign_production(project_id: int, db: Session = Depends(get_db)):
 
 # ---------------------------------------------------------------------------
 # POST /api/v1/retraining/{project_id}/create-release
-# Creates a new release using the reference release config automatically.
-# Operator does not see or configure anything.
+# Returns the full release payload (copied from reference) for the frontend
+# to submit to POST /releases/create. Also deletes old unprotected
+# user_retraining releases for this project before returning.
 # ---------------------------------------------------------------------------
 @router.post("/retraining/{project_id}/create-release")
 def create_retraining_release(
@@ -254,15 +255,20 @@ def create_retraining_release(
     db: Session = Depends(get_db)
 ):
     """
-    Creates a new release by copying config from the production reference release.
-    Body: { name (optional) }
-    The frontend then triggers the normal release generation pipeline.
-    Returns the new release config ready for the frontend to submit.
+    Body: { name: str }
+    1. Validates reference release exists.
+    2. Deletes old unprotected user_retraining releases (DB + ZIP file).
+    3. Returns full ReleaseCreate payload with all config auto-copied from reference.
+    Frontend then POSTs this payload to /releases/create.
     """
+    name = body.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Release name is required")
+
+    # ── Get reference ────────────────────────────────────────────────────────
     ref = db.query(RetrainingReference).filter(
         RetrainingReference.project_id == project_id
     ).first()
-
     if not ref or not ref.release_id:
         raise HTTPException(
             status_code=404,
@@ -273,7 +279,7 @@ def create_retraining_release(
     if not ref_release:
         raise HTTPException(status_code=404, detail="Reference release no longer exists.")
 
-    # Extract config from reference release
+    # ── Extract reference config ─────────────────────────────────────────────
     release_config = {}
     if ref_release.config:
         try:
@@ -281,20 +287,63 @@ def create_retraining_release(
         except Exception:
             release_config = {}
 
-    # Return the config for the frontend to use when creating the release
-    # The actual release creation uses the existing release pipeline
+    # ── Delete old unprotected user_retraining releases ──────────────────────
+    # Production-protected = currently pointed to by retraining_references.release_id
+    protected_id = ref.release_id
+
+    old_releases = db.query(Release).filter(
+        Release.project_id == project_id,
+        Release.release_source == 'user_retraining',
+        Release.id != protected_id,
+    ).all()
+
+    for old_rel in old_releases:
+        # Delete ZIP file from disk
+        if old_rel.model_path:
+            try:
+                zip_path = path_manager.get_absolute_path(old_rel.model_path)
+                if zip_path.exists():
+                    zip_path.unlink()
+                # Also try removing the parent folder if it's now empty
+                if zip_path.parent.exists() and not any(zip_path.parent.iterdir()):
+                    zip_path.parent.rmdir()
+            except Exception:
+                pass  # Non-critical — DB record still removed
+        db.delete(old_rel)
+
+    db.commit()
+
+    logger.info("app.retraining",
+                f"Deleted {len(old_releases)} old user_retraining release(s) for project {project_id}",
+                "create_release_cleanup",
+                {"project_id": project_id, "deleted_count": len(old_releases)})
+
+    # ── Collect all dataset IDs for this project ──────────────────────────────
+    all_datasets = db.query(Dataset).filter(
+        Dataset.project_id == project_id
+    ).all()
+    dataset_ids = [str(d.id) for d in all_datasets]
+
+    if not dataset_ids:
+        raise HTTPException(status_code=400, detail="No datasets found for this project.")
+
+    # ── Build full ReleaseCreate payload ─────────────────────────────────────
     return {
         "project_id": project_id,
-        "reference_release_id": ref_release.id,
-        "release_config": {
-            "task_type": ref_release.task_type,
-            "export_format": release_config.get("export_format", "yolo"),
-            "output_format": release_config.get("output_format", "original"),
+        "release_payload": {
+            "version_name": name,
+            "dataset_ids": dataset_ids,
+            "description": f"Auto-created by Retraining Mode on {datetime.utcnow().strftime('%Y-%m-%d')}",
             "transformations": release_config.get("transformations", []),
-            "images_per_original": release_config.get("images_per_original", 1),
-            "train_image_count": ref_release.train_image_count,
-            "val_image_count": ref_release.val_image_count,
-            "test_image_count": ref_release.test_image_count,
+            "multiplier": release_config.get("images_per_original", 1),
+            "export_format": release_config.get("export_format") or ref_release.export_format or "YOLO",
+            "task_type": ref_release.task_type or "object_detection",
+            "output_format": release_config.get("output_format", "original"),
+            "include_images": True,
+            "include_annotations": True,
+            "verified_only": False,
+            "preserve_annotations": True,
+            "release_source": "user_retraining",
         }
     }
 

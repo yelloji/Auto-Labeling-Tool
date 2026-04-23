@@ -347,3 +347,14 @@ def get_db():
                     logger.info("app.database", "Added column upload_source to datasets", "datasets_add_upload_source")
         except Exception as mig_err:
             logger.warning("errors.system", f"Schema migration for datasets upload_source failed: {mig_err}", "datasets_add_upload_source_failed", {"error": str(mig_err)})
+
+        # Migration: add release_source to releases (tracks Retraining Mode releases)
+        try:
+            with engine.begin() as conn:
+                cols = conn.execute(text("PRAGMA table_info(releases)")).fetchall()
+                col_names = {c[1] for c in cols}
+                if "release_source" not in col_names:
+                    conn.execute(text("ALTER TABLE releases ADD COLUMN release_source VARCHAR(50)"))
+                    logger.info("app.database", "Added column release_source to releases", "releases_add_release_source")
+        except Exception as mig_err:
+            logger.warning("errors.system", f"Schema migration for releases release_source failed: {mig_err}", "releases_add_release_source_failed", {"error": str(mig_err)})

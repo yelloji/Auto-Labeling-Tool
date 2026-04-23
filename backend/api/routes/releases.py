@@ -88,6 +88,7 @@ class ReleaseCreate(BaseModel):
     verified_only: bool = False
     output_format: str = "original"  # Image format: original, jpg, png, webp, bmp, tiff
     preview_data: Optional[dict] = None  # Preview data with calculated split counts
+    release_source: Optional[str] = None  # 'user_retraining' or None (Full Mode)
 
 class DatasetRebalanceRequest(BaseModel):
     train_count: int
@@ -638,6 +639,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             test_image_count=split_counts.get("test", 0),
             class_count=class_count,  # ✅ FIXED: Set nc (number of classes) from preview data
             model_path=relative_model_path,
+            release_source=payload.release_source,
             created_at=datetime.now(),
         )
         db.add(release)
@@ -925,6 +927,7 @@ def get_project_releases(project_id: str, db: Session = Depends(get_db)):
                 "description": r.description,
                 "datasets_used": r.datasets_used,
                 "project_id": r.project_id,
+                "release_source": r.release_source,
             }
             for r in releases
         ]

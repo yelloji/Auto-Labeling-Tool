@@ -287,9 +287,10 @@ class Release(Base):
     class_count = Column(Integer, default=0)        # nc: number of classes (enough for UI)
 
     model_path = Column(String(500))  # path to ZIP or export folder
+    release_source = Column(String(50), nullable=True)  # 'user_retraining' or None (Full Mode)
 
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationship to transformations
     transformations = relationship("ImageTransformation", back_populates="release")
 
