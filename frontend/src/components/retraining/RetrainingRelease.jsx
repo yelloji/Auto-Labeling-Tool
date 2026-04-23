@@ -601,41 +601,6 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                     </div>
                 </div>
 
-                    {hasRelease && (
-                        <div style={{
-                            padding: '0.95rem 1.05rem',
-                            background: 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(240,253,250,0.96))',
-                            border: '1px solid rgba(16,185,129,0.28)',
-                            borderLeft: '5px solid #10b981',
-                            borderRadius: 12,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '1rem',
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <CheckCircleOutlined style={{ color: '#10b981', fontSize: '1.15rem', flexShrink: 0 }} />
-                                <div>
-                                    <Text strong style={{ color: '#065f46', display: 'block' }}>Release ready</Text>
-                                    <Text style={{ color: '#047857', fontSize: '0.84rem' }}>
-                                        {previewOriginalCount != null && previewFinalCount != null
-                                            ? `${previewOriginalCount} source images became ${previewFinalCount} release images. `
-                                            : previewFinalCount ? `${previewFinalCount} images prepared. ` : ''}
-                                        Continue to training from the bottom bar.
-                                    </Text>
-                                </div>
-                            </div>
-                            {activeRelease && (
-                                <Button
-                                    icon={<EyeOutlined />}
-                                    onClick={() => setSelectedRelease(activeRelease)}
-                                    style={{ borderRadius: 9, fontWeight: 800 }}
-                                >
-                                    Open Details
-                                </Button>
-                            )}
-                        </div>
-                    )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}>
@@ -816,11 +781,35 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                         )}
                     </div>
 
+                    {hasRelease && (
+                        <div style={{
+                            padding: '0.95rem 1.05rem',
+                            background: 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(240,253,250,0.96))',
+                            border: '1px solid rgba(16,185,129,0.28)',
+                            borderLeft: '5px solid #10b981',
+                            borderRadius: 12,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '0.75rem',
+                        }}>
+                            <CheckCircleOutlined style={{ color: '#10b981', fontSize: '1.15rem', flexShrink: 0, marginTop: 2 }} />
+                            <div>
+                                <Text strong style={{ color: '#065f46', display: 'block' }}>Release ready</Text>
+                                <Text style={{ color: '#047857', fontSize: '0.84rem', lineHeight: 1.55 }}>
+                                    {previewOriginalCount != null && previewFinalCount != null
+                                        ? `${previewOriginalCount} source images became ${previewFinalCount} release images. `
+                                        : previewFinalCount ? `${previewFinalCount} images prepared. ` : ''}
+                                    To see release images, click the created release card above in Release History. Continue to training from the bottom bar.
+                                </Text>
+                            </div>
+                        </div>
+                    )}
+
                     <div style={{
-                        background: 'rgba(255,255,255,0.48)',
+                        background: 'linear-gradient(135deg, rgba(255,247,237,0.88), rgba(255,251,235,0.82))',
                         backdropFilter: 'blur(14px)',
                         WebkitBackdropFilter: 'blur(14px)',
-                        border: '1px solid rgba(255,255,255,0.68)',
+                        border: '1px solid rgba(251,191,36,0.28)',
                         borderRadius: 12,
                         padding: '0.9rem 1rem',
                         display: 'flex',
@@ -828,9 +817,9 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                         alignItems: 'flex-start',
                         boxShadow: '0 4px 14px rgba(15,23,42,0.04)',
                     }}>
-                        <SafetyCertificateOutlined style={{ color: '#059669', marginTop: 2 }} />
-                        <Text style={{ color: '#475569', fontSize: '0.8rem', lineHeight: 1.55 }}>
-                            Retraining releases stay separate from Full Mode releases. Creating a new one replaces only the previous retraining package unless it is protected as production.
+                        <SafetyCertificateOutlined style={{ color: '#d97706', marginTop: 2 }} />
+                        <Text style={{ color: '#9a3412', fontSize: '0.8rem', lineHeight: 1.55 }}>
+                            Only one active retraining release is shown here at a time. If you need a fresh release package, remove the current release above, then create the next one. If a release is protected by production assignment, you can create a new retraining release again. Production assignment happens later from the Results step when the trained model is approved for production.
                         </Text>
                     </div>
                 </div>
