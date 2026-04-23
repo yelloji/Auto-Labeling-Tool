@@ -288,13 +288,37 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav, onReadyChange 
         }
     }, []);
 
+    const fetchDatasets = useCallback(async () => {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/datasets`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        return Array.isArray(data) ? data : (data.datasets || data.items || []);
+    }, [projectId]);
+
     const loadAll = useCallback(async () => {
         setLoadingDatasets(true);
         try {
-            const res = await fetch(`${API_BASE}/projects/${projectId}/datasets`);
-            if (!res.ok) throw new Error();
-            const data = await res.json();
-            const datasets = Array.isArray(data) ? data : (data.datasets || data.items || []);
+            let datasets = await fetchDatasets();
+
+            // Auto-split: trigger silently if all new images are labeled and still in annotating stage
+            const newDsCheck = datasets.filter(d => d.upload_source === 'user_retraining');
+            const shouldAutoSplit =
+                newDsCheck.length > 0 &&
+                newDsCheck.some(d => d.split_type !== 'dataset') &&
+                newDsCheck.every(d => (d.total_images ?? 0) > 0 && (d.labeled_images ?? 0) >= (d.total_images ?? 0));
+
+            if (shouldAutoSplit) {
+                try {
+                    const sr = await fetch(`${API_BASE}/retraining/${projectId}/auto-split`, { method: 'POST' });
+                    if (sr.ok) {
+                        const sd = await sr.json();
+                        if (sd.split_done) {
+                            // Re-fetch so split_type reflects the new 'dataset' stage
+                            datasets = await fetchDatasets();
+                        }
+                    }
+                } catch { /* non-critical — state will be refreshed on next load */ }
+            }
 
             const newDs = datasets.filter(d => d.upload_source === 'user_retraining');
             const oldDs = datasets.filter(d => d.split_type === 'dataset');
@@ -325,7 +349,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav, onReadyChange 
         } finally {
             setLoadingDatasets(false);
         }
-    }, [projectId, loadDatasetImagesPage]);
+    }, [projectId, fetchDatasets, loadDatasetImagesPage]);
 
     useEffect(() => { loadAll(); }, [loadAll]);
 

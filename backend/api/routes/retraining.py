@@ -13,11 +13,14 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
 import json
+import random
+import shutil
 
 from database.database import get_db
 from database.models import (
-    Project, RetrainingReference, TrainingSession, Release
+    Project, RetrainingReference, TrainingSession, Release, Dataset, Image
 )
+from utils.path_utils import path_manager
 from logging_system.professional_logger import get_professional_logger
 
 logger = get_professional_logger()
@@ -359,3 +362,148 @@ def start_retraining(
             "resolved_config": resolved_config,
         }
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/retraining/{project_id}/auto-split
+# Silently assigns train/val/test split to all user_retraining annotating images.
+# Called automatically by the frontend when the Label step is opened.
+# ---------------------------------------------------------------------------
+@router.post("/retraining/{project_id}/auto-split")
+def auto_split_retraining_images(project_id: int, db: Session = Depends(get_db)):
+    """
+    Conditions to run (ALL must be true):
+    1. Project has a production reference (for split ratio).
+    2. There are datasets with upload_source='user_retraining'.
+    3. All images in those datasets with split_type='annotating' are labeled.
+
+    If images are already in 'dataset' stage → skipped (already split).
+    If not all labeled → skipped (frontend gates Next button separately).
+    """
+    try:
+        # ── Get project ──────────────────────────────────────────────────────
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # ── Get reference release for ratio calculation ───────────────────────
+        ref = db.query(RetrainingReference).filter(
+            RetrainingReference.project_id == project_id
+        ).first()
+
+        if not ref or not ref.release_id:
+            raise HTTPException(status_code=404, detail="No production reference found.")
+
+        ref_release = db.query(Release).filter(Release.id == ref.release_id).first()
+        if not ref_release:
+            raise HTTPException(status_code=404, detail="Reference release not found.")
+
+        # ── Calculate split ratios from reference release image counts ─────────
+        train_cnt = ref_release.train_image_count or 0
+        val_cnt = ref_release.val_image_count or 0
+        test_cnt = ref_release.test_image_count or 0
+        total_ref = train_cnt + val_cnt + test_cnt
+
+        if total_ref == 0:
+            train_ratio, val_ratio = 0.7, 0.2
+        else:
+            train_ratio = train_cnt / total_ref
+            val_ratio = val_cnt / total_ref
+        # test gets the remainder (avoids float rounding leaving an image unassigned)
+
+        # ── Collect annotating images from user_retraining datasets ───────────
+        datasets = db.query(Dataset).filter(
+            Dataset.project_id == project_id,
+            Dataset.upload_source == 'user_retraining'
+        ).all()
+
+        if not datasets:
+            return {"split_done": False, "skipped": True, "reason": "no_retraining_datasets"}
+
+        images_to_split = []  # list of (image, dataset)
+        for dataset in datasets:
+            annotating = db.query(Image).filter(
+                Image.dataset_id == dataset.id,
+                Image.split_type == 'annotating'
+            ).all()
+
+            if not annotating:
+                continue  # dataset already split or empty — skip
+
+            # All must be labeled before we auto-split
+            if not all(img.is_labeled for img in annotating):
+                return {"split_done": False, "skipped": True, "reason": "not_all_labeled"}
+
+            images_to_split.extend((img, dataset) for img in annotating)
+
+        if not images_to_split:
+            return {"split_done": False, "skipped": True, "reason": "no_annotating_images"}
+
+        # ── Assign split sections by ratio ────────────────────────────────────
+        random.shuffle(images_to_split)
+        n = len(images_to_split)
+        n_train = round(train_ratio * n)
+        n_val = round(val_ratio * n)
+        n_test = n - n_train - n_val
+        if n_test < 0:
+            n_train += n_test
+            n_test = 0
+
+        assignments = (
+            [('train', img, ds) for img, ds in images_to_split[:n_train]] +
+            [('val',   img, ds) for img, ds in images_to_split[n_train:n_train + n_val]] +
+            [('test',  img, ds) for img, ds in images_to_split[n_train + n_val:]]
+        )
+
+        # ── Copy files and update DB ──────────────────────────────────────────
+        project_folder = path_manager.get_absolute_path(f"projects/{project.name}")
+        counts = {"train": 0, "val": 0, "test": 0}
+
+        for split_section, image, dataset in assignments:
+            target_folder = project_folder / "dataset" / dataset.name / split_section
+            target_folder.mkdir(parents=True, exist_ok=True)
+            target_path = target_folder / image.filename
+
+            source_path = path_manager.get_absolute_path(image.file_path)
+            if source_path.exists():
+                shutil.copy2(str(source_path), str(target_path))
+
+            new_path = f"projects/{project.name}/dataset/{dataset.name}/{split_section}/{image.filename}"
+            image.split_type = 'dataset'
+            image.split_section = split_section
+            image.file_path = new_path
+            image.updated_at = datetime.utcnow()
+
+            counts[split_section] += 1
+
+        db.commit()
+
+        # ── Remove annotating folders (non-critical) ──────────────────────────
+        for dataset in datasets:
+            annotating_folder = project_folder / "annotating" / dataset.name
+            if annotating_folder.exists():
+                try:
+                    shutil.rmtree(str(annotating_folder))
+                except Exception:
+                    pass
+
+        logger.info("app.retraining",
+                    f"Auto-split complete for project {project_id}: "
+                    f"{counts['train']} train / {counts['val']} val / {counts['test']} test",
+                    "auto_split_complete",
+                    {"project_id": project_id, "counts": counts, "total": n})
+
+        return {
+            "split_done": True,
+            "skipped": False,
+            "counts": counts,
+            "total": n,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error("errors.system", f"Auto-split failed: {e}", "auto_split_error",
+                     {"project_id": project_id, "error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))
