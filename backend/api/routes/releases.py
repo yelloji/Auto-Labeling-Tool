@@ -47,6 +47,70 @@ router = APIRouter()
 
 # Note: Release paths are now project-specific: /projects/{project_name}/releases/
 
+
+def _resolve_release_class_count(release: Release) -> int:
+    """Best-effort class count for releases with missing cached nc values."""
+    if not release:
+        return 0
+
+    if release.class_count and release.class_count > 0:
+        return release.class_count
+
+    try:
+        config_data = release.config
+        if isinstance(config_data, str):
+            config_data = json.loads(config_data)
+        if isinstance(config_data, dict):
+            classes = config_data.get("classes")
+            if isinstance(classes, list) and classes:
+                return len([c for c in classes if str(c).strip()])
+    except Exception:
+        pass
+
+    try:
+        abs_model_path = PathManager.get_absolute_path(release.model_path) if release.model_path else None
+        if not abs_model_path or not abs_model_path.exists():
+            return 0
+
+        with zipfile.ZipFile(abs_model_path, 'r') as zipf:
+            for file_path in zipf.namelist():
+                normalized = file_path.replace("\\", "/").lower()
+
+                if normalized.endswith("metadata/release_config.json") or normalized.endswith("release_config.json"):
+                    try:
+                        with zipf.open(file_path) as f:
+                            config_json = json.loads(f.read().decode('utf-8'))
+                            classes = config_json.get("classes")
+                            if isinstance(classes, list) and classes:
+                                return len([c for c in classes if str(c).strip()])
+                    except Exception:
+                        pass
+
+                if normalized.endswith("data.yaml") or normalized.endswith("data.yml"):
+                    try:
+                        with zipf.open(file_path) as f:
+                            yaml_data = yaml.safe_load(f.read().decode('utf-8'))
+                            names = yaml_data.get("names") if isinstance(yaml_data, dict) else None
+                            if isinstance(names, dict):
+                                return len(names)
+                            if isinstance(names, list):
+                                return len([n for n in names if str(n).strip()])
+                    except Exception:
+                        pass
+
+                if normalized.endswith("classes.txt"):
+                    try:
+                        with zipf.open(file_path) as f:
+                            class_names = [line.strip() for line in f.read().decode('utf-8').splitlines() if line.strip()]
+                            if class_names:
+                                return len(class_names)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+    return 0
+
 # New enhanced release generation models
 class EnhancedReleaseCreate(BaseModel):
     release_name: str
@@ -746,6 +810,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         })
         
         created_release = db.query(Release).filter(Release.id == release_id).first()
+        resolved_class_count = _resolve_release_class_count(created_release)
         
         logger.info("operations.releases", f"Preparing successful response", "response_preparation", {
             "release_id": release_id,
@@ -773,11 +838,12 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
                 "export_format": created_release.export_format,
                 "task_type": created_release.task_type,
                 "final_image_count": created_release.final_image_count,
-                "class_count": created_release.class_count or 0,
+                "class_count": resolved_class_count,
                 "total_original_images": created_release.total_original_images,
                 "total_augmented_images": created_release.total_augmented_images,
                 "original_image_count": created_release.total_original_images,  # For backward compatibility
                 "augmented_image_count": created_release.total_augmented_images,  # For backward compatibility
+                "total_classes": resolved_class_count,
                 "created_at": created_release.created_at,
                 "model_path": created_release.model_path,
                 "datasets_used": created_release.datasets_used,
@@ -861,13 +927,13 @@ def get_release_history(dataset_id: str, db: Session = Depends(get_db)):
                 "task_type": r.task_type,
                 "original_image_count": r.total_original_images,
                 "augmented_image_count": r.total_augmented_images,
-                "final_image_count": r.final_image_count,  # Add this field for frontend
-                "class_count": r.class_count or 0,
-                "total_original_images": r.total_original_images,  # Add this field for frontend
+                "final_image_count": r.final_image_count,
+                "class_count": _resolve_release_class_count(r),
+                "total_original_images": r.total_original_images,
                 "total_augmented_images": r.total_augmented_images,
-                "total_classes": r.class_count or 0,
+                "total_classes": _resolve_release_class_count(r),
                 "created_at": r.created_at,
-                "model_path": r.model_path,  # Add this for download modal
+                "model_path": r.model_path,
                 "description": r.description,
                 "train_image_count": r.train_image_count,
                 "val_image_count": r.val_image_count,
@@ -912,14 +978,14 @@ def get_project_releases(project_id: str, db: Session = Depends(get_db)):
             {
                 "id": r.id,
                 "name": r.name,
-                "version_name": r.name,  # For backward compatibility
+                "version_name": r.name,
                 "export_format": r.export_format,
                 "task_type": r.task_type,
                 "original_image_count": r.total_original_images,
                 "augmented_image_count": r.total_augmented_images,
                 "final_image_count": r.final_image_count,
-                "class_count": r.class_count or 0,
-                "total_classes": r.class_count or 0,
+                "class_count": _resolve_release_class_count(r),
+                "total_classes": _resolve_release_class_count(r),
                 "total_original_images": r.total_original_images,
                 "total_augmented_images": r.total_augmented_images,
                 "created_at": r.created_at,
@@ -3812,6 +3878,7 @@ def create_complete_release_zip(
             _release_row = db.query(Release).filter(Release.id == release_id).first()
             if _release_row:
                 _release_row.final_image_count = final_image_count
+                _release_row.class_count = len(class_list_for_yaml) if class_list_for_yaml else _resolve_release_class_count(_release_row)
                 db.commit()
         except Exception as _ue:
             logger.warning("errors.system", "Failed to update release final_image_count after ZIP", "release_count_update_failed", {

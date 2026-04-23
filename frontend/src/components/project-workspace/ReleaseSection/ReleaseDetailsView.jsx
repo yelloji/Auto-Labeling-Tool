@@ -883,7 +883,11 @@ useEffect(() => {
                     </svg>
                   </div>
                   <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                    {release.total_classes || 0}
+                    {release.total_classes
+                      || release.class_count
+                      || (Array.isArray(releaseConfig?.classes) ? releaseConfig.classes.length : 0)
+                      || (releaseConfig?.class_mapping ? Object.keys(releaseConfig.class_mapping).length : 0)
+                      || 0}
                   </div>
                   <div style={{ color: '#666' }}>Classes</div>
                 </div>
