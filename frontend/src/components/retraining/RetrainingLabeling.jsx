@@ -321,7 +321,7 @@ const RetrainingLabeling = ({ projectId, onNext, onBack, hideNav, onReadyChange 
             }
 
             const newDs = datasets.filter(d => d.upload_source === 'user_retraining');
-            const oldDs = datasets.filter(d => d.split_type === 'dataset');
+            const oldDs = datasets.filter(d => d.split_type === 'dataset' && d.upload_source !== 'user_retraining');
 
             setNewDatasets(newDs);
             setOldDatasets(oldDs);
