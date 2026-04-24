@@ -14,11 +14,6 @@ import TrainingInitializing from '../project-workspace/ModelTrainingSection/Dash
 const { Text } = Typography;
 const API = '/api/v1';
 
-const autoTrainingName = () => {
-    const d = new Date();
-    return `retraining-train-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
 const panelStyle = {
     background: 'rgba(255,255,255,0.78)',
     backdropFilter: 'blur(20px)',
@@ -39,13 +34,21 @@ const statStyle = {
     minHeight: 86,
 };
 
+const tabScrollFrameStyle = {
+    maxHeight: 'calc(100vh - 245px)',
+    minHeight: 380,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    paddingRight: 4,
+};
+
 const fileName = (value) => String(value || '').split(/[\\/]/).pop() || '-';
 
 const RetrainingTraining = ({ projectId, onReadyChange }) => {
     const [reference, setReference] = useState(null);
     const [activeRelease, setActiveRelease] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [trainingName, setTrainingName] = useState(autoTrainingName());
+    const [trainingName, setTrainingName] = useState('');
     const [selectedBaseModel, setSelectedBaseModel] = useState('');
     const [configPreview, setConfigPreview] = useState({});
     const [datasetReleaseDir, setDatasetReleaseDir] = useState('');
@@ -465,7 +468,7 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
                                     key: 'config',
                                     label: 'Config Preview',
                                     children: (
-                                        <div>
+                                        <div style={tabScrollFrameStyle}>
                                             <div style={{ marginBottom: 10 }}>
                                                 <Text style={{ color: '#64748b', fontSize: '0.8rem' }}>
                                                     Read-only preview of the copied production training config with the current run name, model, and release dataset.
@@ -476,7 +479,7 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
                                                 border: '1px solid #e2e8f0',
                                                 borderRadius: 10,
                                                 padding: 12,
-                                                maxHeight: 420,
+                                                minHeight: 300,
                                                 overflow: 'auto',
                                                 margin: 0,
                                                 fontSize: 12,
@@ -490,7 +493,7 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
                                     key: 'status',
                                     label: 'Status',
                                     children: (
-                                        <div style={{ minHeight: 380 }}>
+                                        <div style={tabScrollFrameStyle}>
                                             {showInitializing ? (
                                                 <TrainingInitializing />
                                             ) : (
