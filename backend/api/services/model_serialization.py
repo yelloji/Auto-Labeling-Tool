@@ -169,6 +169,8 @@ def serialize_ai_model(db: Session, m: AiModel) -> Dict[str, Any]:
         # Authoritative flags for UI
         "source": source,
         "source_type": getattr(m, 'source_type', None),  # Add source_type for trained models
+        "training_session_id": getattr(m, 'training_session_id', None),
+        "is_best": getattr(m, 'is_best', None),
         "is_custom": is_custom,
         "is_pretrained": is_pretrained,
         "is_ready": is_ready,

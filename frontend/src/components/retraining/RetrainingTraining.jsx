@@ -56,6 +56,7 @@ const parseMaybeJson = (value, fallback = null) => {
 const RetrainingTraining = ({ projectId, onReadyChange }) => {
     const [reference, setReference] = useState(null);
     const [activeRelease, setActiveRelease] = useState(null);
+    const [productionProjectModel, setProductionProjectModel] = useState(null);
     const [loading, setLoading] = useState(true);
     const [trainingName, setTrainingName] = useState('');
     const [selectedBaseModel, setSelectedBaseModel] = useState('');
@@ -140,19 +141,28 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
     const loadCore = useCallback(async () => {
         setLoading(true);
         try {
-            const [referenceRes, releasesRes] = await Promise.all([
+            const [referenceRes, releasesRes, projectModels] = await Promise.all([
                 fetch(`${API}/retraining/${projectId}/reference`),
                 fetch(`${API}/projects/${projectId}/releases`),
+                projectsAPI.getProjectModels(projectId, false).catch(() => []),
             ]);
 
             const referenceData = referenceRes.ok ? await referenceRes.json() : null;
             const allReleases = releasesRes.ok ? await releasesRes.json() : [];
             const retrainingReleases = (allReleases || []).filter(rel => rel.release_source === 'user_retraining');
+            const productionTrainingId = referenceData?.training_info?.id;
+            const matchedProductionModel = (projectModels || []).find((model) => (
+                model?.source_type === 'training'
+                && String(model?.training_session_id || '') === String(productionTrainingId || '')
+                && Boolean(model?.is_best)
+            )) || null;
 
             setReference(referenceData);
             setActiveRelease(retrainingReleases[0] || null);
+            setProductionProjectModel(matchedProductionModel);
 
-            const defaultModel = referenceData?.training_info?.best_weights_path
+            const defaultModel = matchedProductionModel?.file_path
+                || referenceData?.training_info?.best_weights_path
                 || referenceData?.training_info?.base_model_id
                 || '';
             setSelectedBaseModel(prev => prev || defaultModel);
@@ -221,9 +231,9 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
         };
 
         pushOption(
-            trainingInfo.best_weights_path,
+            productionProjectModel?.file_path || trainingInfo.best_weights_path,
             'Production trained model',
-            fileName(trainingInfo.best_weights_path),
+            productionProjectModel?.name || fileName(trainingInfo.best_weights_path),
             'production'
         );
         pushOption(
@@ -234,7 +244,7 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
         );
 
         return options;
-    }, [reference]);
+    }, [reference, productionProjectModel]);
 
     const selectedModelOption = useMemo(
         () => modelOptions.find(option => option.value === selectedBaseModel) || null,
