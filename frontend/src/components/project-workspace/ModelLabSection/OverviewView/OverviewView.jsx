@@ -60,8 +60,13 @@ const OverviewView = ({ training, projectId }) => {
                         body: JSON.stringify({ training_session_id: training.id }),
                     });
                     if (!res.ok) throw new Error('Failed');
+                    const data = await res.json();
                     setIsProduction(true);
-                    message.success(`"${training.name}" is now the production reference.`);
+                    if (data?.auto_model_added) {
+                        message.success(`"${training.name}" is now the production reference, and its production trained model was added to Project Models.`);
+                    } else {
+                        message.success(`"${training.name}" is now the production reference. Its production trained model already exists in Project Models.`);
+                    }
                 } catch {
                     message.error('Failed to assign production reference.');
                 } finally {

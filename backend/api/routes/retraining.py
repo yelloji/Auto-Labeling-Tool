@@ -23,6 +23,7 @@ from database.models import (
 )
 from utils.path_utils import path_manager
 from logging_system.professional_logger import get_professional_logger
+from models.training.model_lab_model_router import deploy_training_model_record
 
 logger = get_professional_logger()
 router = APIRouter()
@@ -202,6 +203,21 @@ def assign_production(
         )
         db.add(ref)
 
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    auto_model_name = f"{ts.name} - Production trained model"
+    auto_model_description = "Auto-added from Assign to Production"
+    auto_model, model_created_now = deploy_training_model_record(
+        db=db,
+        project=project,
+        session=ts,
+        model_type="best",
+        model_name=auto_model_name,
+        description=auto_model_description,
+    )
+
     db.commit()
     db.refresh(ref)
 
@@ -214,6 +230,9 @@ def assign_production(
         "training_session_id": training_session_id,
         "release_id": release_id,
         "assigned_at": ref.assigned_at.isoformat(),
+        "auto_model_added": model_created_now,
+        "auto_model_id": auto_model.id,
+        "auto_model_name": auto_model.name,
     }
 
 
