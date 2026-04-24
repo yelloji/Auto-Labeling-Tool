@@ -7,7 +7,7 @@ import {
     PlayCircleOutlined,
     StopOutlined,
 } from '@ant-design/icons';
-import { trainingAPI } from '../../services/api';
+import { projectsAPI, trainingAPI } from '../../services/api';
 import LiveTrainingDashboard from '../project-workspace/ModelTrainingSection/Dashboard/LiveTrainingDashboard';
 import TrainingInitializing from '../project-workspace/ModelTrainingSection/Dashboard/TrainingInitializing';
 
@@ -43,6 +43,15 @@ const tabScrollFrameStyle = {
 };
 
 const fileName = (value) => String(value || '').split(/[\\/]/).pop() || '-';
+const parseMaybeJson = (value, fallback = null) => {
+    if (!value) return fallback;
+    if (typeof value === 'object') return value;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return fallback;
+    }
+};
 
 const RetrainingTraining = ({ projectId, onReadyChange }) => {
     const [reference, setReference] = useState(null);
@@ -60,6 +69,73 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
     const [preparing, setPreparing] = useState(false);
     const [starting, setStarting] = useState(false);
     const [isStopping, setIsStopping] = useState(false);
+    const [lastCompletedMetrics, setLastCompletedMetrics] = useState(null);
+    const [lastCompletedSession, setLastCompletedSession] = useState(null);
+    const suppressNameResetRef = React.useRef(false);
+
+    const isRetrainingSession = useCallback((sessionLike) => {
+        if (!sessionLike) return false;
+
+        const description = String(sessionLike.description || '').toLowerCase();
+        if (description.includes('retraining mode')) return true;
+
+        if (activeRelease?.id && String(sessionLike.dataset_release_id || '') === String(activeRelease.id)) {
+            return true;
+        }
+
+        const resolvedConfig = parseMaybeJson(sessionLike.resolved_config_json, {});
+        const dataPath = String(resolvedConfig?.train?.data || '').toLowerCase();
+        const releaseName = String(activeRelease?.name || '').toLowerCase();
+
+        return dataPath.includes('retraining_data') || (releaseName && dataPath.includes(releaseName));
+    }, [activeRelease]);
+
+    const applyRecoveredSession = useCallback((sessionLike) => {
+        if (!sessionLike) return;
+
+        suppressNameResetRef.current = true;
+        const resolvedConfig = parseMaybeJson(sessionLike.resolved_config_json, {});
+        const metrics = parseMaybeJson(sessionLike.metrics_json || sessionLike.metrics, null);
+        const trainConfig = resolvedConfig?.train || {};
+
+        setTrainingName(sessionLike.name || '');
+        setSessionId(sessionLike.id || null);
+        setStatus(sessionLike.status || 'queued');
+        setLiveMetrics(metrics);
+        setConfigPreview({
+            train: trainConfig,
+            hyperparameters: resolvedConfig?.hyperparameters || {},
+            augmentation: resolvedConfig?.augmentation || {},
+            val: resolvedConfig?.val || {},
+        });
+
+        if (trainConfig.model) {
+            setSelectedBaseModel(trainConfig.model);
+        }
+        if (sessionLike.dataset_release_dir) {
+            setDatasetReleaseDir(sessionLike.dataset_release_dir);
+        }
+        if (sessionLike.dataset_release_id) {
+            setDatasetReleaseId(sessionLike.dataset_release_id);
+        }
+    }, []);
+
+    const applyLastCompletedSession = useCallback((sessionLike) => {
+        if (!sessionLike) return;
+
+        const resolvedConfig = parseMaybeJson(sessionLike.resolved_config_json, {});
+        const metrics = parseMaybeJson(sessionLike.metrics_json || sessionLike.metrics, null);
+
+        setLastCompletedSession(sessionLike);
+        setLastCompletedMetrics(metrics);
+        setStatus('completed');
+        setConfigPreview({
+            train: resolvedConfig?.train || {},
+            hyperparameters: resolvedConfig?.hyperparameters || {},
+            augmentation: resolvedConfig?.augmentation || {},
+            val: resolvedConfig?.val || {},
+        });
+    }, []);
 
     const loadCore = useCallback(async () => {
         setLoading(true);
@@ -90,6 +166,42 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
     useEffect(() => {
         loadCore();
     }, [loadCore]);
+
+    useEffect(() => {
+        const restoreRetrainingSession = async () => {
+            if (!projectId || !activeRelease?.id || trainingName.trim()) return;
+
+            try {
+                const activeSession = await trainingAPI.getActiveSession(projectId);
+                if (activeSession?.name) {
+                    const fullActiveSession = await trainingAPI.getSession({ projectId, name: activeSession.name });
+                    if (isRetrainingSession(fullActiveSession)) {
+                        applyRecoveredSession(fullActiveSession);
+                        return;
+                    }
+                }
+            } catch (error) {
+                if (error?.response?.status !== 404) {
+                    /* ignore active restore issues */
+                }
+            }
+
+            try {
+                const sessions = await projectsAPI.getTrainingSessions(projectId);
+                const latestCompletedRetraining = (sessions || []).find((session) => (
+                    session?.status === 'completed' && isRetrainingSession(session)
+                ));
+
+                if (latestCompletedRetraining) {
+                    applyLastCompletedSession(latestCompletedRetraining);
+                }
+            } catch {
+                /* ignore last-completed restore issues */
+            }
+        };
+
+        restoreRetrainingSession();
+    }, [projectId, activeRelease, trainingName, isRetrainingSession, applyRecoveredSession, applyLastCompletedSession]);
 
     const modelOptions = useMemo(() => {
         const trainingInfo = reference?.training_info || {};
@@ -226,6 +338,18 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
     }, [prepareTrainingSession]);
 
     useEffect(() => {
+        if (!trainingName.trim()) return;
+        if (suppressNameResetRef.current) {
+            suppressNameResetRef.current = false;
+            return;
+        }
+        setLastCompletedMetrics(null);
+        setLastCompletedSession(null);
+        setLiveMetrics(null);
+        setStatus('queued');
+    }, [trainingName]);
+
+    useEffect(() => {
         if (!projectId || !trainingName.trim() || !sessionId) return;
 
         const timer = setInterval(async () => {
@@ -286,6 +410,8 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
         && status === 'running'
         && (!liveMetrics || !liveMetrics.training || !liveMetrics.training.epoch);
 
+    const displayedMetrics = liveMetrics || lastCompletedMetrics || {};
+
     const previewSummary = useMemo(() => {
         const trainingInfo = reference?.training_info || {};
         return [
@@ -316,7 +442,7 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
                                     <Text strong style={{ color: '#0f172a', fontSize: '1rem' }}>Retraining Training</Text>
                                 </div>
                                 <Tag color={status === 'completed' ? 'success' : status === 'running' ? 'processing' : 'default'} style={{ margin: 0, borderRadius: 14, fontWeight: 800 }}>
-                                    {status === 'completed' ? 'Completed' : status === 'running' ? 'Running' : 'Ready to start'}
+                                    {status === 'completed' ? (trainingName.trim() ? 'Completed' : 'Last result') : status === 'running' ? 'Running' : 'Ready to start'}
                                 </Tag>
                             </div>
 
@@ -497,15 +623,17 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
                                             {showInitializing ? (
                                                 <TrainingInitializing />
                                             ) : (
-                                                <LiveTrainingDashboard metrics={liveMetrics || {}} status={status} />
+                                                <LiveTrainingDashboard metrics={displayedMetrics} status={status} />
                                             )}
                                             {status === 'completed' && (
                                                 <Alert
                                                     type="success"
                                                     showIcon
                                                     icon={<CheckCircleOutlined />}
-                                                    message="Training complete"
-                                                    description="The same training-complete flow is active here. Continue to the Results step to review the trained model."
+                                                    message={trainingName.trim() ? 'Training complete' : 'Last completed retraining result'}
+                                                    description={trainingName.trim()
+                                                        ? 'The same training-complete flow is active here. Continue to the Results step to review the trained model.'
+                                                        : `Showing the latest completed retraining result${lastCompletedSession?.name ? `: ${lastCompletedSession.name}` : ''}. Enter a new training name to start a fresh run.`}
                                                     style={{ marginTop: 12, borderRadius: 10 }}
                                                 />
                                             )}
