@@ -1,7 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Modal, Spin, Table, Tabs, Typography, message } from 'antd';
+import { Alert, Button, Card, Modal, Spin, Table, Tabs, Tag, Typography, message } from 'antd';
 import {
+    CheckCircleOutlined,
+    DownloadOutlined,
     ExperimentOutlined,
+    InfoCircleOutlined,
+    RocketOutlined,
+    SwapOutlined,
+    TrophyOutlined,
 } from '@ant-design/icons';
 import { projectsAPI } from '../../services/api';
 import TrainingList from '../project-workspace/ModelLabSection/TrainingList/TrainingList';
@@ -150,6 +156,13 @@ const metricRowStyle = {
     borderBottom: '1px solid #f1f5f9',
     color: '#0f172a',
     fontSize: '0.84rem',
+};
+
+const actionCardStyle = {
+    borderRadius: 12,
+    border: '1px solid #e7eaf3',
+    boxShadow: '0 4px 14px rgba(15,23,42,0.05)',
+    marginBottom: '1rem',
 };
 
 const OverviewPanel = ({ training }) => {
@@ -318,6 +331,206 @@ const OverviewPanel = ({ training }) => {
     );
 };
 
+const DeploymentPanel = ({ projectId, training }) => {
+    const [assigning, setAssigning] = useState(false);
+    const [unassigning, setUnassigning] = useState(false);
+    const [isProduction, setIsProduction] = useState(false);
+
+    useEffect(() => {
+        let alive = true;
+        const loadProductionState = async () => {
+            if (!projectId || !training?.id) return;
+            try {
+                const response = await fetch(`/api/v1/retraining/${projectId}/reference`);
+                if (!response.ok) {
+                    if (alive) setIsProduction(false);
+                    return;
+                }
+                const data = await response.json();
+                const refTrainingId = data?.training_info?.id;
+                if (alive) {
+                    setIsProduction(refTrainingId != null && Number(refTrainingId) === Number(training.id));
+                }
+            } catch {
+                if (alive) setIsProduction(false);
+            }
+        };
+        loadProductionState();
+        return () => {
+            alive = false;
+        };
+    }, [projectId, training?.id]);
+
+    const handleAssignToProduction = () => {
+        if (!projectId || !training?.id) return;
+        Modal.confirm({
+            title: 'Assign to Production',
+            content: `Set "${training.name}" as the production reference for User Retraining Mode? Operators will use its parameters for all future retraining.`,
+            okText: 'Assign to Production',
+            okButtonProps: { style: { background: '#6d28d9', borderColor: '#7c3aed' } },
+            cancelText: 'Cancel',
+            onOk: async () => {
+                setAssigning(true);
+                try {
+                    const res = await fetch(`/api/v1/retraining/${projectId}/assign-production`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ training_session_id: training.id }),
+                    });
+                    if (!res.ok) throw new Error('Failed');
+                    const data = await res.json();
+                    setIsProduction(true);
+                    if (data?.auto_model_added) {
+                        message.success(`"${training.name}" is now the production reference, and its production trained model was added to Project Models.`);
+                    } else {
+                        message.success(`"${training.name}" is now the production reference. Its production trained model already exists in Project Models.`);
+                    }
+                } catch {
+                    message.error('Failed to assign production reference.');
+                } finally {
+                    setAssigning(false);
+                }
+            },
+        });
+    };
+
+    const handleUnassignProduction = () => {
+        if (!projectId) return;
+        Modal.confirm({
+            title: 'Remove Production Reference',
+            content: `Remove "${training.name}" as the production reference? Operators will no longer use it for retraining until another model is assigned.`,
+            okText: 'Remove Reference',
+            okButtonProps: { danger: true },
+            cancelText: 'Cancel',
+            onOk: async () => {
+                setUnassigning(true);
+                try {
+                    const res = await fetch(`/api/v1/retraining/${projectId}/unassign-production`, {
+                        method: 'DELETE',
+                    });
+                    if (!res.ok) throw new Error('Failed');
+                    const data = await res.json();
+                    setIsProduction(false);
+                    if (data?.fallback_reference?.assignment_label) {
+                        message.success(`Production reference removed. ${data.fallback_reference.assignment_label} is active again.`);
+                    } else {
+                        message.success('Production reference removed.');
+                    }
+                } catch {
+                    message.error('Failed to remove production reference.');
+                } finally {
+                    setUnassigning(false);
+                }
+            },
+        });
+    };
+
+    return (
+        <div style={{ padding: '1.1rem 1.15rem 1.4rem' }}>
+            <div style={{ marginBottom: '1rem' }}>
+                <Text strong style={{ fontSize: '1.22rem', color: '#0f172a' }}>Deployment</Text>
+                <div style={{ marginTop: 4 }}>
+                    <Text style={{ color: '#64748b', fontSize: '0.8rem' }}>
+                        Approve this retraining model for production use and prepare export actions.
+                    </Text>
+                </div>
+            </div>
+
+            <Card style={actionCardStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.85rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <TrophyOutlined style={{ color: '#7c3aed', fontSize: '1rem' }} />
+                        <Text strong style={{ color: '#0f172a', fontSize: '1rem' }}>Production Assignment</Text>
+                    </div>
+                    <Tag color={isProduction ? 'success' : 'default'} style={{ borderRadius: 999, fontWeight: 700, margin: 0 }}>
+                        {isProduction ? 'Assigned' : 'Not Assigned'}
+                    </Tag>
+                </div>
+
+                <Alert
+                    type={isProduction ? 'success' : 'info'}
+                    showIcon
+                    icon={isProduction ? <CheckCircleOutlined /> : <InfoCircleOutlined />}
+                    message={isProduction ? 'This retraining model is already the production reference.' : 'This model is not assigned to production yet.'}
+                    description={isProduction
+                        ? 'This training is now the active retraining reference, and its production trained model is available in Project Models for future retraining.'
+                        : 'Assigning to production makes this training the active retraining reference and keeps its production trained model available in Project Models.'}
+                    style={{ borderRadius: 10, marginBottom: '1rem' }}
+                />
+
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <Button
+                        type="primary"
+                        icon={<RocketOutlined />}
+                        loading={assigning}
+                        disabled={isProduction}
+                        onClick={handleAssignToProduction}
+                        style={{
+                            background: isProduction ? undefined : 'linear-gradient(135deg, #7c3aed, #5b21b6)',
+                            border: 'none',
+                            borderRadius: 10,
+                            fontWeight: 800,
+                            minWidth: 190,
+                            boxShadow: isProduction ? 'none' : '0 10px 24px rgba(124,58,237,0.28)',
+                        }}
+                    >
+                        {isProduction ? 'Assigned to Production' : 'Assign to Production'}
+                    </Button>
+
+                    {isProduction && (
+                        <Button
+                            danger
+                            loading={unassigning}
+                            onClick={handleUnassignProduction}
+                            style={{ borderRadius: 10, fontWeight: 700 }}
+                        >
+                            Unassign
+                        </Button>
+                    )}
+                </div>
+            </Card>
+
+            <Card style={actionCardStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.85rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <SwapOutlined style={{ color: '#2563eb', fontSize: '1rem' }} />
+                        <Text strong style={{ color: '#0f172a', fontSize: '1rem' }}>ONNX Conversion</Text>
+                    </div>
+                    <Tag color="default" style={{ borderRadius: 999, fontWeight: 700, margin: 0 }}>
+                        Pending
+                    </Tag>
+                </div>
+
+                <Alert
+                    type="info"
+                    showIcon
+                    icon={<InfoCircleOutlined />}
+                    message="best.pt will be used automatically for ONNX conversion."
+                    description="We are keeping this simple for operators. No best.pt / last.pt choice is shown here in retraining mode."
+                    style={{ borderRadius: 10, marginBottom: '1rem' }}
+                />
+
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <Button
+                        icon={<SwapOutlined />}
+                        disabled
+                        style={{ borderRadius: 10, fontWeight: 700 }}
+                    >
+                        Convert to ONNX
+                    </Button>
+                    <Button
+                        icon={<DownloadOutlined />}
+                        disabled
+                        style={{ borderRadius: 10, fontWeight: 700 }}
+                    >
+                        Download ONNX
+                    </Button>
+                </div>
+            </Card>
+        </div>
+    );
+};
+
 const RetrainingResults = ({ projectId }) => {
     const [loading, setLoading] = useState(true);
     const [trainings, setTrainings] = useState([]);
@@ -333,6 +546,7 @@ const RetrainingResults = ({ projectId }) => {
                     .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
                     .map((session) => parseTrainingForOverview(session, projectId));
                 setTrainings(retrainingSessions);
+
             } catch {
                 message.error('Failed to load retraining results');
             } finally {
@@ -404,6 +618,11 @@ const RetrainingResults = ({ projectId }) => {
                                         key: 'overview',
                                         label: 'Overview',
                                         children: <OverviewPanel training={selectedTraining} />,
+                                    },
+                                    {
+                                        key: 'deployment',
+                                        label: 'Deployment',
+                                        children: <DeploymentPanel projectId={projectId} training={selectedTraining} />,
                                     },
                                 ]}
                                 style={{ padding: '0 0.9rem' }}

@@ -29,6 +29,24 @@ logger = get_professional_logger()
 router = APIRouter()
 
 
+def _get_active_retraining_reference(db: Session, project_id: int) -> Optional[RetrainingReference]:
+    return (
+        db.query(RetrainingReference)
+        .filter(RetrainingReference.project_id == project_id)
+        .order_by(RetrainingReference.assignment_index.desc(), RetrainingReference.id.desc())
+        .first()
+    )
+
+
+def _get_next_assignment_index(db: Session, project_id: int) -> int:
+    current_max = (
+        db.query(func.max(RetrainingReference.assignment_index))
+        .filter(RetrainingReference.project_id == project_id)
+        .scalar()
+    )
+    return int(current_max or 0) + 1
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/retraining/projects
 # Returns only projects that have a retraining reference assigned.
@@ -43,9 +61,7 @@ def get_retraining_projects(db: Session = Depends(get_db)):
         projects = db.query(Project).order_by(Project.updated_at.desc()).all()
         result = []
         for proj in projects:
-            ref = db.query(RetrainingReference).filter(
-                RetrainingReference.project_id == proj.id
-            ).first()
+            ref = _get_active_retraining_reference(db, proj.id)
 
             result.append({
                 "id": proj.id,
@@ -59,6 +75,8 @@ def get_retraining_projects(db: Session = Depends(get_db)):
                     "training_session_id": ref.training_session_id,
                     "release_id": ref.release_id,
                     "assigned_at": ref.assigned_at.isoformat() if ref.assigned_at else None,
+                    "assignment_index": ref.assignment_index,
+                    "assignment_label": f"Retraining {ref.assignment_index} Production",
                     "notes": ref.notes,
                 } if ref else None
             })
@@ -82,9 +100,7 @@ def get_retraining_reference(project_id: int, db: Session = Depends(get_db)):
     - training session params (model, epochs, optimizer, task, etc.)
     - release config (transformations, format, task type, split ratios)
     """
-    ref = db.query(RetrainingReference).filter(
-        RetrainingReference.project_id == project_id
-    ).first()
+    ref = _get_active_retraining_reference(db, project_id)
 
     if not ref:
         raise HTTPException(
@@ -146,6 +162,8 @@ def get_retraining_reference(project_id: int, db: Session = Depends(get_db)):
         "training_info": training_info,
         "training_params": training_params,
         "release_info": release_info,
+        "assignment_index": ref.assignment_index,
+        "assignment_label": f"Retraining {ref.assignment_index} Production",
         "assigned_at": ref.assigned_at.isoformat() if ref.assigned_at else None,
         "notes": ref.notes,
     }
@@ -184,24 +202,16 @@ def assign_production(
     # Find the release used by this training session
     release_id = ts.dataset_release_id
 
-    # Upsert retraining reference
-    ref = db.query(RetrainingReference).filter(
-        RetrainingReference.project_id == project_id
-    ).first()
-
-    if ref:
-        ref.training_session_id = training_session_id
-        ref.release_id = release_id
-        ref.assigned_at = datetime.utcnow()
-        ref.notes = notes
-    else:
-        ref = RetrainingReference(
-            project_id=project_id,
-            training_session_id=training_session_id,
-            release_id=release_id,
-            notes=notes,
-        )
-        db.add(ref)
+    assignment_index = _get_next_assignment_index(db, project_id)
+    ref = RetrainingReference(
+        project_id=project_id,
+        training_session_id=training_session_id,
+        release_id=release_id,
+        assignment_index=assignment_index,
+        assigned_at=datetime.utcnow(),
+        notes=notes,
+    )
+    db.add(ref)
 
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
@@ -229,6 +239,8 @@ def assign_production(
         "project_id": project_id,
         "training_session_id": training_session_id,
         "release_id": release_id,
+        "assignment_index": ref.assignment_index,
+        "assignment_label": f"Retraining {ref.assignment_index} Production",
         "assigned_at": ref.assigned_at.isoformat(),
         "auto_model_added": model_created_now,
         "auto_model_id": auto_model.id,
@@ -246,20 +258,31 @@ def unassign_production(project_id: int, db: Session = Depends(get_db)):
     Removes the retraining reference for this project.
     Project will appear locked in User Retraining Mode until reassigned.
     """
-    ref = db.query(RetrainingReference).filter(
-        RetrainingReference.project_id == project_id
-    ).first()
+    ref = _get_active_retraining_reference(db, project_id)
 
     if not ref:
         raise HTTPException(status_code=404, detail="No production reference found for this project.")
 
+    deleted_assignment_index = ref.assignment_index
     db.delete(ref)
     db.commit()
+
+    fallback_ref = _get_active_retraining_reference(db, project_id)
 
     logger.info("app.retraining", f"Removed production reference for project {project_id}",
                 "unassign_production", {"project_id": project_id})
 
-    return {"success": True, "project_id": project_id}
+    return {
+        "success": True,
+        "project_id": project_id,
+        "removed_assignment_index": deleted_assignment_index,
+        "fallback_reference": {
+            "training_session_id": fallback_ref.training_session_id,
+            "release_id": fallback_ref.release_id,
+            "assignment_index": fallback_ref.assignment_index,
+            "assignment_label": f"Retraining {fallback_ref.assignment_index} Production",
+        } if fallback_ref else None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -286,9 +309,7 @@ def create_retraining_release(
         raise HTTPException(status_code=400, detail="Release name is required")
 
     # ── Get reference ────────────────────────────────────────────────────────
-    ref = db.query(RetrainingReference).filter(
-        RetrainingReference.project_id == project_id
-    ).first()
+    ref = _get_active_retraining_reference(db, project_id)
     if not ref or not ref.release_id:
         raise HTTPException(
             status_code=404,
@@ -308,14 +329,20 @@ def create_retraining_release(
             release_config = {}
 
     # ── Delete old unprotected user_retraining releases ──────────────────────
-    # Production-protected = currently pointed to by retraining_references.release_id
-    protected_id = ref.release_id
+    protected_ids = {
+        release_id for (release_id,) in db.query(RetrainingReference.release_id).filter(
+            RetrainingReference.project_id == project_id,
+            RetrainingReference.release_id.isnot(None)
+        ).all()
+    }
 
-    old_releases = db.query(Release).filter(
+    old_releases_query = db.query(Release).filter(
         Release.project_id == project_id,
         Release.release_source == 'user_retraining',
-        Release.id != protected_id,
-    ).all()
+    )
+    if protected_ids:
+        old_releases_query = old_releases_query.filter(~Release.id.in_(protected_ids))
+    old_releases = old_releases_query.all()
 
     for old_rel in old_releases:
         # Delete ZIP file from disk
@@ -391,9 +418,7 @@ def start_retraining(
     release_id = body.get("release_id")
     base_model_override = body.get("base_model_id")
 
-    ref = db.query(RetrainingReference).filter(
-        RetrainingReference.project_id == project_id
-    ).first()
+    ref = _get_active_retraining_reference(db, project_id)
 
     if not ref or not ref.training_session_id:
         raise HTTPException(
@@ -456,9 +481,7 @@ def auto_split_retraining_images(project_id: int, db: Session = Depends(get_db))
             raise HTTPException(status_code=404, detail="Project not found")
 
         # ── Get reference release for ratio calculation ───────────────────────
-        ref = db.query(RetrainingReference).filter(
-            RetrainingReference.project_id == project_id
-        ).first()
+        ref = _get_active_retraining_reference(db, project_id)
 
         if not ref or not ref.release_id:
             raise HTTPException(status_code=404, detail="No production reference found.")

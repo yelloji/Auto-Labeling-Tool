@@ -729,16 +729,17 @@ class HumanVerification(Base):
 
 class RetrainingReference(Base):
     """
-    Points to the production-quality training session for a project.
+    Stores production assignment history for a project.
     Used by User Retraining Mode to auto-fill all parameters for the next retraining.
-    One row per project maximum — updated when developer clicks 'Assign to Production'.
+    The latest assignment_index row is the active production reference.
     """
     __tablename__ = "retraining_references"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     training_session_id = Column(Integer, ForeignKey("training_sessions.id", ondelete="SET NULL"), nullable=True)
     release_id = Column(String, ForeignKey("releases.id", ondelete="SET NULL"), nullable=True)
+    assignment_index = Column(Integer, nullable=False, default=1)
     assigned_at = Column(DateTime, default=func.now(), onupdate=func.now())
     notes = Column(Text, nullable=True)
 

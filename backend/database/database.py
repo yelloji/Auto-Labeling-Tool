@@ -223,15 +223,98 @@ async def init_db():
                     conn.execute(text("""
                         CREATE TABLE retraining_references (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+                            project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
                             training_session_id INTEGER REFERENCES training_sessions(id) ON DELETE SET NULL,
                             release_id TEXT REFERENCES releases(id) ON DELETE SET NULL,
+                            assignment_index INTEGER NOT NULL DEFAULT 1,
                             assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                             notes TEXT
                         )
                     """))
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_retraining_references_project ON retraining_references(project_id)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_retraining_references_project_assignment ON retraining_references(project_id, assignment_index)"))
                     logger.info("app.database", "Created retraining_references table", "retraining_references_created")
+                else:
+                    cols = conn.execute(text("PRAGMA table_info(retraining_references)")).fetchall()
+                    col_names = {c[1] for c in cols}
+                    create_sql = conn.execute(
+                        text("SELECT sql FROM sqlite_master WHERE type='table' AND name='retraining_references'")
+                    ).scalar() or ""
+                    needs_rebuild = ("PROJECT_ID INTEGER NOT NULL UNIQUE" in create_sql.upper())
+
+                    if needs_rebuild:
+                        old_rows = conn.execute(text("""
+                            SELECT id, project_id, training_session_id, release_id, assigned_at, notes
+                            FROM retraining_references
+                            ORDER BY project_id, COALESCE(assigned_at, ''), id
+                        """)).mappings().all()
+
+                        conn.execute(text("ALTER TABLE retraining_references RENAME TO retraining_references_old"))
+                        conn.execute(text("""
+                            CREATE TABLE retraining_references (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                                training_session_id INTEGER REFERENCES training_sessions(id) ON DELETE SET NULL,
+                                release_id TEXT REFERENCES releases(id) ON DELETE SET NULL,
+                                assignment_index INTEGER NOT NULL DEFAULT 1,
+                                assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                notes TEXT
+                            )
+                        """))
+                        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_retraining_references_project ON retraining_references(project_id)"))
+                        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_retraining_references_project_assignment ON retraining_references(project_id, assignment_index)"))
+
+                        project_counters = {}
+                        for row in old_rows:
+                            pid = row["project_id"]
+                            project_counters[pid] = project_counters.get(pid, 0) + 1
+                            conn.execute(text("""
+                                INSERT INTO retraining_references
+                                    (id, project_id, training_session_id, release_id, assignment_index, assigned_at, notes)
+                                VALUES
+                                    (:id, :project_id, :training_session_id, :release_id, :assignment_index, :assigned_at, :notes)
+                            """), {
+                                "id": row["id"],
+                                "project_id": row["project_id"],
+                                "training_session_id": row["training_session_id"],
+                                "release_id": row["release_id"],
+                                "assignment_index": project_counters[pid],
+                                "assigned_at": row["assigned_at"],
+                                "notes": row["notes"],
+                            })
+
+                        conn.execute(text("DROP TABLE retraining_references_old"))
+                        logger.info("app.database", "Rebuilt retraining_references table for assignment history", "retraining_references_rebuilt")
+                    else:
+                        if "assignment_index" not in col_names:
+                            conn.execute(text("ALTER TABLE retraining_references ADD COLUMN assignment_index INTEGER"))
+                            rows = conn.execute(text("""
+                                SELECT id, project_id
+                                FROM retraining_references
+                                ORDER BY project_id, COALESCE(assigned_at, ''), id
+                            """)).mappings().all()
+                            project_counters = {}
+                            for row in rows:
+                                pid = row["project_id"]
+                                project_counters[pid] = project_counters.get(pid, 0) + 1
+                                conn.execute(text("""
+                                    UPDATE retraining_references
+                                    SET assignment_index = :assignment_index
+                                    WHERE id = :id
+                                """), {
+                                    "assignment_index": project_counters[pid],
+                                    "id": row["id"],
+                                })
+                        # Older migrations left behind a unique project_id index, which blocks
+                        # multiple retraining assignment history rows per project.
+                        idx_rows = conn.execute(text("PRAGMA index_list('retraining_references')")).fetchall()
+                        for idx in idx_rows:
+                            idx_name = idx[1]
+                            is_unique = bool(idx[2])
+                            if idx_name == "ix_retraining_references_project_id" and is_unique:
+                                conn.execute(text("DROP INDEX IF EXISTS ix_retraining_references_project_id"))
+                        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_retraining_references_project ON retraining_references(project_id)"))
+                        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_retraining_references_project_assignment ON retraining_references(project_id, assignment_index)"))
         except Exception as rr_err:
             logger.warning("errors.system", f"retraining_references migration failed: {rr_err}", "retraining_references_migration_failed", {"error": str(rr_err)})
 
