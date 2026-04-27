@@ -139,7 +139,11 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
             const r = await fetch(`${API}/projects/${projectId}/releases`);
             if (!r.ok) return;
             const all = await r.json();
-            setReleases((all || []).filter(rel => rel.release_source === 'user_retraining'));
+            setReleases(
+                (all || [])
+                    .filter(rel => rel.release_source === 'user_retraining')
+                    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+            );
         } catch {
             /* release history is non-blocking */
         }
@@ -293,6 +297,10 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
     const transformations = releaseInfo.transformations || [];
     const multiplier = releaseInfo.multiplier ?? releaseInfo.images_per_original ?? 1;
     const activeRelease = releases[0] || null;
+    const activeProtectedReleaseId = reference?.release_info?.id || null;
+    const isReleaseProtected = (releaseId) => !!activeProtectedReleaseId && releaseId === activeProtectedReleaseId;
+    const activeReleaseProtected = activeRelease ? isReleaseProtected(activeRelease.id) : false;
+    const canCreateAnotherRelease = !activeRelease || activeReleaseProtected;
     const activeImageCount = activeRelease?.final_image_count ?? activeRelease?.image_count ?? activeRelease?.total_images;
     const previewOriginalCount = activeRelease?.original_image_count
         ?? activeRelease?.total_original_images
@@ -605,7 +613,7 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}>
                     {/* ── Create Release ── */}
-                    {!hasRelease && (
+                    {canCreateAnotherRelease && (
                         <div style={{ ...panel, padding: '1.15rem 1.25rem', border: '1px solid rgba(255,255,255,0.62)', borderTop: '3px solid #7c3aed' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.9rem' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
@@ -728,6 +736,9 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                                     <ClockCircleOutlined style={{ color: '#94a3b8', fontSize: '0.72rem' }} />
                                                     <Text style={{ color: '#64748b', fontSize: '0.75rem' }}>{formatDate(rel.created_at)}</Text>
                                                     <span style={chipStyle('green')}>Ready</span>
+                                                    {isReleaseProtected(rel.id) && (
+                                                        <span style={chipStyle('purple')}>Protected by Production</span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -770,8 +781,15 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                                                 <Tooltip title="Rename">
                                                     <Button size="small" icon={<EditOutlined />} style={{ borderRadius: 7 }} onClick={e => handleRename(rel, e)} />
                                                 </Tooltip>
-                                                <Tooltip title="Delete">
-                                                    <Button size="small" danger icon={<DeleteOutlined />} style={{ borderRadius: 7 }} onClick={e => handleDelete(rel, e)} />
+                                                <Tooltip title={isReleaseProtected(rel.id) ? 'This release is protected by the current production assignment' : 'Delete'}>
+                                                    <Button
+                                                        size="small"
+                                                        danger
+                                                        icon={<DeleteOutlined />}
+                                                        style={{ borderRadius: 7 }}
+                                                        disabled={isReleaseProtected(rel.id)}
+                                                        onClick={e => handleDelete(rel, e)}
+                                                    />
                                                 </Tooltip>
                                             </div>
                                         </div>
@@ -819,7 +837,9 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
                     }}>
                         <SafetyCertificateOutlined style={{ color: '#d97706', marginTop: 2 }} />
                         <Text style={{ color: '#9a3412', fontSize: '0.8rem', lineHeight: 1.55 }}>
-                            Only one active retraining release is shown here at a time. If you need a fresh release package, remove the current release above, then create the next one. If a release is protected by production assignment, you can create a new retraining release again. Production assignment happens later from the Results step when the trained model is approved for production.
+                            {activeReleaseProtected
+                                ? 'This release is protected by the current production assignment. You can create a fresh retraining release again without deleting this protected one first.'
+                                : 'Only one active retraining release is shown here at a time. If you need a fresh release package, remove the current release above, then create the next one. Production assignment happens later from the Results step when the trained model is approved for production.'}
                         </Text>
                     </div>
                 </div>

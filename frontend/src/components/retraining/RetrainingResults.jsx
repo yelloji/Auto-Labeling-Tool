@@ -540,11 +540,27 @@ const RetrainingResults = ({ projectId }) => {
         const loadTrainings = async () => {
             setLoading(true);
             try {
-                const sessions = await projectsAPI.getTrainingSessions(projectId);
+                const [sessions, referenceResponse] = await Promise.all([
+                    projectsAPI.getTrainingSessions(projectId),
+                    fetch(`/api/v1/retraining/${projectId}/reference`).catch(() => null),
+                ]);
+
+                let activeReferenceTrainingId = null;
+                if (referenceResponse?.ok) {
+                    const referenceData = await referenceResponse.json();
+                    activeReferenceTrainingId = referenceData?.training_info?.id ?? null;
+                }
+
                 const retrainingSessions = (sessions || [])
                     .filter(isRetrainingSession)
                     .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
-                    .map((session) => parseTrainingForOverview(session, projectId));
+                    .map((session) => {
+                        const parsed = parseTrainingForOverview(session, projectId);
+                        if (activeReferenceTrainingId != null && Number(session.id) === Number(activeReferenceTrainingId)) {
+                            parsed.productionBadge = 'Active Production';
+                        }
+                        return parsed;
+                    });
                 setTrainings(retrainingSessions);
 
             } catch {

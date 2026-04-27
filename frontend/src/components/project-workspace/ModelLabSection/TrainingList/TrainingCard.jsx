@@ -20,7 +20,8 @@ const TrainingCard = ({ training, isSelected, onClick, onDelete }) => {
         taskType,
         status,
         epochs,
-        date
+        date,
+        productionBadge
     } = training;
 
     // Format date to readable string
@@ -117,6 +118,27 @@ const TrainingCard = ({ training, isSelected, onClick, onDelete }) => {
                 <span className="training-card-task">{getTaskLabel()}</span>
                 <span className="training-card-epochs">{epochs} Epochs</span>
             </div>
+
+            {productionBadge && (
+                <div style={{ marginTop: '8px' }}>
+                    <span
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '999px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: '#6d28d9',
+                            background: 'rgba(124,58,237,0.10)',
+                            border: '1px solid rgba(124,58,237,0.20)',
+                        }}
+                    >
+                        🏆 {productionBadge}
+                    </span>
+                </div>
+            )}
         </div>
     );
 };
@@ -129,7 +151,8 @@ TrainingCard.propTypes = {
         status: PropTypes.oneOf(['completed', 'failed']).isRequired,
         epochs: PropTypes.number.isRequired,
         date: PropTypes.string.isRequired,
-        metrics: PropTypes.object
+        metrics: PropTypes.object,
+        productionBadge: PropTypes.string
     }).isRequired,
     isSelected: PropTypes.bool.isRequired,
     onClick: PropTypes.func.isRequired,
