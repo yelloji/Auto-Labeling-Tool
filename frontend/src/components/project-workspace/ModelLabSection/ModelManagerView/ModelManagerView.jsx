@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, Button, message, Modal, Input, Spin, Empty, Tag, Tooltip } from 'antd';
 import {
   DownloadOutlined,
@@ -6,7 +6,8 @@ import {
   RocketOutlined,
   FileTextOutlined,
   TrophyOutlined,
-  SaveOutlined
+  SaveOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { mergeModelLabGuideState } from '../modellabGuideState';
@@ -23,9 +24,63 @@ const ModelManagerView = ({ projectId, trainingId, sessionName }) => {
   const [deployingModel, setDeployingModel] = useState(null);
   const [deployForm, setDeployForm] = useState({ name: '', description: '' });
 
+  // ONNX conversion state
+  const [onnxStatus, setOnnxStatus] = useState('pending'); // pending | converting | done | failed
+  const onnxPollRef = useRef(null);
+
   useEffect(() => {
     loadModels();
   }, [projectId, trainingId]);
+
+  // Poll ONNX status on mount / when trainingId changes
+  useEffect(() => {
+    if (!trainingId) return;
+    const checkStatus = async () => {
+      try {
+        const r = await fetch(`/api/v1/onnx/training/${trainingId}/status`);
+        if (r.ok) {
+          const d = await r.json();
+          setOnnxStatus(d.status);
+          if (d.status === 'done' || d.status === 'failed') {
+            clearInterval(onnxPollRef.current);
+          }
+        }
+      } catch { /* non-blocking */ }
+    };
+    checkStatus();
+    return () => clearInterval(onnxPollRef.current);
+  }, [trainingId]);
+
+  const handleConvertOnnx = async () => {
+    setOnnxStatus('converting');
+    try {
+      const r = await fetch(`/api/v1/onnx/training/${trainingId}/convert`, { method: 'POST' });
+      if (!r.ok) throw new Error('Failed');
+      onnxPollRef.current = setInterval(async () => {
+        try {
+          const sr = await fetch(`/api/v1/onnx/training/${trainingId}/status`);
+          if (sr.ok) {
+            const d = await sr.json();
+            setOnnxStatus(d.status);
+            if (d.status === 'done') {
+              clearInterval(onnxPollRef.current);
+              message.success('ONNX conversion complete. Ready to download.');
+            } else if (d.status === 'failed') {
+              clearInterval(onnxPollRef.current);
+              message.error('ONNX conversion failed.');
+            }
+          }
+        } catch { clearInterval(onnxPollRef.current); }
+      }, 3000);
+    } catch {
+      setOnnxStatus('failed');
+      message.error('Could not start ONNX conversion.');
+    }
+  };
+
+  const handleDownloadOnnx = () => {
+    window.open(`/api/v1/onnx/training/${trainingId}/download`, '_blank');
+  };
 
   useEffect(() => {
     mergeModelLabGuideState({
@@ -284,6 +339,44 @@ const ModelManagerView = ({ projectId, trainingId, sessionName }) => {
           '#1890ff'
         )}
       </div>
+
+      <Card
+        className="onnx-conversion-card"
+        style={{ marginTop: 16 }}
+        title={<span><SwapOutlined style={{ marginRight: 8 }} />ONNX Conversion</span>}
+        extra={
+          <Tag color={
+            onnxStatus === 'done' ? 'success' :
+            onnxStatus === 'converting' ? 'processing' :
+            onnxStatus === 'failed' ? 'error' : 'default'
+          }>
+            {onnxStatus === 'done' ? 'Ready' :
+             onnxStatus === 'converting' ? 'Converting...' :
+             onnxStatus === 'failed' ? 'Failed' : 'Pending'}
+          </Tag>
+        }
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Tooltip title={onnxStatus === 'done' ? 'Already converted' : 'Convert best.pt to ONNX format'}>
+            <Button
+              icon={<SwapOutlined />}
+              onClick={handleConvertOnnx}
+              disabled={onnxStatus === 'converting' || onnxStatus === 'done'}
+              loading={onnxStatus === 'converting'}
+            >
+              {onnxStatus === 'done' ? 'Converted' : 'Convert to ONNX'}
+            </Button>
+          </Tooltip>
+          <Button
+            type={onnxStatus === 'done' ? 'primary' : 'default'}
+            icon={<DownloadOutlined />}
+            onClick={handleDownloadOnnx}
+            disabled={onnxStatus !== 'done'}
+          >
+            Download ONNX
+          </Button>
+        </div>
+      </Card>
 
       {models.additional_files && models.additional_files.length > 0 && (
         <Card className="additional-files-card" title="📄 Additional Files">
