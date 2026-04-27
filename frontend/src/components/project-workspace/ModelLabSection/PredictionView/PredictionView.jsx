@@ -707,14 +707,15 @@ const PredictionView = ({ training }) => {
                 setSelectedExp(null);
                 setConfig({
                     name: '',
-                    dataset_source: 'test',
+                    dataset_source: getDefaultSplit(),
                     confidence: 0.25,
                     iou_threshold: 0.45,
                     batch: 1,
-                    imgsz: 640,
+                    imgsz: getDetectedImgsz(),
                     weights_type: 'best',
                     max_det: 300,
-                    device: '0'
+                    device: '0',
+                    task: training?.taskType || 'detection'
                 });
             }
         } catch (error) {
@@ -790,14 +791,15 @@ const PredictionView = ({ training }) => {
     const handleReset = () => {
         setConfig({
             name: '',
-            dataset_source: 'test',
+            dataset_source: getDefaultSplit(),
             confidence: 0.25,
             iou_threshold: 0.45,
             batch: 1,
-            imgsz: 640,
+            imgsz: getDetectedImgsz(),
             weights_type: 'best',
             max_det: 300,
-            device: '0'
+            device: '0',
+            task: training?.taskType || 'detection'
         });
         setSelectedExp(null);
     };
@@ -846,11 +848,11 @@ const PredictionView = ({ training }) => {
                                         // Always populate the configuration panel with the clicked experiment's settings
                                         setConfig({
                                             name: item.name || '',
-                                            dataset_source: item.dataset_source || 'test',
+                                            dataset_source: item.dataset_source || getDefaultSplit(),
                                             confidence: item.confidence || 0.25,
                                             iou_threshold: item.iou_threshold || 0.45,
                                             batch: item.batch || 1,
-                                            imgsz: item.imgsz || 640,
+                                            imgsz: item.imgsz || getDetectedImgsz(),
                                             weights_type: item.weights_type || 'best',
                                             max_det: item.max_det || 300,
                                             task: item.task || training?.taskType || 'detection'
@@ -1459,7 +1461,7 @@ const PredictionView = ({ training }) => {
                                         value={config.imgsz}
                                         style={{ width: '100%', marginTop: '0.25rem' }}
                                         onChange={val => updateParam('imgsz', val)}
-                                        placeholder={`Model default: ${training?.imgsz || 640}`}
+                                        placeholder={`Model default: ${getDetectedImgsz()}`}
                                         disabled={selectedExp && selectedExp.status !== 'queued'}
                                     />
                                 </div>

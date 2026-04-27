@@ -11,6 +11,7 @@ import {
 } from '@ant-design/icons';
 import { projectsAPI } from '../../services/api';
 import TrainingList from '../project-workspace/ModelLabSection/TrainingList/TrainingList';
+import PredictionView from '../project-workspace/ModelLabSection/PredictionView/PredictionView';
 
 const { Text } = Typography;
 
@@ -120,6 +121,7 @@ const parseTrainingForOverview = (session, projectId) => {
     return {
         id: session.id,
         name: session.name || `Training ${session.id}`,
+        training_uid: session.training_uid,
         taskType,
         status: session.status || 'queued',
         date: session.created_at,
@@ -130,6 +132,13 @@ const parseTrainingForOverview = (session, projectId) => {
         isSegmentation,
         quickStats,
         projectId,
+        project_id: projectId,
+        resolved_config_json: session.resolved_config_json,
+        dataset_summary_json: session.dataset_summary_json,
+        training_config_snapshot: session.training_config_snapshot,
+        model_name: session.model_name,
+        best_epoch: session.best_epoch,
+        description: session.description,
     };
 };
 
@@ -694,6 +703,11 @@ const RetrainingResults = ({ projectId }) => {
                                         key: 'overview',
                                         label: 'Overview',
                                         children: <OverviewPanel training={selectedTraining} />,
+                                    },
+                                    {
+                                        key: 'prediction',
+                                        label: 'Prediction',
+                                        children: <PredictionView training={selectedTraining} />,
                                     },
                                     {
                                         key: 'deployment',
