@@ -10,6 +10,7 @@ import UploadSection from '../project-workspace/UploadSection/UploadSection';
 import RetrainingLabeling from './RetrainingLabeling';
 import RetrainingRelease from './RetrainingRelease';
 import RetrainingTraining from './RetrainingTraining';
+import RetrainingResults from './RetrainingResults';
 
 const { Title, Text } = Typography;
 
@@ -99,13 +100,7 @@ const RetrainingWorkspace = () => {
                     />
                 );
             case 4:
-                return (
-                    <div style={{ textAlign: 'center', padding: '5rem 2rem' }}>
-                        <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>🏆</div>
-                        <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#1a1a2e', marginBottom: '0.5rem' }}>Results — Coming Soon</div>
-                        <Text type="secondary">Review metrics, run prediction, and assign the best model to production.</Text>
-                    </div>
-                );
+                return <RetrainingResults projectId={projectId} />;
             default:
                 return null;
         }
