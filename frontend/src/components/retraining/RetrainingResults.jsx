@@ -336,6 +336,59 @@ const DeploymentPanel = ({ projectId, training }) => {
     const [unassigning, setUnassigning] = useState(false);
     const [isProduction, setIsProduction] = useState(false);
 
+    // ONNX conversion state
+    const [onnxStatus, setOnnxStatus] = useState('pending'); // pending | converting | done | failed
+    const [onnxPolling, setOnnxPolling] = useState(null);
+
+    // Poll ONNX status on mount and when training changes
+    useEffect(() => {
+        if (!training?.id) return;
+        const poll = async () => {
+            try {
+                const r = await fetch(`/api/v1/onnx/training/${training.id}/status`);
+                if (r.ok) {
+                    const d = await r.json();
+                    setOnnxStatus(d.status);
+                    if (d.status === 'done' || d.status === 'failed') clearInterval(onnxPolling);
+                }
+            } catch { /* non-blocking */ }
+        };
+        poll(); // immediate check
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [training?.id]);
+
+    const handleConvertOnnx = async () => {
+        if (!training?.id) return;
+        setOnnxStatus('converting');
+        try {
+            const r = await fetch(`/api/v1/onnx/training/${training.id}/convert`, { method: 'POST' });
+            if (!r.ok) throw new Error('Failed to start conversion');
+            // Poll every 3s until done or failed
+            const interval = setInterval(async () => {
+                try {
+                    const sr = await fetch(`/api/v1/onnx/training/${training.id}/status`);
+                    if (sr.ok) {
+                        const d = await sr.json();
+                        setOnnxStatus(d.status);
+                        if (d.status === 'done' || d.status === 'failed') {
+                            clearInterval(interval);
+                            if (d.status === 'done') message.success('ONNX conversion complete. Ready to download.');
+                            else message.error('ONNX conversion failed. Check server logs.');
+                        }
+                    }
+                } catch { clearInterval(interval); }
+            }, 3000);
+            setOnnxPolling(interval);
+        } catch {
+            setOnnxStatus('failed');
+            message.error('Could not start ONNX conversion.');
+        }
+    };
+
+    const handleDownloadOnnx = () => {
+        window.open(`/api/v1/onnx/training/${training.id}/download`, '_blank');
+    };
+
     useEffect(() => {
         let alive = true;
         const loadProductionState = async () => {
@@ -496,8 +549,11 @@ const DeploymentPanel = ({ projectId, training }) => {
                         <SwapOutlined style={{ color: '#2563eb', fontSize: '1rem' }} />
                         <Text strong style={{ color: '#0f172a', fontSize: '1rem' }}>ONNX Conversion</Text>
                     </div>
-                    <Tag color="default" style={{ borderRadius: 999, fontWeight: 700, margin: 0 }}>
-                        Pending
+                    <Tag
+                        color={onnxStatus === 'done' ? 'success' : onnxStatus === 'failed' ? 'error' : onnxStatus === 'converting' ? 'processing' : 'default'}
+                        style={{ borderRadius: 999, fontWeight: 700, margin: 0 }}
+                    >
+                        {onnxStatus === 'done' ? 'Ready' : onnxStatus === 'failed' ? 'Failed' : onnxStatus === 'converting' ? 'Converting…' : 'Pending'}
                     </Tag>
                 </div>
 
@@ -513,14 +569,18 @@ const DeploymentPanel = ({ projectId, training }) => {
                 <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <Button
                         icon={<SwapOutlined />}
-                        disabled
+                        loading={onnxStatus === 'converting'}
+                        disabled={onnxStatus === 'converting' || onnxStatus === 'done'}
+                        onClick={handleConvertOnnx}
                         style={{ borderRadius: 10, fontWeight: 700 }}
                     >
-                        Convert to ONNX
+                        {onnxStatus === 'done' ? 'Converted' : onnxStatus === 'converting' ? 'Converting…' : 'Convert to ONNX'}
                     </Button>
                     <Button
                         icon={<DownloadOutlined />}
-                        disabled
+                        disabled={onnxStatus !== 'done'}
+                        onClick={handleDownloadOnnx}
+                        type={onnxStatus === 'done' ? 'primary' : 'default'}
                         style={{ borderRadius: 10, fontWeight: 700 }}
                     >
                         Download ONNX

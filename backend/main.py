@@ -25,6 +25,7 @@ from api.routes import import_labels
 from models.training import api_routes as training_api
 from api.routes import analytics, augmentation, dataset_management
 from api.routes import image_transformations, logs, frontend_logs, release_detail_view, project_transfer, retraining
+from api.routes import onnx_export
 from api.routes import dev_password
 from core.config import settings
 from database.database import init_db
@@ -150,6 +151,7 @@ app.include_router(releases.router, prefix="/api/v1", tags=["releases"])
 app.include_router(release_detail_view.router, prefix="/api/v1", tags=["release-details"])
 app.include_router(project_transfer.router, prefix="/api/v1", tags=["project-transfer"])
 app.include_router(retraining.router, prefix="/api/v1", tags=["retraining"])
+app.include_router(onnx_export.router, prefix="/api/v1", tags=["onnx-export"])
 app.include_router(training_api.router, prefix="/api/v1", tags=["training"])
 
 # Include model lab routes
