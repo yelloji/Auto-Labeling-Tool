@@ -40,7 +40,8 @@ const ImageViewerModal = ({
     onDeleteVerification, // New: Function to trigger deletion
     projectLabels = [], // New: Project-level labels for classification
     duplicateMatchMap = {}, // New: Duplicate group insights
-    sizeGroups = { thresholds: [0, 0, 0], count: 0 } // New: Size bucketing data
+    sizeGroups = { thresholds: [0, 0, 0], count: 0 }, // New: Size bucketing data
+    operatorMode = false
 }) => {
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [scale, setScale] = useState(1);
@@ -1115,7 +1116,7 @@ const ImageViewerModal = ({
                         </Button>
                     </Tooltip>
 
-                    <Tooltip title={isDrawingMode ? "Cancel Drawing" : "Add Missing Defect"}>
+                    {!operatorMode && <Tooltip title={isDrawingMode ? "Cancel Drawing" : "Add Missing Defect"}>
                         <Button
                             className="premium-action-btn"
                             onClick={() => {
@@ -1145,10 +1146,10 @@ const ImageViewerModal = ({
                         >
                             {isDrawingMode ? "CANCEL" : "ADD MISSING"}
                         </Button>
-                    </Tooltip>
+                    </Tooltip>}
 
                     {/* Phase 7.1: Missed Detections Toggle */}
-                    {hasGroundTruth && (
+                    {hasGroundTruth && !operatorMode && (
                         <>
                             {missedDetections.length > 0 && (
                             <Tooltip title="Show/Hide Missed Ground Truth Detections">
@@ -1366,7 +1367,7 @@ const ImageViewerModal = ({
                         </div>
 
                         {/* NEW: PRIMARY ACTION - ADD MISSING DEFECT */}
-                        <div style={{ margin: '2px 0 6px 0' }}>
+                        {!operatorMode && <div style={{ margin: '2px 0 6px 0' }}>
                             <Button
                                 block
                                 icon={<span style={{ fontSize: '12px' }}>➕</span>}
@@ -1410,7 +1411,7 @@ const ImageViewerModal = ({
                                  }
                                `}
                             </style>
-                        </div>
+                        </div>}
 
                         {/* Section 1: Visual Intelligence */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
@@ -2095,7 +2096,7 @@ const ImageViewerModal = ({
                                         </Text>
 
                                         {/* 3-Button Verification Status Selector */}
-                                        <Space size={6} style={{ marginLeft: '8px' }}>
+                                        {!operatorMode && <Space size={6} style={{ marginLeft: '8px' }}>
                                             {/* UNVERIFIED Button */}
                                             <div
                                                 onClick={(e) => {
@@ -2173,7 +2174,7 @@ const ImageViewerModal = ({
                                                 }}>
                                                 ❌ FAIL
                                             </div>
-                                        </Space>
+                                        </Space>}
 
                                         {/* Historical Hint Badge */}
                                         {!activeVerification && hintVerifications.length > 0 && primaryHint && (

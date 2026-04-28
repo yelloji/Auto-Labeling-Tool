@@ -64,7 +64,7 @@ const { Option } = Select;
  * 
  * Detailed prediction tab with 2-column sidebar layout.
  */
-const PredictionView = ({ training }) => {
+const PredictionView = ({ training, operatorMode = false }) => {
     // --- State ---
     const [experiments, setExperiments] = useState([]);
     const [selectedExp, setSelectedExp] = useState(null);
@@ -1794,6 +1794,7 @@ const PredictionView = ({ training }) => {
                 projectLabels={projectLabels}
                 duplicateMatchMap={duplicateMatchMap}
                 sizeGroups={sizeGroups}
+                operatorMode={operatorMode}
             />
 
             < AnalyticsModal

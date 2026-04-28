@@ -707,7 +707,7 @@ const RetrainingResults = ({ projectId }) => {
                                     {
                                         key: 'prediction',
                                         label: 'Prediction',
-                                        children: <PredictionView training={selectedTraining} />,
+                                        children: <PredictionView training={selectedTraining} operatorMode />,
                                     },
                                     {
                                         key: 'deployment',
