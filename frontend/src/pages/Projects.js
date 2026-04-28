@@ -178,11 +178,13 @@ const Projects = () => {
         width: '80px',
         height: '80px',
         borderRadius: '8px',
-        background: `linear-gradient(135deg, ${
-          typeInfo.color === 'blue' ? '#1890ff, #40a9ff' : 
-          typeInfo.color === 'green' ? '#52c41a, #73d13d' : 
-          typeInfo.color === 'purple' ? '#722ed1, #9254de' : '#d9d9d9, #f0f0f0'
-        })`,
+        background: project.tile_enabled
+          ? 'linear-gradient(135deg, #13c2c2, #36cfc9)'
+          : `linear-gradient(135deg, ${
+              typeInfo.color === 'blue' ? '#1890ff, #40a9ff' :
+              typeInfo.color === 'green' ? '#52c41a, #73d13d' :
+              typeInfo.color === 'purple' ? '#722ed1, #9254de' : '#d9d9d9, #f0f0f0'
+            })`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -493,7 +495,7 @@ const Projects = () => {
       <Col xs={24} sm={12} lg={8} key={project.id}>
         <Card
           hoverable
-          style={{ 
+          style={{
             height: '100%',
             borderRadius: '8px',
             border: '1px solid #f0f0f0',
@@ -527,9 +529,9 @@ const Projects = () => {
             {/* Project Info */}
             <div style={{ flex: 1, minWidth: 0 }}>
               {/* Project Type Badge */}
-              <Tag 
-                color={typeInfo.color} 
-                style={{ 
+              <Tag
+                color={typeInfo.color}
+                style={{
                   marginBottom: '8px',
                   fontSize: '11px',
                   fontWeight: 500,
@@ -538,6 +540,20 @@ const Projects = () => {
               >
                 {typeInfo.label}
               </Tag>
+              {project.tile_enabled && (
+                <Tag
+                  color="cyan"
+                  style={{
+                    marginBottom: '8px',
+                    marginLeft: '4px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    border: 'none'
+                  }}
+                >
+                  Tile
+                </Tag>
+              )}
               
               {/* Project Name */}
               <Title 

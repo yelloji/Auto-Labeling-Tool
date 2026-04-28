@@ -447,10 +447,12 @@ const ProjectWorkspace = () => {
                 width: '2.5rem',
                 height: '2.5rem',
                 borderRadius: '0.5rem',
-                background: `linear-gradient(135deg, ${typeInfo.color === 'blue' ? '#1890ff, #40a9ff' :
-                  typeInfo.color === 'green' ? '#52c41a, #73d13d' :
-                    typeInfo.color === 'purple' ? '#722ed1, #9254de' : '#d9d9d9, #f0f0f0'
-                  })`,
+                background: project.tile_enabled
+                  ? 'linear-gradient(135deg, #13c2c2, #36cfc9)'
+                  : `linear-gradient(135deg, ${typeInfo.color === 'blue' ? '#1890ff, #40a9ff' :
+                      typeInfo.color === 'green' ? '#52c41a, #73d13d' :
+                        typeInfo.color === 'purple' ? '#722ed1, #9254de' : '#d9d9d9, #f0f0f0'
+                    })`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -466,19 +468,34 @@ const ProjectWorkspace = () => {
                 <Title level={4} style={{ margin: 0, fontSize: '1.25rem', lineHeight: '1.6rem', color: '#ffffff', fontWeight: 600 }}>
                   {project.name}
                 </Title>
-                <Tag
-                  color={typeInfo.color}
-                  style={{
-                    fontSize: '0.75rem',
-                    lineHeight: '1rem',
-                    height: 'auto',
-                    padding: '0.25rem 0.625rem',
-                    marginTop: '0.375rem',
-                    fontWeight: 500
-                  }}
-                >
-                  {typeInfo.label}
-                </Tag>
+                <div style={{ marginTop: '0.375rem', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  <Tag
+                    color={typeInfo.color}
+                    style={{
+                      fontSize: '0.75rem',
+                      lineHeight: '1rem',
+                      height: 'auto',
+                      padding: '0.25rem 0.625rem',
+                      fontWeight: 500
+                    }}
+                  >
+                    {typeInfo.label}
+                  </Tag>
+                  {project.tile_enabled && (
+                    <Tag
+                      color="cyan"
+                      style={{
+                        fontSize: '0.75rem',
+                        lineHeight: '1rem',
+                        height: 'auto',
+                        padding: '0.25rem 0.625rem',
+                        fontWeight: 600
+                      }}
+                    >
+                      Tile
+                    </Tag>
+                  )}
+                </div>
               </div>
             </div>
           </div>
