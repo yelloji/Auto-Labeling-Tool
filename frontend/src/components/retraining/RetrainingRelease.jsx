@@ -315,18 +315,22 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
     const activeReleaseProtected = activeRelease ? isReleaseProtected(activeRelease.id) : false;
     const canCreateAnotherRelease = !activeRelease || activeReleaseProtected;
     const activeImageCount = activeRelease?.final_image_count ?? activeRelease?.image_count ?? activeRelease?.total_images;
-    const previewOriginalCount = activeRelease?.original_image_count
+    const liveTrainSource = datasetStats?.train?.images ?? null;
+    const liveValSource = datasetStats?.val?.images ?? null;
+    const liveTestSource = datasetStats?.test?.images ?? null;
+    const previewOriginalCount = datasetStats?.total?.images
+        ?? activeRelease?.original_image_count
         ?? activeRelease?.total_original_images
-        ?? datasetStats?.total?.images
         ?? datasetSummary.sourceImages
         ?? releaseInfo.original_image_count
         ?? releaseInfo.source_image_count
         ?? releaseInfo.image_count
         ?? null;
-    const previewFinalCount = activeImageCount
+    const previewFinalCount = (previewOriginalCount != null ? previewOriginalCount * multiplier : null)
+        ?? activeImageCount
         ?? releaseInfo.final_image_count
         ?? releaseInfo.total_images
-        ?? (previewOriginalCount != null ? previewOriginalCount * multiplier : null);
+        ?? null;
     const referenceTrainCount = releaseInfo.train_image_count ?? null;
     const referenceValCount = releaseInfo.val_image_count ?? null;
     const referenceTestCount = releaseInfo.test_image_count ?? null;
@@ -345,17 +349,23 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
     // Source split counts (actual from release ÷ multiplier, or estimated from reference ratios)
     const trainSrcEst = referenceRatios && previewOriginalCount != null ? Math.round(previewOriginalCount * referenceRatios.train) : null;
     const valSrcEst   = referenceRatios && previewOriginalCount != null ? Math.round(previewOriginalCount * referenceRatios.val)   : null;
-    const trainSource = activeRelease?.train_image_count != null ? Math.round(activeRelease.train_image_count / multiplier) : trainSrcEst;
-    const valSource   = activeRelease?.val_image_count   != null ? Math.round(activeRelease.val_image_count   / multiplier) : valSrcEst;
-    const testSource  = activeRelease?.test_image_count  != null
+    const trainSource = liveTrainSource != null
+        ? liveTrainSource
+        : (activeRelease?.train_image_count != null ? Math.round(activeRelease.train_image_count / multiplier) : trainSrcEst);
+    const valSource   = liveValSource != null
+        ? liveValSource
+        : (activeRelease?.val_image_count   != null ? Math.round(activeRelease.val_image_count   / multiplier) : valSrcEst);
+    const testSource  = liveTestSource != null
+        ? liveTestSource
+        : (activeRelease?.test_image_count  != null
         ? Math.round(activeRelease.test_image_count / multiplier)
         : (previewOriginalCount != null && trainSrcEst != null && valSrcEst != null
             ? Math.max(previewOriginalCount - trainSrcEst - valSrcEst, 0)
-            : null);
+            : null));
     // Release split counts (actual or estimated)
-    const trainRelease = activeRelease?.train_image_count ?? (trainSource != null ? Math.round(trainSource * multiplier) : null);
-    const valRelease   = activeRelease?.val_image_count   ?? (valSource   != null ? Math.round(valSource   * multiplier) : null);
-    const testRelease  = activeRelease?.test_image_count  ?? (testSource  != null ? Math.round(testSource  * multiplier) : null);
+    const trainRelease = trainSource != null ? Math.round(trainSource * multiplier) : (activeRelease?.train_image_count ?? null);
+    const valRelease   = valSource   != null ? Math.round(valSource   * multiplier) : (activeRelease?.val_image_count   ?? null);
+    const testRelease  = testSource  != null ? Math.round(testSource  * multiplier) : (activeRelease?.test_image_count  ?? null);
 
     return (
         <div style={{ padding: '1.4rem 1.75rem 6.5rem', width: '100%', background: 'linear-gradient(135deg, #eef2ff 0%, #faf5ff 50%, #f0fdf4 100%)', minHeight: '100%' }}>

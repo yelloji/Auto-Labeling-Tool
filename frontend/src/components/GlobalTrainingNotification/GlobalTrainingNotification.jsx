@@ -3,6 +3,23 @@ import { Button } from 'antd';
 import { trainingNotificationAPI } from '../../services/api';
 import './GlobalTrainingNotification.css';
 
+const isRetrainingCompletion = (completion) => {
+    const description = String(completion?.description || '').toLowerCase();
+    if (description.includes('retraining mode')) return true;
+
+    try {
+        const resolvedConfig = completion?.resolved_config_json
+            ? (typeof completion.resolved_config_json === 'string'
+                ? JSON.parse(completion.resolved_config_json)
+                : completion.resolved_config_json)
+            : {};
+        const dataPath = String(resolvedConfig?.train?.data || '').toLowerCase();
+        return dataPath.includes('retraining_data');
+    } catch {
+        return false;
+    }
+};
+
 export default function GlobalTrainingNotification() {
     const [completion, setCompletion] = useState(null);
     const [videoStage, setVideoStage] = useState('hidden'); // hidden, playing, showing
@@ -75,8 +92,12 @@ export default function GlobalTrainingNotification() {
                 console.error('Error acknowledging completion:', error);
             }
 
-            // THEN: Navigate to Model Lab and auto-select training
-            window.location.href = `/projects/${completion.project_id}/workspace?section=model-lab&trainingId=${completion.id}`;
+            // THEN: Navigate to the correct results surface for the training type
+            if (isRetrainingCompletion(completion)) {
+                window.location.href = `/retraining/${completion.project_id}?step=4&trainingId=${completion.id}`;
+            } else {
+                window.location.href = `/projects/${completion.project_id}/workspace?section=model-lab&trainingId=${completion.id}`;
+            }
         }
     };
 

@@ -1533,7 +1533,10 @@ async def check_training_completions(db: Session = Depends(get_db)):
             "name": session.name,
             "project_id": session.project_id,
             "project_name": session.project_name,
-            "status": session.status,  # ← Include status so frontend knows!
+            "status": session.status,
+            "description": session.description,
+            "dataset_release_id": session.dataset_release_id,
+            "resolved_config_json": session.resolved_config_json,
             "completed_at": session.completed_at.isoformat() if session.completed_at else None,
             "duration": duration,
             "error_msg": session.error_msg if session.status == "failed" else None
@@ -2740,3 +2743,4 @@ async def get_missed_ground_truth(
         error_details = traceback.format_exc()
         logger.error("errors.system", f"Error loading missed detections: {e}\n{error_details}", "missed_detections_error")
         raise HTTPException(status_code=500, detail=str(e))
+
