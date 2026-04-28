@@ -46,6 +46,7 @@ class ProjectCreateRequest(BaseModel):
     name: str
     description: str = ""
     project_type: str = "Object Detection"
+    tile_enabled: bool = False
     default_model_id: Optional[str] = None
     confidence_threshold: float = 0.5
     iou_threshold: float = 0.45
@@ -67,6 +68,7 @@ class ProjectResponse(BaseModel):
     name: str
     description: str
     project_type: str
+    tile_enabled: bool = False
     default_model_id: Optional[str]
     confidence_threshold: float
     iou_threshold: float
@@ -163,6 +165,7 @@ async def get_projects(
                 name=project.name,
                 description=project.description,
                 project_type=project.project_type,
+                tile_enabled=bool(project.tile_enabled),
                 default_model_id=project.default_model_id,
                 confidence_threshold=project.confidence_threshold,
                 iou_threshold=project.iou_threshold,
@@ -233,6 +236,7 @@ async def create_project(
             name=request.name,
             description=request.description,
             project_type=request.project_type,
+            tile_enabled=request.tile_enabled,
             default_model_id=request.default_model_id,
             confidence_threshold=request.confidence_threshold,
             iou_threshold=request.iou_threshold
@@ -280,6 +284,7 @@ async def create_project(
             name=project.name,
             description=project.description,
             project_type=project.project_type,
+            tile_enabled=bool(project.tile_enabled),
             default_model_id=project.default_model_id,
             confidence_threshold=project.confidence_threshold,
             iou_threshold=project.iou_threshold,
@@ -289,7 +294,7 @@ async def create_project(
             total_images=0,
             labeled_images=0
         )
-        
+
     except HTTPException:
         # Re-raise HTTP exceptions as they are already handled
         raise
@@ -346,6 +351,7 @@ async def get_project(project_id: str, db: Session = Depends(get_db)):
             name=project.name,
             description=project.description,
             project_type=project.project_type,
+            tile_enabled=bool(project.tile_enabled),
             default_model_id=project.default_model_id,
             confidence_threshold=project.confidence_threshold,
             iou_threshold=project.iou_threshold,
@@ -355,7 +361,7 @@ async def get_project(project_id: str, db: Session = Depends(get_db)):
             total_images=total_images,
             labeled_images=labeled_images
         )
-        
+
     except HTTPException:
         # Re-raise HTTP exceptions as they are already handled
         raise

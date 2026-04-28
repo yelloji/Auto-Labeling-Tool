@@ -34,6 +34,7 @@ class ProjectOperations:
         name: str,
         description: str = "",
         project_type: str = "Object Detection",
+        tile_enabled: bool = False,
         default_model_id: str = None,
         confidence_threshold: float = 0.5,
         iou_threshold: float = 0.45
@@ -53,6 +54,7 @@ class ProjectOperations:
                 name=name,
                 description=description,
                 project_type=project_type,
+                tile_enabled=tile_enabled,
                 default_model_id=default_model_id,
                 confidence_threshold=confidence_threshold,
                 iou_threshold=iou_threshold

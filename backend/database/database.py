@@ -441,3 +441,14 @@ def get_db():
                     logger.info("app.database", "Added column release_source to releases", "releases_add_release_source")
         except Exception as mig_err:
             logger.warning("errors.system", f"Schema migration for releases release_source failed: {mig_err}", "releases_add_release_source_failed", {"error": str(mig_err)})
+
+        # Migration: add tile_enabled to projects (tile project mode flag)
+        try:
+            with engine.begin() as conn:
+                cols = conn.execute(text("PRAGMA table_info(projects)")).fetchall()
+                col_names = {c[1] for c in cols}
+                if "tile_enabled" not in col_names:
+                    conn.execute(text("ALTER TABLE projects ADD COLUMN tile_enabled BOOLEAN DEFAULT 0"))
+                    logger.info("app.database", "Added column tile_enabled to projects", "projects_add_tile_enabled")
+        except Exception as mig_err:
+            logger.warning("errors.system", f"Schema migration for projects tile_enabled failed: {mig_err}", "projects_add_tile_enabled_failed", {"error": str(mig_err)})

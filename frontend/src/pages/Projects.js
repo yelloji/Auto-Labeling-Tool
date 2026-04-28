@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Card, 
-  Button, 
-  Space, 
+import {
+  Card,
+  Button,
+  Space,
   Typography,
   Modal,
   Form,
   Input,
   Select,
+  Switch,
   Spin,
   Tag,
   message,
@@ -873,6 +874,16 @@ const Projects = () => {
               <Option value="object_detection">Object Detection</Option>
               <Option value="segmentation">Image Segmentation</Option>
             </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="tile_enabled"
+            label="Tile Mode"
+            valuePropName="checked"
+            initialValue={false}
+            extra="Enable for large image projects (e.g. 5000×6000px). Images are split into tiles for training. Cannot be changed after creation."
+          >
+            <Switch />
           </Form.Item>
         </Form>
       </Modal>

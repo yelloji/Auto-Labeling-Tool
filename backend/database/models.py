@@ -25,6 +25,7 @@ class Project(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text)
     project_type = Column(String(50), default="Object Detection")  # Object Detection, Image Classification, Instance Segmentation, etc.
+    tile_enabled = Column(Boolean, default=False)  # Tile project mode — locked after creation
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
