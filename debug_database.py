@@ -456,22 +456,25 @@ class DatabaseDebugger:
             return
         
         for project in projects:
-            print(f"\n🏗️  PROJECT: {project['name']} (ID: {project['id']})")
+            tile_flag = "[TILE MODE]" if project['tile_enabled'] else ""
+            print(f"\n🏗️  PROJECT: {project['name']} (ID: {project['id']}) {tile_flag}")
             print(f"   📝 Description: {project['description']}")
+            print(f"   🎯 Type: {project['project_type']}")
+            print(f"   🔲 Tile Mode: {'ENABLED' if project['tile_enabled'] else 'disabled'}")
             print(f"   📅 Created: {project['created_at']}")
             print(f"   🔄 Updated: {project['updated_at']}")
-            
+
             # Get project statistics
             cursor.execute("SELECT COUNT(*) FROM datasets WHERE project_id = ?", (project['id'],))
             dataset_count = cursor.fetchone()[0]
-            
+
             cursor.execute("""
-                SELECT COUNT(*) FROM images i 
-                JOIN datasets d ON i.dataset_id = d.id 
+                SELECT COUNT(*) FROM images i
+                JOIN datasets d ON i.dataset_id = d.id
                 WHERE d.project_id = ?
             """, (project['id'],))
             image_count = cursor.fetchone()[0]
-            
+
             print(f"   📊 Datasets: {dataset_count}")
             print(f"   🖼️  Total Images: {image_count}")
     
