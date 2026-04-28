@@ -169,33 +169,37 @@ class ProjectOperations:
         })
         
         try:
-            # First, explicitly delete all labels associated with this project
-            from database.models import Label
-            logger.info("app.database", "Deleting project labels", "project_labels_deletion", {
-                "project_id": project_id
-            })
-            
-            # Find all labels to delete (for logging)
+            from database.models import Label, Release, TrainingSession, ModelExperiment
+
+            # Delete model experiments for this project
+            exp_count = db.query(ModelExperiment).filter(ModelExperiment.project_id == project_id).count()
+            db.query(ModelExperiment).filter(ModelExperiment.project_id == project_id).delete(synchronize_session=False)
+            logger.info("app.database", f"Deleted {exp_count} model experiments", "project_deletion_experiments", {"project_id": project_id})
+
+            # Delete training sessions for this project
+            ts_count = db.query(TrainingSession).filter(TrainingSession.project_id == project_id).count()
+            db.query(TrainingSession).filter(TrainingSession.project_id == project_id).delete(synchronize_session=False)
+            logger.info("app.database", f"Deleted {ts_count} training sessions", "project_deletion_training", {"project_id": project_id})
+
+            # Delete releases for this project
+            rel_count = db.query(Release).filter(Release.project_id == project_id).count()
+            db.query(Release).filter(Release.project_id == project_id).delete(synchronize_session=False)
+            logger.info("app.database", f"Deleted {rel_count} releases", "project_deletion_releases", {"project_id": project_id})
+
+            # Delete labels for this project
             labels_to_delete = db.query(Label).filter(Label.project_id == project_id).all()
-            logger.info("app.database", f"Found {len(labels_to_delete)} labels to delete", "labels_count", {
-                "project_id": project_id,
-                "labels_count": len(labels_to_delete)
-            })
-            
-            # Delete the labels
             db.query(Label).filter(Label.project_id == project_id).delete(synchronize_session=False)
-            
-            # Then delete the project itself
+            logger.info("app.database", f"Deleted {len(labels_to_delete)} labels", "project_deletion_labels", {"project_id": project_id})
+
+            # Finally delete the project itself (cascades datasets → images → annotations)
             project = db.query(Project).filter(Project.id == project_id).first()
             if project:
                 logger.info("app.database", "Deleting project", "project_deletion", {
                     "project_id": project.id,
                     "project_name": project.name
                 })
-                
                 db.delete(project)
                 db.commit()
-                
                 logger.info("app.database", "Project deleted successfully", "project_deletion_complete", {
                     "project_id": project_id
                 })
