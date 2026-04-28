@@ -43,6 +43,9 @@ const tabScrollFrameStyle = {
 };
 
 const fileName = (value) => String(value || '').split(/[\\/]/).pop() || '-';
+const cleanModelDisplayName = (value) => String(value || '')
+    .replace(/\s*-\s*Production trained model$/i, '')
+    .trim();
 const parseMaybeJson = (value, fallback = null) => {
     if (!value) return fallback;
     if (typeof value === 'object') return value;
@@ -56,6 +59,7 @@ const parseMaybeJson = (value, fallback = null) => {
 const RetrainingTraining = ({ projectId, onReadyChange }) => {
     const [reference, setReference] = useState(null);
     const [activeRelease, setActiveRelease] = useState(null);
+    const [projectModels, setProjectModels] = useState([]);
     const [productionProjectModel, setProductionProjectModel] = useState(null);
     const [loading, setLoading] = useState(true);
     const [trainingName, setTrainingName] = useState('');
@@ -159,11 +163,23 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
 
             setReference(referenceData);
             setActiveRelease(retrainingReleases[0] || null);
+            setProjectModels(Array.isArray(projectModels) ? projectModels : []);
             setProductionProjectModel(matchedProductionModel);
 
-            const defaultModel = matchedProductionModel?.file_path
+            const history = Array.isArray(referenceData?.reference_history) ? referenceData.reference_history : [];
+            const latestHistoryItem = history[0] || null;
+            const latestHistoryProjectModel = latestHistoryItem
+                ? (projectModels || []).find((model) => (
+                    model?.source_type === 'training'
+                    && String(model?.training_session_id || '') === String(latestHistoryItem?.training_info?.id || latestHistoryItem?.training_session_id || '')
+                    && Boolean(model?.is_best)
+                ))
+                : null;
+
+            const defaultModel = latestHistoryProjectModel?.file_path
+                || matchedProductionModel?.file_path
+                || latestHistoryItem?.training_info?.best_weights_path
                 || referenceData?.training_info?.best_weights_path
-                || referenceData?.training_info?.base_model_id
                 || '';
             setSelectedBaseModel(prev => prev || defaultModel);
         } catch {
@@ -214,37 +230,52 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
     }, [projectId, activeRelease, trainingName, isRetrainingSession, applyRecoveredSession, applyLastCompletedSession]);
 
     const modelOptions = useMemo(() => {
-        const trainingInfo = reference?.training_info || {};
         const options = [];
         const seen = new Set();
-
-        const pushOption = (value, label, hint, kind) => {
+        const pushOption = (value, label, meta, kind, roleLabel) => {
             if (!value || seen.has(value)) return;
             seen.add(value);
             options.push({
                 value,
                 label,
                 title: label,
-                hint,
+                meta,
                 kind,
+                roleLabel,
             });
         };
 
+        const history = Array.isArray(reference?.reference_history) ? reference.reference_history : [];
+
+        history.forEach((item, index) => {
+            const trainingInfo = item?.training_info || {};
+            const matchingProjectModel = projectModels.find((model) => (
+                model?.source_type === 'training'
+                && String(model?.training_session_id || '') === String(trainingInfo?.id || item?.training_session_id || '')
+                && Boolean(model?.is_best)
+            ));
+
+            const value = matchingProjectModel?.file_path || trainingInfo?.best_weights_path;
+            const displayName = cleanModelDisplayName(
+                matchingProjectModel?.name || trainingInfo?.name || fileName(value)
+            ) || fileName(value);
+            const roleLabel = item?.role_label || (index === 0 ? 'Current Production Model' : 'Previous Production Model');
+            const meta = item?.assignment_label || roleLabel;
+            pushOption(value, displayName, meta, index === 0 ? 'production' : 'history', roleLabel);
+        });
+
+        const oldestHistoryItem = history[history.length - 1];
+        const originalBaseModel = oldestHistoryItem?.training_info?.base_model_id;
         pushOption(
-            productionProjectModel?.file_path || trainingInfo.best_weights_path,
-            'Production trained model',
-            productionProjectModel?.name || fileName(trainingInfo.best_weights_path),
-            'production'
-        );
-        pushOption(
-            trainingInfo.base_model_id,
-            'Original default pretrained model',
-            fileName(trainingInfo.base_model_id),
-            'default'
+            originalBaseModel,
+            cleanModelDisplayName(fileName(originalBaseModel)),
+            'Raw YOLO base model',
+            'original',
+            'Original YOLO Pretrained Model'
         );
 
         return options;
-    }, [reference, productionProjectModel]);
+    }, [reference, projectModels]);
 
     const selectedModelOption = useMemo(
         () => modelOptions.find(option => option.value === selectedBaseModel) || null,
@@ -427,7 +458,7 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
         return [
             ['Framework', trainingInfo.framework || '-'],
             ['Task', trainingInfo.task || '-'],
-            ['Base Model', selectedModelOption?.label || fileName(selectedBaseModel)],
+            ['Base Model', selectedModelOption?.label || cleanModelDisplayName(fileName(selectedBaseModel))],
             ['Release', activeRelease?.name || '-'],
         ];
     }, [reference, selectedBaseModel, selectedModelOption, activeRelease]);
@@ -508,7 +539,9 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
                                             return (
                                                 <div style={{ padding: '0.1rem 0' }}>
                                                     <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.92rem' }}>{data.label}</div>
-                                                    <div style={{ color: '#64748b', fontSize: '0.76rem', marginTop: 2 }}>{data.hint}</div>
+                                                    <div style={{ color: '#64748b', fontSize: '0.76rem', marginTop: 2 }}>
+                                                        {data.roleLabel} - {data.meta}
+                                                    </div>
                                                 </div>
                                             );
                                         }}
@@ -532,12 +565,12 @@ const RetrainingTraining = ({ projectId, onReadyChange }) => {
                                                 )}
                                             </div>
                                             <Text style={{ display: 'block', marginTop: 4, color: '#64748b', fontSize: '0.76rem' }}>
-                                                {selectedModelOption.hint}
+                                                {selectedModelOption.roleLabel} - {selectedModelOption.meta}
                                             </Text>
                                         </div>
                                     )}
                                     <Text style={{ display: 'block', marginTop: 8, color: '#64748b', fontSize: '0.78rem' }}>
-                                        Default is the production trained model best.pt. If results are not good, switch to the original default pretrained model and try again.
+                                        Default is the current production model. If needed, you can step back to an older saved production model from the history list.
                                     </Text>
                                 </div>
 

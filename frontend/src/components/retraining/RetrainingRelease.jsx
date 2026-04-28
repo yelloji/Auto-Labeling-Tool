@@ -187,6 +187,19 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
     }, [loadReference, loadReleases, loadDatasetSummary, loadLabels, loadDatasetStats]);
 
     useEffect(() => {
+        const handleDatasetChanged = (event) => {
+            const changedProjectId = event?.detail?.projectId;
+            if (changedProjectId == null || String(changedProjectId) !== String(projectId)) return;
+            loadDatasetSummary();
+            loadDatasetStats();
+            loadLabels();
+        };
+
+        window.addEventListener('datasetChanged', handleDatasetChanged);
+        return () => window.removeEventListener('datasetChanged', handleDatasetChanged);
+    }, [projectId, loadDatasetSummary, loadDatasetStats, loadLabels]);
+
+    useEffect(() => {
         if (onReadyChange) onReadyChange(releases.length > 0);
     }, [releases.length, onReadyChange]);
 
@@ -304,6 +317,7 @@ const RetrainingRelease = ({ projectId, onReadyChange }) => {
     const activeImageCount = activeRelease?.final_image_count ?? activeRelease?.image_count ?? activeRelease?.total_images;
     const previewOriginalCount = activeRelease?.original_image_count
         ?? activeRelease?.total_original_images
+        ?? datasetStats?.total?.images
         ?? datasetSummary.sourceImages
         ?? releaseInfo.original_image_count
         ?? releaseInfo.source_image_count

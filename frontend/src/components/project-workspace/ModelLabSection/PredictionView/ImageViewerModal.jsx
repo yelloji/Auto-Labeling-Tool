@@ -21,6 +21,15 @@ import { mergeModelLabGuideState } from '../modellabGuideState';
 
 const { Text } = Typography;
 
+const getImageHashFromMetadata = (value) => {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object') {
+        return value.md5 || value.hash || value.image_hash_md5 || null;
+    }
+    return null;
+};
+
 /**
  * ImageViewerModal Component
  * 
@@ -1443,40 +1452,46 @@ const ImageViewerModal = ({
                                         </div>
                                     </div>
 
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <div style={{ fontSize: '8px', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', padding: '1px 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(255,255,255,0.1)' }}>UNVERIFIED</div>
-                                        <Text style={{ color: '#fff', fontSize: '0.68rem' }}>Reset decision.</Text>
-                                    </div>
+                                    {!operatorMode && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <div style={{ fontSize: '8px', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', padding: '1px 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(255,255,255,0.1)' }}>UNVERIFIED</div>
+                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}>Reset decision.</Text>
+                                        </div>
+                                    )}
 
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                                        <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
-                                            <div style={{ fontSize: '8px', color: '#1890ff', border: '1px solid rgba(24,144,255,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(24,144,255,0.1)' }}>PASS</div>
-                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>AI is Correct.</strong> Save as a baseline to compare next experiments.</Text>
+                                    {!operatorMode && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
+                                                <div style={{ fontSize: '8px', color: '#1890ff', border: '1px solid rgba(24,144,255,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(24,144,255,0.1)' }}>PASS</div>
+                                                <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>AI is Correct.</strong> Save as a baseline to compare next experiments.</Text>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
+                                                <div style={{ fontSize: '8px', color: '#ff4d4f', border: '1px solid rgba(255,77,79,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(255,77,79,0.1)' }}>FAIL</div>
+                                                <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>False Positive.</strong> Track error to see if future models improve.</Text>
+                                            </div>
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
-                                            <div style={{ fontSize: '8px', color: '#ff4d4f', border: '1px solid rgba(255,77,79,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(255,77,79,0.1)' }}>FAIL</div>
-                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>False Positive.</strong> Track error to see if future models improve.</Text>
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
 
                                 {/* 2. The Story Box (Documentation Area) */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <div style={{ width: 10, height: 10, background: 'rgba(163, 53, 238, 0.2)', border: '1px solid #a335ee', borderRadius: '2px' }} />
-                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>Purple:</strong> Manual Marks.</Text>
+                                {!operatorMode && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <div style={{ width: 10, height: 10, background: 'rgba(163, 53, 238, 0.2)', border: '1px solid #a335ee', borderRadius: '2px' }} />
+                                                <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>Purple:</strong> Manual Marks.</Text>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <div style={{ width: 10, height: 10, background: 'transparent', border: '1px dashed #ff8c00', borderRadius: '2px' }} />
+                                                <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>Orange:</strong> History Hints.</Text>
+                                            </div>
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <div style={{ width: 10, height: 10, background: 'transparent', border: '1px dashed #ff8c00', borderRadius: '2px' }} />
-                                            <Text style={{ color: '#fff', fontSize: '0.68rem' }}><strong>Orange:</strong> History Hints.</Text>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                                            <div style={{ fontSize: '9px', color: '#faad14', border: '1px solid rgba(250,173,20,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(250,173,20,0.1)' }}>STORY</div>
+                                            <Text style={{ color: '#fff', fontSize: '0.68rem', fontStyle: 'italic' }}><strong>Story History:</strong> Hover any box for its full evolution details.</Text>
                                         </div>
                                     </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                                        <div style={{ fontSize: '9px', color: '#faad14', border: '1px solid rgba(250,173,20,0.5)', padding: '0 4px', borderRadius: '3px', fontWeight: 900, background: 'rgba(250,173,20,0.1)' }}>STORY</div>
-                                        <Text style={{ color: '#fff', fontSize: '0.68rem', fontStyle: 'italic' }}><strong>Story History:</strong> Hover any box for its full evolution details.</Text>
-                                    </div>
-                                </div>
+                                )}
                             </div>
                             <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.7rem', paddingLeft: '4px', fontStyle: 'italic', marginTop: '2px' }}>
                                 Tip: Use <u>Select All</u> / <u>Unselect All</u> for bulk actions.
@@ -2002,7 +2017,9 @@ const ImageViewerModal = ({
                                     }
                                 }
 
-                                const currentImgHash = imgMetadata && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
+                                const currentImgHash = imgMetadata && !Array.isArray(imgMetadata)
+                                    ? getImageHashFromMetadata(imgMetadata[fileName])
+                                    : null;
 
                                 let activeVerification = null;
                                 let hintVerifications = []; // Store all historical hints

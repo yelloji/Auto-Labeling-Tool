@@ -59,6 +59,15 @@ import './PredictionView.css';
 const { Text } = Typography;
 const { Option } = Select;
 
+const getImageHashFromMetadata = (value) => {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object') {
+        return value.md5 || value.hash || value.image_hash_md5 || null;
+    }
+    return null;
+};
+
 /**
  * PredictionView Component
  * 
@@ -123,7 +132,8 @@ const PredictionView = ({ training, operatorMode = false }) => {
         const hashGroups = {};
 
         // Group by hash
-        Object.entries(imgMetadata).forEach(([name, hash]) => {
+        Object.entries(imgMetadata).forEach(([name, rawMetadata]) => {
+            const hash = getImageHashFromMetadata(rawMetadata);
             if (hash) {
                 if (!hashGroups[hash]) hashGroups[hash] = [];
                 hashGroups[hash].push(name);
@@ -520,7 +530,8 @@ const PredictionView = ({ training, operatorMode = false }) => {
         if (showOnlyDuplicates) {
             const imgMetadata = selectedExp?.input_images || {};
             const hashCounts = {};
-            Object.values(imgMetadata).forEach(h => {
+            Object.values(imgMetadata).forEach(rawMetadata => {
+                const h = getImageHashFromMetadata(rawMetadata);
                 if (h) hashCounts[h] = (hashCounts[h] || 0) + 1;
             });
             Object.keys(hashCounts).forEach(h => {
@@ -531,7 +542,9 @@ const PredictionView = ({ training, operatorMode = false }) => {
         const filtered = experimentImages.filter(imgName => {
             const fileName = imgName.split('/').pop();
             const imgMetadata = selectedExp?.input_images || {};
-            const imgHash = typeof imgMetadata === 'object' && !Array.isArray(imgMetadata) ? imgMetadata[fileName] : null;
+            const imgHash = typeof imgMetadata === 'object' && !Array.isArray(imgMetadata)
+                ? getImageHashFromMetadata(imgMetadata[fileName])
+                : null;
 
             // 1. Duplicate Filter
             if (showOnlyDuplicates && (!imgHash || !duplicateHashes.has(imgHash))) {
@@ -963,10 +976,10 @@ const PredictionView = ({ training, operatorMode = false }) => {
                                     />
                                 </div>
 
-                                <Divider style={{ margin: '8px 0' }} />
+                                {!operatorMode && <Divider style={{ margin: '8px 0' }} />}
 
                                 {/* Expert Diagnostic Filters */}
-                                <div>
+                                {!operatorMode && <div>
                                     <Text strong style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.75rem', color: '#1890ff' }}>
                                         EXPERT DIAGNOSTICS
                                     </Text>
@@ -1062,12 +1075,39 @@ const PredictionView = ({ training, operatorMode = false }) => {
                                             </div>
                                         )}
                                     </div>
-                                </div>
+                                </div>}
 
-                                <Divider style={{ margin: '12px 0 8px 0' }} />
+                                {operatorMode && (
+                                    <div>
+                                        <Tooltip title="Filter detections by their pixel area (Tiny, Small, Medium, Large). Thresholds are dynamically calculated based on all detections in this experiment.">
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                                                <Text type="secondary" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Object Size</Text>
+                                                {sizeGroups.count > 0 && (
+                                                    <Tag color="default" style={{ fontSize: '9px', margin: 0, padding: '0 4px', background: 'rgba(255,255,255,0.05)', color: '#666', border: 'none' }}>
+                                                        {sizeGroups.count} DETS ANALYZED
+                                                    </Tag>
+                                                )}
+                                            </div>
+                                        </Tooltip>
+                                        <Select
+                                            value={filters.selectedSizeGroup}
+                                            onChange={val => setFilters(f => ({ ...f, selectedSizeGroup: val }))}
+                                            style={{ width: '100%' }}
+                                            size="small"
+                                        >
+                                            <Option value="all">All Sizes</Option>
+                                            <Option value="tiny">Tiny (Bottom 25%)</Option>
+                                            <Option value="small">Small (25-50%)</Option>
+                                            <Option value="medium">Medium (50-75%)</Option>
+                                            <Option value="large">Large (Top 25%)</Option>
+                                        </Select>
+                                    </div>
+                                )}
+
+                                {!operatorMode && <Divider style={{ margin: '12px 0 8px 0' }} />}
 
                                 {/* Risk Level Filter */}
-                                <div>
+                                {!operatorMode && <div>
                                     <Tooltip title="Instantly see 'High Risk' images that probably need a human eyes.">
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                                             <Text type="secondary" style={{ fontSize: '0.75rem' }}>Risk Level</Text>
@@ -1110,10 +1150,10 @@ const PredictionView = ({ training, operatorMode = false }) => {
                                             </Space>
                                         </Option>
                                     </Select>
-                                </div>
+                                </div>}
 
                                 {/* Review Status Filter */}
-                                <div>
+                                {!operatorMode && <div>
                                     <Tooltip title="Filter by images you've already audited as Correct (Pass) or Wrong (Fail).">
                                         <Text type="secondary" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>Review Status (Master Truth)</Text>
                                     </Tooltip>
@@ -1143,7 +1183,7 @@ const PredictionView = ({ training, operatorMode = false }) => {
                                             </Space>
                                         </Option>
                                     </Select>
-                                </div>
+                                </div>}
 
                                 {/* Results Counter & Clear */}
                                 <div style={{

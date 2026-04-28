@@ -108,6 +108,13 @@ def get_retraining_reference(project_id: int, db: Session = Depends(get_db)):
             detail="No production reference set for this project. Please contact your developer."
         )
 
+    history_rows = (
+        db.query(RetrainingReference)
+        .filter(RetrainingReference.project_id == project_id)
+        .order_by(RetrainingReference.assignment_index.desc(), RetrainingReference.id.desc())
+        .all()
+    )
+
     # Load training session params
     training_params = {}
     training_info = {}
@@ -156,6 +163,41 @@ def get_retraining_reference(project_id: int, db: Session = Depends(get_db)):
                 "test_image_count": rel.test_image_count,
             }
 
+    history = []
+    for index, history_ref in enumerate(history_rows):
+        history_training_info = {}
+        if history_ref.training_session_id:
+            history_ts = db.query(TrainingSession).filter(
+                TrainingSession.id == history_ref.training_session_id
+            ).first()
+            if history_ts:
+                history_training_info = {
+                    "id": history_ts.id,
+                    "name": history_ts.name,
+                    "framework": history_ts.framework,
+                    "task": history_ts.task,
+                    "model_name": history_ts.model_name,
+                    "base_model_id": history_ts.base_model_id,
+                    "best_weights_path": history_ts.best_weights_path,
+                }
+
+        role_label = "Current Production Model" if index == 0 else (
+            "Base Production Model" if history_ref.assignment_index == 1 else "Previous Production Model"
+        )
+        history_label = "Base Production Model" if history_ref.assignment_index == 1 else f"Retraining {history_ref.assignment_index} Production"
+
+        history.append({
+            "reference_id": history_ref.id,
+            "training_session_id": history_ref.training_session_id,
+            "release_id": history_ref.release_id,
+            "assignment_index": history_ref.assignment_index,
+            "assignment_label": history_label,
+            "role_label": role_label,
+            "assigned_at": history_ref.assigned_at.isoformat() if history_ref.assigned_at else None,
+            "notes": history_ref.notes,
+            "training_info": history_training_info,
+        })
+
     return {
         "project_id": project_id,
         "reference_id": ref.id,
@@ -166,6 +208,7 @@ def get_retraining_reference(project_id: int, db: Session = Depends(get_db)):
         "assignment_label": f"Retraining {ref.assignment_index} Production",
         "assigned_at": ref.assigned_at.isoformat() if ref.assigned_at else None,
         "notes": ref.notes,
+        "reference_history": history,
     }
 
 
