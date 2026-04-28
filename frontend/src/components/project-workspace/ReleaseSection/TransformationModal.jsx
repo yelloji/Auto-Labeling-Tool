@@ -44,7 +44,8 @@ const TransformationModal = ({
   editingTransformation,
   selectedDatasets = [],
   transformationType, // 'basic' or 'advanced'
-  existingTransformations = [] // Existing transformations to show Continue button
+  existingTransformations = [], // Existing transformations to show Continue button
+  tileEnabled = false
 }) => {
   const [form] = Form.useForm();
   const [view, setView] = useState('selection'); // 'selection' or 'configuration'
@@ -858,6 +859,7 @@ const TransformationModal = ({
         advanced: ["color_jitter", "cutout", "random_zoom", "grayscale", "shear", "gamma_correction", "equalize", "clahe"]
       };
       const hiddenTransformations = new Set(["affine_transform", "perspective_warp"]);
+      if (!tileEnabled) hiddenTransformations.add("tile");
       
       const basicTransformations = {};
       const advancedTransformations = {};

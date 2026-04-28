@@ -391,7 +391,7 @@ const AnnotatedImageCard = ({ image }) => {
   );
 };
 
-const ReleaseSection = ({ projectId, datasetId }) => {
+const ReleaseSection = ({ projectId, datasetId, project }) => {
   // State management
   const [transformations, setTransformations] = useState([]);
   const [selectedDatasets, setSelectedDatasets] = useState([]);
@@ -1524,13 +1524,14 @@ const ReleaseSection = ({ projectId, datasetId }) => {
               </Card>
 
               {/* Transformation Pipeline */}
-              <TransformationSection 
+              <TransformationSection
                 key={`${currentReleaseVersion || 'default'}-${transformationKey}`} // ✅ Force re-render when release version changes or after modal close
                 onTransformationsChange={setTransformations}
                 selectedDatasets={selectedDatasets}
                 onContinue={handleContinueToReleaseConfig}
                 currentReleaseVersion={currentReleaseVersion}
                 onReleaseVersionChange={setCurrentReleaseVersion}
+                tileEnabled={!!project?.tile_enabled}
               />
 
               {/* Release Configuration - Only show after Continue is clicked */}

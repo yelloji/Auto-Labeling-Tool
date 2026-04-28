@@ -53,7 +53,7 @@ const formatParameters = (config) => {
   return params;
 };
 
-const TransformationSection = ({ onTransformationsChange, selectedDatasets = [], onContinue }) => {
+const TransformationSection = ({ onTransformationsChange, selectedDatasets = [], onContinue, tileEnabled = false }) => {
   const [basicTransformations, setBasicTransformations] = useState([]);
   const [advancedTransformations, setAdvancedTransformations] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -745,6 +745,7 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
         selectedDatasets={selectedDatasets}
         transformationType={modalType}
         existingTransformations={[...basicTransformations, ...advancedTransformations]}
+        tileEnabled={tileEnabled}
       />
     </>
   );
