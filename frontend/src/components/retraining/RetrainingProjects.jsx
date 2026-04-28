@@ -36,7 +36,9 @@ const RetrainingProjects = () => {
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
-  const filtered = projects.filter(p =>
+  const visibleProjects = projects.filter(p => p.has_reference);
+
+  const filtered = visibleProjects.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -92,7 +94,7 @@ const RetrainingProjects = () => {
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', paddingTop: '5rem', color: 'rgba(255,255,255,0.35)' }}>
           <ReloadOutlined style={{ fontSize: '2.5rem', marginBottom: '1rem' }} />
-          <div>No projects found</div>
+          <div>{searchTerm ? 'No projects found' : 'No retraining projects available'}</div>
         </div>
       ) : (
         <Row gutter={[20, 20]}>
