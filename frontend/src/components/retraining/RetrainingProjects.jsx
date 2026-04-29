@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card, Button, Typography, Spin, Tag, Row, Col,
-  Input, message, Tooltip
+  Input, message
 } from 'antd';
 import {
-  ReloadOutlined, LockOutlined, SearchOutlined,
-  PictureOutlined, DatabaseOutlined, CalendarOutlined,
-  SettingOutlined, CheckCircleOutlined, WarningOutlined
+  ReloadOutlined, SearchOutlined, CalendarOutlined,
+  SettingOutlined, CheckCircleOutlined, ArrowRightOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 const API_BASE = '/api/v1';
 
@@ -36,160 +35,309 @@ const RetrainingProjects = () => {
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
-  const visibleProjects = projects.filter(p => p.has_reference);
+  const visibleProjects = projects.filter(project => project.has_reference);
 
-  const filtered = visibleProjects.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  const filtered = visibleProjects.filter(project =>
+    project.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleOpenProject = (project) => {
-    if (!project.has_reference) return;
     navigate(`/retraining/${project.id}`);
   };
 
   const formatDate = (iso) => {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    if (!iso) return '--';
+    return new Date(iso).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
   };
 
   return (
     <div style={{ padding: '2rem', background: '#001529', minHeight: '100vh' }}>
-
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-        <div>
-          <Title level={2} style={{ color: '#fff', margin: 0 }}>
-            <ReloadOutlined style={{ marginRight: '0.6rem', color: '#7c3aed' }} />
-            User Retraining Mode
-          </Title>
-          <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.85rem' }}>
-            Select a project to begin retraining its model with new images
-          </Text>
-        </div>
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={loadProjects}
-          style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: '#fff' }}
+      <div style={{ maxWidth: 1540, margin: '0 auto' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1.25rem',
+            marginBottom: '1.1rem',
+          }}
         >
-          Refresh
-        </Button>
-      </div>
+          <div>
+            <Title level={2} style={{ color: '#fff', margin: 0, fontSize: '2rem' }}>
+              <ReloadOutlined style={{ marginRight: '0.6rem', color: '#7c3aed' }} />
+              User Retraining Mode
+            </Title>
+            <Text style={{ color: 'rgba(255,255,255,0.58)', fontSize: '0.94rem' }}>
+              Select a developer-enabled project to continue retraining with new labeled images.
+            </Text>
+          </div>
 
-      {/* Search */}
-      <div style={{ marginBottom: '1.25rem', maxWidth: 340 }}>
-        <Input
-          prefix={<SearchOutlined style={{ color: 'rgba(255,255,255,0.35)' }} />}
-          placeholder="Search projects"
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', borderRadius: 6 }}
-        />
-      </div>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={loadProjects}
+            style={{
+              height: 42,
+              paddingInline: 18,
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.18)',
+              color: '#fff',
+              borderRadius: 10,
+              boxShadow: '0 10px 24px rgba(0,0,0,0.18)',
+            }}
+          >
+            Refresh
+          </Button>
+        </div>
 
-      {/* Project Grid */}
-      {loading ? (
-        <div style={{ textAlign: 'center', paddingTop: '5rem' }}>
-          <Spin size="large" />
+        <div
+          style={{
+            marginBottom: '1.5rem',
+            maxWidth: 360,
+          }}
+        >
+          <Text
+            style={{
+              display: 'block',
+              color: 'rgba(255,255,255,0.62)',
+              fontSize: '0.74rem',
+              fontWeight: 600,
+              marginBottom: 10,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+            }}
+          >
+            Search Projects
+          </Text>
+            <Input
+            prefix={<SearchOutlined style={{ color: 'rgba(255,255,255,0.38)' }} />}
+            placeholder="Search enabled retraining projects"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            style={{
+              height: 42,
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(244,247,252,0.98) 100%)',
+              border: '1px solid rgba(196,207,225,0.45)',
+              color: '#fff',
+              borderRadius: 10,
+              boxShadow: '0 10px 22px rgba(9,30,66,0.08)',
+            }}
+          />
         </div>
-      ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', paddingTop: '5rem', color: 'rgba(255,255,255,0.35)' }}>
-          <ReloadOutlined style={{ fontSize: '2.5rem', marginBottom: '1rem' }} />
-          <div>{searchTerm ? 'No projects found' : 'No retraining projects available'}</div>
-        </div>
-      ) : (
-        <Row gutter={[20, 20]}>
-          {filtered.map(project => {
-            const locked = !project.has_reference;
-            return (
-              <Col key={project.id} xs={24} sm={12} lg={8}>
-                <Tooltip
-                  title={locked ? 'No production reference set for this project. Please contact your developer.' : ''}
-                  placement="top"
+
+        {loading ? (
+          <div style={{ textAlign: 'center', paddingTop: '5rem' }}>
+            <Spin size="large" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '5rem 2rem',
+              color: 'rgba(255,255,255,0.42)',
+              borderRadius: 18,
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.03) 100%)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <ReloadOutlined style={{ fontSize: '2.5rem', marginBottom: '1rem' }} />
+            <div>{searchTerm ? 'No projects found' : 'No retraining projects available'}</div>
+          </div>
+        ) : (
+          <Row gutter={[18, 18]}>
+            {filtered.map(project => (
+              <Col key={project.id} xs={24} md={12} xl={6}>
+                <Card
+                  onClick={() => handleOpenProject(project)}
+                  hoverable
+                  style={{
+                    position: 'relative',
+                    overflow: 'hidden',
+                    background: 'linear-gradient(180deg, rgba(245,248,255,0.98) 0%, rgba(238,244,255,0.98) 100%)',
+                    border: '1px solid rgba(160,174,208,0.32)',
+                    borderRadius: 16,
+                    cursor: 'pointer',
+                    boxShadow: '0 18px 34px rgba(0,0,0,0.16), 0 1px 0 rgba(255,255,255,0.6) inset',
+                    transition: 'transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease',
+                  }}
+                  bodyStyle={{ padding: '1rem 1rem 0.95rem' }}
                 >
-                  <Card
-                    onClick={() => handleOpenProject(project)}
+                  <div
                     style={{
-                      background: locked ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)',
-                      border: locked
-                        ? '1px solid rgba(255,255,255,0.08)'
-                        : '1px solid rgba(124,58,237,0.35)',
-                      borderRadius: 10,
-                      cursor: locked ? 'not-allowed' : 'pointer',
-                      opacity: locked ? 0.65 : 1,
-                      transition: 'border 0.2s, box-shadow 0.2s',
+                      position: 'absolute',
+                      inset: '0 0 auto 0',
+                      height: 2,
+                      background: 'linear-gradient(90deg, #7c3aed 0%, #22c55e 100%)',
                     }}
-                    hoverable={!locked}
-                    bodyStyle={{ padding: '1rem 1.1rem' }}
-                  >
-                    {/* Card header */}
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-                      <div style={{
-                        width: 40, height: 40, borderRadius: 8, flexShrink: 0,
-                        background: locked ? 'rgba(255,255,255,0.06)' : 'rgba(124,58,237,0.25)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {locked
-                          ? <LockOutlined style={{ color: 'rgba(255,255,255,0.35)', fontSize: '1rem' }} />
-                          : <SettingOutlined style={{ color: '#a78bfa', fontSize: '1rem' }} />
-                        }
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <Text strong style={{ color: '#fff', fontSize: '0.95rem' }}>
-                            {project.name}
-                          </Text>
-                          <Tag
-                            color={project.project_type === 'segmentation' ? 'purple' : 'blue'}
-                            style={{ fontSize: '0.7rem', margin: 0 }}
-                          >
-                            {project.project_type || 'Detection'}
-                          </Tag>
-                        </div>
-                        <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.78rem' }}>
-                          {project.description || 'No description'}
+                  />
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.9rem' }}>
+                    <div
+                      style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 12,
+                        flexShrink: 0,
+                        background: 'linear-gradient(180deg, rgba(124,58,237,0.9) 0%, rgba(109,40,217,0.88) 100%)',
+                        border: '1px solid rgba(124,58,237,0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 10px 18px rgba(91,45,178,0.18)',
+                      }}
+                    >
+                      <SettingOutlined style={{ color: '#fff', fontSize: '0.98rem' }} />
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: 6 }}>
+                        <Text
+                          strong
+                          style={{
+                            color: '#0f172a',
+                            fontSize: '1rem',
+                            lineHeight: 1.25,
+                          }}
+                        >
+                          {project.name}
                         </Text>
+                        <Tag
+                          style={{
+                            margin: 0,
+                            borderRadius: 999,
+                            paddingInline: 9,
+                            fontSize: '0.68rem',
+                            lineHeight: '20px',
+                            height: 22,
+                            background: '#f3e8ff',
+                            color: '#6d28d9',
+                            border: 'none',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {project.project_type || 'Detection'}
+                        </Tag>
                       </div>
+
+                      <Text
+                        style={{
+                          display: 'block',
+                          color: '#64748b',
+                          fontSize: '0.8rem',
+                          minHeight: 20,
+                        }}
+                      >
+                        {project.description || 'No description'}
+                      </Text>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: '0.95rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '0.34rem 0.76rem',
+                      borderRadius: 999,
+                      background: '#ecfdf3',
+                      color: '#15803d',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      border: '1px solid rgba(34,197,94,0.18)',
+                      boxShadow: '0 8px 18px rgba(34,197,94,0.12)',
+                    }}
+                  >
+                    <CheckCircleOutlined />
+                    Ready for retraining
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: '0.95rem',
+                      paddingTop: '0.85rem',
+                      borderTop: '1px solid rgba(148,163,184,0.16)',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                      gap: '0.95rem',
+                    }}
+                  >
+                    <div>
+                      <Text
+                        style={{
+                          display: 'block',
+                          color: '#64748b',
+                          fontSize: '0.68rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          marginBottom: 4,
+                        }}
+                      >
+                        Reference Set
+                      </Text>
+                      <Text style={{ color: '#1e293b', fontSize: '0.8rem' }}>
+                        <CalendarOutlined style={{ marginRight: 6, color: '#94a3b8' }} />
+                        {formatDate(project.reference?.assigned_at)}
+                      </Text>
                     </div>
 
-                    {/* Status badge */}
-                    <div style={{ marginTop: '0.75rem' }}>
-                      {locked ? (
-                        <Tag icon={<WarningOutlined />} color="warning" style={{ fontSize: '0.75rem' }}>
-                          No reference set — contact developer
-                        </Tag>
-                      ) : (
-                        <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontSize: '0.75rem' }}>
-                          Ready for retraining
-                        </Tag>
-                      )}
-                    </div>
-
-                    {/* Reference info */}
-                    {project.reference && (
-                      <div style={{ marginTop: '0.6rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)' }}>
-                        <CalendarOutlined style={{ marginRight: 4 }} />
-                        Reference set: {formatDate(project.reference.assigned_at)}
-                      </div>
-                    )}
-
-                    {/* Footer */}
-                    <div style={{
-                      marginTop: '0.85rem', paddingTop: '0.75rem',
-                      borderTop: '1px solid rgba(255,255,255,0.07)',
-                      display: 'flex', gap: '1rem',
-                    }}>
-                      <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.75rem' }}>
-                        <CalendarOutlined style={{ marginRight: 4 }} />
+                    <div>
+                      <Text
+                        style={{
+                          display: 'block',
+                          color: '#64748b',
+                          fontSize: '0.68rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          marginBottom: 4,
+                        }}
+                      >
+                        Updated
+                      </Text>
+                      <Text style={{ color: '#1e293b', fontSize: '0.8rem' }}>
+                        <CalendarOutlined style={{ marginRight: 6, color: '#94a3b8' }} />
                         {formatDate(project.updated_at)}
                       </Text>
                     </div>
-                  </Card>
-                </Tooltip>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: '0.95rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.8rem',
+                    }}
+                  >
+                    <Text style={{ color: '#475569', fontSize: '0.76rem' }}>
+                      Open retraining workspace
+                    </Text>
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 999,
+                        background: '#ffffff',
+                        border: '1px solid rgba(148,163,184,0.24)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 8px 14px rgba(15,23,42,0.08)',
+                      }}
+                    >
+                      <ArrowRightOutlined style={{ color: '#475569', fontSize: '0.78rem' }} />
+                    </div>
+                  </div>
+                </Card>
               </Col>
-            );
-          })}
-        </Row>
-      )}
+            ))}
+          </Row>
+        )}
+      </div>
     </div>
   );
 };
