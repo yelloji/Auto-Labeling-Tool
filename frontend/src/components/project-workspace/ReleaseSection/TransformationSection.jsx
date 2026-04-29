@@ -53,7 +53,15 @@ const formatParameters = (config) => {
   return params;
 };
 
-const TransformationSection = ({ onTransformationsChange, selectedDatasets = [], onContinue, tileEnabled = false }) => {
+const TransformationSection = ({
+  onTransformationsChange,
+  selectedDatasets = [],
+  onContinue,
+  tileEnabled = false,
+  currentReleaseVersion,
+  onReleaseVersionChange,
+  projectId
+}) => {
   const [basicTransformations, setBasicTransformations] = useState([]);
   const [advancedTransformations, setAdvancedTransformations] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -61,7 +69,6 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
   const [editingTransformation, setEditingTransformation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [availableTransformations, setAvailableTransformations] = useState(null);
-  const [currentReleaseVersion, setCurrentReleaseVersion] = useState(null);
   const [loadingTransformations, setLoadingTransformations] = useState(false);
 
   useEffect(() => {
@@ -101,8 +108,26 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
     });
 
     try {
-      // Check if there's a stored release version in session storage
-      let releaseVersion = sessionStorage.getItem('currentReleaseVersion');
+      const storageKey = `currentReleaseVersion_${projectId || 'default'}`;
+      let releaseVersion = sessionStorage.getItem(storageKey);
+
+      // First prefer an existing pending draft for this same project.
+      const pendingTransformations = await imageTransformationsAPI.getPendingTransformations(projectId);
+      if (pendingTransformations && pendingTransformations.length > 0) {
+        const pendingVersion = pendingTransformations[0]?.release_version;
+        if (pendingVersion) {
+          releaseVersion = pendingVersion;
+          sessionStorage.setItem(storageKey, pendingVersion);
+
+          logInfo('app.frontend.ui', 'using_existing_project_pending_release_version', 'Using existing project pending release version', {
+            timestamp: new Date().toISOString(),
+            releaseVersion: pendingVersion,
+            projectId: projectId,
+            pendingTransformationsCount: pendingTransformations.length,
+            function: 'initializeReleaseVersion'
+          });
+        }
+      }
       
       if (!releaseVersion) {
         logInfo('app.frontend.ui', 'generating_new_release_version', 'Generating new release version', {
@@ -113,7 +138,7 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
         // Generate a new release version
         const response = await imageTransformationsAPI.generateVersion();
         releaseVersion = response.version;
-        sessionStorage.setItem('currentReleaseVersion', releaseVersion);
+        sessionStorage.setItem(storageKey, releaseVersion);
 
         logInfo('app.frontend.interactions', 'new_release_version_generated', 'New release version generated successfully', {
           timestamp: new Date().toISOString(),
@@ -128,7 +153,7 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
         });
       }
       
-      setCurrentReleaseVersion(releaseVersion);
+      onReleaseVersionChange?.(releaseVersion);
       console.log('Using release version:', releaseVersion);
       
       // Load existing transformations for this version
@@ -158,7 +183,7 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       
       // FIXED: Load ALL PENDING transformations instead of just one version
       // This ensures transformations persist across app restarts
-      const transformations = await imageTransformationsAPI.getPendingTransformations();
+      const transformations = await imageTransformationsAPI.getPendingTransformations(projectId);
       console.log('Loaded PENDING transformations:', transformations);
       
       logInfo('app.frontend.interactions', 'existing_transformations_loaded', 'Existing transformations loaded successfully', {
@@ -398,6 +423,7 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
         parameters: parameters,
         is_enabled: true,
         order_index: (basicTransformations.length + advancedTransformations.length) + 1,
+        project_id: projectId,
         category: isAdvanced ? 'advanced' : 'basic'
       };
 
@@ -406,6 +432,23 @@ const TransformationSection = ({ onTransformationsChange, selectedDatasets = [],
       // Save to database
       const savedTransformation = await imageTransformationsAPI.createTransformation(transformationData);
       console.log('Saved transformation:', savedTransformation);
+
+      // Keep the shared release version aligned with the actual backend draft version immediately.
+      if (savedTransformation?.release_version) {
+        const actualReleaseVersion = savedTransformation.release_version;
+        const storageKey = `currentReleaseVersion_${projectId || 'default'}`;
+        if (actualReleaseVersion !== currentReleaseVersion) {
+          sessionStorage.setItem(storageKey, actualReleaseVersion);
+          onReleaseVersionChange?.(actualReleaseVersion);
+          logInfo('app.frontend.interactions', 'release_version_synced_after_save', 'Synced release version after transformation save', {
+            timestamp: new Date().toISOString(),
+            previousReleaseVersion: currentReleaseVersion,
+            actualReleaseVersion,
+            projectId,
+            function: 'handleSaveTransformation'
+          });
+        }
+      }
 
       logInfo('app.frontend.interactions', 'transformation_saved_to_database', 'Transformation saved to database successfully', {
         timestamp: new Date().toISOString(),

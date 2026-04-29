@@ -213,7 +213,38 @@ async def init_db():
         except Exception as me_err:
             logger.warning("errors.system", f"Model experiments verification/migration failed: {me_err}", "model_experiments_verification_failed", {"error": str(me_err)})
 
-        
+        # Image transformations schema verification & migration (project-scoped pending drafts)
+        try:
+            with engine.begin() as conn:
+                if "image_transformations" in {t[0] for t in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}:
+                    cols = conn.execute(text("PRAGMA table_info(image_transformations)")).fetchall()
+                    existing = {c[1] for c in cols}
+
+                    if "project_id" not in existing:
+                        conn.execute(text("ALTER TABLE image_transformations ADD COLUMN project_id INTEGER"))
+                        logger.info("app.database", "Added column project_id to image_transformations", "image_transformations_add_project_id")
+
+                    try:
+                        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_transformations_project_id ON image_transformations(project_id)"))
+                    except Exception:
+                        pass
+
+                    try:
+                        conn.execute(text("""
+                            UPDATE image_transformations
+                            SET project_id = (
+                                SELECT releases.project_id
+                                FROM releases
+                                WHERE releases.id = image_transformations.release_id
+                            )
+                            WHERE project_id IS NULL
+                              AND release_id IS NOT NULL
+                        """))
+                    except Exception as backfill_err:
+                        logger.warning("errors.system", f"Could not backfill image_transformations.project_id: {backfill_err}", "image_transformations_backfill_failed", {"error": str(backfill_err)})
+        except Exception as it_err:
+            logger.warning("errors.system", f"image_transformations migration failed: {it_err}", "image_transformations_migration_failed", {"error": str(it_err)})
+
 
         # Retraining references table (User Retraining Mode)
         try:

@@ -803,9 +803,11 @@ export const imageTransformationsAPI = {
   },
 
   // Get pending transformations
-  getPendingTransformations: async () => {
+  getPendingTransformations: async (projectId = null) => {
     try {
-      const response = await api.get('/api/image-transformations/pending');
+      const params = {};
+      if (projectId) params.project_id = projectId;
+      const response = await api.get('/api/image-transformations/pending', { params });
       return response.data;
     } catch (error) {
       handleAPIError(error, 'Failed to get pending transformations');
@@ -828,10 +830,11 @@ export const imageTransformationsAPI = {
   },
 
   // Get all release versions
-  getReleaseVersions: async (status = null) => {
+  getReleaseVersions: async (status = null, projectId = null) => {
     try {
       const params = {};
       if (status) params.status = status;
+      if (projectId) params.project_id = projectId;
 
       const response = await api.get('/api/image-transformations/release-versions', { params });
       return response.data;

@@ -31,7 +31,7 @@ router = APIRouter(prefix="/image-transformations", tags=["transformations"])
 def generate_transformation_version():
     """Generate a unique version identifier for transformations"""
     now = datetime.now()
-    return f"version_auto_{now.strftime('%Y_%m_%d_%H_%M')}"
+    return f"version_auto_{now.strftime('%Y_%m_%d_%H_%M_%S')}_{uuid.uuid4().hex[:6]}"
 
 
 def update_transformation_combination_count(db: Session, release_version: str):
@@ -83,6 +83,7 @@ class TransformationCreate(BaseModel):
     parameters: Dict[str, Any]
     is_enabled: bool = True
     order_index: int = 0
+    project_id: Optional[int] = None
     release_version: Optional[str] = None
     category: str = "basic"  # basic or advanced
     status: str = "PENDING"  # PENDING or COMPLETED
@@ -103,6 +104,7 @@ class TransformationUpdate(BaseModel):
     order_index: Optional[int] = None
     category: Optional[str] = None
     status: Optional[str] = None
+    project_id: Optional[int] = None
     release_id: Optional[str] = None
     release_version: Optional[str] = None
     parameter_ranges: Optional[Dict[str, List[float]]] = None
@@ -129,6 +131,7 @@ class TransformationResponse(BaseModel):
     created_at: datetime
     category: str
     status: str
+    project_id: Optional[int] = None
     release_id: Optional[str] = None
     parameter_ranges: Optional[Dict[str, List[float]]] = None
     range_enabled_params: Optional[List[str]] = None
@@ -197,9 +200,12 @@ def create_transformation(
     try:
         # Determine release version: use existing PENDING version or create new one
         if not transformation.release_version:
+            if transformation.project_id is None:
+                raise HTTPException(status_code=400, detail="project_id is required when release_version is omitted")
             # Check if there are existing PENDING transformations
             existing_pending = db.query(ImageTransformation).filter(
-                ImageTransformation.status == "PENDING"
+                ImageTransformation.status == "PENDING",
+                ImageTransformation.project_id == transformation.project_id
             ).first()
             
             if existing_pending:
@@ -225,6 +231,7 @@ def create_transformation(
             parameters=transformation.parameters,
             is_enabled=transformation.is_enabled,
             order_index=transformation.order_index,
+            project_id=transformation.project_id,
             release_version=transformation.release_version,
             category=transformation.category,
             status=transformation.status,
@@ -251,6 +258,9 @@ def create_transformation(
         })
         return db_transformation
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         logger.error("errors.system", f"Error creating transformation: {str(e)}", "transformation_creation_error", {
@@ -292,14 +302,20 @@ def get_transformations(
 
 
 @router.get("/pending", response_model=List[TransformationResponse])
-def get_pending_transformations(db: Session = Depends(get_db)):
+def get_pending_transformations(
+    project_id: Optional[int] = Query(None, description="Filter pending transformations by project"),
+    db: Session = Depends(get_db)
+):
     """
     Get all pending transformations
     """
     try:
-        transformations = db.query(ImageTransformation).filter(
+        query = db.query(ImageTransformation).filter(
             ImageTransformation.status == "PENDING"
-        ).all()
+        )
+        if project_id is not None:
+            query = query.filter(ImageTransformation.project_id == project_id)
+        transformations = query.order_by(ImageTransformation.order_index).all()
         return transformations
     except Exception as e:
         logger.error("errors.system", f"Error getting pending transformations: {str(e)}", "pending_transformations_error", {
@@ -311,6 +327,7 @@ def get_pending_transformations(db: Session = Depends(get_db)):
 @router.get("/release-versions", response_model=List[str])
 def get_release_versions(
     status: Optional[str] = Query(None, description="Filter by status (PENDING, COMPLETED)"),
+    project_id: Optional[int] = Query(None, description="Filter by project"),
     db: Session = Depends(get_db)
 ):
     """
@@ -321,6 +338,8 @@ def get_release_versions(
         
         if status:
             query = query.filter(ImageTransformation.status == status)
+        if project_id is not None:
+            query = query.filter(ImageTransformation.project_id == project_id)
         
         versions = [row[0] for row in query.all() if row[0]]
         
@@ -445,6 +464,9 @@ def update_transformation(
             
         if transformation.status is not None:
             db_transformation.status = transformation.status
+
+        if transformation.project_id is not None:
+            db_transformation.project_id = transformation.project_id
             
         if transformation.release_id is not None:
             db_transformation.release_id = transformation.release_id
@@ -551,10 +573,17 @@ def create_transformations_batch(
     All transformations will use the same release_version if not individually specified
     """
     try:
+        if transformations and any(t.project_id is None for t in transformations):
+            raise HTTPException(status_code=400, detail="project_id is required for batch transformation creation")
+
         # Generate a common version ID if not provided in the first item
         common_version = None
         if transformations and not transformations[0].release_version:
-            common_version = generate_transformation_version()
+            existing_pending = db.query(ImageTransformation).filter(
+                ImageTransformation.status == "PENDING",
+                ImageTransformation.project_id == transformations[0].project_id
+            ).first()
+            common_version = existing_pending.release_version if existing_pending else generate_transformation_version()
 
         db_transformations = []
         for i, transformation in enumerate(transformations):
@@ -569,6 +598,7 @@ def create_transformations_batch(
                 parameters=transformation.parameters,
                 is_enabled=transformation.is_enabled,
                 order_index=i,  # Use position in list as order
+                project_id=transformation.project_id,
                 release_version=transformation.release_version,
                 category=transformation.category,
                 parameter_ranges=transformation.parameter_ranges,
@@ -594,6 +624,9 @@ def create_transformations_batch(
         })
         return db_transformations
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         logger.error("errors.system", f"Error creating transformations batch: {str(e)}", "transformations_batch_error", {

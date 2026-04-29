@@ -1531,6 +1531,7 @@ const ReleaseSection = ({ projectId, datasetId, project }) => {
                 onContinue={handleContinueToReleaseConfig}
                 currentReleaseVersion={currentReleaseVersion}
                 onReleaseVersionChange={setCurrentReleaseVersion}
+                projectId={projectId}
                 tileEnabled={!!project?.tile_enabled}
               />
 
@@ -1544,6 +1545,7 @@ const ReleaseSection = ({ projectId, datasetId, project }) => {
                     selectedDatasets={Array.isArray(selectedDatasets) ? selectedDatasets : []}
                     currentReleaseVersion={currentReleaseVersion}
                     onReleaseVersionChange={setCurrentReleaseVersion}
+                    projectId={projectId}
                     isGenerating={isGenerating}
                   />
                 </div>

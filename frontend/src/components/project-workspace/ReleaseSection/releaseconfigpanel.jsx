@@ -6,7 +6,7 @@ import { logInfo, logError, logUserClick } from '../../../utils/professional_log
 
 const { Option } = Select;
 
-const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selectedDatasets = [], currentReleaseVersion, onReleaseVersionChange, isGenerating = false }) => {
+const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selectedDatasets = [], currentReleaseVersion, onReleaseVersionChange, projectId, isGenerating = false }) => {
   console.log('🔥 UPDATED COMPONENT LOADED - VERSION 2.0 🔥');
   
   // Log component initialization
@@ -338,7 +338,7 @@ const ReleaseConfigPanel = ({ onGenerate, onPreview, transformations = [], selec
           });
 
           // Get pending release versions
-          const pendingVersions = await imageTransformationsAPI.getReleaseVersions('PENDING');
+          const pendingVersions = await imageTransformationsAPI.getReleaseVersions('PENDING', projectId);
           
           if (pendingVersions && pendingVersions.length > 0) {
             // Use the most recent version (first in sorted array)

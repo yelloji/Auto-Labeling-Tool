@@ -309,6 +309,7 @@ class ImageTransformation(Base):
     category = Column(String(20), default="basic")            # 'basic' or 'advanced'
     created_at = Column(DateTime, default=func.now())
     status = Column(String(20), default="PENDING")            # 'PENDING' or 'COMPLETED'
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
     release_id = Column(String, ForeignKey("releases.id", ondelete="SET NULL"), nullable=True)
     
     # NEW: Parameter ranges support for two-point sliders
