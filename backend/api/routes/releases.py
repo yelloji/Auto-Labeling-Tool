@@ -36,6 +36,7 @@ logger = get_professional_logger()
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+WINDOWS_INVALID_FILENAME_CHARS = '<>:"/\\|?*'
 
 from database.database import get_db
 from database.models import Project, Dataset, Image, Annotation, Release, ImageTransformation
@@ -111,6 +112,18 @@ def _resolve_release_class_count(release: Release) -> int:
 
     return 0
 
+
+def _safe_release_zip_stem(name: str) -> str:
+    """Keep the user-facing release name intact, but sanitize filenames for disk/zip creation."""
+    if not name:
+        return "release"
+
+    sanitized = "".join("_" if ch in WINDOWS_INVALID_FILENAME_CHARS else ch for ch in str(name))
+    sanitized = sanitized.replace(" ", "_").strip(" .")
+    while "__" in sanitized:
+        sanitized = sanitized.replace("__", "_")
+    return sanitized or "release"
+
 # New enhanced release generation models
 class EnhancedReleaseCreate(BaseModel):
     release_name: str
@@ -140,6 +153,7 @@ class ReleaseProgressResponse(BaseModel):
 # Original release creation model (for backward compatibility)
 class ReleaseCreate(BaseModel):
     version_name: str
+    release_version: Optional[str] = None
     dataset_ids: List[str]  # Changed from single dataset_id to multiple dataset_ids
     description: Optional[str] = ""
     transformations: List[dict] = []
@@ -648,7 +662,7 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         releases_dir = os.path.join(projects_root, project.name, "releases")
         os.makedirs(releases_dir, exist_ok=True)
         
-        zip_filename = f"{payload.version_name.replace(' ', '_')}_{payload.export_format.lower()}.zip"
+        zip_filename = f"{_safe_release_zip_stem(payload.version_name)}_{payload.export_format.lower()}.zip"
         model_path = os.path.join(releases_dir, zip_filename)
         # Store relative path in database for portability
         relative_model_path = PathManager.get_project_relative_path(model_path)
@@ -762,8 +776,10 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
             "project_id": project_id
         })
         
+        pending_release_version = payload.release_version or payload.version_name
         pending_transformations = db.query(ImageTransformation).filter(
-            ImageTransformation.release_version == payload.version_name,
+            ImageTransformation.project_id == project_id,
+            ImageTransformation.release_version == pending_release_version,
             ImageTransformation.status == "PENDING"
         ).all()
         
@@ -1048,7 +1064,7 @@ def rename_release(release_id: str, new_name: dict, db: Session = Depends(get_db
             zip_extension = os.path.splitext(old_zip_path)[1]  # .zip
             
             # Generate new ZIP filename: {new_name}_{export_format}.zip
-            new_zip_filename = f"{new_name_value}_{release.export_format.lower()}{zip_extension}"
+            new_zip_filename = f"{_safe_release_zip_stem(new_name_value)}_{release.export_format.lower()}{zip_extension}"
             new_zip_path = os.path.join(zip_dir, new_zip_filename)  # absolute path
             
             logger.info("operations.releases", f"Renaming ZIP file", "zip_file_rename", {
@@ -1312,11 +1328,11 @@ def complete_transformations(release_id: str, db: Session = Depends(get_db)):
             })
             raise HTTPException(status_code=404, detail="Release not found")
         
-        # Update transformation status from 'pending' to 'completed'
+        # Update transformation status from PENDING to COMPLETED
         updated_count = db.query(ImageTransformation).filter(
             ImageTransformation.release_id == release_id,
-            ImageTransformation.status == 'pending'
-        ).update({"status": "completed"})
+            ImageTransformation.status == 'PENDING'
+        ).update({"status": "COMPLETED"})
         
         db.commit()
         
@@ -1442,7 +1458,7 @@ def download_release(release_id: str, db: Session = Depends(get_db)):
             })
             
             # Create ZIP filename
-            zip_filename = f"{release.name.replace(' ', '_')}_{release.export_format}.zip"
+            zip_filename = f"{_safe_release_zip_stem(release.name)}_{release.export_format}.zip"
             zip_path = os.path.join(releases_dir, zip_filename)
             
             logger.debug("operations.exports", f"Creating minimal ZIP file", "minimal_zip_creation", {

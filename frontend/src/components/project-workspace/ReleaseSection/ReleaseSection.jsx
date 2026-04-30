@@ -948,6 +948,7 @@ const ReleaseSection = ({ projectId, datasetId, project }) => {
       // Prepare release data for API using the values from the release config form
       const releaseData = {
         version_name: releaseConfig.name, // ✅ backend expects "version_name"
+        release_version: currentReleaseVersion,
         dataset_ids: releaseConfig.selectedDatasets,
         transformations: normalizedTransformations,
         multiplier: releaseConfig.multiplier,
