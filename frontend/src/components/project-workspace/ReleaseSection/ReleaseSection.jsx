@@ -1394,6 +1394,7 @@ const ReleaseSection = ({ projectId, datasetId, project }) => {
               onRename={handleRenameFromDetails}
               onCreateNew={handleCreateNewFromDetails}
               projectId={projectId}
+              tileEnabled={!!project?.tile_enabled}
             />
           ) : (
             <>

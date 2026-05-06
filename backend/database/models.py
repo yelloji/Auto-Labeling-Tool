@@ -268,6 +268,7 @@ class Release(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
+    parent_release_id = Column(String, ForeignKey("releases.id"), nullable=True)
 
     name = Column(String(100), nullable=False)
     description = Column(Text)

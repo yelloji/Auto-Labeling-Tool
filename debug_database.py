@@ -1397,9 +1397,12 @@ class DatabaseDebugger:
                    r.task_type, r.datasets_used, r.config, r.total_original_images,
                    r.total_augmented_images, r.final_image_count,
                    r.train_image_count, r.val_image_count, r.test_image_count,
-                   r.class_count,r.model_path, r.created_at, p.name as project_name
+                   r.class_count, r.model_path, r.created_at, r.parent_release_id,
+                   p.name as project_name,
+                   pr.name as parent_release_name
             FROM releases r
             LEFT JOIN projects p ON r.project_id = p.id
+            LEFT JOIN releases pr ON r.parent_release_id = pr.id
             ORDER BY r.created_at DESC
         """)
         
@@ -1421,6 +1424,14 @@ class DatabaseDebugger:
             print(f"   📦 Export Format: {release['export_format'] or 'Not specified'}")
             print(f"   🎯 Task Type: {release['task_type'] or 'Not specified'}")
             print(f"   📅 Created: {release['created_at']}")
+            if release['parent_release_id']:
+                print(
+                    f"   👪 Parent Release: "
+                    f"{release['parent_release_name'] or 'Unknown'} "
+                    f"(ID: {release['parent_release_id']})"
+                )
+            else:
+                print(f"   👪 Parent Release: None (top-level release)")
             
             # Display image counts
             print(f"   📊 Image Counts:")

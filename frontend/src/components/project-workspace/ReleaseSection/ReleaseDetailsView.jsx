@@ -30,11 +30,13 @@ import {
   TagsOutlined,
   SettingOutlined,
   CopyOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  FilterOutlined
 } from '@ant-design/icons';
 import { logInfo, logError, logUserClick } from '../../../utils/professional_logger';
 import { API_BASE_URL } from '../../../config';
 import ReleaseImageViewerModal from './ReleaseImageViewerModal';
+import TileBalanceWorkspace from './TileBalanceWorkspace';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -122,7 +124,8 @@ const ReleaseDetailsView = ({
   onBack, 
   onRename, 
   onCreateNew,
-  projectId 
+  projectId,
+  tileEnabled = false,
 }) => {
   const [releaseImages, setReleaseImages] = useState([]);
 
@@ -160,6 +163,7 @@ const ReleaseDetailsView = ({
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [gridSpan, setGridSpan] = useState(4);
+  const [showTileBalance, setShowTileBalance] = useState(false);
 
 useEffect(() => {
   if (release) {
@@ -699,6 +703,15 @@ useEffect(() => {
     );
   }
 
+  if (showTileBalance) {
+    return (
+      <TileBalanceWorkspace
+        release={release}
+        onBackToDetails={() => setShowTileBalance(false)}
+      />
+    );
+  }
+
   return (
     <Layout style={{ background: '#fafafa', minHeight: '100vh' }}>
       <Content style={{ padding: '3px' }}>
@@ -744,6 +757,14 @@ useEffect(() => {
             </Col>
             <Col>
               <Space>
+                {tileEnabled && (
+                  <Button
+                    icon={<FilterOutlined />}
+                    onClick={() => setShowTileBalance(true)}
+                  >
+                    Tile Balance
+                  </Button>
+                )}
                 <Button 
                   icon={<PlusOutlined />} 
                   type="primary"

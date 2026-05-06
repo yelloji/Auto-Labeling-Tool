@@ -473,6 +473,17 @@ def get_db():
         except Exception as mig_err:
             logger.warning("errors.system", f"Schema migration for releases release_source failed: {mig_err}", "releases_add_release_source_failed", {"error": str(mig_err)})
 
+        # Migration: add parent_release_id to releases (derived/balanced child release linkage)
+        try:
+            with engine.begin() as conn:
+                cols = conn.execute(text("PRAGMA table_info(releases)")).fetchall()
+                col_names = {c[1] for c in cols}
+                if "parent_release_id" not in col_names:
+                    conn.execute(text("ALTER TABLE releases ADD COLUMN parent_release_id VARCHAR"))
+                    logger.info("app.database", "Added column parent_release_id to releases", "releases_add_parent_release_id")
+        except Exception as mig_err:
+            logger.warning("errors.system", f"Schema migration for releases parent_release_id failed: {mig_err}", "releases_add_parent_release_id_failed", {"error": str(mig_err)})
+
         # Migration: add tile_enabled to projects (tile project mode flag)
         try:
             with engine.begin() as conn:
