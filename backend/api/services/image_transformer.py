@@ -317,7 +317,7 @@ class ImageTransformer:
                     'cols': {
                         'type': 'int',
                         'min': 1,
-                        'max': 10,
+                        'max': 6,
                         'default': 2,
                         'step': 1,
                         'description': 'Number of columns to split the image into'
@@ -325,7 +325,7 @@ class ImageTransformer:
                     'rows': {
                         'type': 'int',
                         'min': 1,
-                        'max': 10,
+                        'max': 6,
                         'default': 2,
                         'step': 1,
                         'description': 'Number of rows to split the image into'
@@ -1002,8 +1002,8 @@ class ImageTransformer:
         try:
             import random
             from PIL import ImageDraw
-            cols = max(1, int(params.get('cols', 2)))
-            rows = max(1, int(params.get('rows', 2)))
+            cols = max(1, min(6, int(params.get('cols', 2))))
+            rows = max(1, min(6, int(params.get('rows', 2))))
             orig_w, orig_h = image.size
             tile_w = orig_w // cols
             tile_h = orig_h // rows

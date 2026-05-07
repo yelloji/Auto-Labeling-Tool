@@ -11,6 +11,7 @@ from typing import List, Optional, Tuple, Dict
 from datetime import datetime
 import os
 import json
+import math
 import uuid
 import shutil
 from utils.path_utils import PathManager  # absolute import
@@ -2842,8 +2843,8 @@ def create_complete_release_zip(
                     # ============================================================
                     _tile_transform = next((t for t in (transformations or []) if t.get('type') == 'tile'), None)
                     if _tile_transform:
-                        _tile_cols = max(1, int(_tile_transform.get('params', {}).get('cols', 2)))
-                        _tile_rows = max(1, int(_tile_transform.get('params', {}).get('rows', 2)))
+                        _tile_cols = max(1, min(6, int(_tile_transform.get('params', {}).get('cols', 2))))
+                        _tile_rows = max(1, min(6, int(_tile_transform.get('params', {}).get('rows', 2))))
                         # Base transforms (resize only) applied to every tile including originals.
                         # Aug transforms (flip, rotate, etc.) generate additional variants per tile.
                         _remaining_transforms = [t for t in (transformations or []) if t.get('type') != 'tile']
@@ -2939,33 +2940,17 @@ def create_complete_release_zip(
                                     _tile_lbl_fn = _tile_base + ".txt"
                                     _tile_lbl_path = os.path.join(staging_dir, "labels", safe_split, _tile_lbl_fn)
                                     os.makedirs(os.path.dirname(_tile_lbl_path), exist_ok=True)
-                                    _tile_yolo_lines = []
-                                    if _tile_tracking and _tile_tracking.get("has_geometric_transforms", False):
-                                        _tori = _tile_tracking.get("original_dims")
-                                        _tcfg2 = _tile_tracking.get("transformation_config")
-                                        try:
-                                            if label_mode == "yolo_detection":
-                                                from core.annotation_transformer import transform_detection_annotations_to_yolo
-                                                _tile_yolo_lines = transform_detection_annotations_to_yolo(
-                                                    annotations=img_data["annotations"],
-                                                    img_w=_tile_img_w, img_h=_tile_img_h,
-                                                    transform_config=_tcfg2,
-                                                    original_dims=_tori,
-                                                    class_index_resolver=resolve_class_index,
-                                                    label_mode=label_mode
-                                                )
-                                            else:
-                                                from core.annotation_transformer import transform_segmentation_annotations_to_yolo
-                                                _tile_yolo_lines = transform_segmentation_annotations_to_yolo(
-                                                    annotations=img_data["annotations"],
-                                                    img_w=_tile_img_w, img_h=_tile_img_h,
-                                                    transform_config=_tcfg2,
-                                                    original_dims=_tori,
-                                                    class_index_resolver=resolve_class_index,
-                                                    label_mode=label_mode
-                                                )
-                                        except Exception:
-                                            _tile_yolo_lines = []
+                                    try:
+                                        _tile_yolo_lines = _generate_tile_yolo_lines_for_release(
+                                            annotations=img_data["annotations"],
+                                            tracking_data=_tile_tracking,
+                                            label_mode=label_mode,
+                                            img_w=_tile_img_w,
+                                            img_h=_tile_img_h,
+                                            class_index_resolver=resolve_class_index
+                                        )
+                                    except Exception:
+                                        _tile_yolo_lines = []
                                     with open(_tile_lbl_path, 'w') as _tf:
                                         _tf.write("\n".join(_tile_yolo_lines))
                                     final_image_count += 1
@@ -3040,33 +3025,17 @@ def create_complete_release_zip(
                                         _aug_lbl_fn = os.path.splitext(_aug_tile_fn)[0] + ".txt"
                                         _aug_lbl_path = os.path.join(staging_dir, "labels", safe_split, _aug_lbl_fn)
                                         os.makedirs(os.path.dirname(_aug_lbl_path), exist_ok=True)
-                                        _aug_yolo_lines = []
-                                        if _aug_tile_tracking and _aug_tile_tracking.get("has_geometric_transforms", False):
-                                            _aug_tori = _aug_tile_tracking.get("original_dims")
-                                            _aug_tcfg2 = _aug_tile_tracking.get("transformation_config")
-                                            try:
-                                                if label_mode == "yolo_detection":
-                                                    from core.annotation_transformer import transform_detection_annotations_to_yolo
-                                                    _aug_yolo_lines = transform_detection_annotations_to_yolo(
-                                                        annotations=img_data["annotations"],
-                                                        img_w=_aug_tile_w, img_h=_aug_tile_h,
-                                                        transform_config=_aug_tcfg2,
-                                                        original_dims=_aug_tori,
-                                                        class_index_resolver=resolve_class_index,
-                                                        label_mode=label_mode
-                                                    )
-                                                else:
-                                                    from core.annotation_transformer import transform_segmentation_annotations_to_yolo
-                                                    _aug_yolo_lines = transform_segmentation_annotations_to_yolo(
-                                                        annotations=img_data["annotations"],
-                                                        img_w=_aug_tile_w, img_h=_aug_tile_h,
-                                                        transform_config=_aug_tcfg2,
-                                                        original_dims=_aug_tori,
-                                                        class_index_resolver=resolve_class_index,
-                                                        label_mode=label_mode
-                                                    )
-                                            except Exception:
-                                                _aug_yolo_lines = []
+                                        try:
+                                            _aug_yolo_lines = _generate_tile_yolo_lines_for_release(
+                                                annotations=img_data["annotations"],
+                                                tracking_data=_aug_tile_tracking,
+                                                label_mode=label_mode,
+                                                img_w=_aug_tile_w,
+                                                img_h=_aug_tile_h,
+                                                class_index_resolver=resolve_class_index
+                                            )
+                                        except Exception:
+                                            _aug_yolo_lines = []
                                         with open(_aug_lbl_path, 'w') as _af:
                                             _af.write("\n".join(_aug_yolo_lines))
                                         _aug_tile_img.close()
@@ -4758,6 +4727,260 @@ def apply_transformations_to_annotations(annotations: List, tracking_data: dict)
         })
         # Return original annotations as fallback
         return annotations
+
+
+def _tile_polygon_area(points: List[tuple]) -> float:
+    if len(points) < 3:
+        return 0.0
+    area = 0.0
+    for i in range(len(points)):
+        x1, y1 = points[i]
+        x2, y2 = points[(i + 1) % len(points)]
+        area += x1 * y2 - x2 * y1
+    return abs(area) * 0.5
+
+
+def _tile_polygon_path_length(points: List[tuple]) -> float:
+    if len(points) < 2:
+        return 0.0
+    total = 0.0
+    for i in range(1, len(points)):
+        x1, y1 = points[i - 1]
+        x2, y2 = points[i]
+        total += math.hypot(x2 - x1, y2 - y1)
+    return total
+
+
+def _tile_annotation_metrics(annotation) -> dict:
+    if hasattr(annotation, 'points'):
+        xs = [float(x) for x, _ in annotation.points]
+        ys = [float(y) for _, y in annotation.points]
+        width = max(xs) - min(xs) if xs else 0.0
+        height = max(ys) - min(ys) if ys else 0.0
+        return {
+            "area": _tile_polygon_area(annotation.points),
+            "span": max(width, height),
+            "length": _tile_polygon_path_length(annotation.points),
+        }
+
+    width = max(0.0, float(annotation.x_max) - float(annotation.x_min))
+    height = max(0.0, float(annotation.y_max) - float(annotation.y_min))
+    return {
+        "area": width * height,
+        "span": max(width, height),
+        "length": max(width, height),
+    }
+
+
+def _convert_single_annotation_for_tile(annotation, label_mode: str):
+    from core.annotation_transformer import BoundingBox, Polygon
+
+    if hasattr(annotation, 'points'):
+        return annotation
+
+    if label_mode == "yolo_segmentation":
+        seg_data = getattr(annotation, 'segmentation', None)
+        if isinstance(seg_data, str):
+            try:
+                seg_data = json.loads(seg_data)
+            except Exception:
+                seg_data = None
+
+        points = []
+        if isinstance(seg_data, list) and len(seg_data) > 0:
+            if isinstance(seg_data[0], dict) and 'x' in seg_data[0] and 'y' in seg_data[0]:
+                points = [(float(p['x']), float(p['y'])) for p in seg_data]
+            elif isinstance(seg_data[0], list):
+                flat = seg_data[0]
+                for i in range(0, len(flat) - 1, 2):
+                    points.append((float(flat[i]), float(flat[i + 1])))
+            elif isinstance(seg_data[0], (int, float)):
+                for i in range(0, len(seg_data) - 1, 2):
+                    points.append((float(seg_data[i]), float(seg_data[i + 1])))
+
+        if len(points) >= 3:
+            return Polygon(
+                points=points,
+                class_name=getattr(annotation, 'class_name', 'unknown'),
+                class_id=int(getattr(annotation, 'class_id', 0))
+            )
+        return None
+
+    if hasattr(annotation, 'x_min') and getattr(annotation, 'x_min', None) is not None:
+        return BoundingBox(
+            x_min=float(annotation.x_min),
+            y_min=float(annotation.y_min),
+            x_max=float(annotation.x_max),
+            y_max=float(annotation.y_max),
+            class_name=getattr(annotation, 'class_name', 'unknown'),
+            class_id=int(getattr(annotation, 'class_id', 0))
+        )
+
+    return None
+
+
+def _clamp_tile_annotation_to_canvas(annotation, img_w: int, img_h: int):
+    from core.annotation_transformer import BoundingBox, Polygon
+
+    if hasattr(annotation, 'points'):
+        clamped_points = [
+            (
+                max(0.0, min(float(img_w), float(x))),
+                max(0.0, min(float(img_h), float(y))),
+            )
+            for (x, y) in annotation.points
+        ]
+        return Polygon(
+            points=clamped_points,
+            class_name=getattr(annotation, 'class_name', 'unknown'),
+            class_id=int(getattr(annotation, 'class_id', 0)),
+            confidence=float(getattr(annotation, 'confidence', 1.0)),
+        )
+
+    return BoundingBox(
+        x_min=max(0.0, min(float(img_w), float(annotation.x_min))),
+        y_min=max(0.0, min(float(img_h), float(annotation.y_min))),
+        x_max=max(0.0, min(float(img_w), float(annotation.x_max))),
+        y_max=max(0.0, min(float(img_h), float(annotation.y_max))),
+        class_name=getattr(annotation, 'class_name', 'unknown'),
+        class_id=int(getattr(annotation, 'class_id', 0)),
+        confidence=float(getattr(annotation, 'confidence', 1.0)),
+    )
+
+
+def _keep_tile_annotation_fragment(original_annotation, tile_annotation) -> bool:
+    original_metrics = _tile_annotation_metrics(original_annotation)
+    tile_metrics = _tile_annotation_metrics(tile_annotation)
+
+    if hasattr(original_annotation, 'points') and tile_metrics["area"] <= 1e-3:
+        logger.debug(
+            "operations.transformations",
+            "Dropping collapsed tile polygon fragment",
+            "tile_polygon_collapsed_fragment_drop",
+            {
+                "class_name": getattr(original_annotation, 'class_name', 'unknown'),
+                "tile_span": round(tile_metrics["span"], 4),
+                "tile_length": round(tile_metrics["length"], 4),
+            }
+        )
+        return False
+
+    original_area = max(original_metrics["area"], 1e-6)
+    original_span = max(original_metrics["span"], 1e-6)
+    original_length = max(original_metrics["length"], 1e-6)
+
+    area_ratio = tile_metrics["area"] / original_area
+    span_ratio = tile_metrics["span"] / original_span
+    length_ratio = tile_metrics["length"] / original_length
+
+    if hasattr(original_annotation, 'points'):
+        keep = span_ratio >= 0.20 and (area_ratio >= 0.08 or length_ratio >= 0.28)
+    else:
+        keep = area_ratio >= 0.20 and span_ratio >= 0.25
+
+    logger.debug(
+        "operations.transformations",
+        "Tile annotation quality check",
+        "tile_annotation_quality_check",
+        {
+            "class_name": getattr(original_annotation, 'class_name', 'unknown'),
+            "annotation_type": "polygon" if hasattr(original_annotation, 'points') else "bbox",
+            "area_ratio": round(area_ratio, 4),
+            "span_ratio": round(span_ratio, 4),
+            "length_ratio": round(length_ratio, 4),
+            "keep": keep,
+        }
+    )
+    return keep
+
+
+def _generate_tile_yolo_lines_for_release(
+    annotations: List,
+    tracking_data: dict,
+    label_mode: str,
+    img_w: int,
+    img_h: int,
+    class_index_resolver=None
+) -> List[str]:
+    from core.annotation_transformer import (
+        update_annotations_for_transformations,
+        transform_detection_annotations_to_yolo,
+        transform_segmentation_annotations_to_yolo,
+    )
+
+    if not annotations or not tracking_data or not tracking_data.get("has_geometric_transforms", False):
+        return []
+
+    filtered_annotations = []
+    conversion_config = tracking_data.get("transformation_config", {})
+    original_dims = tracking_data.get("original_dims")
+    crop_config = conversion_config.get("crop")
+    crop_only_config = {"crop": crop_config} if crop_config else {}
+    crop_dims = None
+    if crop_config:
+        crop_width = int(crop_config.get("actual_params", {}).get("width", crop_config.get("width", 0)) or 0)
+        crop_height = int(crop_config.get("actual_params", {}).get("height", crop_config.get("height", 0)) or 0)
+        if crop_width > 0 and crop_height > 0:
+            crop_dims = (crop_width, crop_height)
+
+    for annotation in annotations:
+        original_converted = _convert_single_annotation_for_tile(annotation, label_mode)
+        if original_converted is None:
+            continue
+
+        quality_transformed = update_annotations_for_transformations(
+            annotations=[original_converted],
+            transformation_config=crop_only_config if crop_only_config else conversion_config,
+            original_dims=original_dims,
+            new_dims=crop_dims if crop_dims else tracking_data.get("final_dims"),
+            affine_matrix=None,
+            debug_tracking=False,
+            label_mode=label_mode
+        )
+
+        if not quality_transformed:
+            continue
+
+        quality_tile_annotation = quality_transformed[0]
+        if not _keep_tile_annotation_fragment(original_converted, quality_tile_annotation):
+            continue
+
+        transformed = update_annotations_for_transformations(
+            annotations=[original_converted],
+            transformation_config=conversion_config,
+            original_dims=original_dims,
+            new_dims=tracking_data.get("final_dims"),
+            affine_matrix=None,
+            debug_tracking=False,
+            label_mode=label_mode
+        )
+
+        if not transformed:
+            continue
+
+        filtered_annotations.append(
+            _clamp_tile_annotation_to_canvas(transformed[0], img_w, img_h)
+        )
+
+    if not filtered_annotations:
+        return []
+
+    if label_mode == "yolo_detection":
+        return transform_detection_annotations_to_yolo(
+            annotations=filtered_annotations,
+            img_w=img_w,
+            img_h=img_h,
+            class_index_resolver=class_index_resolver,
+            label_mode=label_mode
+        )
+
+    return transform_segmentation_annotations_to_yolo(
+        annotations=filtered_annotations,
+        img_w=img_w,
+        img_h=img_h,
+        class_index_resolver=class_index_resolver,
+        label_mode=label_mode
+    )
 
 
 def save_debug_tracking_json(debug_info: dict, metadata_dir: str, image_name: str) -> str:
