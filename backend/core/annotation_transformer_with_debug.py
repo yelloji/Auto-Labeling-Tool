@@ -73,6 +73,72 @@ def _clip_bbox_to_dims(x_min: float, y_min: float, x_max: float, y_max: float,
     return (x_min, y_min, x_max, y_max)
 
 
+def _clip_polygon_to_rect(
+    points: List[Tuple[float, float]],
+    min_x: float,
+    min_y: float,
+    max_x: float,
+    max_y: float,
+) -> List[Tuple[float, float]]:
+    """Clip a polygon against an axis-aligned rectangle using Sutherland-Hodgman."""
+    if not points:
+        return []
+
+    def clip_against_edge(poly: List[Tuple[float, float]], edge: str) -> List[Tuple[float, float]]:
+        if not poly:
+            return []
+
+        def inside(p: Tuple[float, float]) -> bool:
+            x, y = p
+            if edge == "left":
+                return x >= min_x
+            if edge == "right":
+                return x <= max_x
+            if edge == "top":
+                return y >= min_y
+            return y <= max_y
+
+        def intersect(p1: Tuple[float, float], p2: Tuple[float, float]) -> Tuple[float, float]:
+            x1, y1 = p1
+            x2, y2 = p2
+            dx = x2 - x1
+            dy = y2 - y1
+
+            if edge in ("left", "right"):
+                x_edge = min_x if edge == "left" else max_x
+                if abs(dx) < 1e-12:
+                    return (x_edge, y1)
+                t = (x_edge - x1) / dx
+                return (x_edge, y1 + t * dy)
+
+            y_edge = min_y if edge == "top" else max_y
+            if abs(dy) < 1e-12:
+                return (x1, y_edge)
+            t = (y_edge - y1) / dy
+            return (x1 + t * dx, y_edge)
+
+        out: List[Tuple[float, float]] = []
+        s = poly[-1]
+        for e in poly:
+            if inside(e):
+                if inside(s):
+                    out.append(e)
+                else:
+                    out.append(intersect(s, e))
+                    out.append(e)
+            elif inside(s):
+                out.append(intersect(s, e))
+            s = e
+        return out
+
+    clipped = points
+    for edge_name in ("left", "right", "top", "bottom"):
+        clipped = clip_against_edge(clipped, edge_name)
+        if len(clipped) < 3:
+            return []
+    return clipped
+
+
 def _transform_bbox_with_matrix(bbox: BoundingBox, A: np.ndarray,
                                 new_dims: Tuple[int, int]) -> Optional[BoundingBox]:
     # --- sanity on inputs ---
@@ -1620,28 +1686,25 @@ def _transform_polygon(polygon: Polygon, transformation_config: Dict[str, Any],
                     crop_y = actual_params.get('y', 0)
                     crop_w = actual_params.get('width', current_width - crop_x)
                     crop_h = actual_params.get('height', current_height - crop_y)
-                    print(f"🎯 POLYGON CROP: Using actual crop parameters: {actual_params}")
                 else:
                     crop_x = params.get('x', 0)
                     crop_y = params.get('y', 0)
                     crop_w = params.get('width',  current_width  - crop_x)
                     crop_h = params.get('height', current_height - crop_y)
-                    print(f"⚠️ POLYGON CROP: Using fallback crop parameters: {params}")
-                
-                # Apply crop offset and clip coordinates to crop boundaries
-                clipped_points = []
-                for x, y in points:
-                    # Apply crop offset
-                    new_x = x - crop_x
-                    new_y = y - crop_y
-                    
-                    # CRITICAL FIX: Clip to crop boundaries
-                    new_x = max(0, min(crop_w, new_x))
-                    new_y = max(0, min(crop_h, new_y))
-                    
-                    clipped_points.append((new_x, new_y))
-                
-                points = clipped_points
+
+                translated_points = [
+                    (x - crop_x, y - crop_y)
+                    for (x, y) in points
+                ]
+                points = _clip_polygon_to_rect(
+                    translated_points,
+                    0.0,
+                    0.0,
+                    float(crop_w),
+                    float(crop_h),
+                )
+                if len(points) < 3:
+                    return None
                 current_width, current_height = float(crop_w), float(crop_h)
 
             
@@ -2188,5 +2251,4 @@ def transform_segmentation_annotations_to_yolo(
                  "yolo_segmentation_conversion_complete", {'total_converted': len(yolo_lines)})
 
     return yolo_lines
-
 
