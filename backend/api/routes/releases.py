@@ -125,6 +125,53 @@ def _safe_release_zip_stem(name: str) -> str:
         sanitized = sanitized.replace("__", "_")
     return sanitized or "release"
 
+
+def _normalize_release_zip_key(value: str) -> str:
+    return str(value or "").replace("\\", "/")
+
+
+def _derive_release_label_path(image_path: str) -> str:
+    normalized = _normalize_release_zip_key(image_path)
+    filename = normalized.split("/")[-1]
+    split = normalized.split("/")[1] if normalized.startswith("images/") and len(normalized.split("/")) >= 3 else "train"
+    label_name = os.path.splitext(filename)[0] + ".txt"
+    return f"labels/{split}/{label_name}"
+
+
+def _resolve_image_annotations_for_path(image_path: str, annotations_data: Dict) -> List:
+    normalized_annotations = {
+        _normalize_release_zip_key(key): value for key, value in (annotations_data or {}).items()
+    }
+    normalized_image_path = _normalize_release_zip_key(image_path)
+    label_path = _derive_release_label_path(normalized_image_path)
+    filename = normalized_image_path.split("/")[-1]
+    basename = os.path.splitext(filename)[0]
+
+    possible_keys = [
+        normalized_image_path,
+        label_path,
+        filename,
+        basename,
+        f"images/{normalized_image_path}" if not normalized_image_path.startswith("images/") else normalized_image_path,
+    ]
+
+    for key in possible_keys:
+        if key in normalized_annotations:
+            value = normalized_annotations[key]
+            return value if isinstance(value, list) else []
+
+    return []
+
+
+def _build_balanced_child_release_name(db: Session, project_id: int, parent_name: str) -> str:
+    base_name = f"{parent_name}-balanced"
+    candidate = base_name
+    suffix = 2
+    while db.query(Release).filter(Release.project_id == project_id, Release.name == candidate).first():
+        candidate = f"{base_name}-{suffix}"
+        suffix += 1
+    return candidate
+
 # New enhanced release generation models
 class EnhancedReleaseCreate(BaseModel):
     release_name: str
@@ -173,6 +220,12 @@ class DatasetRebalanceRequest(BaseModel):
     train_count: int
     val_count: int
     test_count: int
+
+
+class TileBalancedReleaseCreate(BaseModel):
+    mode: str  # automatic | manual
+    selected_image_paths: List[str]
+    ratio_value: Optional[int] = None
 
 # NEW ENHANCED RELEASE GENERATION ENDPOINTS
 
@@ -891,6 +944,214 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         })
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+@router.post("/releases/{release_id}/tile-balance/create")
+def create_tile_balanced_child_release(
+    release_id: str,
+    payload: TileBalancedReleaseCreate,
+    db: Session = Depends(get_db)
+):
+    logger = get_professional_logger()
+
+    logger.info("app.backend", "Creating tile-balanced child release", "tile_balanced_release_start", {
+        "parent_release_id": release_id,
+        "mode": payload.mode,
+        "selected_count": len(payload.selected_image_paths or []),
+        "ratio_value": payload.ratio_value,
+    })
+
+    try:
+        parent_release = db.query(Release).filter(Release.id == release_id).first()
+        if not parent_release:
+            raise HTTPException(status_code=404, detail="Parent release not found")
+
+        project = db.query(Project).filter(Project.id == parent_release.project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        if not parent_release.model_path:
+            raise HTTPException(status_code=400, detail="Parent release has no export package")
+
+        abs_parent_zip = PathManager.get_absolute_path(parent_release.model_path)
+        if not abs_parent_zip or not abs_parent_zip.exists():
+            raise HTTPException(status_code=404, detail="Parent release ZIP not found")
+
+        selected_image_paths = [
+            _normalize_release_zip_key(path) for path in (payload.selected_image_paths or []) if str(path).strip()
+        ]
+        selected_image_paths = list(dict.fromkeys(selected_image_paths))
+        if not selected_image_paths:
+            raise HTTPException(status_code=400, detail="No selected tile images provided")
+
+        child_release_id = str(uuid.uuid4())
+        child_release_name = _build_balanced_child_release_name(db, parent_release.project_id, parent_release.name)
+
+        releases_dir = os.path.join(str(settings.PROJECTS_DIR), project.name, "releases")
+        os.makedirs(releases_dir, exist_ok=True)
+
+        zip_filename = f"{_safe_release_zip_stem(child_release_name)}_{(parent_release.export_format or 'yolo').lower()}.zip"
+        child_zip_path = os.path.join(releases_dir, zip_filename)
+        relative_child_zip_path = PathManager.get_project_relative_path(child_zip_path)
+
+        selected_set = set(selected_image_paths)
+        selected_label_paths = {_derive_release_label_path(path) for path in selected_image_paths}
+
+        parent_config = parent_release.config
+        if isinstance(parent_config, str):
+            try:
+                parent_config = json.loads(parent_config)
+            except Exception:
+                parent_config = {}
+        if not isinstance(parent_config, dict):
+            parent_config = {}
+
+        child_annotations = {}
+        class_mapping = {}
+        copied_image_count = 0
+        split_counts = {"train": 0, "val": 0, "test": 0}
+
+        with zipfile.ZipFile(abs_parent_zip, "r") as parent_zip:
+            parent_members = parent_zip.namelist()
+            raw_annotations = {}
+
+            for member in parent_members:
+                normalized_member = _normalize_release_zip_key(member)
+                if normalized_member.endswith("annotations.json"):
+                    try:
+                        raw_annotations = json.loads(parent_zip.read(member).decode("utf-8"))
+                    except Exception:
+                        raw_annotations = {}
+                    break
+
+            for member in parent_members:
+                normalized_member = _normalize_release_zip_key(member)
+                if normalized_member.endswith("data.yaml") or normalized_member.endswith("data.yml"):
+                    try:
+                        yaml_data = yaml.safe_load(parent_zip.read(member).decode("utf-8"))
+                        names = yaml_data.get("names") if isinstance(yaml_data, dict) else None
+                        if isinstance(names, dict):
+                            class_mapping = names
+                        elif isinstance(names, list):
+                            class_mapping = {i: name for i, name in enumerate(names)}
+                    except Exception:
+                        class_mapping = {}
+                    if class_mapping:
+                        break
+
+            with zipfile.ZipFile(child_zip_path, "w", zipfile.ZIP_DEFLATED) as child_zip:
+                for member in parent_members:
+                    normalized_member = _normalize_release_zip_key(member)
+                    is_selected_image = normalized_member in selected_set
+                    is_selected_label = normalized_member in selected_label_paths
+
+                    if normalized_member.endswith("annotations.json") or normalized_member.endswith("release_config.json"):
+                        continue
+
+                    if is_selected_image or is_selected_label:
+                        child_zip.writestr(member, parent_zip.read(member))
+
+                        if is_selected_image:
+                            copied_image_count += 1
+                            split = normalized_member.split("/")[1] if normalized_member.startswith("images/") and len(normalized_member.split("/")) >= 3 else "train"
+                            if split in split_counts:
+                                split_counts[split] += 1
+                            child_annotations[normalized_member] = _resolve_image_annotations_for_path(normalized_member, raw_annotations)
+                    elif normalized_member.startswith("metadata/") or normalized_member.endswith("data.yaml") or normalized_member.endswith("data.yml") or normalized_member.endswith("classes.txt") or normalized_member.endswith("README.md"):
+                        child_zip.writestr(member, parent_zip.read(member))
+
+                child_release_config = {
+                    **parent_config,
+                    "version_name": child_release_name,
+                    "parent_release_id": parent_release.id,
+                    "tile_balance": {
+                        "mode": payload.mode,
+                        "ratio_value": payload.ratio_value,
+                        "selected_image_count": copied_image_count,
+                    },
+                    "split_counts": split_counts,
+                }
+                child_zip.writestr(
+                    "metadata/release_config.json",
+                    json.dumps(child_release_config, indent=2)
+                )
+                child_zip.writestr(
+                    "metadata/annotations.json",
+                    json.dumps(child_annotations, indent=2)
+                )
+
+        resolved_class_count = len(class_mapping) if class_mapping else _resolve_release_class_count(parent_release)
+
+        child_release = Release(
+            id=child_release_id,
+            project_id=parent_release.project_id,
+            parent_release_id=parent_release.id,
+            name=child_release_name,
+            description=f"Balanced child release from {parent_release.name}",
+            export_format=parent_release.export_format,
+            task_type=parent_release.task_type,
+            datasets_used=parent_release.datasets_used,
+            config=child_release_config,
+            total_original_images=copied_image_count,
+            total_augmented_images=0,
+            final_image_count=copied_image_count,
+            train_image_count=split_counts.get("train", 0),
+            val_image_count=split_counts.get("val", 0),
+            test_image_count=split_counts.get("test", 0),
+            class_count=resolved_class_count,
+            model_path=relative_child_zip_path,
+            release_source=parent_release.release_source,
+            created_at=datetime.now(),
+        )
+        db.add(child_release)
+        db.commit()
+
+        created_child = db.query(Release).filter(Release.id == child_release_id).first()
+
+        logger.info("operations.releases", "Tile-balanced child release created successfully", "tile_balanced_release_success", {
+            "parent_release_id": parent_release.id,
+            "child_release_id": child_release_id,
+            "selected_count": copied_image_count,
+        })
+
+        return {
+            "message": "Balanced child release created successfully",
+            "release": {
+                "id": created_child.id,
+                "name": created_child.name,
+                "version_name": created_child.name,
+                "description": created_child.description,
+                "export_format": created_child.export_format,
+                "task_type": created_child.task_type,
+                "final_image_count": created_child.final_image_count,
+                "class_count": created_child.class_count,
+                "total_original_images": created_child.total_original_images,
+                "total_augmented_images": created_child.total_augmented_images,
+                "original_image_count": created_child.total_original_images,
+                "augmented_image_count": created_child.total_augmented_images,
+                "total_classes": created_child.class_count,
+                "created_at": created_child.created_at,
+                "model_path": created_child.model_path,
+                "datasets_used": created_child.datasets_used,
+                "train_image_count": created_child.train_image_count,
+                "val_image_count": created_child.val_image_count,
+                "test_image_count": created_child.test_image_count,
+                "project_id": created_child.project_id,
+                "parent_release_id": created_child.parent_release_id,
+                "status": "completed",
+            }
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error("errors.system", f"Failed to create tile-balanced child release: {str(e)}", "tile_balanced_release_error", {
+            "parent_release_id": release_id,
+            "error": str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Failed to create balanced child release: {str(e)}")
 
 @router.get("/releases/{dataset_id}/history")
 def get_release_history(dataset_id: str, db: Session = Depends(get_db)):

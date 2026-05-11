@@ -124,6 +124,7 @@ const ReleaseDetailsView = ({
   onBack, 
   onRename, 
   onCreateNew,
+  onBalancedReleaseCreated,
   projectId,
   tileEnabled = false,
 }) => {
@@ -708,6 +709,10 @@ useEffect(() => {
       <TileBalanceWorkspace
         release={release}
         onBackToDetails={() => setShowTileBalance(false)}
+        onBalancedReleaseCreated={(childRelease) => {
+          setShowTileBalance(false);
+          onBalancedReleaseCreated && onBalancedReleaseCreated(childRelease);
+        }}
       />
     );
   }

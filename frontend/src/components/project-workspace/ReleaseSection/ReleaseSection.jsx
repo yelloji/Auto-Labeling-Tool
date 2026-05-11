@@ -1247,6 +1247,18 @@ const ReleaseSection = ({ projectId, datasetId, project }) => {
     // Reset to main view for creating new release
   };
 
+  const handleBalancedReleaseCreated = (release) => {
+    if (window.releaseHistoryRefreshKey) {
+      window.releaseHistoryRefreshKey = window.releaseHistoryRefreshKey + 1;
+    } else {
+      window.releaseHistoryRefreshKey = 1;
+    }
+
+    setSelectedRelease(release);
+    setShowReleaseDetails(true);
+    message.success('Balanced child release created successfully');
+  };
+
   // Close download modal and refresh the Release Section state
   const closeDownloadModal = () => {
     logUserClick('close_download_modal_button_clicked', 'User clicked close download modal button');
@@ -1393,6 +1405,7 @@ const ReleaseSection = ({ projectId, datasetId, project }) => {
               onDownload={handleDownloadFromDetails}
               onRename={handleRenameFromDetails}
               onCreateNew={handleCreateNewFromDetails}
+              onBalancedReleaseCreated={handleBalancedReleaseCreated}
               projectId={projectId}
               tileEnabled={!!project?.tile_enabled}
             />

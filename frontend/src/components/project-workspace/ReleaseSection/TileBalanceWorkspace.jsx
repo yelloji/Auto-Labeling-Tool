@@ -109,23 +109,18 @@ const ratioOptions = [
   { label: '1:3', value: 3 },
 ];
 
-const outputSizeOptions = [
-  { label: '640', value: 640 },
-  { label: '896', value: 896 },
-];
-
 const normalizeAnnotationKey = (value = '') => String(value).replace(/\\/g, '/');
 const PAGE_SIZE = 50;
 
-const TileBalanceWorkspace = ({ release, onBackToDetails }) => {
+const TileBalanceWorkspace = ({ release, onBackToDetails, onBalancedReleaseCreated }) => {
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [tileImages, setTileImages] = useState([]);
   const [annotations, setAnnotations] = useState({});
   const [classMapping, setClassMapping] = useState({});
   const [manualTab, setManualTab] = useState('labeled');
   const [mode, setMode] = useState('automatic');
   const [ratioValue, setRatioValue] = useState(1);
-  const [outputSize, setOutputSize] = useState(640);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [labeledPage, setLabeledPage] = useState(1);
   const [unlabeledPage, setUnlabeledPage] = useState(1);
@@ -237,6 +232,17 @@ const TileBalanceWorkspace = ({ release, onBackToDetails }) => {
   const automaticFinalCount = selectedLabeledCount + automaticUnlabeledCount;
   const manualFinalCount = selectedLabeledCount + selectedUnlabeledCount;
 
+  const automaticSelectedTiles = useMemo(() => {
+    const selectedLabeled = labeledTiles.filter((img) => selectedIds.has(img.id));
+    const selectedUnlabeled = unlabeledTiles.slice(0, automaticUnlabeledCount);
+    return [...selectedLabeled, ...selectedUnlabeled];
+  }, [labeledTiles, unlabeledTiles, automaticUnlabeledCount, selectedIds]);
+
+  const manualSelectedTiles = useMemo(
+    () => tileImages.filter((img) => selectedIds.has(img.id)),
+    [tileImages, selectedIds]
+  );
+
   const currentTileSet = manualTab === 'labeled' ? labeledTiles : unlabeledTiles;
   const currentPage = manualTab === 'labeled' ? labeledPage : unlabeledPage;
   const currentTotal = manualTab === 'labeled' ? labeledTiles.length : unlabeledTiles.length;
@@ -259,6 +265,46 @@ const TileBalanceWorkspace = ({ release, onBackToDetails }) => {
     if (idx >= 0) {
       setViewerIndex(idx);
       setViewerVisible(true);
+    }
+  };
+
+  const handleCreateBalancedRelease = async () => {
+    const selectedTiles = mode === 'automatic' ? automaticSelectedTiles : manualSelectedTiles;
+    if (!selectedTiles.length) {
+      message.warning('No tiles selected for the balanced child release');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/releases/${release.id}/tile-balance/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode,
+          ratio_value: mode === 'automatic' ? ratioValue : null,
+          selected_image_paths: selectedTiles.map((tile) => tile.fullPath),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to create balanced child release');
+      }
+
+      const result = await response.json();
+      if (!result?.release) {
+        throw new Error('Balanced child release response was incomplete');
+      }
+
+      onBalancedReleaseCreated && onBalancedReleaseCreated(result.release);
+    } catch (error) {
+      console.error(error);
+      message.error(error.message || 'Failed to create balanced child release');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -335,11 +381,6 @@ const TileBalanceWorkspace = ({ release, onBackToDetails }) => {
               />
             </Card>
           </Col>
-          <Col xs={12} md={6}>
-            <Card bordered={false} style={{ borderRadius: 12, background: 'linear-gradient(135deg, #faf7ff 0%, #f3ebff 100%)' }}>
-              <Statistic title="Output Tile Size" value={outputSize} suffix="px" valueStyle={{ color: '#2563eb' }} />
-            </Card>
-          </Col>
         </Row>
 
         {loading ? (
@@ -368,11 +409,6 @@ const TileBalanceWorkspace = ({ release, onBackToDetails }) => {
                   <Text strong style={{ display: 'block', marginBottom: 8 }}>Unlabeled Keep Ratio</Text>
                   <Segmented options={ratioOptions} value={ratioValue} onChange={setRatioValue} />
                 </div>
-
-                <div>
-                  <Text strong style={{ display: 'block', marginBottom: 8 }}>Output Tile Size</Text>
-                  <Segmented options={outputSizeOptions} value={outputSize} onChange={setOutputSize} />
-                </div>
               </Card>
             </Col>
             <Col xs={24} lg={8}>
@@ -398,9 +434,15 @@ const TileBalanceWorkspace = ({ release, onBackToDetails }) => {
                     showIcon
                     style={{ borderRadius: 12 }}
                     message="Child release flow ready"
-                    description="Next backend step will create a balanced child release linked by parent_release_id."
+                    description="This will create a balanced child release linked by parent_release_id and place it in Release History."
                   />
-                  <Button type="primary" size="large" disabled style={{ background: '#7c3aed', borderColor: '#7c3aed' }}>
+                  <Button
+                    type="primary"
+                    size="large"
+                    loading={creating}
+                    onClick={handleCreateBalancedRelease}
+                    style={{ background: '#7c3aed', borderColor: '#7c3aed' }}
+                  >
                     Create Balanced Release
                   </Button>
                 </Space>
@@ -500,9 +542,6 @@ const TileBalanceWorkspace = ({ release, onBackToDetails }) => {
                   <Statistic title="Labeled selected" value={selectedLabeledCount} valueStyle={{ color: '#7c3aed' }} />
                   <Statistic title="Unlabeled selected" value={selectedUnlabeledCount} valueStyle={{ color: '#16a34a' }} />
                   <Statistic title="Final child release total" value={manualFinalCount} valueStyle={{ color: '#2563eb' }} />
-                  <Divider style={{ margin: '6px 0' }} />
-                  <Text strong style={{ display: 'block' }}>Output Tile Size</Text>
-                  <Segmented options={outputSizeOptions} value={outputSize} onChange={setOutputSize} />
                   <Alert
                     type="info"
                     showIcon
@@ -510,7 +549,13 @@ const TileBalanceWorkspace = ({ release, onBackToDetails }) => {
                     message="Manual review mode"
                     description="Labeled tiles start included. Remove bad labeled tiles or add selected unlabeled tiles before creating the child release."
                   />
-                  <Button type="primary" size="large" disabled style={{ background: '#7c3aed', borderColor: '#7c3aed' }}>
+                  <Button
+                    type="primary"
+                    size="large"
+                    loading={creating}
+                    onClick={handleCreateBalancedRelease}
+                    style={{ background: '#7c3aed', borderColor: '#7c3aed' }}
+                  >
                     Create Balanced Release
                   </Button>
                 </Space>
