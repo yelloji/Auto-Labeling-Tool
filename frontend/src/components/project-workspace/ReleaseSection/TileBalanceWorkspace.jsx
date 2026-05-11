@@ -277,6 +277,8 @@ const TileBalanceWorkspace = ({ release, onBackToDetails, onBalancedReleaseCreat
 
     setCreating(true);
     try {
+      // This creates a child release from the already-exported parent release ZIP.
+      // We only send the chosen tile paths; backend reuses the parent package assets.
       const response = await fetch(`${API_BASE_URL}/api/v1/releases/${release.id}/tile-balance/create`, {
         method: 'POST',
         headers: {

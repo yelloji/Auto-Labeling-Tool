@@ -1011,6 +1011,8 @@ def create_tile_balanced_child_release(
         copied_image_count = 0
         split_counts = {"train": 0, "val": 0, "test": 0}
 
+        # Tile Balance does not retile or regenerate images. It creates a child
+        # release by reusing a filtered subset of the parent release package.
         with zipfile.ZipFile(abs_parent_zip, "r") as parent_zip:
             parent_members = parent_zip.namelist()
             raw_annotations = {}
@@ -1048,6 +1050,8 @@ def create_tile_balanced_child_release(
                     if normalized_member.endswith("annotations.json") or normalized_member.endswith("release_config.json"):
                         continue
 
+                    # Copy only the selected tile images and their matching label files.
+                    # Shared metadata files are copied separately below.
                     if is_selected_image or is_selected_label:
                         child_zip.writestr(member, parent_zip.read(member))
 
@@ -1060,6 +1064,8 @@ def create_tile_balanced_child_release(
                     elif normalized_member.startswith("metadata/") or normalized_member.endswith("data.yaml") or normalized_member.endswith("data.yml") or normalized_member.endswith("classes.txt") or normalized_member.endswith("README.md"):
                         child_zip.writestr(member, parent_zip.read(member))
 
+                # The child release keeps the parent's release config as a base,
+                # then records the tile-balance selection details on top.
                 child_release_config = {
                     **parent_config,
                     "version_name": child_release_name,
