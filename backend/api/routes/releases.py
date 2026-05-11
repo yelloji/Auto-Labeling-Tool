@@ -4874,7 +4874,10 @@ def _keep_tile_annotation_fragment(original_annotation, tile_annotation) -> bool
     length_ratio = tile_metrics["length"] / original_length
 
     if hasattr(original_annotation, 'points'):
-        keep = span_ratio >= 0.20 and (area_ratio >= 0.08 or length_ratio >= 0.28)
+        keep = (
+            area_ratio >= 0.12
+            or (span_ratio >= 0.20 and (area_ratio >= 0.08 or length_ratio >= 0.28))
+        )
     else:
         keep = area_ratio >= 0.20 and span_ratio >= 0.25
 
