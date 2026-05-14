@@ -1561,6 +1561,13 @@ class ReleaseController:
             
             history = []
             for release in releases:
+                parent_release_name = None
+                if release.parent_release_id:
+                    parent_release = self.db.query(Release).filter(
+                        Release.id == release.parent_release_id
+                    ).first()
+                    parent_release_name = parent_release.name if parent_release else None
+
                 record = {
                     "id": release.id,
                     "name": release.name,
@@ -1574,7 +1581,9 @@ class ReleaseController:
                     "total_classes": release.class_count or 0,
                     "status": "completed",  # Default status for existing releases
                     "created_at": release.created_at.isoformat() if release.created_at else None,
-                    "model_path": release.model_path
+                    "model_path": release.model_path,
+                    "parent_release_id": release.parent_release_id,
+                    "parent_release_name": parent_release_name,
                 }
                 history.append(record)
             

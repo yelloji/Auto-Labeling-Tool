@@ -1144,6 +1144,7 @@ def create_tile_balanced_child_release(
                 "test_image_count": created_child.test_image_count,
                 "project_id": created_child.project_id,
                 "parent_release_id": created_child.parent_release_id,
+                "parent_release_name": parent_release.name,
                 "status": "completed",
             }
         }
@@ -1278,6 +1279,8 @@ def get_project_releases(project_id: str, db: Session = Depends(get_db)):
                 "datasets_used": r.datasets_used,
                 "project_id": r.project_id,
                 "release_source": r.release_source,
+                "parent_release_id": r.parent_release_id,
+                "parent_release_name": db.query(Release.name).filter(Release.id == r.parent_release_id).scalar() if r.parent_release_id else None,
             }
             for r in releases
         ]

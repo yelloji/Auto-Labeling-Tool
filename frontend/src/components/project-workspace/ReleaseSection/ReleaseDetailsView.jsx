@@ -166,6 +166,18 @@ const ReleaseDetailsView = ({
   const [gridSpan, setGridSpan] = useState(4);
   const [showTileBalance, setShowTileBalance] = useState(false);
 
+  const isBalancedChildRelease = !!(release?.parent_release_id || releaseConfig?.parent_release_id || releaseConfig?.tile_balance);
+  const releaseClasses = Array.isArray(releaseConfig?.classes) && releaseConfig.classes.length > 0
+    ? releaseConfig.classes
+    : Object.values(classMapping || {});
+  const balanceInfo = releaseConfig?.tile_balance || {};
+  const parentReleaseName = release?.parent_release_name || releaseConfig?.parent_release_name || releaseConfig?.source_release_name || 'Parent release';
+  const balanceModeLabel = balanceInfo?.mode ? `${balanceInfo.mode.charAt(0).toUpperCase()}${balanceInfo.mode.slice(1)}` : '--';
+  const balanceRatioLabel = typeof balanceInfo?.ratio_value === 'number'
+    ? `1:${balanceInfo.ratio_value}`
+    : '--';
+  const selectedTileCount = balanceInfo?.selected_image_count ?? release.final_image_count ?? release.total_images ?? '--';
+
 useEffect(() => {
   if (release) {
     loadReleaseImages();
@@ -945,7 +957,9 @@ useEffect(() => {
           <Divider />
           
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-            <Title level={4} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Transformation</Title>
+            <Title level={4} style={{ margin: 0, background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              {isBalancedChildRelease ? 'Balanced Release Info' : 'Transformation'}
+            </Title>
             <span style={{ marginLeft: '8px', fontSize: '16px', display: 'flex', alignItems: 'center' }}>
               <svg width="16" height="16" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
                 <defs>
@@ -960,120 +974,226 @@ useEffect(() => {
             </span>
           </div>
 
-          {/* Metadata Cards Row */}
-          <Row gutter={[24, 8]} style={{ marginBottom: 16 }}>
-            <Col xs={24} sm={8} md={8} lg={8}>
-              <Card size="small" bordered={false} style={{
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
-                boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)',
-                minHeight: 'auto'
-              }} bodyStyle={{ padding: '8px 12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
-                  <div style={{ flexShrink: 0 }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <defs>
-                        <linearGradient id="imagesPerOriginalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#1976d2" />
-                          <stop offset="100%" stopColor="#42a5f5" />
-                        </linearGradient>
-                      </defs>
-                      <path fill="url(#imagesPerOriginalGradient)" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-                      <circle fill="url(#imagesPerOriginalGradient)" cx="18" cy="6" r="2" opacity="0.8"/>
-                    </svg>
-                  </div>
-                  <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2' }}>Images per Original:</div>
-                  <div style={{ fontSize: '16px', color: '#333', whiteSpace: 'nowrap', fontWeight: 500 }}>{releaseConfig?.images_per_original ?? '--'}</div>
-                </div>
-              </Card>
-              </Col>
-              <Col xs={24} sm={8} md={8} lg={8}>
-                <Card size="small" bordered={false} style={{
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
-                  boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)',
-                  minHeight: 'auto'
-                }} bodyStyle={{ padding: '8px 12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
-                    <div style={{ flexShrink: 0 }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                          <linearGradient id="outputFormatGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#1976d2" />
-                            <stop offset="100%" stopColor="#42a5f5" />
-                          </linearGradient>
-                        </defs>
-                        <path fill="url(#outputFormatGradient)" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
-                        <path fill="url(#outputFormatGradient)" d="M8 12h8v2H8zm0 4h6v2H8z" opacity="0.8"/>
-                      </svg>
-                    </div>
-                    <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2' }}>Output Format:</div>
-                    <div style={{ fontSize: '16px', color: '#333', whiteSpace: 'nowrap', fontWeight: 500 }}>{releaseConfig?.output_format ?? '--'}</div>
-                  </div>
-                </Card>
+          {isBalancedChildRelease ? (
+            <>
+              <Row gutter={[24, 8]} style={{ marginBottom: 16 }}>
+                <Col xs={24} sm={12} md={8} lg={8}>
+                  <Card size="small" bordered={false} style={{
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #f3e8ff 0%, #eef2ff 100%)',
+                    boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)'
+                  }} bodyStyle={{ padding: '10px 14px' }}>
+                    <div style={{ fontWeight: 600, fontSize: '14px', color: '#722ed1', marginBottom: 4 }}>Balanced From</div>
+                    <div style={{ fontSize: '16px', color: '#222', fontWeight: 600 }}>{parentReleaseName}</div>
+                  </Card>
                 </Col>
-                <Col xs={24} sm={8} md={8} lg={8}>
-                <Card size="small" bordered={false} style={{
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
-                  boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)',
-                  minHeight: 'auto'
-                }} bodyStyle={{ padding: '8px 12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
-                    <div style={{ flexShrink: 0 }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                          <linearGradient id="classesMetadataGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#1976d2" />
-                            <stop offset="100%" stopColor="#42a5f5" />
-                          </linearGradient>
-                        </defs>
-                        <path fill="url(#classesMetadataGradient)" d="M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z"/>
-                        <circle fill="url(#classesMetadataGradient)" cx="7" cy="12" r="2" opacity="0.8"/>
-                      </svg>
+                <Col xs={24} sm={12} md={8} lg={8}>
+                  <Card size="small" bordered={false} style={{
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #e6fffb 0%, #f6ffed 100%)',
+                    boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)'
+                  }} bodyStyle={{ padding: '10px 14px' }}>
+                    <div style={{ fontWeight: 600, fontSize: '14px', color: '#08979c', marginBottom: 4 }}>Balance Mode</div>
+                    <div style={{ fontSize: '16px', color: '#222', fontWeight: 600 }}>{balanceModeLabel}</div>
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8}>
+                  <Card size="small" bordered={false} style={{
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #fff7e6 0%, #fff2f0 100%)',
+                    boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)'
+                  }} bodyStyle={{ padding: '10px 14px' }}>
+                    <div style={{ fontWeight: 600, fontSize: '14px', color: '#d46b08', marginBottom: 4 }}>Selected Tiles</div>
+                    <div style={{ fontSize: '16px', color: '#222', fontWeight: 600 }}>{selectedTileCount}</div>
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8}>
+                  <Card size="small" bordered={false} style={{
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #f9f0ff 0%, #f0f5ff 100%)',
+                    boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)'
+                  }} bodyStyle={{ padding: '10px 14px' }}>
+                    <div style={{ fontWeight: 600, fontSize: '14px', color: '#722ed1', marginBottom: 4 }}>Ratio Used</div>
+                    <div style={{ fontSize: '16px', color: '#222', fontWeight: 600 }}>
+                      {balanceInfo?.mode === 'automatic' ? balanceRatioLabel : 'Manual Selection'}
                     </div>
-                    <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2' }}>Classes:</div>
-                    <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '3px', justifyContent: 'flex-start', alignItems: 'center', overflow: 'auto' }}>
-                      {releaseConfig?.classes?.map((cls, idx) => {
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8}>
+                  <Card size="small" bordered={false} style={{
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #e3f2fd 0%, #eef7ff 100%)',
+                    boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)'
+                  }} bodyStyle={{ padding: '10px 14px' }}>
+                    <div style={{ fontWeight: 600, fontSize: '14px', color: '#1976d2', marginBottom: 4 }}>Output Format</div>
+                    <div style={{ fontSize: '16px', color: '#222', fontWeight: 600 }}>
+                      {release.export_format?.toUpperCase() || releaseConfig?.output_format || '--'}
+                    </div>
+                  </Card>
+                </Col>
+                <Col xs={24} sm={24} md={8} lg={8}>
+                  <Card size="small" bordered={false} style={{
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #e3f2fd 0%, #eef7ff 100%)',
+                    boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)'
+                  }} bodyStyle={{ padding: '10px 14px' }}>
+                    <div style={{ fontWeight: 600, fontSize: '14px', color: '#1976d2', marginBottom: 6 }}>Classes</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {releaseClasses.length > 0 ? releaseClasses.map((cls, idx) => {
                         const classColors = ['#1976d2', '#388e3c', '#fbc02d', '#d32f2f', '#7b1fa2', '#0288d1', '#c2185b'];
                         const bgColor = classColors[idx % classColors.length];
                         return (
                           <span key={cls} style={{
-                             background: bgColor,
-                             color: '#fff',
-                             borderRadius: '3px',
-                             padding: '2px 5px',
-                             fontWeight: 500,
-                             fontSize: releaseConfig?.classes?.length > 6 ? '9px' : releaseConfig?.classes?.length > 4 ? '10px' : '11px',
-                             minHeight: 'auto',
-                             display: 'inline-flex',
-                             alignItems: 'center',
-                             lineHeight: 1.1,
-                             whiteSpace: 'nowrap',
-                             textDecoration: 'none'
-                           }}>{cls}</span>
+                            background: bgColor,
+                            color: '#fff',
+                            borderRadius: '999px',
+                            padding: '3px 8px',
+                            fontWeight: 500,
+                            fontSize: '11px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            lineHeight: 1.1,
+                            whiteSpace: 'nowrap'
+                          }}>{cls}</span>
                         );
-                      })}
+                      }) : <Text type="secondary">No classes available</Text>}
                     </div>
-                  </div>
-                </Card>
+                  </Card>
                 </Col>
               </Row>
-
-              <div
+              <Card
+                size="small"
+                bordered={false}
                 style={{
-                  background: 'linear-gradient(135deg, #e0f7fa 0%, #f3e5f5 100%)',
-                  border: '8px solid',
-                  borderImage: 'linear-gradient(135deg, #e0f7fa 0%, #f3e5f5 100%) 1',
-                  borderRadius: '6px',
-                  padding: '4px',
-                  boxShadow: '0 1px 6px rgba(60, 60, 120, 0.03)',
-                  marginBottom: '4px'
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #fcf8ff 0%, #f6ffed 100%)',
+                  boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)',
+                  marginBottom: '8px'
                 }}
-                onMouseEnter={() => setIsDetailsHovered(true)}
-                onMouseLeave={() => setIsDetailsHovered(false)}
+                bodyStyle={{ padding: '14px 16px' }}
               >
-                {releaseConfig?.transformations && releaseConfig.transformations.length > 0 ? (
+                <div style={{ fontWeight: 600, fontSize: '15px', color: '#531dab', marginBottom: 4 }}>Balanced child release</div>
+                <div style={{ color: '#444', fontSize: '13px', lineHeight: 1.6 }}>
+                  This release reuses selected tile images from <strong>{parentReleaseName}</strong>. It does not rerun tile generation or transformation tools; it keeps a curated subset from the parent release for training.
+                </div>
+              </Card>
+            </>
+          ) : (
+            <>
+              {/* Metadata Cards Row */}
+              <Row gutter={[24, 8]} style={{ marginBottom: 16 }}>
+                <Col xs={24} sm={8} md={8} lg={8}>
+                  <Card size="small" bordered={false} style={{
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
+                    boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)',
+                    minHeight: 'auto'
+                  }} bodyStyle={{ padding: '8px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                      <div style={{ flexShrink: 0 }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <defs>
+                            <linearGradient id="imagesPerOriginalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#1976d2" />
+                              <stop offset="100%" stopColor="#42a5f5" />
+                            </linearGradient>
+                          </defs>
+                          <path fill="url(#imagesPerOriginalGradient)" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                          <circle fill="url(#imagesPerOriginalGradient)" cx="18" cy="6" r="2" opacity="0.8"/>
+                        </svg>
+                      </div>
+                      <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2' }}>Images per Original:</div>
+                      <div style={{ fontSize: '16px', color: '#333', whiteSpace: 'nowrap', fontWeight: 500 }}>{releaseConfig?.images_per_original ?? '--'}</div>
+                    </div>
+                  </Card>
+                  </Col>
+                  <Col xs={24} sm={8} md={8} lg={8}>
+                    <Card size="small" bordered={false} style={{
+                      borderRadius: '12px',
+                      background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
+                      boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)',
+                      minHeight: 'auto'
+                    }} bodyStyle={{ padding: '8px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                        <div style={{ flexShrink: 0 }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                              <linearGradient id="outputFormatGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#1976d2" />
+                                <stop offset="100%" stopColor="#42a5f5" />
+                              </linearGradient>
+                            </defs>
+                            <path fill="url(#outputFormatGradient)" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                            <path fill="url(#outputFormatGradient)" d="M8 12h8v2H8zm0 4h6v2H8z" opacity="0.8"/>
+                          </svg>
+                        </div>
+                        <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2' }}>Output Format:</div>
+                        <div style={{ fontSize: '16px', color: '#333', whiteSpace: 'nowrap', fontWeight: 500 }}>{releaseConfig?.output_format ?? '--'}</div>
+                      </div>
+                    </Card>
+                    </Col>
+                    <Col xs={24} sm={8} md={8} lg={8}>
+                    <Card size="small" bordered={false} style={{
+                      borderRadius: '12px',
+                      background: 'linear-gradient(135deg, #e3f2fd 0%, #e3f2fd 100%)',
+                      boxShadow: '0 2px 8px rgba(60, 60, 120, 0.08)',
+                      minHeight: 'auto'
+                    }} bodyStyle={{ padding: '8px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                        <div style={{ flexShrink: 0 }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                              <linearGradient id="classesMetadataGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#1976d2" />
+                                <stop offset="100%" stopColor="#42a5f5" />
+                              </linearGradient>
+                            </defs>
+                            <path fill="url(#classesMetadataGradient)" d="M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z"/>
+                            <circle fill="url(#classesMetadataGradient)" cx="7" cy="12" r="2" opacity="0.8"/>
+                          </svg>
+                        </div>
+                        <div style={{ fontWeight: 600, fontSize: '16px', color: '#1976d2' }}>Classes:</div>
+                        <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '3px', justifyContent: 'flex-start', alignItems: 'center', overflow: 'auto' }}>
+                          {releaseConfig?.classes?.map((cls, idx) => {
+                            const classColors = ['#1976d2', '#388e3c', '#fbc02d', '#d32f2f', '#7b1fa2', '#0288d1', '#c2185b'];
+                            const bgColor = classColors[idx % classColors.length];
+                            return (
+                              <span key={cls} style={{
+                                 background: bgColor,
+                                 color: '#fff',
+                                 borderRadius: '3px',
+                                 padding: '2px 5px',
+                                 fontWeight: 500,
+                                 fontSize: releaseConfig?.classes?.length > 6 ? '9px' : releaseConfig?.classes?.length > 4 ? '10px' : '11px',
+                                 minHeight: 'auto',
+                                 display: 'inline-flex',
+                                 alignItems: 'center',
+                                 lineHeight: 1.1,
+                                 whiteSpace: 'nowrap',
+                                 textDecoration: 'none'
+                               }}>{cls}</span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </Card>
+                    </Col>
+                  </Row>
+
+                  <div
+                    style={{
+                      background: 'linear-gradient(135deg, #e0f7fa 0%, #f3e5f5 100%)',
+                      border: '8px solid',
+                      borderImage: 'linear-gradient(135deg, #e0f7fa 0%, #f3e5f5 100%) 1',
+                      borderRadius: '6px',
+                      padding: '4px',
+                      boxShadow: '0 1px 6px rgba(60, 60, 120, 0.03)',
+                      marginBottom: '4px'
+                    }}
+                    onMouseEnter={() => setIsDetailsHovered(true)}
+                    onMouseLeave={() => setIsDetailsHovered(false)}
+                  >
+                    {releaseConfig?.transformations && releaseConfig.transformations.length > 0 ? (
                   <Row gutter={[8, 8]} style={{ justifyContent: 'flex-start' }}>
                     {releaseConfig.transformations.map((item, idx) => {
                       // Emoji icon mapping for all 18 tools
@@ -1261,7 +1381,9 @@ useEffect(() => {
                     <div style={{ color: '#888' }}>No transformation data available yet. We'll integrate this soon.</div>
                   </div>
                 )}
-              </div>
+                  </div>
+                </>
+              )}
             </Card>
 
             {/* Images Grid */}

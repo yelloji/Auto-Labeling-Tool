@@ -427,6 +427,8 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
     return colors[status] || 'default';
   };
 
+  const isBalancedChildRelease = (release) => !!release.parent_release_id;
+
   if (loading) {
     logInfo('app.frontend.ui', 'release_history_loading_rendered', 'ReleaseHistoryList loading state rendered', {
       timestamp: new Date().toISOString(),
@@ -487,11 +489,14 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
               size="small"
               style={{
                 marginBottom: '12px',
-                border: '1px solid #f0f0f0',
+                border: isBalancedChildRelease(release) ? '1px solid #d8c5ff' : '1px solid #f0f0f0',
                 borderRadius: '8px',
-                backgroundColor: '#fafafa',
+                background: isBalancedChildRelease(release)
+                  ? 'linear-gradient(135deg, #fcf8ff 0%, #fafafa 100%)'
+                  : '#fafafa',
                 transition: 'all 0.3s ease',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                minHeight: isBalancedChildRelease(release) ? '172px' : 'auto'
               }}
               className="release-history-item"
               onClick={() => {
@@ -516,9 +521,20 @@ const ReleaseHistoryList = ({ projectId, datasetId, onReleaseSelect, onReleaseCl
                   <Space size="small">
                     <span style={{ fontSize: '14px' }}>{getTaskIcon(release.task_type)}</span>
                     <span style={{ fontWeight: 600, fontSize: '14px' }}>{release.name}</span>
+                    {isBalancedChildRelease(release) && (
+                      <Tag color="purple" style={{ marginInlineStart: 0 }}>
+                        Balanced Release
+                      </Tag>
+                    )}
                   </Space>
                   <Tag color={getStatusColor(release.status)} size="small">{release.status}</Tag>
                 </div>
+
+                {isBalancedChildRelease(release) && (
+                  <div style={{ fontSize: '12px', color: '#722ed1', marginBottom: 6, fontWeight: 500 }}>
+                    From: {release.parent_release_name || 'Parent release'}
+                  </div>
+                )}
                 
               {/* Date / Time */}
               <div style={{ display: 'flex', alignItems: 'center', fontSize: '12px', color: '#999', marginBottom: 4 }}>
