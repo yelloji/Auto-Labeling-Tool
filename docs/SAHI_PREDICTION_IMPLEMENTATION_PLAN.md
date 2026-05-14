@@ -438,16 +438,27 @@ Completed implementation:
 - Saves SAHI visuals under the predictor output folder.
 - Verification: `python -m py_compile backend/models/training/sahi_predictor.py` completed successfully.
 
-### Task 5 - SAHI Executor
+### Task 5 - SAHI Executor - DONE
 
-- Create `sahi_prediction_executor.py`.
-- Call `SahiUltralyticsPredictor`.
-- Read image manifest and params JSON.
-- Update DB status/results.
+- [x] Create `sahi_prediction_executor.py`.
+- [x] Call `SahiUltralyticsPredictor`.
+- [x] Read image manifest and params JSON.
+- [x] Update DB status/results.
+- [x] Store per-image MD5 and dimensions for later review/verification.
+- [x] Preserve upload persistence behavior for uploaded full images.
 
 Files likely touched:
 
 - `backend/models/training/sahi_prediction_executor.py`
+
+Completed implementation:
+
+- Added standalone SAHI subprocess runner.
+- Accepts `--experiment_id`, `--weights_path`, `--images_manifest` or `--images_json`, `--output_folder`, and `--params_json`.
+- Updates experiment status to `running`, then `completed` or `failed`.
+- Stores predictions, analytics summary, image count, output folder, and input image metadata.
+- Verification: `python -m py_compile backend/models/training/sahi_prediction_executor.py backend/models/training/sahi_predictor.py` completed successfully.
+- CLI smoke: `python backend/models/training/sahi_prediction_executor.py --help` completed successfully with `DEBUG=false` for the local process.
 
 ### Task 6 - Launch Subprocess
 
