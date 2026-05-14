@@ -414,21 +414,42 @@ Completed implementation:
 - SAHI draft API stores `image_count`, `input_source`, `input_split_counts`, and `input_skipped_count` in the experiment summary/custom params.
 - Verification: `python -m py_compile backend/models/training/sahi_image_resolver.py backend/models/training/sahi_prediction_api.py backend/models/training/api_routes.py` completed successfully.
 
-### Task 4 - SAHI Executor
+### Task 4 - SAHI Predictor - DONE
+
+- [x] Create SAHI predictor using the existing `BasePredictor` contract.
+- [x] Load `AutoDetectionModel`.
+- [x] Loop through input images.
+- [x] Run `get_sliced_prediction`.
+- [x] Export visual image per input.
+- [x] Convert predictions to app JSON.
+- [x] Return analytics in the same shape as normal Prediction.
+
+Files likely touched:
+
+- `backend/models/training/sahi_predictor.py`
+
+Completed implementation:
+
+- Added `SahiUltralyticsPredictor(BasePredictor)`.
+- Uses SAHI `AutoDetectionModel.from_pretrained(...)` and `get_sliced_prediction(...)`.
+- Keeps model loading inside the predictor method so import errors are reported only when SAHI prediction runs.
+- Converts SAHI object predictions into `{class, class_id, confidence, bbox, segmentation, mask, source}`.
+- Uses original full-image coordinates returned by SAHI.
+- Saves SAHI visuals under the predictor output folder.
+- Verification: `python -m py_compile backend/models/training/sahi_predictor.py` completed successfully.
+
+### Task 5 - SAHI Executor
 
 - Create `sahi_prediction_executor.py`.
-- Load `AutoDetectionModel`.
-- Loop through input images.
-- Run `get_sliced_prediction`.
-- Export visual image per input.
-- Convert predictions to app JSON.
+- Call `SahiUltralyticsPredictor`.
+- Read image manifest and params JSON.
 - Update DB status/results.
 
 Files likely touched:
 
 - `backend/models/training/sahi_prediction_executor.py`
 
-### Task 5 - Launch Subprocess
+### Task 6 - Launch Subprocess
 
 - Resolve selected weights.
 - Write input manifest and params JSON.
@@ -437,9 +458,9 @@ Files likely touched:
 
 Files likely touched:
 
-- `backend/models/training/api_routes.py`
+- `backend/models/training/sahi_prediction_api.py`
 
-### Task 6 - Frontend API Methods
+### Task 7 - Frontend API Methods
 
 - Add SAHI API functions to `frontend/src/services/api.js`.
 
@@ -450,7 +471,7 @@ Needed functions:
 - `updateSahiPredictionDraft`
 - `triggerSahiPrediction`
 
-### Task 7 - SAHI Prediction View UI
+### Task 8 - SAHI Prediction View UI
 
 - Build `SahiPredictionView`.
 - History list.
@@ -465,7 +486,7 @@ Files likely touched:
 - `SahiPredictionView.css`
 - `OverviewView.jsx`
 
-### Task 8 - Viewer Compatibility
+### Task 9 - Viewer Compatibility
 
 - Reuse normal `ImageViewerModal` if prediction JSON is compatible.
 - If full-size image handling needs tweaks, isolate them behind props.
@@ -475,7 +496,7 @@ Files likely touched:
 - `SahiPredictionView.jsx`
 - maybe `PredictionView/ImageViewerModal.jsx`
 
-### Task 9 - Analytics
+### Task 10 - Analytics
 
 - Start with basic SAHI stats:
   - image count
@@ -485,7 +506,7 @@ Files likely touched:
   - detections per image
 - Keep advanced comparison/verification out of first version unless existing components work cleanly.
 
-### Task 10 - Verification
+### Task 11 - Verification
 
 - Backend compile:
   - `python -m py_compile backend/models/training/api_routes.py backend/models/training/sahi_prediction_executor.py`
