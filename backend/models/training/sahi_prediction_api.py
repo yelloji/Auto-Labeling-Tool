@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from database.database import get_db
 from database.models import ModelExperiment, Project, TrainingSession
 from logging_system.professional_logger import get_professional_logger
+from models.training.sahi_image_resolver import resolve_sahi_input_images
 
 
 logger = get_professional_logger()
@@ -154,6 +155,25 @@ def _apply_sahi_update(exp: ModelExperiment, payload: BaseModel) -> None:
         exp.custom_params = {**existing_params, **sahi_updates}
 
 
+def _resolve_and_apply_sahi_input_summary(db: Session, exp: ModelExperiment) -> Dict[str, Any]:
+    resolved = resolve_sahi_input_images(
+        db=db,
+        project_id=exp.project_id,
+        dataset_source=exp.dataset_source,
+        uploaded_images=exp.input_images if exp.dataset_source == "upload" else None,
+    )
+
+    exp.image_count = resolved["count"]
+    params = exp.custom_params if isinstance(exp.custom_params, dict) else {}
+    exp.custom_params = {
+        **params,
+        "input_source": resolved["source"],
+        "input_split_counts": resolved["split_counts"],
+        "input_skipped_count": len(resolved["skipped"]),
+    }
+    return resolved
+
+
 @router.get("/training/{training_id}/sahi-prediction/queued")
 async def get_queued_sahi_prediction(training_id: int, db: Session = Depends(get_db)):
     """Find existing queued SAHI prediction experiment for a model."""
@@ -191,10 +211,6 @@ async def init_sahi_prediction(training_id: int, payload: SahiPredictionRequest,
     project = _ensure_tile_project_for_sahi(ts, db)
     _validate_sahi_dataset_source(payload.dataset_source)
 
-    image_count = None
-    if payload.dataset_source == "upload" and payload.uploaded_images:
-        image_count = len(payload.uploaded_images)
-
     exp = ModelExperiment(
         id=str(uuid.uuid4()),
         training_id=ts.id,
@@ -207,7 +223,7 @@ async def init_sahi_prediction(training_id: int, payload: SahiPredictionRequest,
         task=payload.task or ts.task,
         dataset_source=payload.dataset_source,
         dataset_path=None,
-        image_count=image_count,
+        image_count=None,
         confidence=payload.confidence,
         iou_threshold=payload.postprocess_match_threshold,
         imgsz=max(payload.slice_height, payload.slice_width),
@@ -219,6 +235,7 @@ async def init_sahi_prediction(training_id: int, payload: SahiPredictionRequest,
         input_images=payload.uploaded_images,
         status="queued"
     )
+    _resolve_and_apply_sahi_input_summary(db, exp)
 
     db.add(exp)
     db.commit()
@@ -245,6 +262,7 @@ async def update_sahi_prediction(experiment_id: str, payload: SahiPredictionUpda
     _ensure_tile_project_for_sahi(ts, db)
 
     _apply_sahi_update(exp, payload)
+    _resolve_and_apply_sahi_input_summary(db, exp)
     db.commit()
     db.refresh(exp)
     return exp

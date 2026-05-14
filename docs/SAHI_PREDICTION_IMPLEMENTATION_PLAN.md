@@ -392,17 +392,27 @@ Completed implementation:
 - SAHI API code lives in `backend/models/training/sahi_prediction_api.py`; the main training API only includes that router.
 - Verification: `python -m py_compile backend/models/training/api_routes.py backend/models/training/sahi_prediction_api.py` completed successfully.
 
-### Task 3 - Resolve Full Original Images
+### Task 3 - Resolve Full Original Images - DONE
 
-- Implement backend helper to collect project original images.
-- Collect only `Image.split_type == "dataset"` images from project datasets.
-- Preserve `Image.split_section` (`train`, `val`, `test`) in returned metadata.
-- Exclude `annotating`, `unassigned`, release ZIP, tiled generated outputs, model folders, and prediction temp folders.
-- Support upload source if practical in first version.
+- [x] Implement backend helper to collect dataset-stage original images.
+- [x] Collect only `Image.split_type == "dataset"` images from project datasets.
+- [x] Preserve `Image.split_section` (`train`, `val`, `test`) in returned metadata.
+- [x] Exclude `annotating`, `unassigned`, release ZIP, tiled generated outputs, model folders, training-data folders, and prediction temp folders.
+- [x] Support upload source with existence/extension validation.
+- [x] Wire SAHI draft init/update to resolve image count and split-count summary without running inference.
 
 Files likely touched:
 
-- `backend/models/training/api_routes.py`
+- `backend/models/training/sahi_image_resolver.py`
+- `backend/models/training/sahi_prediction_api.py`
+
+Completed implementation:
+
+- Added `resolve_sahi_input_images(...)`.
+- `dataset_images` source queries `Dataset` + `Image` from the database and only includes ready dataset-stage records.
+- Returned resolver data includes absolute image paths, item metadata, split counts, skipped records, and count.
+- SAHI draft API stores `image_count`, `input_source`, `input_split_counts`, and `input_skipped_count` in the experiment summary/custom params.
+- Verification: `python -m py_compile backend/models/training/sahi_image_resolver.py backend/models/training/sahi_prediction_api.py backend/models/training/api_routes.py` completed successfully.
 
 ### Task 4 - SAHI Executor
 
