@@ -1,10 +1,18 @@
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+import json
+import os
+import re
+import subprocess
+import sys
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from database.database import get_db
 from database.models import ModelExperiment, Project, TrainingSession
 from logging_system.professional_logger import get_professional_logger
@@ -174,6 +182,52 @@ def _resolve_and_apply_sahi_input_summary(db: Session, exp: ModelExperiment) -> 
     return resolved
 
 
+def _resolve_sahi_weights_path(ts: TrainingSession, weights_type: str) -> str:
+    weights_filename = "best.pt" if weights_type == "best" else "last.pt"
+    project_root = settings.BASE_DIR
+    candidates = []
+
+    if ts.weights_dir:
+        candidates.append(project_root / ts.weights_dir / weights_filename)
+    if ts.run_dir:
+        candidates.append(project_root / ts.run_dir / "weights" / weights_filename)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.as_posix()
+
+    raise FileNotFoundError(f"Weights {weights_filename} not found in {candidates}")
+
+
+def _build_sahi_params(exp: ModelExperiment, ts: TrainingSession) -> Dict[str, Any]:
+    custom_params = exp.custom_params if isinstance(exp.custom_params, dict) else {}
+    params = {
+        "confidence": exp.confidence,
+        "iou_threshold": exp.iou_threshold,
+        "imgsz": exp.imgsz,
+        "task": exp.task or ts.task or "detect",
+        "device": exp.device or "auto",
+    }
+    for key in SAHI_PARAM_FIELDS:
+        if key in custom_params:
+            params[key] = custom_params[key]
+    return params
+
+
+def _finalize_sahi_experiment_from_payload(exp: ModelExperiment, ts: TrainingSession, payload: SahiPredictionRequest) -> None:
+    exp.name = payload.name
+    exp.dataset_source = payload.dataset_source
+    exp.weights_type = payload.weights_type
+    exp.task = payload.task or ts.task
+    exp.confidence = payload.confidence
+    exp.iou_threshold = payload.postprocess_match_threshold
+    exp.imgsz = max(payload.slice_height, payload.slice_width)
+    exp.device = payload.device
+    exp.custom_params = _sahi_params_from_payload(payload)
+    exp.input_images = payload.uploaded_images
+    exp.dataset_path = None
+
+
 @router.get("/training/{training_id}/sahi-prediction/queued")
 async def get_queued_sahi_prediction(training_id: int, db: Session = Depends(get_db)):
     """Find existing queued SAHI prediction experiment for a model."""
@@ -241,6 +295,141 @@ async def init_sahi_prediction(training_id: int, payload: SahiPredictionRequest,
     db.commit()
     db.refresh(exp)
     return exp
+
+
+@router.post("/training/{training_id}/sahi-predict")
+async def trigger_sahi_prediction(
+    training_id: int,
+    payload: SahiPredictionRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Start a SAHI prediction experiment in a subprocess."""
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    project = _ensure_tile_project_for_sahi(ts, db)
+    _validate_sahi_dataset_source(payload.dataset_source)
+
+    experiment = (
+        db.query(ModelExperiment)
+        .filter(
+            ModelExperiment.training_id == training_id,
+            ModelExperiment.experiment_type == SAHI_EXPERIMENT_TYPE,
+            ModelExperiment.status == "queued"
+        )
+        .first()
+    )
+
+    if experiment:
+        _finalize_sahi_experiment_from_payload(experiment, ts, payload)
+    else:
+        experiment = ModelExperiment(
+            id=str(uuid.uuid4()),
+            training_id=ts.id,
+            project_id=ts.project_id,
+            project_name=project.name,
+            training_name=ts.name,
+            name=payload.name,
+            experiment_type=SAHI_EXPERIMENT_TYPE,
+            framework=ts.framework or "ultralytics",
+            task=payload.task or ts.task,
+            dataset_source=payload.dataset_source,
+            dataset_path=None,
+            confidence=payload.confidence,
+            iou_threshold=payload.postprocess_match_threshold,
+            imgsz=max(payload.slice_height, payload.slice_width),
+            batch=1,
+            half=False,
+            weights_type=payload.weights_type,
+            device=payload.device,
+            custom_params=_sahi_params_from_payload(payload),
+            input_images=payload.uploaded_images,
+            status="queued"
+        )
+        db.add(experiment)
+
+    resolved_inputs = _resolve_and_apply_sahi_input_summary(db, experiment)
+    if not resolved_inputs["images"]:
+        raise HTTPException(status_code=400, detail="No dataset-stage images found for SAHI prediction")
+
+    db.commit()
+    db.refresh(experiment)
+
+    try:
+        project_root = settings.BASE_DIR
+        if not ts.run_dir:
+            raise ValueError(f"Training session {ts.name} has no run_dir")
+
+        weights_path = _resolve_sahi_weights_path(ts, experiment.weights_type or "best")
+
+        safe_name = re.sub(r"[^\w\-_]", "_", experiment.name or "sahi_prediction")
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        folder_name = f"{safe_name}_{timestamp}"
+        rel_output_dir = Path(ts.run_dir) / "experiments" / "sahi_prediction" / folder_name
+        abs_output_dir = project_root / rel_output_dir
+        abs_output_dir.mkdir(parents=True, exist_ok=True)
+
+        images_manifest_path = abs_output_dir / "sahi_prediction_inputs.json"
+        with open(images_manifest_path, "w", encoding="utf-8") as manifest_file:
+            json.dump(resolved_inputs["images"], manifest_file, ensure_ascii=False)
+
+        params = _build_sahi_params(experiment, ts)
+        params_path = abs_output_dir / "sahi_prediction_params.json"
+        with open(params_path, "w", encoding="utf-8") as params_file:
+            json.dump(params, params_file, ensure_ascii=False, indent=2)
+
+        log_file_path = abs_output_dir / "sahi_prediction.log"
+        log_file = open(log_file_path, "w", encoding="utf-8")
+
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        if env.get("DEBUG") == "release":
+            env["DEBUG"] = "false"
+        if os.environ.get("GEVIS_EXE_MODE") == "1":
+            env["GEVIS_EXE_MODE"] = "1"
+
+        executor_path = (Path(__file__).parent / "sahi_prediction_executor.py").as_posix()
+        command = [
+            sys.executable,
+            executor_path,
+            "--experiment_id", str(experiment.id),
+            "--weights_path", weights_path,
+            "--images_manifest", images_manifest_path.as_posix(),
+            "--output_folder", abs_output_dir.as_posix(),
+            "--params_json", json.dumps(params),
+        ]
+
+        creation_flags = 0
+        if os.name == "nt":
+            creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP
+
+        process = subprocess.Popen(
+            command,
+            cwd=project_root.as_posix(),
+            creationflags=creation_flags,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            env=env,
+        )
+
+        experiment.process_pid = process.pid
+        experiment.status = "running"
+        experiment.output_folder = rel_output_dir.as_posix()
+        db.commit()
+
+        logger.info("operations.training", f"Started SAHI prediction subprocess PID {process.pid}", "sahi_prediction_subprocess_started")
+
+    except Exception as exc:
+        logger.error("errors.system", f"Failed to launch SAHI prediction subprocess: {str(exc)}", "sahi_prediction_launch_failure")
+        experiment.status = "failed"
+        experiment.error_message = str(exc)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to start SAHI prediction: {str(exc)}")
+
+    return {"experiment_id": experiment.id, "status": "running"}
 
 
 @router.patch("/experiments/{experiment_id}/sahi-prediction")

@@ -460,16 +460,27 @@ Completed implementation:
 - Verification: `python -m py_compile backend/models/training/sahi_prediction_executor.py backend/models/training/sahi_predictor.py` completed successfully.
 - CLI smoke: `python backend/models/training/sahi_prediction_executor.py --help` completed successfully with `DEBUG=false` for the local process.
 
-### Task 6 - Launch Subprocess
+### Task 6 - Launch Subprocess - DONE
 
-- Resolve selected weights.
-- Write input manifest and params JSON.
-- Launch executor with `subprocess.Popen`.
-- Record PID and status.
+- [x] Resolve selected weights.
+- [x] Resolve dataset-stage or uploaded images.
+- [x] Write input manifest and params JSON.
+- [x] Launch executor with `subprocess.Popen`.
+- [x] Record PID, output folder, and running status.
 
 Files likely touched:
 
 - `backend/models/training/sahi_prediction_api.py`
+
+Completed implementation:
+
+- Added `POST /training/{training_id}/sahi-predict`.
+- Finalizes queued SAHI draft settings or creates a fallback experiment.
+- Resolves `best.pt` / `last.pt` from the training session weights folder.
+- Resolves SAHI input images through `resolve_sahi_input_images(...)`.
+- Writes `sahi_prediction_inputs.json`, `sahi_prediction_params.json`, and `sahi_prediction.log`.
+- Launches `sahi_prediction_executor.py` in a subprocess and stores the process PID.
+- Verification: `python -m py_compile backend/models/training/sahi_prediction_api.py backend/models/training/sahi_prediction_executor.py backend/models/training/sahi_predictor.py backend/models/training/sahi_image_resolver.py backend/models/training/api_routes.py` completed successfully.
 
 ### Task 7 - Frontend API Methods
 
