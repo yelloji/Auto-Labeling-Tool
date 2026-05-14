@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Card, Typography, Table, Tag, Tooltip, Tabs, Modal, Button, message } from 'antd';
-import { TrophyOutlined, DisconnectOutlined, ScissorOutlined } from '@ant-design/icons';
+import { TrophyOutlined, DisconnectOutlined } from '@ant-design/icons';
 import AnalyticsView from '../AnalyticsView/AnalyticsView';
 import ViewConfig from '../ConfigurationView/ViewConfig';
 import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
 import ModelManagerView from '../ModelManagerView/ModelManagerView';
 import ValidationView from '../ValidationView/ValidationView';
 import PredictionView from '../PredictionView/PredictionView';
+import SahiPredictionView from '../SahiPredictionView/SahiPredictionView';
 import ComparisonEngineView from '../ComparisonEngine/ComparisonEngineView';
 import { mergeModelLabGuideState } from '../modellabGuideState';
 import './OverviewView.css';
@@ -642,24 +643,7 @@ const OverviewView = ({ training, projectId, project }) => {
                 ...(isTileProject ? [{
                     key: 'sahi-prediction',
                     label: 'SAHI Prediction',
-                    children: (
-                        <Card
-                            bordered={false}
-                            style={{
-                                borderRadius: 8,
-                                background: 'linear-gradient(135deg, #f0fdfa 0%, #f8fafc 100%)',
-                                border: '1px solid #ccfbf1'
-                            }}
-                        >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                                <ScissorOutlined style={{ color: '#0f766e', fontSize: 20 }} />
-                                <Title level={4} style={{ margin: 0 }}>SAHI Prediction</Title>
-                            </div>
-                            <Text type="secondary">
-                                SAHI prediction will run this tiled-model training on full original project images using sliced inference. The normal Prediction tab is unchanged.
-                            </Text>
-                        </Card>
-                    )
+                    children: <SahiPredictionView training={training} />
                 }] : []),
                 {
                     key: 'comparison-engine',

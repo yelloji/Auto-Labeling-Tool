@@ -1,0 +1,204 @@
+.sahi-prediction-view {
+    min-height: 100%;
+    padding: 1rem;
+    background: #f7f8fa;
+}
+
+.sahi-prediction-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24rem;
+}
+
+.sahi-prediction-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.sahi-prediction-header h4 {
+    margin: 0;
+}
+
+.sahi-header-icon {
+    color: #0f766e;
+    font-size: 1.25rem;
+}
+
+.sahi-main-grid {
+    align-items: stretch;
+}
+
+.sahi-panel {
+    border-radius: 8px !important;
+    border: 1px solid #e5e7eb !important;
+}
+
+.sahi-panel .ant-card-head {
+    min-height: 44px;
+}
+
+.sahi-empty {
+    padding: 2rem 1rem;
+}
+
+.sahi-history-list {
+    max-height: 42rem;
+    overflow-y: auto;
+}
+
+.sahi-history-item {
+    cursor: pointer;
+    padding: 0.75rem !important;
+    gap: 0.5rem;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    border-left: 3px solid transparent;
+}
+
+.sahi-history-item:hover {
+    background: #f8fafc;
+}
+
+.sahi-history-item.active {
+    background: #ecfdf5;
+    border-left-color: #0f766e;
+}
+
+.sahi-history-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.sahi-history-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.sahi-history-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.45rem;
+}
+
+.sahi-config-alert {
+    margin-bottom: 1rem;
+}
+
+.sahi-config-form .ant-input-number {
+    width: 100%;
+}
+
+.sahi-stats-row {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.sahi-stat-card {
+    border-radius: 8px !important;
+    border: 1px solid #e5e7eb !important;
+}
+
+.sahi-gallery-panel {
+    min-height: 22rem;
+}
+
+.sahi-gallery-loading {
+    min-height: 14rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sahi-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    gap: 0.75rem;
+}
+
+.sahi-gallery-item {
+    appearance: none;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    padding: 0;
+    overflow: hidden;
+    cursor: pointer;
+    text-align: left;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.sahi-gallery-item:hover {
+    transform: translateY(-1px);
+    border-color: #0f766e;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.sahi-image-thumb {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: #eef2f7;
+    overflow: hidden;
+}
+
+.sahi-image-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.sahi-image-hover {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: rgba(15, 23, 42, 0.32);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    font-size: 1.4rem;
+}
+
+.sahi-gallery-item:hover .sahi-image-hover {
+    opacity: 1;
+}
+
+.sahi-image-caption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    min-height: 2.25rem;
+}
+
+.sahi-image-caption .ant-typography {
+    max-width: calc(100% - 2.5rem);
+}
+
+.sahi-preview-image {
+    width: 100%;
+    max-height: 75vh;
+    object-fit: contain;
+    display: block;
+    background: #111827;
+}
+
+@media (max-width: 900px) {
+    .sahi-prediction-header {
+        flex-direction: column;
+    }
+
+    .sahi-prediction-header > .ant-space {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+}

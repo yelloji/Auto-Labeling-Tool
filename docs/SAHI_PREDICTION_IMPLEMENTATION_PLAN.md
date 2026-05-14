@@ -499,20 +499,33 @@ Completed implementation:
 - No SAHI UI is wired yet; this task only exposes frontend service calls.
 - Verification: `npm run build` in `frontend/` completed successfully. Build still reports pre-existing source-map/lint warnings unrelated to these API methods.
 
-### Task 8 - SAHI Prediction View UI
+### Task 8 - SAHI Prediction View UI - DONE
 
-- Build `SahiPredictionView`.
-- History list.
-- Run configuration.
-- Result gallery.
-- Polling.
-- Delete/download.
+- [x] Build `SahiPredictionView`.
+- [x] History list.
+- [x] Run configuration.
+- [x] Result gallery.
+- [x] Polling.
+- [x] Delete/download.
 
 Files likely touched:
 
 - `SahiPredictionView.jsx`
 - `SahiPredictionView.css`
 - `OverviewView.jsx`
+
+Completed implementation:
+
+- Added a separate SAHI Prediction view under Model Lab.
+- The SAHI tab still appears only for tile-enabled projects.
+- Normal Prediction remains unchanged.
+- The SAHI UI filters history to `experiment_type === "sahi_prediction"`.
+- The run form exposes the notebook/default SAHI controls: weights, confidence, slice size, overlap, merge threshold, class-agnostic merge, and device.
+- First UI version uses the full original dataset-stage image source only; upload is not shown because the SAHI upload endpoint is not wired yet.
+- Run starts the SAHI subprocess through `triggerSahiPrediction`.
+- The view polls active queued/running SAHI experiments.
+- Completed results load through the existing experiment images endpoint.
+- Download and delete reuse the generic experiment endpoints.
 
 ### Task 9 - Viewer Compatibility
 
