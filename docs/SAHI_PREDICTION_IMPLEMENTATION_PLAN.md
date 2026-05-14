@@ -1,0 +1,497 @@
+# SAHI Prediction Implementation Plan
+
+This plan covers the new **SAHI Prediction** workflow for tile-enabled projects.
+
+SAHI Prediction must be a separate Model Lab tab beside the existing Prediction tab. It must not change or merge with normal Prediction.
+
+---
+
+## Core Product Rule
+
+- Normal Prediction remains unchanged.
+- SAHI Prediction appears only when `project.tile_enabled = true`.
+- SAHI Prediction runs on full original project images.
+- SAHI Prediction does not run on tiled release images.
+- The trained model can still come from a tiled/balanced release training run.
+- Output predictions are stitched back into original full-image coordinates.
+- Heavy work runs in a subprocess, same as training, validation, and normal prediction.
+
+---
+
+## Official References Checked
+
+### SAHI Documentation
+
+- SAHI is a lightweight vision library for large-scale object detection and instance segmentation.
+- SAHI supports Ultralytics models including YOLOv8, YOLO11, and YOLO26.
+- Official docs confirm the low-level API:
+  - `AutoDetectionModel.from_pretrained(...)`
+  - `get_sliced_prediction(...)`
+- Official docs confirm SAHI can export visuals and return prediction objects.
+
+Reference:
+- https://obss.github.io/sahi/
+- https://obss.github.io/sahi/predict/
+- https://obss.github.io/sahi/models/ultralytics/
+
+### Ultralytics Documentation
+
+- Ultralytics documents SAHI tiled inference as splitting high-resolution images into slices, running YOLO per slice, and stitching predictions back onto the original image.
+
+Reference:
+- https://docs.ultralytics.com/guides/sahi-tiled-inference
+
+### Postprocessing
+
+- SAHI supports NMS / NMM / GreedyNMM style postprocessing.
+- `match_threshold` controls how aggressively overlapping predictions merge/suppress.
+- `class_agnostic=True` merges/suppresses across classes.
+- Backend can auto-resolve to `torchvision` on CUDA, then `numba`, then `numpy`.
+
+Reference:
+- https://obss.github.io/sahi/postprocess/backends/
+
+---
+
+## Notebook Defaults To Match
+
+From `sahi-inference.ipynb`, the working manual configuration is:
+
+```python
+model_type = "ultralytics"
+model_device = "cuda"
+model_confidence_threshold = 0.5
+
+slice_height = 896
+slice_width = 896
+overlap_height_ratio = 0.25
+overlap_width_ratio = 0.25
+
+visual_hide_labels = False
+visual_hide_conf = False
+
+postprocess_match_threshold = 0.3
+postprocess_class_agnostic = True
+no_standard_prediction = True
+no_sliced_prediction = False
+force_postprocess_type = True
+```
+
+These should become the first app defaults.
+
+---
+
+## UI Location
+
+File:
+
+- `frontend/src/components/project-workspace/ModelLabSection/OverviewView/OverviewView.jsx`
+
+Current tabs:
+
+- Overview
+- Configuration
+- Model Manager
+- Validation
+- Prediction
+- Comparison Engine
+
+Tile-enabled projects should show:
+
+- Overview
+- Configuration
+- Model Manager
+- Validation
+- Prediction
+- **SAHI Prediction**
+- Comparison Engine
+
+Normal projects should not show SAHI Prediction.
+
+---
+
+## Backend Architecture
+
+SAHI must follow the existing subprocess pattern.
+
+### Flow
+
+1. Frontend starts SAHI prediction.
+2. Backend creates or finalizes a `ModelExperiment`.
+3. Experiment uses:
+   - `experiment_type = "sahi_prediction"`
+   - `status = "queued"` then `running`
+4. Backend resolves:
+   - training session
+   - project
+   - `best.pt` or selected weights
+   - original project images
+   - output folder
+   - SAHI params
+5. Backend launches:
+   - `backend/models/training/sahi_prediction_executor.py`
+6. API returns immediately.
+7. Frontend polls experiment status.
+8. Executor updates DB with:
+   - `status`
+   - `predictions`
+   - `analytics_summary`
+   - `input_images`
+   - `output_folder`
+   - `image_count`
+   - `duration_sec`
+   - `error_message` if failed
+
+### Do Not
+
+- Do not run SAHI inside the FastAPI request.
+- Do not reuse normal `experiment_type = "prediction"`.
+- Do not scan tiled release folders as default input.
+- Do not mix SAHI history into normal Prediction history.
+
+---
+
+## Input Image Strategy
+
+SAHI input must be full original images from the project.
+
+Supported source options for first version:
+
+1. **Project Images**
+   - Images from project datasets before tiling.
+   - Use original image file paths stored in DB.
+   - Prefer images in `dataset` or `annotating` stages.
+   - Exclude generated release tile images.
+
+2. **Upload Images**
+   - Optional but useful because normal Prediction already supports uploaded images.
+   - Uploaded images are stored in a prediction temp/permanent folder like normal Prediction.
+   - They are still full-size user images, not release tiles.
+
+Do not include train/val/test tiled release split selector as the primary SAHI input.
+
+---
+
+## SAHI Parameters
+
+### Required Defaults
+
+| Param | Default | Notes |
+|---|---:|---|
+| `model_type` | `ultralytics` | Fixed |
+| `weights_type` | `best` | Same normal prediction choice can remain |
+| `confidence_threshold` | `0.5` | From notebook |
+| `slice_height` | `896` | Match tile training size |
+| `slice_width` | `896` | Match tile training size |
+| `overlap_height_ratio` | `0.25` | From notebook |
+| `overlap_width_ratio` | `0.25` | From notebook |
+| `postprocess_match_threshold` | `0.3` | From notebook |
+| `postprocess_class_agnostic` | `true` | From notebook |
+| `no_standard_prediction` | `true` | Sliced-only |
+| `no_sliced_prediction` | `false` | Sliced enabled |
+| `visual_hide_labels` | `false` | Show labels |
+| `visual_hide_conf` | `false` | Show confidence |
+| `device` | `cuda:0` if available, else `cpu` | Backend should tolerate fallback |
+
+### UI Controls
+
+Show only the controls an operator/developer actually needs:
+
+- Prediction name
+- Image source
+- Weights type: best / last
+- Confidence
+- Slice size: 640 / 896 / custom
+- Overlap ratio
+- Merge threshold
+- Class-agnostic merge toggle
+- Device selector: auto / cuda:0 / cpu
+
+Keep advanced SAHI internals hidden at first:
+
+- postprocess backend
+- forced postprocess type
+- raw CLI flags
+
+---
+
+## Result Format
+
+Store predictions in a shape compatible with the existing Prediction gallery as much as possible.
+
+Each image should map to a list of detections:
+
+```json
+{
+  "image_name.jpg": [
+    {
+      "class": "scratch",
+      "class_id": 0,
+      "confidence": 0.87,
+      "bbox": [x1, y1, x2, y2],
+      "mask": [[x, y], [x, y]],
+      "source": "sahi"
+    }
+  ]
+}
+```
+
+For segmentation:
+
+- Preserve mask/polygon data when SAHI returns it.
+- Always include bbox as fallback.
+- Coordinates must refer to the original full image.
+
+---
+
+## Output Folder
+
+Use a separate folder branch under the selected training run:
+
+```text
+projects/{project}/model/{training_run}/experiments/sahi_prediction/{safe_name}_{timestamp}/
+```
+
+Expected files:
+
+- `sahi_prediction_inputs.json`
+- `sahi_prediction_params.json`
+- `sahi_prediction.log`
+- `predictions.json`
+- `analytics_summary.json`
+- `visuals/`
+- `input_images/` only for uploaded images that need persistence
+
+---
+
+## Frontend Architecture
+
+### New Component
+
+Create:
+
+```text
+frontend/src/components/project-workspace/ModelLabSection/SahiPredictionView/SahiPredictionView.jsx
+frontend/src/components/project-workspace/ModelLabSection/SahiPredictionView/SahiPredictionView.css
+```
+
+This should reuse visual patterns from normal Prediction but keep its own API calls and history filtering.
+
+### Behavior
+
+- Show history list of only `experiment_type === "sahi_prediction"`.
+- Run button starts SAHI subprocess.
+- Poll status until completed/failed.
+- Results gallery loads from existing experiment image endpoints if compatible, or new SAHI-specific endpoints if needed.
+- Image viewer displays full original image with stitched detections.
+- Analytics are separate from normal Prediction analytics.
+
+---
+
+## API Plan
+
+Prefer adding SAHI-specific endpoints in existing training API route file for consistency:
+
+```text
+backend/models/training/api_routes.py
+```
+
+Proposed endpoints:
+
+- `GET /api/v1/training/{training_id}/sahi-prediction/queued`
+- `POST /api/v1/training/{training_id}/sahi-prediction/init`
+- `PATCH /api/v1/experiments/{experiment_id}/sahi-prediction`
+- `POST /api/v1/training/{training_id}/sahi-predict`
+
+If existing generic experiment read endpoints already work, reuse:
+
+- `GET /api/v1/training/{training_id}/experiments`
+- `GET /api/v1/experiments/{experiment_id}`
+- `GET /api/v1/experiments/{experiment_id}/images`
+- `GET /api/v1/experiments/{experiment_id}/original-image/{filename}`
+- `GET /api/v1/experiments/{experiment_id}/download`
+- `DELETE /api/v1/experiments/{experiment_id}`
+
+Add new endpoints only where normal Prediction assumptions break.
+
+---
+
+## Dependency Plan
+
+Add SAHI to the active CUDA requirements file:
+
+```text
+backend/requirements-cuda121.txt
+```
+
+Recommended:
+
+```text
+sahi>=0.11.36
+```
+
+Reason:
+
+- User notebook has `sahi 0.11.36` working.
+- Official docs support the needed APIs.
+
+Do not add this only to the CPU requirements file unless we intentionally support CPU-only packaging too.
+
+---
+
+## Implementation Tasks
+
+### Task 1 - Project Tile Flag In Model Lab - DONE
+
+- [x] Fetch/pass project info into `OverviewView`.
+- [x] Determine `isTileProject`.
+- [x] Show `SAHI Prediction` tab only when tile-enabled.
+- [x] Keep normal Prediction tab unchanged.
+
+Files likely touched:
+
+- `ModelLabSection.jsx`
+- `OverviewView.jsx`
+
+Completed implementation:
+
+- `ProjectWorkspace` already passed `project` into `ModelLabSection`.
+- `ModelLabSection` now passes `project` into `OverviewView`.
+- `OverviewView` reads `project?.tile_enabled`.
+- Tile projects get a placeholder `SAHI Prediction` tab beside `Prediction`.
+- Non-tile projects do not get the SAHI tab.
+- Verification: `npm run build` in `frontend/` completed successfully. Build still reports pre-existing source-map/lint warnings unrelated to this gated tab change.
+
+### Task 2 - SAHI Experiment Schema In API
+
+- Add SAHI request/update models.
+- Create queued SAHI experiment with `experiment_type = "sahi_prediction"`.
+- Keep normal prediction queue separate.
+
+Files likely touched:
+
+- `backend/models/training/api_routes.py`
+
+### Task 3 - Resolve Full Original Images
+
+- Implement backend helper to collect project original images.
+- Exclude release ZIP/tiled generated outputs.
+- Support upload source if practical in first version.
+
+Files likely touched:
+
+- `backend/models/training/api_routes.py`
+
+### Task 4 - SAHI Executor
+
+- Create `sahi_prediction_executor.py`.
+- Load `AutoDetectionModel`.
+- Loop through input images.
+- Run `get_sliced_prediction`.
+- Export visual image per input.
+- Convert predictions to app JSON.
+- Update DB status/results.
+
+Files likely touched:
+
+- `backend/models/training/sahi_prediction_executor.py`
+
+### Task 5 - Launch Subprocess
+
+- Resolve selected weights.
+- Write input manifest and params JSON.
+- Launch executor with `subprocess.Popen`.
+- Record PID and status.
+
+Files likely touched:
+
+- `backend/models/training/api_routes.py`
+
+### Task 6 - Frontend API Methods
+
+- Add SAHI API functions to `frontend/src/services/api.js`.
+
+Needed functions:
+
+- `getQueuedSahiPrediction`
+- `initSahiPrediction`
+- `updateSahiPredictionDraft`
+- `triggerSahiPrediction`
+
+### Task 7 - SAHI Prediction View UI
+
+- Build `SahiPredictionView`.
+- History list.
+- Run configuration.
+- Result gallery.
+- Polling.
+- Delete/download.
+
+Files likely touched:
+
+- `SahiPredictionView.jsx`
+- `SahiPredictionView.css`
+- `OverviewView.jsx`
+
+### Task 8 - Viewer Compatibility
+
+- Reuse normal `ImageViewerModal` if prediction JSON is compatible.
+- If full-size image handling needs tweaks, isolate them behind props.
+
+Files likely touched:
+
+- `SahiPredictionView.jsx`
+- maybe `PredictionView/ImageViewerModal.jsx`
+
+### Task 9 - Analytics
+
+- Start with basic SAHI stats:
+  - image count
+  - total detections
+  - average confidence
+  - class distribution
+  - detections per image
+- Keep advanced comparison/verification out of first version unless existing components work cleanly.
+
+### Task 10 - Verification
+
+- Backend compile:
+  - `python -m py_compile backend/models/training/api_routes.py backend/models/training/sahi_prediction_executor.py`
+- Frontend build or targeted lint if available.
+- Manual smoke:
+  - non-tile project: no SAHI tab
+  - tile project: SAHI tab visible
+  - run SAHI on one original large image
+  - status changes queued -> running -> completed
+  - annotated visual appears
+  - predictions are in original image coordinates
+
+---
+
+## Risks And Guardrails
+
+- Large images can create many slices. UI should warn on many selected images.
+- GPU memory can fail; executor should mark experiment failed with clear error.
+- CPU fallback can be slow; show device in experiment config.
+- Segmentation masks may be heavy; store compact polygon data where possible.
+- Do not block the API request during inference.
+- Do not accidentally train/predict on tile release output for SAHI.
+
+---
+
+## First Coding Batch
+
+Do this first:
+
+1. Add SAHI dependency.
+2. Add `SAHI Prediction` tab gated by `tile_enabled`.
+3. Add backend `sahi_prediction` experiment init/trigger skeleton.
+4. Add subprocess executor skeleton that can run one image.
+5. Verify one original image inference end-to-end.
+
+After that:
+
+1. Polish full UI.
+2. Add full history/gallery/download/delete.
+3. Add analytics.
+4. Commit.

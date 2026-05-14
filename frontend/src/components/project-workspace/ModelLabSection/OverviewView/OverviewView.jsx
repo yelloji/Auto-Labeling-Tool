@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Card, Typography, Table, Tag, Tooltip, Tabs, Modal, Button, message } from 'antd';
-import { TrophyOutlined, DisconnectOutlined } from '@ant-design/icons';
+import { TrophyOutlined, DisconnectOutlined, ScissorOutlined } from '@ant-design/icons';
 import AnalyticsView from '../AnalyticsView/AnalyticsView';
 import ViewConfig from '../ConfigurationView/ViewConfig';
 import AdvancedConfigEditor from '../ConfigurationView/AdvancedConfigEditor';
@@ -23,7 +23,7 @@ const { Title, Text } = Typography;
  * - Class-wise breakdown
  * - Confusion Matrix
  */
-const OverviewView = ({ training, projectId }) => {
+const OverviewView = ({ training, projectId, project }) => {
     const [activeTopLevelTab, setActiveTopLevelTab] = useState('overview');
     const [activeConfigTab, setActiveConfigTab] = useState('view');
     const [confusionModalOpen, setConfusionModalOpen] = useState(false);
@@ -111,6 +111,7 @@ const OverviewView = ({ training, projectId }) => {
             'model-manager': 'modellab-model-manager',
             validation: 'modellab-validation',
             prediction: 'modellab-prediction',
+            'sahi-prediction': 'modellab-sahi-prediction',
             'comparison-engine': 'modellab-comparison-engine',
         };
 
@@ -322,6 +323,7 @@ const OverviewView = ({ training, projectId }) => {
         box_f1: calculateF1(cls.box_p, cls.box_r),
         mask_f1: isSeg ? calculateF1(cls.mask_p, cls.mask_r) : undefined
     }));
+    const isTileProject = !!project?.tile_enabled;
 
     return (
         <div className="overview-container">
@@ -637,6 +639,28 @@ const OverviewView = ({ training, projectId }) => {
                     label: 'Prediction',
                     children: <PredictionView training={training} />
                 },
+                ...(isTileProject ? [{
+                    key: 'sahi-prediction',
+                    label: 'SAHI Prediction',
+                    children: (
+                        <Card
+                            bordered={false}
+                            style={{
+                                borderRadius: 8,
+                                background: 'linear-gradient(135deg, #f0fdfa 0%, #f8fafc 100%)',
+                                border: '1px solid #ccfbf1'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                                <ScissorOutlined style={{ color: '#0f766e', fontSize: 20 }} />
+                                <Title level={4} style={{ margin: 0 }}>SAHI Prediction</Title>
+                            </div>
+                            <Text type="secondary">
+                                SAHI prediction will run this tiled-model training on full original project images using sliced inference. The normal Prediction tab is unchanged.
+                            </Text>
+                        </Card>
+                    )
+                }] : []),
                 {
                     key: 'comparison-engine',
                     label: 'Comparison Engine',
@@ -671,6 +695,9 @@ OverviewView.propTypes = {
         date: PropTypes.string,
         metrics: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
         projectId: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+    }),
+    project: PropTypes.shape({
+        tile_enabled: PropTypes.bool
     })
 };
 

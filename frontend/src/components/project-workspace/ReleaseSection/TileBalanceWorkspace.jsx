@@ -104,6 +104,7 @@ const splitColor = {
 };
 
 const ratioOptions = [
+  { label: '1:0.5', value: 0.5 },
   { label: '1:1', value: 1 },
   { label: '1:2', value: 2 },
   { label: '1:3', value: 3 },
@@ -225,7 +226,7 @@ const TileBalanceWorkspace = ({ release, onBackToDetails, onBalancedReleaseCreat
   );
 
   const automaticUnlabeledCount = useMemo(() => {
-    const target = selectedLabeledCount * ratioValue;
+    const target = Math.floor(selectedLabeledCount * ratioValue);
     return Math.min(unlabeledTiles.length, target);
   }, [ratioValue, selectedLabeledCount, unlabeledTiles.length]);
 

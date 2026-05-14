@@ -17,7 +17,7 @@ const { Title } = Typography;
  * Main container for Model Lab feature
  * Two-panel layout: Training List (left) + Details Panel (right)
  */
-const ModelLabSection = ({ projectId }) => {
+const ModelLabSection = ({ projectId, project }) => {
     const location = useLocation();
     const [selectedTraining, setSelectedTraining] = useState(null);
     const [trainings, setTrainings] = useState([]);
@@ -202,7 +202,7 @@ const ModelLabSection = ({ projectId }) => {
                 {/* Right Panel - Details */}
                 <div className="model-lab-right-panel">
                     {selectedTraining ? (
-                        <OverviewView training={selectedTraining} projectId={projectId} />
+                        <OverviewView training={selectedTraining} projectId={projectId} project={project} />
                     ) : (
                         <div className="model-lab-empty-state">
                             <div className="empty-state-icon">

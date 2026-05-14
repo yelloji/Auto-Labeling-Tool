@@ -225,7 +225,7 @@ class DatasetRebalanceRequest(BaseModel):
 class TileBalancedReleaseCreate(BaseModel):
     mode: str  # automatic | manual
     selected_image_paths: List[str]
-    ratio_value: Optional[int] = None
+    ratio_value: Optional[float] = None
 
 # NEW ENHANCED RELEASE GENERATION ENDPOINTS
 
