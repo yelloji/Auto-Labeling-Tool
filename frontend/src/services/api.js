@@ -677,6 +677,37 @@ export const projectsAPI = {
     return response.data;
   },
 
+  // --- SAHI Prediction API ---
+
+  // Get active queued SAHI prediction draft for a model
+  getQueuedSahiPrediction: async (trainingId) => {
+    try {
+      const response = await api.get(`/api/v1/training/${trainingId}/sahi-prediction/queued`);
+      return response.data;
+    } catch (error) {
+      if (error.response && error.response.status === 404) return null;
+      throw error;
+    }
+  },
+
+  // Initialize a SAHI prediction draft
+  initSahiPrediction: async (trainingId, payload) => {
+    const response = await api.post(`/api/v1/training/${trainingId}/sahi-prediction/init`, payload);
+    return response.data;
+  },
+
+  // Sync SAHI prediction draft settings to DB
+  updateSahiPredictionDraft: async (experimentId, payload) => {
+    const response = await api.patch(`/api/v1/experiments/${experimentId}/sahi-prediction`, payload);
+    return response.data;
+  },
+
+  // Start SAHI prediction subprocess
+  triggerSahiPrediction: async (trainingId, payload) => {
+    const response = await api.post(`/api/v1/training/${trainingId}/sahi-predict`, payload);
+    return response.data;
+  },
+
   // List images in an experiment output folder
   getExperimentImages: async (experimentId) => {
     const response = await api.get(`/api/v1/experiments/${experimentId}/images`);

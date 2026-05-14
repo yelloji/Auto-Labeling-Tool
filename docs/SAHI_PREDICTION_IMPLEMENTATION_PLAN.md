@@ -482,16 +482,22 @@ Completed implementation:
 - Launches `sahi_prediction_executor.py` in a subprocess and stores the process PID.
 - Verification: `python -m py_compile backend/models/training/sahi_prediction_api.py backend/models/training/sahi_prediction_executor.py backend/models/training/sahi_predictor.py backend/models/training/sahi_image_resolver.py backend/models/training/api_routes.py` completed successfully.
 
-### Task 7 - Frontend API Methods
+### Task 7 - Frontend API Methods - DONE
 
-- Add SAHI API functions to `frontend/src/services/api.js`.
+- [x] Add SAHI API functions to `frontend/src/services/api.js`.
 
 Needed functions:
 
-- `getQueuedSahiPrediction`
-- `initSahiPrediction`
-- `updateSahiPredictionDraft`
-- `triggerSahiPrediction`
+- [x] `getQueuedSahiPrediction`
+- [x] `initSahiPrediction`
+- [x] `updateSahiPredictionDraft`
+- [x] `triggerSahiPrediction`
+
+Completed implementation:
+
+- Added SAHI methods beside the existing Prediction API methods.
+- No SAHI UI is wired yet; this task only exposes frontend service calls.
+- Verification: `npm run build` in `frontend/` completed successfully. Build still reports pre-existing source-map/lint warnings unrelated to these API methods.
 
 ### Task 8 - SAHI Prediction View UI
 
