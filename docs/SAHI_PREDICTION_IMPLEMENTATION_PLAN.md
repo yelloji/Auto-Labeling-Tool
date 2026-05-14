@@ -10,7 +10,7 @@ SAHI Prediction must be a separate Model Lab tab beside the existing Prediction 
 
 - Normal Prediction remains unchanged.
 - SAHI Prediction appears only when `project.tile_enabled = true`.
-- SAHI Prediction runs on full original project images.
+- SAHI Prediction runs on full original dataset-stage images.
 - SAHI Prediction does not run on tiled release images.
 - The trained model can still come from a tiled/balanced release training run.
 - Output predictions are stitched back into original full-image coordinates.
@@ -153,14 +153,18 @@ SAHI must follow the existing subprocess pattern.
 
 ## Input Image Strategy
 
-SAHI input must be full original images from the project.
+SAHI input must be full original images from the dataset stage.
+
+Important: this means images that are ready for release/training, not every project upload.
 
 Supported source options for first version:
 
-1. **Project Images**
-   - Images from project datasets before tiling.
+1. **Dataset Images**
+   - Images from project datasets after they are moved into the dataset stage.
+   - Database filter: `Image.split_type == "dataset"`.
+   - Use `Image.split_section` to preserve `train`, `val`, and `test`.
    - Use original image file paths stored in DB.
-   - Prefer images in `dataset` or `annotating` stages.
+   - Do not include `annotating` or `unassigned` images.
    - Exclude generated release tile images.
 
 2. **Upload Images**
@@ -362,20 +366,38 @@ Completed implementation:
 - Non-tile projects do not get the SAHI tab.
 - Verification: `npm run build` in `frontend/` completed successfully. Build still reports pre-existing source-map/lint warnings unrelated to this gated tab change.
 
-### Task 2 - SAHI Experiment Schema In API
+### Task 2 - SAHI Experiment Schema In API - DONE
 
-- Add SAHI request/update models.
-- Create queued SAHI experiment with `experiment_type = "sahi_prediction"`.
-- Keep normal prediction queue separate.
+- [x] Add SAHI request/update models.
+- [x] Create queued SAHI experiment with `experiment_type = "sahi_prediction"`.
+- [x] Keep normal prediction queue separate.
+- [x] Add tile-project backend guard so SAHI init/update cannot run on normal projects.
+- [x] Validate SAHI image source as `dataset_images` or `upload`.
+- [x] Store notebook/default SAHI parameters in `custom_params`.
 
 Files likely touched:
 
-- `backend/models/training/api_routes.py`
+- `backend/models/training/sahi_prediction_api.py`
+- `backend/models/training/api_routes.py` only mounts the SAHI router
+
+Completed implementation:
+
+- Added `SahiPredictionRequest` and `SahiPredictionUpdate`.
+- Added `GET /training/{training_id}/sahi-prediction/queued`.
+- Added `POST /training/{training_id}/sahi-prediction/init`.
+- Added `PATCH /experiments/{experiment_id}/sahi-prediction`.
+- SAHI drafts use `experiment_type = "sahi_prediction"` and do not share the normal `prediction` queue.
+- SAHI drafts default to full original dataset-stage image source (`dataset_source = "dataset_images"`) and support upload metadata without resolving/running images yet.
+- SAHI draft task defaults to the training task unless the UI explicitly sends `detect` or `segment`.
+- SAHI API code lives in `backend/models/training/sahi_prediction_api.py`; the main training API only includes that router.
+- Verification: `python -m py_compile backend/models/training/api_routes.py backend/models/training/sahi_prediction_api.py` completed successfully.
 
 ### Task 3 - Resolve Full Original Images
 
 - Implement backend helper to collect project original images.
-- Exclude release ZIP/tiled generated outputs.
+- Collect only `Image.split_type == "dataset"` images from project datasets.
+- Preserve `Image.split_section` (`train`, `val`, `test`) in returned metadata.
+- Exclude `annotating`, `unassigned`, release ZIP, tiled generated outputs, model folders, and prediction temp folders.
 - Support upload source if practical in first version.
 
 Files likely touched:

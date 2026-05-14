@@ -39,10 +39,12 @@ import psutil
 import signal
 from PIL import Image
 from logging_system.professional_logger import get_professional_logger
+from models.training.sahi_prediction_api import router as sahi_prediction_router
 
 logger = get_professional_logger()
 
 router = APIRouter()
+router.include_router(sahi_prediction_router)
 
 @router.get("/training/models")
 async def get_trainable_models_route(
