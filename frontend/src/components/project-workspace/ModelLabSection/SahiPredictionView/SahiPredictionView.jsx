@@ -324,6 +324,14 @@ const SahiPredictionView = ({ training }) => {
         }, 800);
     };
 
+    const handleNameBlur = (event) => {
+        const value = event.target.value.trim();
+        const selected = selectedExpRef.current;
+        if (selected && selected.status === 'queued' && value.length < 3) {
+            form.setFieldsValue({ name: selected.name || 'Untitled Experiment' });
+        }
+    };
+
     const handleRun = async () => {
         if (!training?.id) return;
         try {
@@ -439,20 +447,11 @@ const SahiPredictionView = ({ training }) => {
                                                 </div>
                                             </div>
                                             <Space size={4} onClick={(event) => event.stopPropagation()}>
-                                                <Tooltip title="Download result">
-                                                    <Button
-                                                        size="small"
-                                                        icon={<DownloadOutlined />}
-                                                        disabled={experiment.status !== 'completed'}
-                                                        onClick={() => handleDownload(experiment)}
-                                                    />
-                                                </Tooltip>
                                                 <Tooltip title="Delete">
                                                     <Button
                                                         size="small"
                                                         danger
                                                         icon={<DeleteOutlined />}
-                                                        disabled={isRunningStatus(experiment.status)}
                                                         onClick={() => handleDelete(experiment)}
                                                     />
                                                 </Tooltip>
@@ -516,6 +515,7 @@ const SahiPredictionView = ({ training }) => {
                                         <Input
                                             placeholder="Enter prediction name"
                                             autoComplete="off"
+                                            onBlur={handleNameBlur}
                                             disabled={running || (selectedExp && selectedExp.status !== 'queued')}
                                         />
                                     </Form.Item>

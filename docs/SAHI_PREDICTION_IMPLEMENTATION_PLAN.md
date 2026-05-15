@@ -528,6 +528,7 @@ Completed implementation:
 - Download and delete reuse the generic experiment endpoints.
 - Follow-up refinement: SAHI Prediction UI was realigned to the normal Prediction tab structure with the same parent layout, left history sidebar, right work area, and gradient gallery/history headers.
 - Follow-up refinement: SAHI draft behavior now mirrors normal Prediction: no visible Refresh/Save Draft buttons, empty name by default, draft history row is created when a valid name is entered, and draft changes autosave quietly.
+- Follow-up refinement: SAHI history actions now match normal Prediction history with delete only; result download stays in the gallery header. Draft name snap-back now restores the queued experiment name when an existing draft name is cleared.
 
 ### Task 9 - Viewer Compatibility
 
