@@ -56,7 +56,7 @@ const ImageViewerModal = ({
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [scale, setScale] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
-    const [transformOrigin, setTransformOrigin] = useState('center center');
+    const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
 
@@ -101,6 +101,7 @@ const ImageViewerModal = ({
     const [hoverTooltip, setHoverTooltip] = useState({ show: false, content: '', x: 0, y: 0, type: 'manual' });
 
     const svgRef = React.useRef(null);
+    const imageViewportRef = React.useRef(null);
     const clickTimer = React.useRef(null);
 
     // Individual Detection Selection State (Phase 2.4)
@@ -119,9 +120,57 @@ const ImageViewerModal = ({
 
     const currentIndex = images.indexOf(currentImage);
 
+    const stageSize = React.useMemo(() => {
+        if (!dimensions.width || !dimensions.height || !viewportSize.width || !viewportSize.height) {
+            return { width: 0, height: 0, fitScale: 0 };
+        }
+
+        const fitScale = Math.min(
+            viewportSize.width / dimensions.width,
+            viewportSize.height / dimensions.height
+        );
+
+        return {
+            width: dimensions.width * fitScale,
+            height: dimensions.height * fitScale,
+            fitScale
+        };
+    }, [dimensions.height, dimensions.width, viewportSize.height, viewportSize.width]);
+
     React.useEffect(() => {
         setIouThreshold(experiment?.iou_threshold ?? 0.45);
     }, [experiment?.id, experiment?.iou_threshold]);
+
+    React.useEffect(() => {
+        if (!visible) return undefined;
+
+        const updateViewportSize = () => {
+            const rect = imageViewportRef.current?.getBoundingClientRect();
+            if (!rect?.width || !rect?.height) return;
+
+            setViewportSize((current) => {
+                const next = {
+                    width: Math.round(rect.width),
+                    height: Math.round(rect.height)
+                };
+                return current.width === next.width && current.height === next.height ? current : next;
+            });
+        };
+
+        updateViewportSize();
+
+        let observer = null;
+        if (typeof ResizeObserver !== 'undefined' && imageViewportRef.current) {
+            observer = new ResizeObserver(updateViewportSize);
+            observer.observe(imageViewportRef.current);
+        }
+
+        window.addEventListener('resize', updateViewportSize);
+        return () => {
+            window.removeEventListener('resize', updateViewportSize);
+            if (observer) observer.disconnect();
+        };
+    }, [visible]);
 
     // Helper to get detections (handles both full path and filename only)
     const getDetectionsForImage = (name) => {
@@ -243,7 +292,6 @@ const ImageViewerModal = ({
     React.useEffect(() => {
         setScale(1);
         setOffset({ x: 0, y: 0 });
-        setTransformOrigin('center center');
         setFocusedIndex(null);
         setFocusedMissedIndex(null);
         setIsImgLoading(true); // Guard ON - only when changing images
@@ -629,13 +677,34 @@ const ImageViewerModal = ({
         link.click();
     };
 
+    const zoomAroundViewportCenter = (scaleDelta) => {
+        setScale((currentScale) => {
+            const targetScale = Math.max(0.5, Math.min(currentScale + scaleDelta, 5));
+
+            setOffset((currentOffset) => {
+                if (!stageSize.width || !stageSize.height || currentScale <= 0) {
+                    return currentOffset;
+                }
+
+                const centerContentX = ((stageSize.width / 2) - currentOffset.x) / currentScale;
+                const centerContentY = ((stageSize.height / 2) - currentOffset.y) / currentScale;
+
+                return {
+                    x: (stageSize.width / 2) - (centerContentX * targetScale),
+                    y: (stageSize.height / 2) - (centerContentY * targetScale)
+                };
+            });
+
+            return targetScale;
+        });
+    };
+
     // Zoom Handlers
-    const handleZoomIn = () => setScale(s => Math.min(s + 0.25, 5));
-    const handleZoomOut = () => setScale(s => Math.max(s - 0.25, 0.5));
+    const handleZoomIn = () => zoomAroundViewportCenter(0.25);
+    const handleZoomOut = () => zoomAroundViewportCenter(-0.25);
     const handleResetZoom = () => {
         setScale(1);
         setOffset({ x: 0, y: 0 });
-        setTransformOrigin('center center');
         setFocusedIndex(null);
         setFocusedMissedIndex(null);
     };
@@ -655,7 +724,7 @@ const ImageViewerModal = ({
             return;
         }
 
-        if (!bbox || dimensions.width === 0) return;
+        if (!bbox || dimensions.width === 0 || !stageSize.width || !stageSize.height) return;
 
         const [x1, y1, x2, y2] = bbox;
         const boxW = x2 - x1;
@@ -665,16 +734,27 @@ const ImageViewerModal = ({
         const centerX = (x1 + x2) / 2;
         const centerY = (y1 + y2) / 2;
 
-        const originX = Math.max(0, Math.min(100, (centerX / dimensions.width) * 100));
-        const originY = Math.max(0, Math.min(100, (centerY / dimensions.height) * 100));
+        const fittedX = centerX * stageSize.fitScale;
+        const fittedY = centerY * stageSize.fitScale;
+        const fittedBoxW = boxW * stageSize.fitScale;
+        const fittedBoxH = boxH * stageSize.fitScale;
 
-        // Zoom around the clicked box inside the fitted image. This keeps huge originals visible
-        // without trying to pan by natural-image pixels.
-        const targetScale = Math.min(5, Math.max(1.75, Math.min(dimensions.width / boxW, dimensions.height / boxH) * 0.7));
+        const targetScale = Math.min(
+            5,
+            Math.max(
+                1.75,
+                Math.min(
+                    viewportSize.width / Math.max(fittedBoxW * 3, 1),
+                    viewportSize.height / Math.max(fittedBoxH * 3, 1)
+                )
+            )
+        );
 
         setScale(targetScale);
-        setOffset({ x: 0, y: 0 });
-        setTransformOrigin(`${originX}% ${originY}%`);
+        setOffset({
+            x: (stageSize.width / 2) - (fittedX * targetScale),
+            y: (stageSize.height / 2) - (fittedY * targetScale)
+        });
         setFocusedIndex(focusType === 'detection' ? index : null);
         setFocusedMissedIndex(focusType === 'missed' ? index : null);
     };
@@ -1559,7 +1639,7 @@ const ImageViewerModal = ({
                     }}
                 />
 
-                <div className="prediction-image-container" style={{
+                <div ref={imageViewportRef} className="prediction-image-container" style={{
                     height: '100%',
                     width: '100%',
                     position: 'relative',
@@ -1593,11 +1673,13 @@ const ImageViewerModal = ({
                         }}
                         style={{
                             position: 'relative',
-                            display: 'flex',
-                            maxWidth: '100%',
-                            maxHeight: '100%',
+                            display: stageSize.width && stageSize.height ? 'block' : 'flex',
+                            width: stageSize.width ? `${stageSize.width}px` : 'auto',
+                            height: stageSize.height ? `${stageSize.height}px` : 'auto',
+                            maxWidth: stageSize.width ? 'none' : '100%',
+                            maxHeight: stageSize.height ? 'none' : '100%',
                             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-                            transformOrigin,
+                            transformOrigin: '0 0',
                             transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                             userSelect: 'none',
                             cursor: isDrawingMode ? 'crosshair' : (isDragging ? 'grabbing' : 'grab')
@@ -1611,9 +1693,12 @@ const ImageViewerModal = ({
                                 if (showHelp) setShowHelp(false);
                             }}
                             style={{
-                                maxWidth: '100%',
-                                maxHeight: '100%',
-                                objectFit: 'contain',
+                                width: stageSize.width ? '100%' : undefined,
+                                height: stageSize.height ? '100%' : undefined,
+                                maxWidth: stageSize.width ? 'none' : '100%',
+                                maxHeight: stageSize.height ? 'none' : '100%',
+                                objectFit: stageSize.width ? 'fill' : 'contain',
+                                display: 'block',
                                 boxShadow: '0 0 60px rgba(0,0,0,0.9)',
                                 pointerEvents: 'none' // Let dragging be handled by the parent
                             }}
