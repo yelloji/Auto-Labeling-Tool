@@ -9,6 +9,7 @@ alembic==1.12.1
 
 # Computer Vision and ML - YOLO11 Latest
 ultralytics>=8.3.0  # YOLO11 support
+sahi>=0.11.36  # Required for SAHI sliced inference on tile-enabled model predictions
 opencv-python>=4.8.0
 # PyTorch installed separately via conda with CUDA support
 # torch and torchvision are handled by conda for CUDA compatibility

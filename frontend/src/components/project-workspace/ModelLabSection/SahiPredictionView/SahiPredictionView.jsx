@@ -5,7 +5,9 @@ import {
     Badge,
     Button,
     Card,
+    Checkbox,
     Col,
+    Divider,
     Empty,
     Form,
     Input,
@@ -17,6 +19,7 @@ import {
     Space,
     Spin,
     Statistic,
+    Slider,
     Switch,
     Tag,
     Tooltip,
@@ -33,8 +36,11 @@ import {
     FileImageOutlined,
     LoadingOutlined,
     PlayCircleOutlined,
+    PlusOutlined,
+    SearchOutlined,
     ScissorOutlined
 } from '@ant-design/icons';
+import ImageViewerModal from '../PredictionView/ImageViewerModal';
 import { projectsAPI, handleAPIError } from '../../../../services/api';
 import './SahiPredictionView.css';
 
@@ -58,6 +64,22 @@ const DEFAULT_CONFIG = {
     visual_hide_labels: false,
     visual_hide_conf: false,
     device: 'auto'
+};
+
+const DEFAULT_FILTERS = {
+    detectionCount: 'any',
+    className: 'all',
+    selectedClasses: [],
+    confidenceRange: [10, 100],
+    imageSearch: '',
+    riskLevel: 'any',
+    reviewStatus: 'any',
+    overlapIoU: 0.5,
+    showOverlapping: false,
+    isolateOverlaps: false,
+    showOnlyDuplicates: false,
+    selectedSizeGroup: 'all',
+    isolateBySize: false
 };
 
 const isRunningStatus = (status) => ['queued', 'running'].includes(status);
@@ -123,6 +145,27 @@ const buildImageUrl = (experimentId, imageName, thumbnail = true) => {
     return `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experimentId}/original-image/${imageName}${suffix}`;
 };
 
+const calculateIoU = (bbox1, bbox2) => {
+    if (!bbox1 || !bbox2 || bbox1.length !== 4 || bbox2.length !== 4) return 0;
+    const x1 = Math.max(bbox1[0], bbox2[0]);
+    const y1 = Math.max(bbox1[1], bbox2[1]);
+    const x2 = Math.min(bbox1[2], bbox2[2]);
+    const y2 = Math.min(bbox1[3], bbox2[3]);
+    if (x2 < x1 || y2 < y1) return 0;
+
+    const intersection = (x2 - x1) * (y2 - y1);
+    const area1 = (bbox1[2] - bbox1[0]) * (bbox1[3] - bbox1[1]);
+    const area2 = (bbox2[2] - bbox2[0]) * (bbox2[3] - bbox2[1]);
+    const union = area1 + area2 - intersection;
+    return union > 0 ? intersection / union : 0;
+};
+
+const resetFilterState = () => ({
+    ...DEFAULT_FILTERS,
+    selectedClasses: [],
+    confidenceRange: [...DEFAULT_FILTERS.confidenceRange]
+});
+
 const SahiPredictionView = ({ training }) => {
     const [form] = Form.useForm();
     const watchedName = Form.useWatch('name', form);
@@ -134,8 +177,14 @@ const SahiPredictionView = ({ training }) => {
     const [galleryLoading, setGalleryLoading] = useState(false);
     const [galleryImages, setGalleryImages] = useState([]);
     const [previewImage, setPreviewImage] = useState(null);
+    const [filters, setFilters] = useState(resetFilterState);
+    const [projectLabels, setProjectLabels] = useState([]);
+    const [verifications, setVerifications] = useState([]);
+    const [historyHeight, setHistoryHeight] = useState('100%');
     const selectedExpRef = useRef(null);
     const syncTimeoutRef = useRef(null);
+    const galleryRef = useRef(null);
+    const layoutRef = useRef(null);
 
     const defaultConfig = useMemo(() => ({
         ...DEFAULT_CONFIG,
@@ -207,15 +256,70 @@ const SahiPredictionView = ({ training }) => {
         setLoading(true);
         setSelectedExp(null);
         setGalleryImages([]);
+        setPreviewImage(null);
+        setFilters(resetFilterState());
         form.setFieldsValue(defaultConfig);
         fetchExperiments(false);
     }, [defaultConfig, fetchExperiments, form, training?.id]);
+
+    const projectId = training?.project_id || training?.projectId;
+
+    const fetchProjectLabels = useCallback(async () => {
+        if (!projectId) return;
+        try {
+            const labels = await projectsAPI.getProjectLabels(projectId);
+            setProjectLabels(labels || []);
+        } catch (error) {
+            console.error('Failed to fetch SAHI project labels:', error);
+        }
+    }, [projectId]);
+
+    const fetchVerifications = useCallback(async () => {
+        if (!projectId) return;
+        try {
+            const data = await projectsAPI.getProjectVerifications(projectId);
+            setVerifications(data || []);
+        } catch (error) {
+            console.error('Failed to fetch SAHI verifications:', error);
+        }
+    }, [projectId]);
+
+    useEffect(() => {
+        fetchProjectLabels();
+        fetchVerifications();
+    }, [fetchProjectLabels, fetchVerifications]);
 
     useEffect(() => {
         return () => {
             if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
         };
     }, []);
+
+    const updateAlignment = useCallback(() => {
+        if (!galleryRef.current || !layoutRef.current) return;
+        const galleryRect = galleryRef.current.getBoundingClientRect();
+        const layoutRect = layoutRef.current.getBoundingClientRect();
+        const topOffset = galleryRect.top - layoutRect.top;
+
+        if (selectedExp?.status === 'completed' && topOffset > 100) {
+            setHistoryHeight(`${topOffset - 24}px`);
+        } else {
+            setHistoryHeight('100%');
+        }
+    }, [selectedExp]);
+
+    useEffect(() => {
+        updateAlignment();
+        window.addEventListener('resize', updateAlignment);
+
+        const observer = new ResizeObserver(updateAlignment);
+        if (layoutRef.current) observer.observe(layoutRef.current);
+
+        return () => {
+            window.removeEventListener('resize', updateAlignment);
+            observer.disconnect();
+        };
+    }, [updateAlignment, experiments, selectedExp, galleryImages.length]);
 
     useEffect(() => {
         const hasActiveExperiment = experiments.some((experiment) => isRunningStatus(experiment.status));
@@ -262,6 +366,116 @@ const SahiPredictionView = ({ training }) => {
             splitCounts: params.input_split_counts || selectedExp?.analytics_summary?.input_split_counts || {}
         };
     }, [galleryImages.length, selectedExp]);
+
+    const availableClasses = useMemo(() => {
+        if (selectedExp?.analytics_summary?.classes_detected) {
+            return Object.keys(selectedExp.analytics_summary.classes_detected);
+        }
+        if (!selectedExp?.predictions) return [];
+        const classes = new Set();
+        Object.values(selectedExp.predictions).forEach((detections) => {
+            if (Array.isArray(detections)) {
+                detections.forEach((detection) => {
+                    if (detection?.class) classes.add(detection.class);
+                });
+            }
+        });
+        return Array.from(classes).sort();
+    }, [selectedExp]);
+
+    const sizeGroups = useMemo(() => {
+        if (!selectedExp?.predictions) return { thresholds: [0, 0, 0], count: 0 };
+        const areas = [];
+        Object.values(selectedExp.predictions).forEach((detections) => {
+            if (Array.isArray(detections)) {
+                detections.forEach((detection) => {
+                    if (detection?.bbox?.length === 4) {
+                        const [x1, y1, x2, y2] = detection.bbox;
+                        areas.push((x2 - x1) * (y2 - y1));
+                    }
+                });
+            }
+        });
+        if (areas.length === 0) return { thresholds: [0, 0, 0], count: 0 };
+        areas.sort((a, b) => a - b);
+        return {
+            thresholds: [
+                areas[Math.floor(areas.length * 0.25)],
+                areas[Math.floor(areas.length * 0.5)],
+                areas[Math.floor(areas.length * 0.75)]
+            ],
+            count: areas.length
+        };
+    }, [selectedExp]);
+
+    const filteredImages = useMemo(() => {
+        if (!selectedExp || selectedExp.status !== 'completed') return galleryImages;
+        const minConf = filters.confidenceRange[0] / 100;
+        const maxConf = filters.confidenceRange[1] / 100;
+
+        return galleryImages.filter((imageName) => {
+            const fileName = imageName.split('/').pop();
+            if (filters.imageSearch && !imageName.toLowerCase().includes(filters.imageSearch.toLowerCase())) {
+                return false;
+            }
+
+            const allDetections = getImageDetections(selectedExp, imageName);
+            const imageVerifications = verifications.filter((verification) => verification.image_name === fileName);
+            if (filters.reviewStatus !== 'any') {
+                if (filters.reviewStatus === 'unverified') {
+                    const hasReviewed = imageVerifications.some((verification) => verification.status === 'pass' || verification.status === 'fail');
+                    if (hasReviewed) return false;
+                } else if (!imageVerifications.some((verification) => verification.status === filters.reviewStatus)) {
+                    return false;
+                }
+            }
+
+            const matchingDetections = allDetections.filter((detection) => {
+                const confidence = Number(detection.confidence || 0);
+                const confMatch = confidence >= minConf && confidence <= maxConf;
+                const classMatch = filters.selectedClasses.length > 0
+                    ? filters.selectedClasses.includes(detection.class)
+                    : filters.className === 'all' || detection.class === filters.className;
+
+                let riskMatch = true;
+                if (filters.riskLevel === 'high') riskMatch = confidence < 0.4;
+                else if (filters.riskLevel === 'medium') riskMatch = confidence >= 0.4 && confidence < 0.7;
+                else if (filters.riskLevel === 'low') riskMatch = confidence >= 0.7;
+
+                let overlapMatch = true;
+                if (filters.showOverlapping && filters.isolateOverlaps) {
+                    overlapMatch = allDetections.some((otherDetection) => (
+                        otherDetection !== detection &&
+                        calculateIoU(detection.bbox, otherDetection.bbox) >= filters.overlapIoU
+                    ));
+                }
+
+                let sizeMatch = true;
+                if (filters.selectedSizeGroup !== 'all' && filters.isolateBySize && detection?.bbox?.length === 4) {
+                    const [q25, q50, q75] = sizeGroups.thresholds;
+                    const [x1, y1, x2, y2] = detection.bbox;
+                    const area = (x2 - x1) * (y2 - y1);
+                    if (filters.selectedSizeGroup === 'tiny') sizeMatch = area <= q25;
+                    else if (filters.selectedSizeGroup === 'small') sizeMatch = area > q25 && area <= q50;
+                    else if (filters.selectedSizeGroup === 'medium') sizeMatch = area > q50 && area <= q75;
+                    else if (filters.selectedSizeGroup === 'large') sizeMatch = area > q75;
+                }
+
+                return confMatch && classMatch && riskMatch && overlapMatch && sizeMatch;
+            });
+
+            if (filters.detectionCount === 'no') return allDetections.length === 0;
+            if (filters.detectionCount === 'yes') return matchingDetections.length > 0;
+            if (filters.detectionCount === '1-5') return matchingDetections.length >= 1 && matchingDetections.length <= 5;
+            if (filters.detectionCount === '6-10') return matchingDetections.length >= 6 && matchingDetections.length <= 10;
+            if (filters.detectionCount === '10+') return matchingDetections.length > 10;
+
+            if ((filters.selectedClasses.length > 0 || filters.className !== 'all' || filters.riskLevel !== 'any') && matchingDetections.length === 0) {
+                return false;
+            }
+            return true;
+        });
+    }, [filters, galleryImages, selectedExp, sizeGroups, verifications]);
 
     const handleFormChange = async (changedValues, allValues) => {
         if (!training?.id) return;
@@ -360,6 +574,45 @@ const SahiPredictionView = ({ training }) => {
         }
     };
 
+    const handleNewRun = () => {
+        setSelectedExp(null);
+        selectedExpRef.current = null;
+        setQueuedExp(null);
+        setGalleryImages([]);
+        setPreviewImage(null);
+        setFilters(resetFilterState());
+        form.setFieldsValue(defaultConfig);
+        message.info('Ready for a new SAHI prediction');
+    };
+
+    const navigatePreview = (nextImage) => {
+        setPreviewImage(nextImage);
+    };
+
+    const handleVerify = async (payload) => {
+        if (!projectId) return;
+        try {
+            await projectsAPI.verifyDetection({
+                ...payload,
+                project_id: projectId
+            });
+            fetchVerifications();
+            message.success(`Status updated to ${payload.status}`);
+        } catch (error) {
+            handleAPIError(error, 'Failed to update verification');
+        }
+    };
+
+    const handleDeleteVerification = async (verificationId) => {
+        try {
+            await projectsAPI.deleteManualVerification(verificationId);
+            fetchVerifications();
+            message.success('Manual box deleted successfully');
+        } catch (error) {
+            handleAPIError(error, 'Failed to delete manual box');
+        }
+    };
+
     const handleDelete = (experiment) => {
         Modal.confirm({
             title: 'Delete SAHI Prediction',
@@ -402,6 +655,195 @@ const SahiPredictionView = ({ training }) => {
         }
     };
 
+    const renderFiltersCard = () => (
+        <Card
+            title={<Space><SearchOutlined /> Filter Results</Space>}
+            className="sahi-filters-card"
+            size="small"
+        >
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <div>
+                    <Tooltip title="Find a specific image by its filename.">
+                        <Text type="secondary" className="sahi-filter-label">Search Image</Text>
+                    </Tooltip>
+                    <Input
+                        placeholder="Search by name..."
+                        size="small"
+                        allowClear
+                        value={filters.imageSearch}
+                        onChange={(event) => setFilters((current) => ({ ...current, imageSearch: event.target.value }))}
+                        prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                    />
+                </div>
+
+                <div>
+                    <Tooltip title="Filter images by total number of objects found.">
+                        <Text type="secondary" className="sahi-filter-label">Detection Count</Text>
+                    </Tooltip>
+                    <Select
+                        value={filters.detectionCount}
+                        onChange={(value) => setFilters((current) => ({ ...current, detectionCount: value }))}
+                        style={{ width: '100%' }}
+                        size="small"
+                    >
+                        <Option value="any">Any</Option>
+                        <Option value="yes">With Detections</Option>
+                        <Option value="no">No Detections</Option>
+                        <Option value="1-5">1-5 Detections</Option>
+                        <Option value="6-10">6-10 Detections</Option>
+                        <Option value="10+">10+ Detections</Option>
+                    </Select>
+                </div>
+
+                <div>
+                    <Tooltip title="See only images containing selected object classes.">
+                        <Text type="secondary" className="sahi-filter-label">Class (Multi-Select)</Text>
+                    </Tooltip>
+                    <Select
+                        mode="multiple"
+                        placeholder="Select classes..."
+                        value={filters.selectedClasses}
+                        onChange={(value) => setFilters((current) => ({ ...current, selectedClasses: value, className: 'all' }))}
+                        style={{ width: '100%' }}
+                        size="small"
+                        maxTagCount="responsive"
+                    >
+                        {availableClasses.map((className) => <Option key={className} value={className}>{className}</Option>)}
+                    </Select>
+                </div>
+
+                <div>
+                    <div className="sahi-filter-row-label">
+                        <Tooltip title="View boxes based on model confidence.">
+                            <Text type="secondary" className="sahi-filter-label-inline">Confidence Range</Text>
+                        </Tooltip>
+                        <Text type="secondary" className="sahi-filter-label-inline">
+                            {filters.confidenceRange[0]}% - {filters.confidenceRange[1]}%
+                        </Text>
+                    </div>
+                    <Slider
+                        range
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={filters.confidenceRange}
+                        onChange={(value) => setFilters((current) => ({ ...current, confidenceRange: value }))}
+                    />
+                </div>
+
+                <Divider className="sahi-filter-divider" />
+
+                <div>
+                    <Text strong className="sahi-filter-section-title">EXPERT DIAGNOSTICS</Text>
+                    <div className="sahi-filter-switch-row">
+                        <Tooltip title="Find boxes stacked in the same area.">
+                            <Text type="secondary" className="sahi-filter-label-inline">Detect Overlaps</Text>
+                        </Tooltip>
+                        <Switch
+                            size="small"
+                            checked={filters.showOverlapping}
+                            onChange={(value) => setFilters((current) => ({ ...current, showOverlapping: value }))}
+                        />
+                    </div>
+                    {filters.showOverlapping && (
+                        <div className="sahi-filter-nested">
+                            <div className="sahi-filter-row-label">
+                                <Text type="secondary" className="sahi-filter-label-inline">IoU Threshold</Text>
+                                <Text className="sahi-filter-label-inline">{filters.overlapIoU}</Text>
+                            </div>
+                            <Slider
+                                min={0.1}
+                                max={0.9}
+                                step={0.05}
+                                value={filters.overlapIoU}
+                                onChange={(value) => setFilters((current) => ({ ...current, overlapIoU: value }))}
+                            />
+                            <Checkbox
+                                checked={filters.isolateOverlaps}
+                                onChange={(event) => setFilters((current) => ({ ...current, isolateOverlaps: event.target.checked }))}
+                            >
+                                <Text type="secondary" className="sahi-filter-label-inline">Isolate Overlaps Only</Text>
+                            </Checkbox>
+                        </div>
+                    )}
+
+                    <div className="sahi-filter-size-block">
+                        <div className="sahi-filter-row-label">
+                            <Tooltip title="Filter detections by pixel area buckets calculated from this run.">
+                                <Text type="secondary" className="sahi-filter-label-inline">Object Size</Text>
+                            </Tooltip>
+                            {sizeGroups.count > 0 && <Tag className="sahi-size-count">{sizeGroups.count} DETS</Tag>}
+                        </div>
+                        <Select
+                            value={filters.selectedSizeGroup}
+                            onChange={(value) => setFilters((current) => ({ ...current, selectedSizeGroup: value }))}
+                            style={{ width: '100%' }}
+                            size="small"
+                        >
+                            <Option value="all">All Sizes</Option>
+                            <Option value="tiny">Tiny (Bottom 25%)</Option>
+                            <Option value="small">Small (25-50%)</Option>
+                            <Option value="medium">Medium (50-75%)</Option>
+                            <Option value="large">Large (Top 25%)</Option>
+                        </Select>
+                        {filters.selectedSizeGroup !== 'all' && (
+                            <Checkbox
+                                className="sahi-filter-checkbox"
+                                checked={filters.isolateBySize}
+                                onChange={(event) => setFilters((current) => ({ ...current, isolateBySize: event.target.checked }))}
+                            >
+                                Isolate Selected Size
+                            </Checkbox>
+                        )}
+                    </div>
+                </div>
+
+                <Divider className="sahi-filter-divider" />
+
+                <div>
+                    <Tooltip title="Focus images by risk level based on confidence.">
+                        <Text type="secondary" className="sahi-filter-label">Risk Level</Text>
+                    </Tooltip>
+                    <Select
+                        value={filters.riskLevel}
+                        onChange={(value) => setFilters((current) => ({ ...current, riskLevel: value }))}
+                        style={{ width: '100%' }}
+                        size="small"
+                    >
+                        <Option value="any">Any Risk</Option>
+                        <Option value="high">High Risk (&lt; 40%)</Option>
+                        <Option value="medium">Medium Risk (40-70%)</Option>
+                        <Option value="low">Low Risk (&gt; 70%)</Option>
+                    </Select>
+                </div>
+
+                <div>
+                    <Tooltip title="Filter by detections you have reviewed in the advanced viewer.">
+                        <Text type="secondary" className="sahi-filter-label">Review Status</Text>
+                    </Tooltip>
+                    <Select
+                        value={filters.reviewStatus}
+                        onChange={(value) => setFilters((current) => ({ ...current, reviewStatus: value }))}
+                        style={{ width: '100%' }}
+                        size="small"
+                    >
+                        <Option value="any">Any Status</Option>
+                        <Option value="pass"><CheckCircleOutlined style={{ color: '#52c41a' }} /> Verified Correct</Option>
+                        <Option value="fail"><CloseCircleOutlined style={{ color: '#ff4d4f' }} /> Verified Wrong</Option>
+                        <Option value="unverified">Unverified Detections</Option>
+                    </Select>
+                </div>
+
+                <div className="sahi-filter-footer">
+                    <Text type="secondary">{filteredImages.length} of {galleryImages.length}</Text>
+                    <Button type="link" size="small" onClick={() => setFilters(resetFilterState())}>
+                        Clear All
+                    </Button>
+                </div>
+            </Space>
+        </Card>
+    );
+
     if (loading) {
         return (
             <div className="sahi-prediction-view-container sahi-prediction-loading">
@@ -411,10 +853,15 @@ const SahiPredictionView = ({ training }) => {
     }
 
     return (
-        <div className="sahi-prediction-view-container">
+        <div className="sahi-prediction-view-container" ref={layoutRef}>
             <div className="sahi-prediction-layout">
                 <aside className="sahi-prediction-left-col">
-                    <Card title="SAHI History" className="history-card sahi-history-card" bodyStyle={{ padding: 0 }}>
+                    <Card
+                        title="SAHI History"
+                        className="history-card sahi-history-card"
+                        bodyStyle={{ padding: 0 }}
+                        style={{ height: historyHeight }}
+                    >
                         {experiments.length === 0 ? (
                             <Empty className="sahi-empty" description="No SAHI predictions yet" />
                         ) : (
@@ -462,6 +909,7 @@ const SahiPredictionView = ({ training }) => {
                             />
                         )}
                     </Card>
+                    {selectedExp?.status === 'completed' && renderFiltersCard()}
                 </aside>
 
                 <main className="sahi-prediction-right-col">
@@ -477,6 +925,11 @@ const SahiPredictionView = ({ training }) => {
                                 </Text>
                             </div>
                             <Space className="sahi-action-bar">
+                                {selectedExp && selectedExp.status !== 'queued' && (
+                                    <Button icon={<PlusOutlined />} onClick={handleNewRun}>
+                                        New Run
+                                    </Button>
+                                )}
                                 <Button
                                     type="primary"
                                     icon={<PlayCircleOutlined />}
@@ -611,7 +1064,7 @@ const SahiPredictionView = ({ training }) => {
                         </Col>
                     </Row>
 
-                    <section className="gallery-section-container sahi-gallery-panel">
+                    <section className="gallery-section-container sahi-gallery-panel" ref={galleryRef}>
                         <div className="gallery-header">
                             <span><FileImageOutlined /> Result Gallery</span>
                             <Space>
@@ -641,11 +1094,11 @@ const SahiPredictionView = ({ training }) => {
                             />
                         ) : galleryLoading ? (
                             <div className="sahi-gallery-loading"><Spin /></div>
-                        ) : galleryImages.length === 0 ? (
+                        ) : filteredImages.length === 0 ? (
                             <Empty description="No result images available yet" />
                         ) : (
                             <div className="sahi-gallery-grid">
-                                {galleryImages.map((imageName) => {
+                                {filteredImages.map((imageName) => {
                                     const detections = getImageDetections(selectedExp, imageName);
                                     const displayName = imageName.split('/').pop();
                                     return (
@@ -679,22 +1132,22 @@ const SahiPredictionView = ({ training }) => {
                 </main>
             </div>
 
-            <Modal
-                open={!!previewImage}
+            <ImageViewerModal
+                visible={!!previewImage}
                 onCancel={() => setPreviewImage(null)}
-                footer={null}
-                width="82vw"
-                title={previewImage?.split('/').pop()}
-                destroyOnClose
-            >
-                {previewImage && (
-                    <img
-                        className="sahi-preview-image"
-                        src={buildImageUrl(selectedExp?.id, previewImage, false)}
-                        alt={previewImage}
-                    />
-                )}
-            </Modal>
+                currentImage={previewImage}
+                images={filteredImages}
+                experiment={selectedExp}
+                onNavigate={navigatePreview}
+                filters={filters}
+                setFilters={setFilters}
+                verifications={verifications}
+                onVerify={handleVerify}
+                onDeleteVerification={handleDeleteVerification}
+                projectLabels={projectLabels}
+                duplicateMatchMap={{}}
+                sizeGroups={sizeGroups}
+            />
         </div>
     );
 };

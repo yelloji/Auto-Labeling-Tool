@@ -17,7 +17,7 @@ from models.training.yaml_generator import generate_ultralytics_training_yaml
 from models.training.executor import start_ultralytics_training
 import json
 from pathlib import Path
-from database.models import Release, Project, DevModeSetting, HumanVerification
+from database.models import Release, Project, DevModeSetting, HumanVerification, Annotation, Dataset, Image as DBImage
 from datetime import datetime, timedelta
 import uuid
 import asyncio
@@ -45,6 +45,30 @@ logger = get_professional_logger()
 
 router = APIRouter()
 router.include_router(sahi_prediction_router)
+
+
+def _annotation_to_yolo_bbox(annotation: Annotation) -> List[float]:
+    """Return normalized YOLO bbox for either normalized or pixel DB annotation coordinates."""
+    coords = [annotation.x_min, annotation.y_min, annotation.x_max, annotation.y_max]
+    if all(coord is not None and 0 <= float(coord) <= 1 for coord in coords):
+        x_min, y_min, x_max, y_max = [float(coord) for coord in coords]
+        return [
+            ((x_min + x_max) / 2.0),
+            ((y_min + y_max) / 2.0),
+            (x_max - x_min),
+            (y_max - y_min),
+        ]
+
+    image = annotation.image
+    img_width = float(image.width or 1)
+    img_height = float(image.height or 1)
+    x_min, y_min, x_max, y_max = [float(coord or 0) for coord in coords]
+    return [
+        ((x_min + x_max) / 2.0) / img_width,
+        ((y_min + y_max) / 2.0) / img_height,
+        (x_max - x_min) / img_width,
+        (y_max - y_min) / img_height,
+    ]
 
 @router.get("/training/models")
 async def get_trainable_models_route(
@@ -2664,12 +2688,88 @@ async def get_missed_ground_truth(
     experiment = db.get(ModelExperiment, experiment_id)
     if not experiment:
         raise HTTPException(404, "Experiment not found")
+
+    if experiment.experiment_type == "sahi_prediction":
+        try:
+            from utils.ground_truth_loader import get_missed_detections
+            image_name_only = Path(image_name).name
+
+            predictions = json.loads(experiment.predictions) if isinstance(experiment.predictions, str) else (experiment.predictions or {})
+            image_predictions = predictions.get(image_name_only, [])
+            if not image_predictions:
+                for key, value in predictions.items():
+                    if Path(str(key)).name == image_name_only:
+                        image_predictions = value or []
+                        break
+
+            input_images = json.loads(experiment.input_images) if isinstance(experiment.input_images, str) else (experiment.input_images or {})
+            image_metadata = input_images.get(image_name_only, {}) if isinstance(input_images, dict) else {}
+            if isinstance(image_metadata, str):
+                try:
+                    image_metadata = json.loads(image_metadata)
+                except (json.JSONDecodeError, ValueError):
+                    image_metadata = {}
+
+            md5 = image_metadata.get("md5") if isinstance(image_metadata, dict) else None
+            candidates_query = (
+                db.query(DBImage)
+                .join(Dataset, DBImage.dataset_id == Dataset.id)
+                .filter(
+                    Dataset.project_id == experiment.project_id,
+                    DBImage.split_type == "dataset",
+                    DBImage.split_section.in_(["train", "val", "test"]),
+                )
+            )
+            filename_match = (DBImage.filename == image_name_only) | (DBImage.original_filename == image_name_only)
+            if md5:
+                candidates_query = candidates_query.filter((DBImage.image_hash_md5 == md5) | filename_match)
+            else:
+                candidates_query = candidates_query.filter(filename_match)
+
+            image_record = candidates_query.first()
+            if not image_record:
+                return {"missed": [], "fp_indices": list(range(len(image_predictions))), "matched_ious": []}
+
+            img_width = image_record.width or (image_metadata.get("width") if isinstance(image_metadata, dict) else None) or 640
+            img_height = image_record.height or (image_metadata.get("height") if isinstance(image_metadata, dict) else None) or 640
+
+            annotations = (
+                db.query(Annotation)
+                .filter(Annotation.image_id == image_record.id)
+                .order_by(Annotation.id)
+                .all()
+            )
+            image_key = f"original/{image_name_only}"
+            annotations_dict = {
+                image_key: [
+                    {
+                        "class_id": ann.class_id,
+                        "bbox": _annotation_to_yolo_bbox(ann),
+                    }
+                    for ann in annotations
+                ]
+            }
+            label_mapping = {ann.class_id: ann.class_name for ann in annotations}
+
+            return get_missed_detections(
+                annotations_dict,
+                image_key,
+                image_predictions,
+                img_width,
+                img_height,
+                label_mapping,
+                iou_threshold,
+            )
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error("errors.system", f"Error loading SAHI missed detections: {e}\n{error_details}", "sahi_missed_detections_error")
+            raise HTTPException(status_code=500, detail=str(e))
     
     if not experiment.dataset_path or not experiment.dataset_source:
         return []
     
     try:
-        from pathlib import Path
         # Resolve absolute path to dataset base
         # dataset_path is like "projects/.../images/train"
         # We need "projects/.../"

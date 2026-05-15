@@ -47,8 +47,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    flex: 1;
-    min-height: 0;
+    flex-shrink: 0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
@@ -69,6 +68,93 @@
     flex: 1;
     overflow-y: auto;
     padding: 0 !important;
+}
+
+.sahi-filters-card {
+    border: 1px solid #e8e8e8 !important;
+    margin: 0 0.5rem 0.5rem;
+    margin-top: 0.5rem;
+    border-radius: 8px !important;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.sahi-filters-card .ant-card-head {
+    background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+    color: #ffffff;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-bottom: none !important;
+    min-height: 0;
+}
+
+.sahi-filters-card .ant-card-head-title {
+    color: #ffffff !important;
+    padding: 0;
+}
+
+.sahi-filters-card .ant-card-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.75rem !important;
+}
+
+.sahi-filter-label {
+    display: block;
+    font-size: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.sahi-filter-label-inline {
+    font-size: 0.75rem;
+}
+
+.sahi-filter-row-label,
+.sahi-filter-switch-row,
+.sahi-filter-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sahi-filter-divider {
+    margin: 0.5rem 0 !important;
+}
+
+.sahi-filter-section-title {
+    display: block;
+    margin-bottom: 0.75rem;
+    font-size: 0.75rem;
+    color: #1890ff;
+}
+
+.sahi-filter-nested {
+    padding: 0 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.sahi-filter-size-block {
+    margin-top: 1rem;
+}
+
+.sahi-filter-checkbox {
+    margin-top: 0.5rem;
+    color: #666666;
+    font-size: 0.75rem;
+}
+
+.sahi-size-count {
+    margin: 0;
+    padding: 0 0.25rem;
+    font-size: 0.6rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: #666666;
+    border: none;
 }
 
 .sahi-config-section,
@@ -207,6 +293,14 @@
     margin: 0;
 }
 
+.sahi-filter-section {
+    flex-shrink: 0;
+}
+
+.sahi-filter-count {
+    margin-left: auto;
+}
+
 .sahi-gallery-loading {
     min-height: 14rem;
     display: flex;
@@ -323,5 +417,9 @@
 
     .sahi-gallery-panel {
         min-height: 28rem;
+    }
+
+    .sahi-filters-card {
+        max-height: 28rem;
     }
 }
