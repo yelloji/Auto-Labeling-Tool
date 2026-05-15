@@ -1,4 +1,5 @@
 import gc
+import inspect
 import os
 import shutil
 import sys
@@ -65,21 +66,12 @@ class SahiUltralyticsPredictor(BasePredictor):
 
             for image_path in img_list:
                 image_name = Path(image_path).name
-                result = get_sliced_prediction(
-                    image=image_path,
+                result = get_sliced_prediction(**self._build_sahi_prediction_kwargs(
+                    get_sliced_prediction=get_sliced_prediction,
+                    image_path=image_path,
                     detection_model=detection_model,
-                    slice_height=int(params.get("slice_height", params.get("imgsz", 896))),
-                    slice_width=int(params.get("slice_width", params.get("imgsz", 896))),
-                    overlap_height_ratio=float(params.get("overlap_height_ratio", 0.25)),
-                    overlap_width_ratio=float(params.get("overlap_width_ratio", 0.25)),
-                    postprocess_type=params.get("postprocess_type", "GREEDYNMM"),
-                    postprocess_match_metric=params.get("postprocess_match_metric", "IOS"),
-                    postprocess_match_threshold=float(params.get("postprocess_match_threshold", params.get("iou_threshold", 0.3))),
-                    postprocess_class_agnostic=bool(params.get("postprocess_class_agnostic", True)),
-                    no_standard_prediction=bool(params.get("no_standard_prediction", True)),
-                    no_sliced_prediction=bool(params.get("no_sliced_prediction", False)),
-                    verbose=int(params.get("verbose", 0)),
-                )
+                    params=params,
+                ))
 
                 image_predictions = []
                 for object_prediction in getattr(result, "object_prediction_list", []) or []:
@@ -171,6 +163,35 @@ class SahiUltralyticsPredictor(BasePredictor):
             distribution["0.5-0.8"] += 1
         else:
             distribution["0.8-1.0"] += 1
+
+    @staticmethod
+    def _build_sahi_prediction_kwargs(get_sliced_prediction: Any, image_path: str, detection_model: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+        kwargs = {
+            "image": image_path,
+            "detection_model": detection_model,
+            "slice_height": int(params.get("slice_height", params.get("imgsz", 896))),
+            "slice_width": int(params.get("slice_width", params.get("imgsz", 896))),
+            "overlap_height_ratio": float(params.get("overlap_height_ratio", 0.25)),
+            "overlap_width_ratio": float(params.get("overlap_width_ratio", 0.25)),
+            "postprocess_type": params.get("postprocess_type", "GREEDYNMM"),
+            "postprocess_match_metric": params.get("postprocess_match_metric", "IOS"),
+            "postprocess_match_threshold": float(params.get("postprocess_match_threshold", params.get("iou_threshold", 0.3))),
+            "postprocess_class_agnostic": bool(params.get("postprocess_class_agnostic", True)),
+            "verbose": int(params.get("verbose", 0)),
+        }
+
+        signature = inspect.signature(get_sliced_prediction)
+        supported_keys = set(signature.parameters.keys())
+
+        if "perform_standard_pred" in supported_keys:
+            kwargs["perform_standard_pred"] = not bool(params.get("no_standard_prediction", True))
+        elif "no_standard_prediction" in supported_keys:
+            kwargs["no_standard_prediction"] = bool(params.get("no_standard_prediction", True))
+
+        if "no_sliced_prediction" in supported_keys:
+            kwargs["no_sliced_prediction"] = bool(params.get("no_sliced_prediction", False))
+
+        return {key: value for key, value in kwargs.items() if key in supported_keys}
 
     def _convert_object_prediction(self, object_prediction: Any) -> Dict[str, Any]:
         category = getattr(object_prediction, "category", None)
