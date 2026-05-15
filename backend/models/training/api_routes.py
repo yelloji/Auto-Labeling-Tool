@@ -1936,9 +1936,32 @@ async def get_experiment_original_image(
     project_root = settings.BASE_DIR
 
     original_path = None
+
+    # SAHI prediction runs on full dataset-stage originals. Those paths are
+    # recorded in the per-run manifest because dataset_source is not train/val/test.
+    if exp.experiment_type == "sahi_prediction" and exp.output_folder:
+        try:
+            output_dir = (project_root / exp.output_folder).resolve()
+            manifest_path = output_dir / "sahi_prediction_inputs.json"
+            requested_name = Path(filename).name
+            if manifest_path.exists():
+                with open(manifest_path, "r", encoding="utf-8") as manifest_file:
+                    manifest_images = json.load(manifest_file)
+                for image_path_str in manifest_images:
+                    candidate = Path(image_path_str).resolve()
+                    if candidate.name == requested_name and candidate.exists():
+                        original_path = candidate
+                        break
+        except Exception as e:
+            logger.warning(
+                "errors.system",
+                f"Failed to resolve SAHI original image for {filename}: {e}",
+                "sahi_original_image_resolve_failed",
+                {"experiment_id": experiment_id}
+            )
     
     # 1. Handle dataset sources (train/val/test)
-    if exp.dataset_source in ['train', 'val', 'test']:
+    if not original_path and exp.dataset_source in ['train', 'val', 'test']:
         if not exp.dataset_path:
             raise HTTPException(status_code=400, detail="Experiment has no dataset path")
             
@@ -1965,7 +1988,7 @@ async def get_experiment_original_image(
                     break
                     
     # 2. Handle uploaded source
-    elif exp.dataset_source == 'upload':
+    elif not original_path and exp.dataset_source == 'upload':
         if not exp.dataset_path:
             raise HTTPException(status_code=400, detail="Experiment has no upload path")
             
