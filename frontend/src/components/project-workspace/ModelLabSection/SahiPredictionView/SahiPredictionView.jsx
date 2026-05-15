@@ -33,7 +33,6 @@ import {
     FileImageOutlined,
     LoadingOutlined,
     PlayCircleOutlined,
-    ReloadOutlined,
     ScissorOutlined
 } from '@ant-design/icons';
 import { projectsAPI, handleAPIError } from '../../../../services/api';
@@ -126,21 +125,22 @@ const buildImageUrl = (experimentId, imageName, thumbnail = true) => {
 
 const SahiPredictionView = ({ training }) => {
     const [form] = Form.useForm();
+    const watchedName = Form.useWatch('name', form);
     const [experiments, setExperiments] = useState([]);
     const [selectedExp, setSelectedExp] = useState(null);
     const [queuedExp, setQueuedExp] = useState(null);
     const [loading, setLoading] = useState(true);
     const [running, setRunning] = useState(false);
-    const [savingDraft, setSavingDraft] = useState(false);
     const [galleryLoading, setGalleryLoading] = useState(false);
     const [galleryImages, setGalleryImages] = useState([]);
     const [previewImage, setPreviewImage] = useState(null);
     const selectedExpRef = useRef(null);
+    const syncTimeoutRef = useRef(null);
 
     const defaultConfig = useMemo(() => ({
         ...DEFAULT_CONFIG,
         task: normalizeTask(training),
-        name: training?.name ? `${training.name} SAHI Prediction` : 'SAHI Prediction'
+        name: ''
     }), [training]);
 
     const hydrateFormFromExperiment = useCallback((experiment) => {
@@ -212,6 +212,12 @@ const SahiPredictionView = ({ training }) => {
     }, [defaultConfig, fetchExperiments, form, training?.id]);
 
     useEffect(() => {
+        return () => {
+            if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
+        };
+    }, []);
+
+    useEffect(() => {
         const hasActiveExperiment = experiments.some((experiment) => isRunningStatus(experiment.status));
         if (!hasActiveExperiment && !running) return undefined;
 
@@ -257,39 +263,82 @@ const SahiPredictionView = ({ training }) => {
         };
     }, [galleryImages.length, selectedExp]);
 
-    const handleSaveDraft = async () => {
+    const handleFormChange = async (changedValues, allValues) => {
         if (!training?.id) return;
-        try {
-            const values = await form.validateFields();
-            setSavingDraft(true);
-            const payload = {
-                ...values,
-                dataset_source: 'dataset_images',
-                custom_params: values
-            };
-            const result = queuedExp
-                ? await projectsAPI.updateSahiPredictionDraft(queuedExp.id, payload)
-                : await projectsAPI.initSahiPrediction(training.id, payload);
-            setQueuedExp(result.experiment || result);
-            message.success('SAHI draft saved');
-            fetchExperiments(false);
-        } catch (error) {
-            if (error?.errorFields) return;
-            handleAPIError(error, 'Failed to save SAHI draft');
-        } finally {
-            setSavingDraft(false);
+        const selected = selectedExpRef.current;
+        const changedKey = Object.keys(changedValues)[0];
+        const name = (allValues.name || '').trim();
+
+        if (!selected && changedKey === 'name' && name.length >= 3) {
+            try {
+                const payload = {
+                    ...allValues,
+                    name,
+                    dataset_source: 'dataset_images',
+                    custom_params: { ...allValues, name }
+                };
+                const draft = await projectsAPI.initSahiPrediction(training.id, payload);
+                const experiment = draft.experiment || draft;
+                selectedExpRef.current = experiment;
+                setQueuedExp(experiment);
+                setSelectedExp(experiment);
+                setExperiments((items) => [experiment, ...items.filter((item) => item.id !== experiment.id)]);
+            } catch (error) {
+                console.error('Failed to initialize SAHI prediction draft:', error);
+            }
+            return;
         }
+
+        if (!selected || selected.status !== 'queued') return;
+        if (changedKey === 'name' && name.length < 3) return;
+
+        if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = window.setTimeout(async () => {
+            try {
+                const payload = {
+                    ...changedValues,
+                    ...(changedKey === 'name' ? { name } : {}),
+                    custom_params: {
+                        ...getExperimentParams(selected),
+                        ...allValues,
+                        ...(changedKey === 'name' ? { name } : {})
+                    }
+                };
+                await projectsAPI.updateSahiPredictionDraft(selected.id, payload);
+                const updatedFields = {
+                    ...changedValues,
+                    ...(changedKey === 'name' ? { name } : {})
+                };
+                setExperiments((items) => items.map((item) => (
+                    item.id === selected.id ? { ...item, ...updatedFields } : item
+                )));
+                setSelectedExp((current) => (
+                    current?.id === selected.id ? { ...current, ...updatedFields } : current
+                ));
+                if (queuedExp?.id === selected.id) {
+                    setQueuedExp((current) => current ? { ...current, ...updatedFields } : current);
+                }
+            } catch (error) {
+                console.error('Failed to autosave SAHI prediction draft:', error);
+            }
+        }, 800);
     };
 
     const handleRun = async () => {
         if (!training?.id) return;
         try {
             const values = await form.validateFields();
+            const name = values.name?.trim();
+            if (!name || name.length < 3) {
+                message.warning('Name must be at least 3 characters');
+                return;
+            }
             setRunning(true);
             const payload = {
                 ...values,
+                name,
                 dataset_source: 'dataset_images',
-                custom_params: values
+                custom_params: { ...values, name }
             };
             const response = await projectsAPI.triggerSahiPrediction(training.id, payload);
             message.success('SAHI prediction started');
@@ -429,13 +478,17 @@ const SahiPredictionView = ({ training }) => {
                                 </Text>
                             </div>
                             <Space className="sahi-action-bar">
-                                <Button icon={<ReloadOutlined />} onClick={() => fetchExperiments(false)}>
-                                    Refresh
-                                </Button>
-                                <Button loading={savingDraft} onClick={handleSaveDraft}>
-                                    Save Draft
-                                </Button>
-                                <Button type="primary" icon={<PlayCircleOutlined />} loading={running} onClick={handleRun}>
+                                <Button
+                                    type="primary"
+                                    icon={<PlayCircleOutlined />}
+                                    loading={running}
+                                    onClick={handleRun}
+                                    disabled={
+                                        (selectedExp && selectedExp.status !== 'queued') ||
+                                        !watchedName?.trim() ||
+                                        watchedName?.trim().length < 3
+                                    }
+                                >
                                     Run SAHI
                                 </Button>
                             </Space>
@@ -451,6 +504,7 @@ const SahiPredictionView = ({ training }) => {
                             layout="vertical"
                             initialValues={defaultConfig}
                             className="sahi-config-form"
+                            onValuesChange={handleFormChange}
                         >
                             <Row gutter={12}>
                                 <Col xs={24} lg={12}>
@@ -459,7 +513,11 @@ const SahiPredictionView = ({ training }) => {
                                         label="Prediction Name"
                                         rules={[{ required: true, message: 'Enter a prediction name' }]}
                                     >
-                                        <Input placeholder="SAHI prediction name" />
+                                        <Input
+                                            placeholder="Enter prediction name"
+                                            autoComplete="off"
+                                            disabled={running || (selectedExp && selectedExp.status !== 'queued')}
+                                        />
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} sm={12} lg={6}>
