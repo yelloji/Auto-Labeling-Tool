@@ -526,6 +526,7 @@ Completed implementation:
 - The view polls active queued/running SAHI experiments.
 - Completed results load through the existing experiment images endpoint.
 - Download and delete reuse the generic experiment endpoints.
+- Follow-up refinement: SAHI Prediction UI was realigned to the normal Prediction tab structure with the same parent layout, left history sidebar, right work area, and gradient gallery/history headers.
 
 ### Task 9 - Viewer Compatibility
 

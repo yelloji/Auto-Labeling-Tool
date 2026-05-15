@@ -347,40 +347,17 @@ const SahiPredictionView = ({ training }) => {
 
     if (loading) {
         return (
-            <div className="sahi-prediction-view sahi-prediction-loading">
+            <div className="sahi-prediction-view-container sahi-prediction-loading">
                 <Spin tip="Loading SAHI prediction workspace..." />
             </div>
         );
     }
 
     return (
-        <div className="sahi-prediction-view">
-            <div className="sahi-prediction-header">
-                <div>
-                    <Space align="center">
-                        <ScissorOutlined className="sahi-header-icon" />
-                        <Title level={4}>SAHI Prediction</Title>
-                    </Space>
-                    <Text type="secondary">
-                        Sliced inference on full original dataset-stage images for this tile-trained model.
-                    </Text>
-                </div>
-                <Space>
-                    <Button icon={<ReloadOutlined />} onClick={() => fetchExperiments(false)}>
-                        Refresh
-                    </Button>
-                    <Button loading={savingDraft} onClick={handleSaveDraft}>
-                        Save Draft
-                    </Button>
-                    <Button type="primary" icon={<PlayCircleOutlined />} loading={running} onClick={handleRun}>
-                        Run SAHI
-                    </Button>
-                </Space>
-            </div>
-
-            <Row gutter={[16, 16]} className="sahi-main-grid">
-                <Col xs={24} xl={7}>
-                    <Card title="History" className="sahi-panel" bodyStyle={{ padding: 0 }}>
+        <div className="sahi-prediction-view-container">
+            <div className="sahi-prediction-layout">
+                <aside className="sahi-prediction-left-col">
+                    <Card title="SAHI History" className="history-card sahi-history-card" bodyStyle={{ padding: 0 }}>
                         {experiments.length === 0 ? (
                             <Empty className="sahi-empty" description="No SAHI predictions yet" />
                         ) : (
@@ -437,10 +414,32 @@ const SahiPredictionView = ({ training }) => {
                             />
                         )}
                     </Card>
-                </Col>
+                </aside>
 
-                <Col xs={24} xl={17}>
-                    <Card title="Run Configuration" className="sahi-panel">
+                <main className="sahi-prediction-right-col">
+                    <section className="config-section-container sahi-config-section">
+                        <div className="sahi-config-header">
+                            <div>
+                                <Space align="center">
+                                    <ScissorOutlined className="sahi-header-icon" />
+                                    <Title level={4}>SAHI Prediction</Title>
+                                </Space>
+                                <Text type="secondary">
+                                    Sliced inference on full original dataset-stage images for this tile-trained model.
+                                </Text>
+                            </div>
+                            <Space className="sahi-action-bar">
+                                <Button icon={<ReloadOutlined />} onClick={() => fetchExperiments(false)}>
+                                    Refresh
+                                </Button>
+                                <Button loading={savingDraft} onClick={handleSaveDraft}>
+                                    Save Draft
+                                </Button>
+                                <Button type="primary" icon={<PlayCircleOutlined />} loading={running} onClick={handleRun}>
+                                    Run SAHI
+                                </Button>
+                            </Space>
+                        </div>
                         <Alert
                             type="info"
                             showIcon
@@ -530,35 +529,45 @@ const SahiPredictionView = ({ training }) => {
                                 </Col>
                             </Row>
                         </Form>
-                    </Card>
+                    </section>
 
                     <Row gutter={[16, 16]} className="sahi-stats-row">
                         <Col xs={24} md={8}>
-                            <Card className="sahi-stat-card">
+                            <div className="sahi-stat-card">
                                 <Statistic title="Images" value={selectedStats.imageCount} prefix={<FileImageOutlined />} />
-                            </Card>
+                            </div>
                         </Col>
                         <Col xs={24} md={8}>
-                            <Card className="sahi-stat-card">
+                            <div className="sahi-stat-card">
                                 <Statistic title="Detections" value={selectedStats.totalDetections} />
-                            </Card>
+                            </div>
                         </Col>
                         <Col xs={24} md={8}>
-                            <Card className="sahi-stat-card">
+                            <div className="sahi-stat-card">
                                 <Statistic
                                     title="Avg Confidence"
                                     value={selectedStats.averageConfidence ?? 0}
                                     precision={2}
                                 />
-                            </Card>
+                            </div>
                         </Col>
                     </Row>
 
-                    <Card
-                        className="sahi-panel sahi-gallery-panel"
-                        title="Result Gallery"
-                        extra={selectedExp ? getStatusTag(selectedExp.status) : null}
-                    >
+                    <section className="gallery-section-container sahi-gallery-panel">
+                        <div className="gallery-header">
+                            <span><FileImageOutlined /> Result Gallery</span>
+                            <Space>
+                                {selectedExp ? getStatusTag(selectedExp.status) : null}
+                                <Button
+                                    icon={<DownloadOutlined />}
+                                    size="small"
+                                    onClick={() => handleDownload(selectedExp)}
+                                    disabled={!selectedExp || selectedExp.status !== 'completed'}
+                                >
+                                    Download Result
+                                </Button>
+                            </Space>
+                        </div>
                         {!selectedExp ? (
                             <Empty description="Run or select a SAHI prediction" />
                         ) : selectedExp.status === 'running' ? (
@@ -608,9 +617,9 @@ const SahiPredictionView = ({ training }) => {
                                 })}
                             </div>
                         )}
-                    </Card>
-                </Col>
-            </Row>
+                    </section>
+                </main>
+            </div>
 
             <Modal
                 open={!!previewImage}
