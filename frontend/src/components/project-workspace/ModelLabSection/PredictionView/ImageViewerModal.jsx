@@ -50,7 +50,8 @@ const ImageViewerModal = ({
     projectLabels = [], // New: Project-level labels for classification
     duplicateMatchMap = {}, // New: Duplicate group insights
     sizeGroups = { thresholds: [0, 0, 0], count: 0 }, // New: Size bucketing data
-    operatorMode = false
+    operatorMode = false,
+    enableMissedInspection = false
 }) => {
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [scale, setScale] = useState(1);
@@ -62,7 +63,9 @@ const ImageViewerModal = ({
     const [isImgLoading, setIsImgLoading] = useState(true); // New: Guard for sync
     const [lastLoadTime, setLastLoadTime] = useState(0);
     const [hoveredIndex, setHoveredIndex] = useState(null); // New: Bidirectional bridge
+    const [hoveredMissedIndex, setHoveredMissedIndex] = useState(null);
     const [focusedIndex, setFocusedIndex] = useState(null); // New: For toggle logic
+    const [focusedMissedIndex, setFocusedMissedIndex] = useState(null);
     const loadStartTime = React.useRef(performance.now());
     const hasInitSelection = React.useRef(false);
 
@@ -241,6 +244,8 @@ const ImageViewerModal = ({
         setScale(1);
         setOffset({ x: 0, y: 0 });
         setTransformOrigin('center center');
+        setFocusedIndex(null);
+        setFocusedMissedIndex(null);
         setIsImgLoading(true); // Guard ON - only when changing images
         loadStartTime.current = performance.now();
     }, [currentImage]);
@@ -631,26 +636,32 @@ const ImageViewerModal = ({
         setScale(1);
         setOffset({ x: 0, y: 0 });
         setTransformOrigin('center center');
+        setFocusedIndex(null);
+        setFocusedMissedIndex(null);
     };
 
     /**
      * CLICK-TO-FOCUS (Precision Zoom)
      * Calculates the center of a detection and zooms to it.
      */
-    const handleFocusDetection = (index) => {
+    const focusBbox = (bbox, focusType, index) => {
         // Toggle Logic: If clicking the same box while zoomed in, reset.
-        if (focusedIndex === index && scale > 1.1) {
+        if (
+            ((focusType === 'detection' && focusedIndex === index) ||
+                (focusType === 'missed' && focusedMissedIndex === index)) &&
+            scale > 1.1
+        ) {
             handleResetZoom();
-            setFocusedIndex(null);
             return;
         }
 
-        const d = filteredDets[index];
-        if (!d || !d.bbox || dimensions.width === 0) return;
+        if (!bbox || dimensions.width === 0) return;
 
-        const [x1, y1, x2, y2] = d.bbox;
+        const [x1, y1, x2, y2] = bbox;
         const boxW = x2 - x1;
         const boxH = y2 - y1;
+        if (boxW <= 0 || boxH <= 0) return;
+
         const centerX = (x1 + x2) / 2;
         const centerY = (y1 + y2) / 2;
 
@@ -664,7 +675,19 @@ const ImageViewerModal = ({
         setScale(targetScale);
         setOffset({ x: 0, y: 0 });
         setTransformOrigin(`${originX}% ${originY}%`);
-        setFocusedIndex(index);
+        setFocusedIndex(focusType === 'detection' ? index : null);
+        setFocusedMissedIndex(focusType === 'missed' ? index : null);
+    };
+
+    const handleFocusDetection = (index) => {
+        const d = filteredDets[index];
+        focusBbox(d?.bbox, 'detection', index);
+    };
+
+    const handleFocusMissedDetection = (index) => {
+        if (!enableMissedInspection) return;
+        const missed = missedDetections[index];
+        focusBbox(missed?.bbox, 'missed', index);
     };
 
     /**
@@ -1846,6 +1869,8 @@ const ImageViewerModal = ({
 
                                 {/* Phase 7.1: Render Missed Ground Truth Detections (Light Gray) */}
                                 {showMissed && missedDetections.map((missed, idx) => {
+                                    const isMissedHovered = enableMissedInspection && hoveredMissedIndex === idx;
+                                    const isMissedFocused = enableMissedInspection && focusedMissedIndex === idx && scale > 1.1;
                                     const labelText = `${missed.class_name} - MISSED`;
                                     const charWidth = 8.5;
                                     const labelWidth = (labelText.length * charWidth) + 12;
@@ -1877,11 +1902,23 @@ const ImageViewerModal = ({
                                                 y={missed.bbox[1]}
                                                 width={missed.bbox[2] - missed.bbox[0]}
                                                 height={missed.bbox[3] - missed.bbox[1]}
-                                                stroke="#d0d0d0"
-                                                strokeWidth={3}
+                                                stroke={isMissedHovered || isMissedFocused ? "#ffffff" : "#d0d0d0"}
+                                                strokeWidth={isMissedHovered || isMissedFocused ? 5 : 3}
                                                 strokeDasharray="8,4"
-                                                fill="rgba(208,208,208,0.08)"
-                                                pointerEvents="none"
+                                                fill={isMissedHovered || isMissedFocused ? "rgba(255,255,255,0.16)" : "rgba(208,208,208,0.08)"}
+                                                pointerEvents={enableMissedInspection ? "all" : "none"}
+                                                onMouseEnter={() => enableMissedInspection && setHoveredMissedIndex(idx)}
+                                                onMouseLeave={() => enableMissedInspection && setHoveredMissedIndex(null)}
+                                                onClick={(e) => {
+                                                    if (!enableMissedInspection) return;
+                                                    e.stopPropagation();
+                                                    handleFocusMissedDetection(idx);
+                                                }}
+                                                style={{
+                                                    cursor: enableMissedInspection ? (isMissedFocused ? 'zoom-out' : 'zoom-in') : 'default',
+                                                    transition: 'all 0.1s ease',
+                                                    filter: isMissedHovered || isMissedFocused ? 'drop-shadow(0 0 10px rgba(255,255,255,0.85))' : 'none'
+                                                }}
                                             />
                                             <text
                                                 x={mtX + 4}
@@ -2249,6 +2286,72 @@ const ImageViewerModal = ({
                                 <Text type="secondary" style={{ color: '#666' }}>No matching objects with current filters.</Text>
                             )}
                         </div>
+                        {enableMissedInspection && showMissed && missedDetections.length > 0 && (
+                            <div style={{
+                                marginTop: '10px',
+                                paddingTop: '8px',
+                                borderTop: '1px solid rgba(255,255,255,0.08)'
+                            }}>
+                                <Text type="secondary" style={{ color: '#aaa', fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.4px' }}>
+                                    MISSED GROUND TRUTH ({missedDetections.length})
+                                </Text>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '8px' }}>
+                                    {missedDetections.map((missed, idx) => {
+                                        const isHovered = hoveredMissedIndex === idx;
+                                        const isFocused = focusedMissedIndex === idx && scale > 1.1;
+                                        const [x1, y1, x2, y2] = missed.bbox || [0, 0, 0, 0];
+                                        const boxW = Math.round(x2 - x1);
+                                        const boxH = Math.round(y2 - y1);
+
+                                        return (
+                                            <div
+                                                key={`missed-chip-${idx}`}
+                                                onMouseEnter={() => setHoveredMissedIndex(idx)}
+                                                onMouseLeave={() => setHoveredMissedIndex(null)}
+                                                onClick={() => handleFocusMissedDetection(idx)}
+                                                style={{
+                                                    background: isHovered || isFocused ? 'rgba(255,255,255,0.14)' : 'rgba(208,208,208,0.08)',
+                                                    border: `1px dashed ${isHovered || isFocused ? '#ffffff' : '#d0d0d0'}`,
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px',
+                                                    cursor: isFocused ? 'zoom-out' : 'zoom-in',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '8px',
+                                                    transition: 'all 0.2s ease',
+                                                    color: '#f0f0f0',
+                                                    boxShadow: isHovered || isFocused ? '0 0 12px rgba(255,255,255,0.45)' : 'none',
+                                                    transform: isHovered ? 'translateY(-2px)' : 'none'
+                                                }}
+                                            >
+                                                <Text style={{ color: '#fff', fontSize: '0.7rem', opacity: 0.6, fontWeight: 'bold' }}>#M{idx + 1}</Text>
+                                                <Text style={{ color: '#f0f0f0', fontSize: '0.8125rem', fontWeight: 500 }}>
+                                                    <strong>{missed.class_name || 'object'}</strong>
+                                                    <span style={{ fontSize: '0.7rem', color: '#bfbfbf', marginLeft: '8px', fontStyle: 'italic' }}>
+                                                        ({boxW} x {boxH} px)
+                                                    </span>
+                                                </Text>
+                                                <Tag
+                                                    style={{
+                                                        margin: 0,
+                                                        height: '18px',
+                                                        lineHeight: '16px',
+                                                        borderRadius: '3px',
+                                                        fontSize: '0.62rem',
+                                                        fontWeight: 800,
+                                                        color: '#f0f0f0',
+                                                        border: '1px solid rgba(255,255,255,0.28)',
+                                                        background: 'rgba(255,255,255,0.08)'
+                                                    }}
+                                                >
+                                                    MISSED
+                                                </Tag>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
             </div>

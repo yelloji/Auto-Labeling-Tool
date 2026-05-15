@@ -1147,6 +1147,7 @@ const SahiPredictionView = ({ training }) => {
                 projectLabels={projectLabels}
                 duplicateMatchMap={{}}
                 sizeGroups={sizeGroups}
+                enableMissedInspection
             />
         </div>
     );
