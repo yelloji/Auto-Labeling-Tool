@@ -55,6 +55,7 @@ const ImageViewerModal = ({
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [scale, setScale] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
+    const [transformOrigin, setTransformOrigin] = useState('center center');
     const [isDragging, setIsDragging] = useState(false);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
 
@@ -239,6 +240,7 @@ const ImageViewerModal = ({
     React.useEffect(() => {
         setScale(1);
         setOffset({ x: 0, y: 0 });
+        setTransformOrigin('center center');
         setIsImgLoading(true); // Guard ON - only when changing images
         loadStartTime.current = performance.now();
     }, [currentImage]);
@@ -628,6 +630,7 @@ const ImageViewerModal = ({
     const handleResetZoom = () => {
         setScale(1);
         setOffset({ x: 0, y: 0 });
+        setTransformOrigin('center center');
     };
 
     /**
@@ -651,17 +654,16 @@ const ImageViewerModal = ({
         const centerX = (x1 + x2) / 2;
         const centerY = (y1 + y2) / 2;
 
-        // Smart Zoom Level: Aim for 70% of the view, clamped between 1.5x and 4x
-        const targetScale = Math.min(4, Math.max(1.5, Math.min(dimensions.width / boxW, dimensions.height / boxH) * 0.7));
+        const originX = Math.max(0, Math.min(100, (centerX / dimensions.width) * 100));
+        const originY = Math.max(0, Math.min(100, (centerY / dimensions.height) * 100));
 
-        // Offset: Displacement from center, scaled
-        const targetOffset = {
-            x: (dimensions.width / 2 - centerX) * targetScale,
-            y: (dimensions.height / 2 - centerY) * targetScale
-        };
+        // Zoom around the clicked box inside the fitted image. This keeps huge originals visible
+        // without trying to pan by natural-image pixels.
+        const targetScale = Math.min(5, Math.max(1.75, Math.min(dimensions.width / boxW, dimensions.height / boxH) * 0.7));
 
         setScale(targetScale);
-        setOffset(targetOffset);
+        setOffset({ x: 0, y: 0 });
+        setTransformOrigin(`${originX}% ${originY}%`);
         setFocusedIndex(index);
     };
 
@@ -1572,7 +1574,7 @@ const ImageViewerModal = ({
                             maxWidth: '100%',
                             maxHeight: '100%',
                             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-                            transformOrigin: 'center center',
+                            transformOrigin,
                             transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                             userSelect: 'none',
                             cursor: isDrawingMode ? 'crosshair' : (isDragging ? 'grabbing' : 'grab')
