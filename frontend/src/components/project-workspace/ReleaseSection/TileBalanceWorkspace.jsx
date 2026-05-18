@@ -112,6 +112,62 @@ const ratioOptions = [
 
 const normalizeAnnotationKey = (value = '') => String(value).replace(/\\/g, '/');
 const PAGE_SIZE = 50;
+const SPLIT_ORDER = ['train', 'val', 'test'];
+
+const formatCount = (value) => Number(value || 0).toLocaleString();
+
+const formatSplitName = (split) => {
+  if (!split) return 'Unknown';
+  return `${split.charAt(0).toUpperCase()}${split.slice(1)}`;
+};
+
+function SplitSummaryCard({ title, total, color, background, rows, equation = false }) {
+  return (
+    <Card
+      bordered={false}
+      style={{
+        borderRadius: 12,
+        background,
+        minHeight: 178,
+        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
+      }}
+      bodyStyle={{ padding: '18px 20px' }}
+    >
+      <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+        {title}
+      </Text>
+      <div style={{ fontSize: 26, lineHeight: 1.1, fontWeight: 700, color, marginBottom: 14 }}>
+        {formatCount(total)}
+      </div>
+      <div style={{ borderTop: '1px solid rgba(15, 23, 42, 0.08)', paddingTop: 10 }}>
+        {(rows || []).map((row) => (
+          <div
+            key={row.split}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: equation ? '72px 1fr' : '72px 1fr',
+              columnGap: 8,
+              alignItems: 'center',
+              marginBottom: 7,
+              fontSize: 13,
+            }}
+          >
+            <Text strong style={{ color: '#334155' }}>{formatSplitName(row.split)}</Text>
+            {equation ? (
+              <Text style={{ color: '#475569' }}>
+                {formatCount(row.labeled)} labeled + {formatCount(row.unlabeled)} unlabeled = <strong>{formatCount(row.total)}</strong>
+              </Text>
+            ) : (
+              <Text style={{ color: '#475569' }}>
+                <strong>{formatCount(row.total)}</strong> tiles
+              </Text>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 const TileBalanceWorkspace = ({ release, onBackToDetails, onBalancedReleaseCreated }) => {
   const [loading, setLoading] = useState(false);
@@ -225,28 +281,73 @@ const TileBalanceWorkspace = ({ release, onBackToDetails, onBalancedReleaseCreat
     [unlabeledTiles, selectedIds]
   );
 
-  const automaticUnlabeledCount = useMemo(() => {
-    const target = Math.floor(selectedLabeledCount * ratioValue);
-    return Math.min(unlabeledTiles.length, target);
-  }, [ratioValue, selectedLabeledCount, unlabeledTiles.length]);
+  const selectedLabeledTiles = useMemo(
+    () => labeledTiles.filter((img) => selectedIds.has(img.id)),
+    [labeledTiles, selectedIds]
+  );
+
+  const splitNames = useMemo(() => {
+    const allSplits = new Set(tileImages.map((img) => img.split).filter(Boolean));
+    return [
+      ...SPLIT_ORDER.filter((split) => allSplits.has(split)),
+      ...Array.from(allSplits).filter((split) => !SPLIT_ORDER.includes(split)),
+    ];
+  }, [tileImages]);
+
+  const automaticUnlabeledTiles = useMemo(() => {
+    return splitNames.flatMap((split) => {
+      const labeledInSplit = selectedLabeledTiles.filter((img) => img.split === split).length;
+      const target = Math.floor(labeledInSplit * ratioValue);
+      if (target <= 0) return [];
+      return unlabeledTiles.filter((img) => img.split === split).slice(0, target);
+    });
+  }, [ratioValue, selectedLabeledTiles, splitNames, unlabeledTiles]);
+
+  const automaticUnlabeledCount = automaticUnlabeledTiles.length;
 
   const automaticFinalCount = selectedLabeledCount + automaticUnlabeledCount;
   const manualFinalCount = selectedLabeledCount + selectedUnlabeledCount;
 
   const automaticSelectedTiles = useMemo(() => {
-    const selectedLabeled = labeledTiles.filter((img) => selectedIds.has(img.id));
-    const selectedUnlabeled = unlabeledTiles.slice(0, automaticUnlabeledCount);
-    return [...selectedLabeled, ...selectedUnlabeled];
-  }, [labeledTiles, unlabeledTiles, automaticUnlabeledCount, selectedIds]);
+    return [...selectedLabeledTiles, ...automaticUnlabeledTiles];
+  }, [automaticUnlabeledTiles, selectedLabeledTiles]);
 
   const manualSelectedTiles = useMemo(
     () => tileImages.filter((img) => selectedIds.has(img.id)),
     [tileImages, selectedIds]
   );
 
+  const splitSummaryRows = useMemo(() => {
+    return splitNames.map((split) => {
+      const labeledTotal = labeledTiles.filter((img) => img.split === split).length;
+      const unlabeledTotal = unlabeledTiles.filter((img) => img.split === split).length;
+      const selectedLabeled = selectedLabeledTiles.filter((img) => img.split === split).length;
+      const selectedUnlabeledSource = mode === 'automatic'
+        ? automaticUnlabeledTiles
+        : unlabeledTiles.filter((img) => selectedIds.has(img.id));
+      const selectedUnlabeled = selectedUnlabeledSource.filter((img) => img.split === split).length;
+
+      return {
+        split,
+        labeledTotal,
+        unlabeledTotal,
+        selectedLabeled,
+        selectedUnlabeled,
+        expectedTotal: selectedLabeled + selectedUnlabeled,
+      };
+    });
+  }, [
+    automaticUnlabeledTiles,
+    labeledTiles,
+    mode,
+    selectedIds,
+    selectedLabeledTiles,
+    splitNames,
+    unlabeledTiles,
+  ]);
+
   const currentTileSet = manualTab === 'labeled' ? labeledTiles : unlabeledTiles;
   const currentPage = manualTab === 'labeled' ? labeledPage : unlabeledPage;
-  const currentTotal = manualTab === 'labeled' ? labeledTiles.length : unlabeledTiles.length;
   const paginatedTileSet = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
     return currentTileSet.slice(start, start + PAGE_SIZE);
@@ -365,24 +466,44 @@ const TileBalanceWorkspace = ({ release, onBackToDetails, onBalancedReleaseCreat
         </Card>
 
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col xs={12} md={6}>
-            <Card bordered={false} style={{ borderRadius: 12, background: 'linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%)' }}>
-              <Statistic title="Labeled Tiles" value={labeledTiles.length} valueStyle={{ color: '#7c3aed' }} />
-            </Card>
+          <Col xs={24} md={8}>
+            <SplitSummaryCard
+              title="Labeled Tiles"
+              total={labeledTiles.length}
+              color="#7c3aed"
+              background="linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%)"
+              rows={splitSummaryRows.map((row) => ({
+                split: row.split,
+                total: row.labeledTotal,
+              }))}
+            />
           </Col>
-          <Col xs={12} md={6}>
-            <Card bordered={false} style={{ borderRadius: 12, background: 'linear-gradient(135deg, #fbfffb 0%, #eefbf0 100%)' }}>
-              <Statistic title="Unlabeled Tiles" value={unlabeledTiles.length} valueStyle={{ color: '#16a34a' }} />
-            </Card>
+          <Col xs={24} md={8}>
+            <SplitSummaryCard
+              title="Unlabeled Tiles"
+              total={unlabeledTiles.length}
+              color="#16a34a"
+              background="linear-gradient(135deg, #fbfffb 0%, #eefbf0 100%)"
+              rows={splitSummaryRows.map((row) => ({
+                split: row.split,
+                total: row.unlabeledTotal,
+              }))}
+            />
           </Col>
-          <Col xs={12} md={6}>
-            <Card bordered={false} style={{ borderRadius: 12, background: 'linear-gradient(135deg, #fffaf5 0%, #fff2e8 100%)' }}>
-              <Statistic
-                title={mode === 'automatic' ? 'Expected Balanced Total' : 'Selected Tile Total'}
-                value={mode === 'automatic' ? automaticFinalCount : manualFinalCount}
-                valueStyle={{ color: '#ea580c' }}
-              />
-            </Card>
+          <Col xs={24} md={8}>
+            <SplitSummaryCard
+              title={mode === 'automatic' ? 'Expected Balanced Total' : 'Selected Tile Total'}
+              total={mode === 'automatic' ? automaticFinalCount : manualFinalCount}
+              color="#ea580c"
+              background="linear-gradient(135deg, #fffaf5 0%, #fff2e8 100%)"
+              equation
+              rows={splitSummaryRows.map((row) => ({
+                split: row.split,
+                labeled: row.selectedLabeled,
+                unlabeled: row.selectedUnlabeled,
+                total: row.expectedTotal,
+              }))}
+            />
           </Col>
         </Row>
 

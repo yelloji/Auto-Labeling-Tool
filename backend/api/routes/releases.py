@@ -163,6 +163,56 @@ def _resolve_image_annotations_for_path(image_path: str, annotations_data: Dict)
     return []
 
 
+def _is_release_image_path(value: str) -> bool:
+    normalized = _normalize_release_zip_key(value).lower()
+    return (
+        normalized.startswith("images/")
+        and not normalized.endswith("/")
+        and normalized.endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"))
+    )
+
+
+def _release_image_split(value: str) -> str:
+    normalized = _normalize_release_zip_key(value)
+    parts = normalized.split("/")
+    return parts[1] if len(parts) >= 3 and parts[0] == "images" else "train"
+
+
+def _build_split_aware_tile_balance_selection(parent_members: List[str], annotations_data: Dict, ratio_value: float) -> List[str]:
+    labeled_by_split: Dict[str, List[str]] = {}
+    unlabeled_by_split: Dict[str, List[str]] = {}
+
+    for member in parent_members:
+        normalized_member = _normalize_release_zip_key(member)
+        if not _is_release_image_path(normalized_member):
+            continue
+
+        split = _release_image_split(normalized_member)
+        has_annotations = bool(_resolve_image_annotations_for_path(normalized_member, annotations_data))
+        target_bucket = labeled_by_split if has_annotations else unlabeled_by_split
+        target_bucket.setdefault(split, []).append(normalized_member)
+
+    ordered_splits = [
+        split for split in ["train", "val", "test"]
+        if split in labeled_by_split or split in unlabeled_by_split
+    ]
+    ordered_splits.extend(
+        split for split in sorted(set(labeled_by_split) | set(unlabeled_by_split))
+        if split not in ordered_splits
+    )
+
+    selected_paths: List[str] = []
+    for split in ordered_splits:
+        labeled_paths = labeled_by_split.get(split, [])
+        unlabeled_paths = unlabeled_by_split.get(split, [])
+        selected_paths.extend(labeled_paths)
+
+        unlabeled_target = max(0, math.floor(len(labeled_paths) * ratio_value))
+        selected_paths.extend(unlabeled_paths[:unlabeled_target])
+
+    return selected_paths
+
+
 def _build_balanced_child_release_name(db: Session, project_id: int, parent_name: str) -> str:
     base_name = f"{parent_name}-balanced"
     candidate = base_name
@@ -981,7 +1031,7 @@ def create_tile_balanced_child_release(
             _normalize_release_zip_key(path) for path in (payload.selected_image_paths or []) if str(path).strip()
         ]
         selected_image_paths = list(dict.fromkeys(selected_image_paths))
-        if not selected_image_paths:
+        if not selected_image_paths and payload.mode != "automatic":
             raise HTTPException(status_code=400, detail="No selected tile images provided")
 
         child_release_id = str(uuid.uuid4())
@@ -1040,6 +1090,21 @@ def create_tile_balanced_child_release(
                         class_mapping = {}
                     if class_mapping:
                         break
+
+            if payload.mode == "automatic":
+                if payload.ratio_value is None:
+                    raise HTTPException(status_code=400, detail="Automatic tile balance requires a ratio value")
+
+                selected_image_paths = _build_split_aware_tile_balance_selection(
+                    parent_members,
+                    raw_annotations,
+                    float(payload.ratio_value),
+                )
+                if not selected_image_paths:
+                    raise HTTPException(status_code=400, detail="No tile images matched automatic balance selection")
+
+                selected_set = set(selected_image_paths)
+                selected_label_paths = {_derive_release_label_path(path) for path in selected_image_paths}
 
             with zipfile.ZipFile(child_zip_path, "w", zipfile.ZIP_DEFLATED) as child_zip:
                 for member in parent_members:
