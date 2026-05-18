@@ -15,10 +15,12 @@ const AnnotationCanvas = ({
   onImagePositionChange,
   onPolygonStateChange,
   onToolChange, // New prop
+  onZoomChange,
   style = {}
 }) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const viewportRef = useRef(null);
   const imageRef = useRef(null);
   const handleMouseDownRef = useRef(null);
   const handleMouseMoveRef = useRef(null);
@@ -26,6 +28,15 @@ const AnnotationCanvas = ({
   const handleDoubleClickRef = useRef(null);
   const handleCanvasClickRef = useRef(null);
   const handleRightClickRef = useRef(null);
+  const wheelZoomAnchorRef = useRef(null);
+  const rightPanRef = useRef({
+    active: false,
+    moved: false,
+    startClientX: 0,
+    startClientY: 0,
+    startScrollLeft: 0,
+    startScrollTop: 0
+  });
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState(null);
@@ -361,6 +372,24 @@ const AnnotationCanvas = ({
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
 
+    const zoomAnchor = wheelZoomAnchorRef.current;
+    if (zoomAnchor?.targetZoom === zoomLevel) {
+      wheelZoomAnchorRef.current = null;
+      window.requestAnimationFrame(() => {
+        const viewport = viewportRef.current;
+        if (!viewport) return;
+
+        const nextScale = zoomLevel / 100;
+        const targetLeft = newPosition.x + (zoomAnchor.imageX * nextScale) - zoomAnchor.viewportX;
+        const targetTop = newPosition.y + (zoomAnchor.imageY * nextScale) - zoomAnchor.viewportY;
+        const maxLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+        const maxTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+
+        viewport.scrollLeft = Math.max(0, Math.min(targetLeft, maxLeft));
+        viewport.scrollTop = Math.max(0, Math.min(targetTop, maxTop));
+      });
+    }
+
     logInfo('app.frontend.ui', 'canvas_resize_completed', 'Canvas resize operation completed', {
       imageId,
       containerWidth,
@@ -629,6 +658,23 @@ const AnnotationCanvas = ({
 
   // Mouse event handlers
   const handleMouseDown = useCallback((e) => {
+    if (e.button === 2) {
+      const viewport = viewportRef.current;
+      if (!viewport) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      rightPanRef.current = {
+        active: true,
+        moved: false,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startScrollLeft: viewport.scrollLeft,
+        startScrollTop: viewport.scrollTop
+      };
+      return;
+    }
+
     logUserClick('AnnotationCanvas', 'mouse_down', {
       activeTool,
       imageId,
@@ -729,6 +775,24 @@ const AnnotationCanvas = ({
   }, [activeTool, smartPolygonTool, imageId, isDrawing, startPoint, polygonPoints.length, zoomLevel, isNearFirstPoint, polygonPoints, screenToImageCoords, onShapeComplete, redrawCanvas]);
 
   const handleMouseMove = useCallback((e) => {
+    if (rightPanRef.current.active) {
+      const viewport = viewportRef.current;
+      if (!viewport) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const deltaX = e.clientX - rightPanRef.current.startClientX;
+      const deltaY = e.clientY - rightPanRef.current.startClientY;
+      if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+        rightPanRef.current.moved = true;
+      }
+
+      viewport.scrollLeft = rightPanRef.current.startScrollLeft - deltaX;
+      viewport.scrollTop = rightPanRef.current.startScrollTop - deltaY;
+      return;
+    }
+
     if (activeTool === 'smart_polygon') {
       // Handle smart polygon tool mouse move
       smartPolygonTool.handleMouseMove(e);
@@ -762,6 +826,13 @@ const AnnotationCanvas = ({
   }, [isDrawing, startPoint, activeTool, smartPolygonTool, imageId, zoomLevel]);
 
   const handleMouseUp = useCallback((e) => {
+    if (rightPanRef.current.active && e.button === 2) {
+      e.preventDefault();
+      e.stopPropagation();
+      rightPanRef.current.active = false;
+      return;
+    }
+
     if (activeTool === 'smart_polygon') {
       // Handle smart polygon tool mouse up
       smartPolygonTool.handleMouseUp(e);
@@ -964,8 +1035,19 @@ const AnnotationCanvas = ({
     }
   }, [activeTool, annotations, onAnnotationSelect, zoomLevel, imagePosition, imageId, screenToImageCoords]);
 
-  // Handle right-click for smart polygon tool
+  // Handle right-click for smart polygon tool, or suppress the browser menu after panning.
   const handleRightClick = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const wasPanGesture = rightPanRef.current.moved;
+    rightPanRef.current.active = false;
+    rightPanRef.current.moved = false;
+
+    if (wasPanGesture) {
+      return;
+    }
+
     if (activeTool === 'smart_polygon') {
       logUserClick('AnnotationCanvas', 'right_click_smart_polygon', {
         imageId,
@@ -984,6 +1066,40 @@ const AnnotationCanvas = ({
     handleCanvasClickRef.current = handleCanvasClick;
     handleRightClickRef.current = handleRightClick;
   }, [handleMouseDown, handleMouseMove, handleMouseUp, handleDoubleClick, handleCanvasClick, handleRightClick]);
+
+  const handleWheelZoom = useCallback((e) => {
+    if (typeof onZoomChange !== 'function') return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const direction = e.deltaY < 0 ? 1 : -1;
+    const currentTargetZoom = wheelZoomAnchorRef.current?.targetZoom || zoomLevel;
+    const nextZoom = Math.max(25, Math.min(500, currentTargetZoom + (direction * 25)));
+    if (nextZoom !== currentTargetZoom) {
+      const viewport = viewportRef.current;
+      if (viewport && !wheelZoomAnchorRef.current) {
+        const viewportRect = viewport.getBoundingClientRect();
+        const viewportX = e.clientX - viewportRect.left;
+        const viewportY = e.clientY - viewportRect.top;
+        const canvasX = viewport.scrollLeft + viewportX;
+        const canvasY = viewport.scrollTop + viewportY;
+        const currentScale = zoomLevel / 100;
+
+        wheelZoomAnchorRef.current = {
+          imageX: (canvasX - imagePosition.x) / currentScale,
+          imageY: (canvasY - imagePosition.y) / currentScale,
+          viewportX,
+          viewportY,
+          targetZoom: nextZoom
+        };
+      } else if (wheelZoomAnchorRef.current) {
+        wheelZoomAnchorRef.current.targetZoom = nextZoom;
+      }
+
+      onZoomChange(nextZoom);
+    }
+  }, [imagePosition, onZoomChange, zoomLevel]);
 
   // Handle keyboard events for polygon completion and undo/redo
   const handleKeyDown = useCallback((e) => {
@@ -1085,6 +1201,7 @@ const AnnotationCanvas = ({
   // Setup event listeners using refs to avoid dependency issues
   useEffect(() => {
     const canvas = canvasRef.current;
+    const viewport = viewportRef.current;
     if (!canvas) {
       logError('app.frontend.validation', 'canvas_event_listeners_setup_failed', 'Cannot setup event listeners - canvas not found', {
         imageId
@@ -1103,6 +1220,17 @@ const AnnotationCanvas = ({
     const onDblClick = (e) => handleDoubleClickRef.current && handleDoubleClickRef.current(e);
     const onClick = (e) => handleCanvasClickRef.current && handleCanvasClickRef.current(e);
     const onContextMenu = (e) => handleRightClickRef.current && handleRightClickRef.current(e);
+    const onWheel = (e) => handleWheelZoom(e);
+    const onWindowMouseMove = (e) => {
+      if (rightPanRef.current.active && handleMouseMoveRef.current) {
+        handleMouseMoveRef.current(e);
+      }
+    };
+    const onWindowMouseUp = (e) => {
+      if (rightPanRef.current.active && handleMouseUpRef.current) {
+        handleMouseUpRef.current(e);
+      }
+    };
 
     canvas.addEventListener('mousedown', onMouseDown);
     canvas.addEventListener('mousemove', onMouseMove);
@@ -1110,6 +1238,9 @@ const AnnotationCanvas = ({
     canvas.addEventListener('dblclick', onDblClick);
     canvas.addEventListener('click', onClick);
     canvas.addEventListener('contextmenu', onContextMenu);
+    viewport?.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('mousemove', onWindowMouseMove);
+    window.addEventListener('mouseup', onWindowMouseUp);
 
     return () => {
       logInfo('app.frontend.ui', 'canvas_event_listeners_cleanup', 'Cleaning up canvas event listeners', {
@@ -1121,8 +1252,11 @@ const AnnotationCanvas = ({
       canvas.removeEventListener('dblclick', onDblClick);
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('contextmenu', onContextMenu);
+      viewport?.removeEventListener('wheel', onWheel);
+      window.removeEventListener('mousemove', onWindowMouseMove);
+      window.removeEventListener('mouseup', onWindowMouseUp);
     };
-  }, []);
+  }, [handleWheelZoom]);
 
   // Setup keyboard event listener separately
   useEffect(() => {
@@ -1189,13 +1323,15 @@ const AnnotationCanvas = ({
       }}
     >
       <div
+        ref={viewportRef}
         className="annotation-canvas-container"
         style={{
           position: 'relative',
           width: '100%',
           height: '100%',
           overflow: 'auto', // Changed from 'hidden' to allow scrolling for large images
-          cursor: activeTool === 'smart_polygon' ? 'crosshair' : 'default'
+          cursor: activeTool === 'smart_polygon' ? 'crosshair' : 'default',
+          overscrollBehavior: 'contain'
         }}
       >
         <canvas
@@ -1215,7 +1351,6 @@ const AnnotationCanvas = ({
           onMouseLeave={() => {
             if (activeTool === 'smart_polygon') smartPolygonTool.handleMouseLeave();
           }}
-          onContextMenu={activeTool === 'smart_polygon' ? smartPolygonTool.handleRightClick : undefined}
           style={{ display: 'block' }}
         />
       </div>

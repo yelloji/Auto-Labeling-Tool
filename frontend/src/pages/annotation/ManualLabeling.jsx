@@ -2183,6 +2183,7 @@ const ManualLabeling = () => {
                 onImagePositionChange={setImagePosition}
                 onPolygonStateChange={handlePolygonStateChange}
                 onToolChange={setActiveTool}
+                onZoomChange={setZoomLevel}
                 style={{
                   maxWidth: '100%',
                   maxHeight: '100%',
