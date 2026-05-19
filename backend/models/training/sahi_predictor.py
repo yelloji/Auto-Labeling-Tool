@@ -214,6 +214,11 @@ class SahiUltralyticsPredictor(BasePredictor):
         }
 
     def _extract_bbox(self, object_prediction: Any, segmentation: Optional[List[List[float]]]) -> List[float]:
+        if segmentation:
+            calculated_bbox = self.calculate_bbox_from_polygon(segmentation)
+            if calculated_bbox:
+                return [float(value) for value in calculated_bbox]
+
         bbox_obj = getattr(object_prediction, "bbox", None)
 
         if bbox_obj is not None:
@@ -228,11 +233,6 @@ class SahiUltralyticsPredictor(BasePredictor):
             attrs = [getattr(bbox_obj, name, None) for name in ("minx", "miny", "maxx", "maxy")]
             if all(value is not None for value in attrs):
                 return [float(value) for value in attrs]
-
-        if segmentation:
-            calculated_bbox = self.calculate_bbox_from_polygon(segmentation)
-            if calculated_bbox:
-                return [float(value) for value in calculated_bbox]
 
         return [0.0, 0.0, 0.0, 0.0]
 

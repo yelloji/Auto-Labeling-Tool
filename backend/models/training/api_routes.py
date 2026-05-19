@@ -230,6 +230,21 @@ def get_image_md5(file_path: Path) -> Optional[str]:
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
+
+def _extract_image_md5_from_metadata(value: Any) -> Optional[str]:
+    """Support both legacy md5 strings and newer image metadata objects."""
+    if not value:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("md5", "hash", "image_hash_md5"):
+            md5_value = value.get(key)
+            if isinstance(md5_value, str) and md5_value:
+                return md5_value
+    return None
+
+
 class VerificationRequest(BaseModel):
     project_id: int
     image_name: str
@@ -265,7 +280,10 @@ async def verify_detection(payload: VerificationRequest, db: Session = Depends(g
                         # input_images can be JSON string or dict: {"filename.png": "md5hash", ...}
                         img_metadata = json.loads(exp.input_images) if isinstance(exp.input_images, str) else exp.input_images
                         if isinstance(img_metadata, dict):
-                            image_md5 = img_metadata.get(payload.image_name)
+                            metadata_entry = img_metadata.get(payload.image_name)
+                            if metadata_entry is None:
+                                metadata_entry = img_metadata.get(Path(payload.image_name).name)
+                            image_md5 = _extract_image_md5_from_metadata(metadata_entry)
                     except:
                         pass  # If parsing fails, continue to disk fallback
                 
