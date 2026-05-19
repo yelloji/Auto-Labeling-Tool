@@ -30,6 +30,10 @@ const getImageHashFromMetadata = (value) => {
     return null;
 };
 
+const MIN_VIEWER_SCALE = 0.5;
+const MAX_VIEWER_SCALE = 64;
+const clampViewerScale = (value) => Math.max(MIN_VIEWER_SCALE, Math.min(value, MAX_VIEWER_SCALE));
+
 /**
  * ImageViewerModal Component
  * 
@@ -58,6 +62,7 @@ const ImageViewerModal = ({
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
     const [isDragging, setIsDragging] = useState(false);
+    const [isWheelZooming, setIsWheelZooming] = useState(false);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
 
     const [isImgLoading, setIsImgLoading] = useState(true); // New: Guard for sync
@@ -103,6 +108,10 @@ const ImageViewerModal = ({
     const svgRef = React.useRef(null);
     const imageViewportRef = React.useRef(null);
     const clickTimer = React.useRef(null);
+    const wheelZoomEndTimer = React.useRef(null);
+    const wheelZoomingRef = React.useRef(false);
+    const scaleRef = React.useRef(scale);
+    const offsetRef = React.useRef(offset);
 
     // Individual Detection Selection State (Phase 2.4)
     // We store the INDICES of the detections that are checked.
@@ -119,6 +128,14 @@ const ImageViewerModal = ({
     const hasGroundTruth = experiment?.dataset_source && experiment.dataset_source !== 'upload';
 
     const currentIndex = images.indexOf(currentImage);
+
+    React.useEffect(() => {
+        scaleRef.current = scale;
+    }, [scale]);
+
+    React.useEffect(() => {
+        offsetRef.current = offset;
+    }, [offset]);
 
     const stageSize = React.useMemo(() => {
         if (!dimensions.width || !dimensions.height || !viewportSize.width || !viewportSize.height) {
@@ -413,6 +430,14 @@ const ImageViewerModal = ({
         fetchMissedDetections();
     }, [currentImage, experiment, iouThreshold]);
 
+    React.useEffect(() => {
+        return () => {
+            if (wheelZoomEndTimer.current) {
+                window.clearTimeout(wheelZoomEndTimer.current);
+            }
+        };
+    }, []);
+
     // Dynamic Story Engine for Historical Hints
     const generateVerificationStory = (hints) => {
         if (!hints || hints.length === 0) return null;
@@ -679,24 +704,79 @@ const ImageViewerModal = ({
 
     const zoomAroundViewportCenter = (scaleDelta) => {
         setScale((currentScale) => {
-            const targetScale = Math.max(0.5, Math.min(currentScale + scaleDelta, 5));
+            const targetScale = clampViewerScale(currentScale + scaleDelta);
 
             setOffset((currentOffset) => {
                 if (!stageSize.width || !stageSize.height || currentScale <= 0) {
                     return currentOffset;
                 }
 
-                const centerContentX = ((stageSize.width / 2) - currentOffset.x) / currentScale;
-                const centerContentY = ((stageSize.height / 2) - currentOffset.y) / currentScale;
+                const centerAnchorX = stageSize.width / 2;
+                const centerAnchorY = stageSize.height / 2;
+                const centerContentX = (centerAnchorX - currentOffset.x) / currentScale;
+                const centerContentY = (centerAnchorY - currentOffset.y) / currentScale;
 
                 return {
-                    x: (stageSize.width / 2) - (centerContentX * targetScale),
-                    y: (stageSize.height / 2) - (centerContentY * targetScale)
+                    x: centerAnchorX - (centerContentX * targetScale),
+                    y: centerAnchorY - (centerContentY * targetScale)
                 };
             });
 
             return targetScale;
         });
+    };
+
+    const markWheelZooming = () => {
+        if (!wheelZoomingRef.current) {
+            wheelZoomingRef.current = true;
+            setIsWheelZooming(true);
+        }
+
+        if (wheelZoomEndTimer.current) {
+            window.clearTimeout(wheelZoomEndTimer.current);
+        }
+
+        wheelZoomEndTimer.current = window.setTimeout(() => {
+            wheelZoomingRef.current = false;
+            setIsWheelZooming(false);
+        }, 120);
+    };
+
+    const handleWheelZoom = (event) => {
+        if (!stageSize.width || !stageSize.height || isImgLoading) return;
+
+        const viewport = imageViewportRef.current;
+        if (!viewport) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        markWheelZooming();
+
+        const viewportRect = viewport.getBoundingClientRect();
+        const layoutLeft = (viewportRect.width - stageSize.width) / 2;
+        const layoutTop = (viewportRect.height - stageSize.height) / 2;
+        const anchorX = event.clientX - viewportRect.left - layoutLeft;
+        const anchorY = event.clientY - viewportRect.top - layoutTop;
+        const zoomFactor = Math.exp(-event.deltaY * 0.0015);
+
+        const currentScale = scaleRef.current;
+        const currentOffset = offsetRef.current;
+        const targetScale = clampViewerScale(currentScale * zoomFactor);
+        if (Math.abs(targetScale - currentScale) < 0.001 || currentScale <= 0) {
+            return;
+        }
+
+        const contentX = (anchorX - currentOffset.x) / currentScale;
+        const contentY = (anchorY - currentOffset.y) / currentScale;
+        const nextOffset = {
+            x: anchorX - (contentX * targetScale),
+            y: anchorY - (contentY * targetScale)
+        };
+
+        scaleRef.current = targetScale;
+        offsetRef.current = nextOffset;
+        setScale(targetScale);
+        setOffset(nextOffset);
     };
 
     // Zoom Handlers
@@ -740,7 +820,7 @@ const ImageViewerModal = ({
         const fittedBoxH = boxH * stageSize.fitScale;
 
         const targetScale = Math.min(
-            5,
+            MAX_VIEWER_SCALE,
             Math.max(
                 1.75,
                 Math.min(
@@ -1400,6 +1480,7 @@ const ImageViewerModal = ({
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                onWheel={handleWheelZoom}
                 onClick={() => {
                     if (scale > 1 && !isDragging) handleResetZoom();
                 }}
@@ -1680,7 +1761,7 @@ const ImageViewerModal = ({
                             maxHeight: stageSize.height ? 'none' : '100%',
                             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
                             transformOrigin: '0 0',
-                            transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                            transition: (isDragging || isWheelZooming) ? 'none' : 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                             userSelect: 'none',
                             cursor: isDrawingMode ? 'crosshair' : (isDragging ? 'grabbing' : 'grab')
                         }}
