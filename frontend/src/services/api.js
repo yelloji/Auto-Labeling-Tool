@@ -498,12 +498,13 @@ export const projectsAPI = {
   },
 
   // Upload multiple images to project (bulk upload)
-  uploadMultipleImagesToProject: async (projectId, formData) => {
+  uploadMultipleImagesToProject: async (projectId, formData, config = {}) => {
     const response = await api.post(`/api/v1/projects/${projectId}/upload-bulk`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
       timeout: 0, // No timeout — upload size is unpredictable (video frames can be thousands of files)
+      ...config,
     });
     return response.data;
   },

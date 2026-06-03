@@ -53,6 +53,15 @@ import { logInfo, logError, logUserClick } from '../../../utils/professional_log
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
+const MAX_UPLOAD_CHUNK_BYTES = 300 * 1024 * 1024;
+
+const formatBytes = (bytes = 0) => {
+  if (!bytes) return '0 MB';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / (1024 ** index);
+  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+};
 
 /**
  * UploadSection Component
@@ -68,6 +77,7 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
 
   // Upload management
   const [uploading, setUploading] = useState(false); // Upload in progress flag
+  const [uploadProgress, setUploadProgress] = useState(null);
 
   // Data and UI state
   const [availableDatasets, setAvailableDatasets] = useState([]); // Available datasets for tagging
@@ -359,7 +369,45 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
    * @param {string} batchNameToUse - The batch name for categorization
    * @returns {Promise} Upload result from API
    */
-  const uploadMultipleFiles = async (files, batchNameToUse, skipDedup = false) => {
+  const createUploadChunks = (files, maxChunkBytes = MAX_UPLOAD_CHUNK_BYTES) => {
+    const chunks = [];
+    let currentChunk = [];
+    let currentSize = 0;
+
+    files.forEach((file) => {
+      if (currentChunk.length > 0 && currentSize + file.size > maxChunkBytes) {
+        chunks.push(currentChunk);
+        currentChunk = [];
+        currentSize = 0;
+      }
+
+      currentChunk.push(file);
+      currentSize += file.size;
+    });
+
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk);
+    }
+
+    return chunks;
+  };
+
+  const mergeUploadResults = (current, result, fallbackCount) => {
+    const results = result?.results || {};
+    const duplicateFiles = result?.duplicate_files || results.duplicate_files || [];
+    return {
+      totalFiles: current.totalFiles + (results.total_files ?? fallbackCount),
+      successfulUploads: current.successfulUploads + (results.successful_uploads ?? fallbackCount),
+      failedUploads: current.failedUploads + (results.failed_uploads ?? 0),
+      skippedDuplicates: current.skippedDuplicates + (result?.skipped_duplicates ?? results.skipped_duplicates ?? 0),
+      duplicateFiles: [...current.duplicateFiles, ...duplicateFiles],
+      errors: [...current.errors, ...(results.errors || [])],
+      datasetName: result?.dataset_name || current.datasetName,
+      datasetId: result?.dataset_id || current.datasetId
+    };
+  };
+
+  const uploadMultipleFiles = async (files, batchNameToUse, skipDedup = false, options = {}) => {
     // Validate files array
     if (!files || files.length === 0) {
       logError('app.frontend.validation', 'upload_multiple_files_invalid', 'Multiple files upload validation failed: invalid files array', {
@@ -379,7 +427,9 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
       fileNames: files.map(f => f.name),
       totalSize: files.reduce((sum, f) => sum + f.size, 0),
       batchName: batchNameToUse,
-      tagsSelected: tags.length > 0
+      tagsSelected: tags.length > 0,
+      chunkIndex: options.chunkIndex,
+      totalChunks: options.totalChunks
     });
 
     const formData = new FormData();
@@ -399,7 +449,7 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
     }
 
     try {
-      const result = await projectsAPI.uploadMultipleImagesToProject(projectId, formData);
+      const result = await projectsAPI.uploadMultipleImagesToProject(projectId, formData, options.requestConfig || {});
 
       logInfo('app.frontend.interactions', 'multiple_files_upload_success', 'Multiple files upload successful', {
         timestamp: new Date().toISOString(),
@@ -422,6 +472,94 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
       message.error(`Failed to upload files: ${errorInfo.message}`);
       throw error;
     }
+  };
+
+  const uploadChunkedFiles = async (files, batchNameToUse, skipDedup = false) => {
+    const chunks = createUploadChunks(files);
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    let completedBytes = 0;
+    let completedFiles = 0;
+    let aggregate = {
+      totalFiles: 0,
+      successfulUploads: 0,
+      failedUploads: 0,
+      skippedDuplicates: 0,
+      duplicateFiles: [],
+      errors: [],
+      datasetName: batchNameToUse,
+      datasetId: null
+    };
+
+    setUploadProgress({
+      percent: 0,
+      uploadedBytes: 0,
+      totalBytes,
+      currentChunk: chunks.length ? 1 : 0,
+      totalChunks: chunks.length,
+      uploadedFiles: 0,
+      totalFiles: files.length
+    });
+
+    for (let index = 0; index < chunks.length; index += 1) {
+      const chunk = chunks[index];
+      const chunkBytes = chunk.reduce((sum, file) => sum + file.size, 0);
+      const currentChunkNumber = index + 1;
+      const baseCompletedBytes = completedBytes;
+      const baseCompletedFiles = completedFiles;
+
+      setUploadProgress((prev) => ({
+        ...prev,
+        currentChunk: currentChunkNumber,
+        uploadedFiles: baseCompletedFiles,
+        uploadedBytes: baseCompletedBytes,
+        percent: totalBytes ? Math.round((baseCompletedBytes / totalBytes) * 100) : 0
+      }));
+
+      const result = await uploadMultipleFiles(chunk, batchNameToUse, skipDedup, {
+        chunkIndex: currentChunkNumber,
+        totalChunks: chunks.length,
+        requestConfig: {
+          onUploadProgress: (event) => {
+            const loaded = Math.min(event.loaded || 0, chunkBytes);
+            const uploadedBytes = Math.min(baseCompletedBytes + loaded, totalBytes);
+            setUploadProgress((prev) => ({
+              ...prev,
+              currentChunk: currentChunkNumber,
+              uploadedBytes,
+              uploadedFiles: baseCompletedFiles,
+              percent: totalBytes ? Math.min(99, Math.round((uploadedBytes / totalBytes) * 100)) : 0
+            }));
+          }
+        }
+      });
+
+      const nextCompletedBytes = baseCompletedBytes + chunkBytes;
+      const nextCompletedFiles = baseCompletedFiles + chunk.length;
+      completedBytes = nextCompletedBytes;
+      completedFiles = nextCompletedFiles;
+      aggregate = mergeUploadResults(aggregate, result, chunk.length);
+      setUploadProgress((prev) => ({
+        ...prev,
+        uploadedBytes: nextCompletedBytes,
+        uploadedFiles: nextCompletedFiles,
+        percent: totalBytes ? Math.round((nextCompletedBytes / totalBytes) * 100) : 100
+      }));
+    }
+
+    return {
+      dataset_id: aggregate.datasetId,
+      dataset_name: aggregate.datasetName,
+      skipped_duplicates: aggregate.skippedDuplicates,
+      duplicate_files: aggregate.duplicateFiles,
+      results: {
+        total_files: aggregate.totalFiles,
+        successful_uploads: aggregate.successfulUploads,
+        failed_uploads: aggregate.failedUploads,
+        skipped_duplicates: aggregate.skippedDuplicates,
+        duplicate_files: aggregate.duplicateFiles,
+        errors: aggregate.errors
+      }
+    };
   };
 
   // ==================== VIDEO PROCESSING FUNCTIONS ====================
@@ -988,7 +1126,8 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
           <Button
             type="primary"
             icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
-            disabled={!!tagWarning}
+            disabled={!!tagWarning || uploading}
+            loading={uploading && uploadType === 'files'}
             style={{ marginRight: '0.5rem', height: '2.25rem', fontSize: '0.875rem' }}
             onClick={(e) => {
               e.stopPropagation();
@@ -999,7 +1138,8 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
           </Button>
           <Button
             icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
-            disabled={!!tagWarning}
+            disabled={!!tagWarning || uploading}
+            loading={uploading && uploadType === 'folder'}
             style={{ marginRight: '0.5rem', height: '2.25rem', fontSize: '0.875rem' }}
             onClick={(e) => {
               e.stopPropagation();
@@ -1012,7 +1152,7 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
             <Button
               type="primary"
               icon={<FolderOutlined style={{ fontSize: '1rem' }} />}
-              disabled={!!tagWarning}
+              disabled={!!tagWarning || uploading}
               style={{ height: '2.25rem', fontSize: '0.875rem' }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -1026,6 +1166,34 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
 
         {/* Import with Labels status — shows below buttons when folder selected */}
         {!operatorMode && <ImportWithLabelsSection ref={importLabelsRef} projectId={projectId} />}
+
+        {uploading && uploadProgress && (
+          <div style={{
+            background: '#f5f9ff',
+            border: '1px solid #91caff',
+            borderRadius: 8,
+            padding: '16px',
+            marginBottom: '1rem'
+          }}>
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <Text strong>Uploading images</Text>
+                <Text type="secondary">
+                  Chunk {uploadProgress.currentChunk} of {uploadProgress.totalChunks}
+                </Text>
+              </div>
+              <Progress percent={uploadProgress.percent} status="active" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <Text type="secondary">
+                  {uploadProgress.uploadedFiles} / {uploadProgress.totalFiles} files sent
+                </Text>
+                <Text type="secondary">
+                  {formatBytes(uploadProgress.uploadedBytes)} / {formatBytes(uploadProgress.totalBytes)}
+                </Text>
+              </div>
+            </Space>
+          </div>
+        )}
 
         {/* Upload result — shown after file/folder select upload */}
         {uploadResult && (
@@ -1227,9 +1395,10 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
 
             try {
               setUploadResult(null);
+              setUploadProgress(null);
               let result;
               if (files.length > 1) {
-                result = await uploadMultipleFiles(files, batchNameToUse);
+                result = await uploadChunkedFiles(files, batchNameToUse);
                 setUploadResult({
                   uploaded: result.results?.successful_uploads ?? files.length,
                   skipped: result.skipped_duplicates ?? 0,
@@ -1257,6 +1426,7 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
               console.error('Batch upload error:', error);
             } finally {
               setUploading(false);
+              setUploadProgress(null);
               // Clear the input value to allow re-uploading the same file
               e.target.value = '';
             }
@@ -1300,7 +1470,8 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
 
             try {
               setUploadResult(null);
-              const result = await uploadMultipleFiles(files, folderName);
+              setUploadProgress(null);
+              const result = await uploadChunkedFiles(files, folderName);
               setUploadResult({
                 uploaded: result.results?.successful_uploads ?? files.length,
                 skipped: result.skipped_duplicates ?? 0,
@@ -1319,6 +1490,7 @@ const UploadSection = ({ projectId, operatorMode = false }) => {
               console.error('Folder upload error:', error);
             } finally {
               setUploading(false);
+              setUploadProgress(null);
               // Clear the input value to allow re-uploading the same folder
               e.target.value = '';
             }
