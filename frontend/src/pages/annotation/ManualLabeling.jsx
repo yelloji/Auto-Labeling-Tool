@@ -9,13 +9,19 @@ import {
   Modal,
   Progress,
   Divider,
-  Tooltip
+  Tooltip,
+  Select,
+  Input,
+  Tag,
+  Alert,
+  Empty
 } from 'antd';
 import {
   ArrowLeftOutlined,
   LeftOutlined,
   RightOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  CopyOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import { logInfo, logError, logUserClick } from '../../utils/professional_logger';
@@ -33,6 +39,17 @@ const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:12000/api/v1
 
 const { Content, Sider } = Layout;
 const { Text, Title } = Typography;
+const { Option } = Select;
+const PREVIEW_COPY_PREFIX = 'copy-preview-';
+
+const getImageDisplayUrl = (image) => {
+  if (!image) return '';
+  const baseUrl = API_BASE.replace('/api/v1', '');
+  const path = image.thumbnail_url || image.url || image.file_path;
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+};
 
 const ManualLabeling = () => {
   const { datasetId } = useParams();
@@ -234,6 +251,7 @@ const ManualLabeling = () => {
   const [imageLabels, setImageLabels] = useState([]);
   const [selectedLabel, setSelectedLabel] = useState(null);
   const [hiddenLabels, setHiddenLabels] = useState([]);
+  const [currentProjectId, setCurrentProjectId] = useState(null);
 
   const findProjectLabelByName = useCallback((labelName) => {
     if (!labelName) return null;
@@ -276,6 +294,15 @@ const ManualLabeling = () => {
   const [labelPopupPosition, setLabelPopupPosition] = useState({ x: 0, y: 0 });
   const [currentSplit, setCurrentSplit] = useState('train');
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+  const [copyModalVisible, setCopyModalVisible] = useState(false);
+  const [copyDatasets, setCopyDatasets] = useState([]);
+  const [copySourceDatasetId, setCopySourceDatasetId] = useState(null);
+  const [copySourceImages, setCopySourceImages] = useState([]);
+  const [copySearchText, setCopySearchText] = useState('');
+  const [copySelectedImage, setCopySelectedImage] = useState(null);
+  const [copyPreviewAnnotations, setCopyPreviewAnnotations] = useState([]);
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copyApplying, setCopyApplying] = useState(false);
 
   // Dataset progress
   const [datasetProgress, setDatasetProgress] = useState({
@@ -288,6 +315,21 @@ const ManualLabeling = () => {
     const labelName = ann.class_name || ann.label || '';
     return labelName.toLowerCase() !== 'null' && !isLabelHidden(labelName);
   });
+  const canvasAnnotations = [...visibleAnnotations, ...copyPreviewAnnotations];
+  const filteredCopySourceImages = copySourceImages.filter(img => {
+    const search = copySearchText.trim().toLowerCase();
+    if (!search) return true;
+    return `${img.filename || ''} ${img.original_filename || ''}`.toLowerCase().includes(search);
+  });
+  const selectedCopySizeMatches = !!(
+    imageData &&
+    copySelectedImage &&
+    Number(imageData.width) === Number(copySelectedImage.width) &&
+    Number(imageData.height) === Number(copySelectedImage.height)
+  );
+  const isTargetMarkedNull = annotations.some(ann =>
+    (ann.class_name || ann.label || '').toLowerCase() === 'null'
+  );
 
   // State to track polygon drawing
   const [isPolygonDrawing, setIsPolygonDrawing] = useState(false);
@@ -828,6 +870,7 @@ const ManualLabeling = () => {
       // Get the project ID for this dataset to load labels
       const response = await axios.get(`${API_BASE}/datasets/${datasetId}`);
       const projectId = response.data.project_id;
+      setCurrentProjectId(projectId);
 
       console.log(`🔍 DATASET ${datasetId} belongs to PROJECT ${projectId}`);
 
@@ -919,6 +962,203 @@ const ManualLabeling = () => {
       localStorage.removeItem(`project_labels_${datasetId}`);
       setProjectLabels([]);
       console.warn('Project labels not loaded from API; cleared stale local cache instead of restoring it.');
+    }
+  };
+
+  const resetCopyLabelsState = () => {
+    setCopySearchText('');
+    setCopySelectedImage(null);
+    setCopySourceImages([]);
+    setCopyPreviewAnnotations([]);
+  };
+
+  const openCopyLabelsModal = async () => {
+    if (!imageData?.id) {
+      message.warning('Open a target image before copying labels');
+      return;
+    }
+
+    setCopyModalVisible(true);
+    setCopyLoading(true);
+    resetCopyLabelsState();
+
+    try {
+      let projectId = currentProjectId;
+      if (!projectId) {
+        const datasetResponse = await axios.get(`${API_BASE}/datasets/${datasetId}`);
+        projectId = datasetResponse.data.project_id;
+        setCurrentProjectId(projectId);
+      }
+
+      const datasetsResponse = await axios.get(`${API_BASE}/datasets/`, {
+        params: { project_id: projectId, skip: 0, limit: 10000 }
+      });
+      const datasets = Array.isArray(datasetsResponse.data) ? datasetsResponse.data : [];
+      setCopyDatasets(datasets);
+      const initialDatasetId = datasets.find(ds => String(ds.id) === String(datasetId))?.id || datasets[0]?.id || null;
+      setCopySourceDatasetId(initialDatasetId);
+      if (initialDatasetId) {
+        await loadCopySourceImages(initialDatasetId);
+      }
+    } catch (error) {
+      console.error('Failed to prepare copy labels modal:', error);
+      message.error('Failed to load source datasets');
+    } finally {
+      setCopyLoading(false);
+    }
+  };
+
+  const loadCopySourceImages = async (sourceDatasetId) => {
+    if (!sourceDatasetId) return;
+    setCopyLoading(true);
+    setCopySelectedImage(null);
+    setCopyPreviewAnnotations([]);
+
+    try {
+      const response = await axios.get(`${API_BASE}/datasets/${sourceDatasetId}/images`, {
+        params: {
+          skip: 0,
+          limit: 10000,
+          labeled_only: true,
+          include_annotations: true
+        }
+      });
+      const images = (response.data.images || [])
+        .filter(img => img.id !== imageData?.id)
+        .map(img => ({
+          ...img,
+          annotation_count: Array.isArray(img.annotations) ? img.annotations.length : 0
+        }))
+        .filter(img => img.annotation_count > 0);
+      setCopySourceImages(images);
+    } catch (error) {
+      console.error('Failed to load source images:', error);
+      message.error('Failed to load labeled source images');
+    } finally {
+      setCopyLoading(false);
+    }
+  };
+
+  const buildCopiedAnnotation = (sourceAnnotation, index, preview = false) => {
+    const labelName = sourceAnnotation.class_name || sourceAnnotation.label || 'unknown';
+    const normalizePoint = (point) => {
+      if (Array.isArray(point)) return { x: Number(point[0]), y: Number(point[1]) };
+      return { x: Number(point.x), y: Number(point.y) };
+    };
+    const normalizeSegmentation = (segmentationValue) => {
+      if (!Array.isArray(segmentationValue) || segmentationValue.length === 0) return null;
+      if (typeof segmentationValue[0] === 'number') {
+        const points = [];
+        for (let i = 0; i < segmentationValue.length - 1; i += 2) {
+          points.push({ x: Number(segmentationValue[i]), y: Number(segmentationValue[i + 1]) });
+        }
+        return points;
+      }
+      return segmentationValue.map(normalizePoint).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+    };
+    const segmentation = normalizeSegmentation(sourceAnnotation.segmentation);
+    const copied = {
+      id: preview ? `${PREVIEW_COPY_PREFIX}${sourceAnnotation.id || index}` : undefined,
+      class_name: labelName,
+      label: labelName,
+      confidence: sourceAnnotation.confidence || 1.0,
+      color: resolveLabelColor(labelName, sourceAnnotation.color),
+      type: segmentation && segmentation.length > 2 ? 'polygon' : 'box',
+      segmentation
+    };
+
+    if (segmentation && segmentation.length > 2) {
+      copied.points = segmentation;
+      const xs = segmentation.map(point => point.x);
+      const ys = segmentation.map(point => point.y);
+      copied.x = Math.min(...xs);
+      copied.y = Math.min(...ys);
+      copied.width = Math.max(...xs) - copied.x;
+      copied.height = Math.max(...ys) - copied.y;
+    } else {
+      const x = sourceAnnotation.x_min ?? sourceAnnotation.x ?? 0;
+      const y = sourceAnnotation.y_min ?? sourceAnnotation.y ?? 0;
+      const xMax = sourceAnnotation.x_max ?? (x + (sourceAnnotation.width || 0));
+      const yMax = sourceAnnotation.y_max ?? (y + (sourceAnnotation.height || 0));
+      copied.x = x;
+      copied.y = y;
+      copied.width = xMax - x;
+      copied.height = yMax - y;
+    }
+
+    return copied;
+  };
+
+  const selectCopySourceImage = async (sourceImage) => {
+    setCopySelectedImage(sourceImage);
+    setCopyPreviewAnnotations([]);
+
+    if (!imageData || Number(sourceImage.width) !== Number(imageData.width) || Number(sourceImage.height) !== Number(imageData.height)) {
+      return;
+    }
+
+    const sourceAnnotations = Array.isArray(sourceImage.annotations) && sourceImage.annotations.length
+      ? sourceImage.annotations
+      : await AnnotationAPI.getImageAnnotations(sourceImage.id);
+    const previewAnnotations = sourceAnnotations.map((ann, index) => buildCopiedAnnotation(ann, index, true));
+    setCopyPreviewAnnotations(previewAnnotations);
+  };
+
+  const applyCopiedLabels = async () => {
+    if (isTargetMarkedNull) {
+      message.warning('Remove Null marking before copying labels');
+      return;
+    }
+
+    if (!copySelectedImage || !selectedCopySizeMatches || copyPreviewAnnotations.length === 0 || !imageData?.id) {
+      message.warning('Select a same-size labeled source image first');
+      return;
+    }
+
+    const saveCopiedAnnotations = async () => {
+      setCopyApplying(true);
+      try {
+        const annotationsToSave = copyPreviewAnnotations.map(({ id, color, points, ...ann }) => ({
+          ...ann,
+          image_id: imageData.id,
+          segmentation: ann.segmentation ? JSON.parse(JSON.stringify(ann.segmentation)) : null
+        }));
+
+        await axios.post(`${API_BASE}/images/${imageData.id}/annotations`, {
+          annotations: annotationsToSave
+        });
+
+        const wasUnlabeled = !imageData.is_labeled;
+        await loadImageData({ ...imageData, is_labeled: true });
+        setImageList(prev => prev.map(img => img.id === imageData.id ? { ...img, is_labeled: true } : img));
+        if (wasUnlabeled) {
+          setDatasetProgress(prev => ({
+            ...prev,
+            labeled: prev.labeled + 1,
+            percentage: prev.total > 0 ? Math.round(((prev.labeled + 1) / prev.total) * 100) : 0
+          }));
+        }
+
+        setCopyModalVisible(false);
+        resetCopyLabelsState();
+        message.success(`Copied ${annotationsToSave.length} label${annotationsToSave.length !== 1 ? 's' : ''}`);
+      } catch (error) {
+        console.error('Failed to copy labels:', error);
+        message.error('Failed to copy labels');
+      } finally {
+        setCopyApplying(false);
+      }
+    };
+
+    if (annotations.length > 0) {
+      Modal.confirm({
+        title: 'Target image already has labels',
+        content: 'Copied labels will be added to the current labels. Continue?',
+        okText: 'Apply Labels',
+        onOk: saveCopiedAnnotations
+      });
+    } else {
+      await saveCopiedAnnotations();
     }
   };
 
@@ -2116,6 +2356,15 @@ const ManualLabeling = () => {
             </div>
           </Tooltip>
 
+          <Button
+            icon={<CopyOutlined />}
+            onClick={openCopyLabelsModal}
+            size="middle"
+            style={{ flexShrink: 0 }}
+          >
+            Copy Labels
+          </Button>
+
           <AnnotationSplitControl
             currentSplit={currentSplit}
             onSplitChange={handleSplitChange}
@@ -2173,7 +2422,7 @@ const ManualLabeling = () => {
               <AnnotationCanvas
                 imageUrl={imageUrl}
                 imageId={imageData?.id}
-                annotations={visibleAnnotations}
+                annotations={canvasAnnotations}
                 selectedAnnotation={selectedAnnotation}
                 activeTool={activeTool}
                 zoomLevel={zoomLevel}
@@ -2228,6 +2477,168 @@ const ManualLabeling = () => {
           />
         </Sider>
       </Layout>
+
+      <Modal
+        title="Copy Labels From Image"
+        open={copyModalVisible}
+        onCancel={() => {
+          setCopyModalVisible(false);
+          resetCopyLabelsState();
+        }}
+        width={900}
+        okText="Apply Labels"
+        okButtonProps={{
+          disabled: isTargetMarkedNull || !selectedCopySizeMatches || copyPreviewAnnotations.length === 0,
+          loading: copyApplying
+        }}
+        onOk={applyCopiedLabels}
+      >
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <Alert
+            type="info"
+            showIcon
+            message="Choose the exact labeled source image. Labels are only saved after Apply Labels."
+          />
+
+          {annotations.length > 0 && (
+            <Alert
+              type={isTargetMarkedNull ? 'error' : 'warning'}
+              showIcon
+              message={isTargetMarkedNull
+                ? 'Current image is marked Null. Remove Null before copying labels.'
+                : 'Current image already has labels. Applying will add copied labels to the existing labels.'}
+            />
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <Text strong>Source dataset / batch</Text>
+              <Select
+                value={copySourceDatasetId}
+                loading={copyLoading}
+                style={{ width: '100%', marginTop: 6 }}
+                placeholder="Select source dataset"
+                onChange={(value) => {
+                  setCopySourceDatasetId(value);
+                  loadCopySourceImages(value);
+                }}
+              >
+                {copyDatasets.map(dataset => (
+                  <Option key={dataset.id} value={dataset.id}>
+                    {dataset.name}
+                  </Option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Text strong>Search source image</Text>
+              <Input
+                value={copySearchText}
+                onChange={(event) => setCopySearchText(event.target.value)}
+                placeholder="Type part of filename..."
+                allowClear
+                style={{ marginTop: 6 }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(260px, 0.8fr)', gap: 16 }}>
+            <div style={{
+              border: '1px solid #f0f0f0',
+              borderRadius: 8,
+              padding: 12,
+              maxHeight: 360,
+              overflowY: 'auto'
+            }}>
+              {filteredCopySourceImages.length === 0 ? (
+                <Empty description={copyLoading ? 'Loading labeled images...' : 'No labeled source images found'} />
+              ) : (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                  gap: 10
+                }}>
+                  {filteredCopySourceImages.map(sourceImage => {
+                    const sameSize = imageData && Number(sourceImage.width) === Number(imageData.width) && Number(sourceImage.height) === Number(imageData.height);
+                    const selected = copySelectedImage?.id === sourceImage.id;
+                    return (
+                      <button
+                        key={sourceImage.id}
+                        type="button"
+                        onClick={() => selectCopySourceImage(sourceImage)}
+                        style={{
+                          textAlign: 'left',
+                          border: selected ? '2px solid #1677ff' : '1px solid #d9d9d9',
+                          borderRadius: 8,
+                          padding: 8,
+                          background: selected ? '#e6f4ff' : '#fff',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <div style={{
+                          height: 82,
+                          borderRadius: 6,
+                          overflow: 'hidden',
+                          background: '#f5f5f5',
+                          marginBottom: 6
+                        }}>
+                          {getImageDisplayUrl(sourceImage) && (
+                            <img
+                              src={getImageDisplayUrl(sourceImage)}
+                              alt=""
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          )}
+                        </div>
+                        <Text style={{
+                          display: 'block',
+                          fontSize: 12,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}>
+                          {sourceImage.filename}
+                        </Text>
+                        <Space size={4} wrap style={{ marginTop: 6 }}>
+                          <Tag color="blue">{sourceImage.annotation_count} labels</Tag>
+                          <Tag color={sameSize ? 'green' : 'red'}>
+                            {sameSize ? 'Same size' : 'Different size'}
+                          </Tag>
+                        </Space>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
+              <Text strong>Selected source</Text>
+              {!copySelectedImage ? (
+                <div style={{ marginTop: 16 }}>
+                  <Text type="secondary">Select a labeled source image to preview labels on the current image.</Text>
+                </div>
+              ) : (
+                <Space direction="vertical" size={8} style={{ width: '100%', marginTop: 12 }}>
+                  <Text>{copySelectedImage.filename}</Text>
+                  <Text type="secondary">
+                    Source: {copySelectedImage.width} x {copySelectedImage.height}
+                  </Text>
+                  <Text type="secondary">
+                    Target: {imageData?.width} x {imageData?.height}
+                  </Text>
+                  <Tag color={selectedCopySizeMatches ? 'green' : 'red'}>
+                    {selectedCopySizeMatches ? 'Safe to copy' : 'Blocked: image sizes differ'}
+                  </Tag>
+                  <Text type="secondary">
+                    Preview labels: {copyPreviewAnnotations.length}
+                  </Text>
+                </Space>
+              )}
+            </div>
+          </div>
+        </Space>
+      </Modal>
 
       {/* Label Selection Popup */}
       <LabelSelectionPopup
