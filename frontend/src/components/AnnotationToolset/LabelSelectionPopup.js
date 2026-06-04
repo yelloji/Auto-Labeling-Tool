@@ -19,7 +19,8 @@ const LabelSelectionPopup = React.memo(({
   existingLabels = [],
   defaultLabel = null,
   shapeType = 'box',
-  isEditing = false
+  isEditing = false,
+  onEditShape
 }) => {
   const [selectedLabel, setSelectedLabel] = useState(defaultLabel);
   const [newLabelName, setNewLabelName] = useState('');
@@ -396,6 +397,16 @@ const LabelSelectionPopup = React.memo(({
             loading={loading}
           >
             Delete
+          </Button>
+        ] : []),
+        ...(isEditing && shapeType === 'polygon' && onEditShape ? [
+          <Button
+            key="edit-shape"
+            icon={<EditOutlined />}
+            onClick={onEditShape}
+            loading={loading}
+          >
+            Edit Shape
           </Button>
         ] : []),
         <Button key="cancel" onClick={() => {

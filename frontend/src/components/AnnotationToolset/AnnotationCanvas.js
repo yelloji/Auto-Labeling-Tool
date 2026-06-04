@@ -16,6 +16,9 @@ const AnnotationCanvas = ({
   onPolygonStateChange,
   onToolChange, // New prop
   onZoomChange,
+  polygonEditMode = false,
+  editableAnnotation = null,
+  onPolygonEditChange,
   style = {}
 }) => {
   const canvasRef = useRef(null);
@@ -48,6 +51,7 @@ const AnnotationCanvas = ({
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 }); // Used for canvas dimensions
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+  const [draggingEditPointIndex, setDraggingEditPointIndex] = useState(null);
 
   // Throttled logging for redraws (reduce console/log noise during frequent redraws)
   const redrawLogTimestampsRef = useRef({ started: 0, completed: 0 });
@@ -248,6 +252,10 @@ const AnnotationCanvas = ({
       drawAnnotation(ctx, annotation, annotation.id === selectedAnnotation?.id);
     });
 
+    if (polygonEditMode && editableAnnotation?.points?.length > 0) {
+      drawPolygonEditHandles(ctx, editableAnnotation);
+    }
+
     // Draw current shape being drawn
     if (currentShape) {
       drawShape(ctx, currentShape, true);
@@ -270,7 +278,7 @@ const AnnotationCanvas = ({
       polygonPointsCount: polygonPoints.length,
       activeTool
     });
-  }, [annotations, selectedAnnotation, currentShape, polygonPoints, activeTool, imagePosition, imageSize, zoomLevel, smartPolygonTool, smartPolygonTool.previewPolygon, smartPolygonTool.currentPolygon, imageId]);
+  }, [annotations, selectedAnnotation, currentShape, polygonPoints, activeTool, imagePosition, imageSize, zoomLevel, smartPolygonTool, smartPolygonTool.previewPolygon, smartPolygonTool.currentPolygon, imageId, polygonEditMode, editableAnnotation]);
 
   // Resize canvas to fit container
   const resizeCanvas = useCallback(() => {
@@ -540,6 +548,45 @@ const AnnotationCanvas = ({
     });
   };
 
+  const drawPolygonEditHandles = (ctx, annotation) => {
+    const scale = zoomLevel / 100;
+    const handleRadius = Math.max(5, Math.min(9, 6 * scale));
+
+    annotation.points.forEach((point, index) => {
+      if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') return;
+
+      const px = imagePosition.x + (point.x * scale);
+      const py = imagePosition.y + (point.y * scale);
+
+      ctx.beginPath();
+      ctx.arc(px, py, handleRadius, 0, 2 * Math.PI);
+      ctx.fillStyle = draggingEditPointIndex === index ? '#faad14' : '#1677ff';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+    });
+  };
+
+  const findPolygonEditPointIndex = useCallback((mousePos) => {
+    if (!polygonEditMode || !editableAnnotation?.points?.length) return -1;
+
+    const scale = zoomLevel / 100;
+    const hitRadius = Math.max(10, Math.min(16, 10 * scale));
+
+    for (let i = editableAnnotation.points.length - 1; i >= 0; i -= 1) {
+      const point = editableAnnotation.points[i];
+      if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') continue;
+
+      const px = imagePosition.x + (point.x * scale);
+      const py = imagePosition.y + (point.y * scale);
+      const distance = Math.sqrt(Math.pow(mousePos.x - px, 2) + Math.pow(mousePos.y - py, 2));
+      if (distance <= hitRadius) return i;
+    }
+
+    return -1;
+  }, [polygonEditMode, editableAnnotation, zoomLevel, imagePosition]);
+
   // Draw shape being drawn
   const drawShape = (ctx, shape, isActive = false) => {
     logInfo('app.frontend.ui', 'shape_drawing', 'Drawing current shape', {
@@ -682,11 +729,21 @@ const AnnotationCanvas = ({
       hasStartPoint: !!startPoint
     });
 
-    console.log('Mouse down - activeTool:', activeTool);
-    if (!activeTool || activeTool === 'select') return;
-
     const mousePos = getMousePos(e);
+    console.log('Mouse down - activeTool:', activeTool);
     console.log('Mouse down position:', mousePos);
+
+    if (polygonEditMode && editableAnnotation?.points?.length) {
+      const editPointIndex = findPolygonEditPointIndex(mousePos);
+      if (editPointIndex >= 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        setDraggingEditPointIndex(editPointIndex);
+        return;
+      }
+    }
+
+    if (!activeTool || activeTool === 'select') return;
 
     if (activeTool === 'smart_polygon') {
       // Handle smart polygon tool
@@ -772,7 +829,7 @@ const AnnotationCanvas = ({
       const newPoint = mousePos;
       setPolygonPoints(prev => [...prev, newPoint]);
     }
-  }, [activeTool, smartPolygonTool, imageId, isDrawing, startPoint, polygonPoints.length, zoomLevel, isNearFirstPoint, polygonPoints, screenToImageCoords, onShapeComplete, redrawCanvas]);
+  }, [activeTool, smartPolygonTool, imageId, isDrawing, startPoint, polygonPoints.length, zoomLevel, isNearFirstPoint, polygonPoints, screenToImageCoords, onShapeComplete, redrawCanvas, polygonEditMode, editableAnnotation, findPolygonEditPointIndex]);
 
   const handleMouseMove = useCallback((e) => {
     if (rightPanRef.current.active) {
@@ -790,6 +847,21 @@ const AnnotationCanvas = ({
 
       viewport.scrollLeft = rightPanRef.current.startScrollLeft - deltaX;
       viewport.scrollTop = rightPanRef.current.startScrollTop - deltaY;
+      return;
+    }
+
+    if (polygonEditMode && draggingEditPointIndex !== null && editableAnnotation?.points?.length) {
+      e.preventDefault();
+      const mousePos = getMousePos(e);
+      const imagePoint = screenToImageCoords(mousePos.x, mousePos.y);
+      const clampedPoint = {
+        x: Math.max(0, Math.min(imageSize.width, imagePoint.x)),
+        y: Math.max(0, Math.min(imageSize.height, imagePoint.y))
+      };
+      const nextPoints = editableAnnotation.points.map((point, index) =>
+        index === draggingEditPointIndex ? clampedPoint : point
+      );
+      onPolygonEditChange?.(nextPoints);
       return;
     }
 
@@ -823,13 +895,20 @@ const AnnotationCanvas = ({
       width: Math.abs(width),
       height: Math.abs(height)
     });
-  }, [isDrawing, startPoint, activeTool, smartPolygonTool, imageId, zoomLevel]);
+  }, [isDrawing, startPoint, activeTool, smartPolygonTool, imageId, zoomLevel, polygonEditMode, draggingEditPointIndex, editableAnnotation, screenToImageCoords, imageSize, onPolygonEditChange]);
 
   const handleMouseUp = useCallback((e) => {
     if (rightPanRef.current.active && e.button === 2) {
       e.preventDefault();
       e.stopPropagation();
       rightPanRef.current.active = false;
+      return;
+    }
+
+    if (polygonEditMode && draggingEditPointIndex !== null) {
+      e.preventDefault();
+      e.stopPropagation();
+      setDraggingEditPointIndex(null);
       return;
     }
 
@@ -936,7 +1015,7 @@ const AnnotationCanvas = ({
     setCurrentShape(null);
     setStartPoint(null);
     redrawCanvas();
-  }, [isDrawing, currentShape, activeTool, onShapeComplete, zoomLevel, smartPolygonTool, imageId, redrawCanvas]);
+  }, [isDrawing, currentShape, activeTool, onShapeComplete, zoomLevel, smartPolygonTool, imageId, redrawCanvas, polygonEditMode, draggingEditPointIndex]);
 
   const handleDoubleClick = useCallback((e) => {
     if (activeTool === 'polygon' && polygonPoints.length >= 3) {

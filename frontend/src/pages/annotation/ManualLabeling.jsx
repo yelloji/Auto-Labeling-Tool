@@ -211,6 +211,9 @@ const ManualLabeling = () => {
   const [annotations, setAnnotations] = useState([]);
   const [selectedAnnotation, setSelectedAnnotation] = useState(null);
   const [editingAnnotation, setEditingAnnotation] = useState(null);
+  const [shapeEditAnnotation, setShapeEditAnnotation] = useState(null);
+  const [shapeEditOriginal, setShapeEditOriginal] = useState(null);
+  const [shapeEditSaving, setShapeEditSaving] = useState(false);
   const [pendingShape, setPendingShape] = useState(null);
   const [activeTool, setActiveTool] = useState('box');
   const [zoomLevel, setZoomLevel] = useState(50);
@@ -315,7 +318,10 @@ const ManualLabeling = () => {
     const labelName = ann.class_name || ann.label || '';
     return labelName.toLowerCase() !== 'null' && !isLabelHidden(labelName);
   });
-  const canvasAnnotations = [...visibleAnnotations, ...copyPreviewAnnotations];
+  const visibleAnnotationsForCanvas = shapeEditAnnotation
+    ? visibleAnnotations.map(ann => ann.id === shapeEditAnnotation.id ? shapeEditAnnotation : ann)
+    : visibleAnnotations;
+  const canvasAnnotations = [...visibleAnnotationsForCanvas, ...copyPreviewAnnotations];
   const filteredCopySourceImages = copySourceImages.filter(img => {
     const search = copySearchText.trim().toLowerCase();
     if (!search) return true;
@@ -2021,7 +2027,144 @@ const ManualLabeling = () => {
     }
   }, [pendingShape, imageData, datasetId, imageLabels, editingAnnotation, annotations, pushHistory, historyPast, findProjectLabelByName, resolveLabelColor]);
 
+  const buildPolygonAnnotationWithPoints = useCallback((annotation, points) => {
+    const cleanPoints = points
+      .map(point => ({ x: Number(point.x), y: Number(point.y) }))
+      .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+    if (cleanPoints.length < 3) {
+      return null;
+    }
+
+    const xs = cleanPoints.map(point => point.x);
+    const ys = cleanPoints.map(point => point.y);
+    const xMin = Math.min(...xs);
+    const yMin = Math.min(...ys);
+    const xMax = Math.max(...xs);
+    const yMax = Math.max(...ys);
+
+    return {
+      ...annotation,
+      type: 'polygon',
+      points: cleanPoints,
+      segmentation: cleanPoints,
+      x: xMin,
+      y: yMin,
+      width: xMax - xMin,
+      height: yMax - yMin
+    };
+  }, []);
+
+  const startPolygonShapeEdit = useCallback(() => {
+    const annotationToEdit = editingAnnotation || selectedAnnotation;
+    if (!annotationToEdit || annotationToEdit.type !== 'polygon' || !Array.isArray(annotationToEdit.points)) {
+      message.warning('Select a polygon annotation to edit shape');
+      return;
+    }
+
+    const draft = buildPolygonAnnotationWithPoints(annotationToEdit, annotationToEdit.points);
+    if (!draft) {
+      message.warning('Polygon must have at least 3 valid points');
+      return;
+    }
+
+    setShapeEditOriginal(JSON.parse(JSON.stringify(annotationToEdit)));
+    setShapeEditAnnotation(JSON.parse(JSON.stringify(draft)));
+    setSelectedAnnotation(draft);
+    setShowLabelPopup(false);
+    setEditingAnnotation(null);
+    message.info('Edit shape mode: drag points, then Save Shape');
+  }, [editingAnnotation, selectedAnnotation, buildPolygonAnnotationWithPoints]);
+
+  const updatePolygonShapeDraft = useCallback((points) => {
+    setShapeEditAnnotation(prev => {
+      if (!prev) return prev;
+      return buildPolygonAnnotationWithPoints(prev, points) || prev;
+    });
+  }, [buildPolygonAnnotationWithPoints]);
+
+  const cancelPolygonShapeEdit = useCallback(() => {
+    setShapeEditAnnotation(null);
+    setShapeEditOriginal(null);
+    setShapeEditSaving(false);
+    if (shapeEditOriginal) {
+      setSelectedAnnotation(shapeEditOriginal);
+    }
+    message.info('Shape edit cancelled');
+  }, [shapeEditOriginal]);
+
+  const savePolygonShapeEdit = useCallback(async () => {
+    if (!shapeEditAnnotation || !shapeEditAnnotation.id || shapeEditAnnotation.points.length < 3) {
+      message.warning('No valid polygon shape to save');
+      return;
+    }
+
+    const xs = shapeEditAnnotation.points.map(point => point.x);
+    const ys = shapeEditAnnotation.points.map(point => point.y);
+    const xMin = Math.min(...xs);
+    const yMin = Math.min(...ys);
+    const xMax = Math.max(...xs);
+    const yMax = Math.max(...ys);
+
+    setShapeEditSaving(true);
+    const currentSnapshot = JSON.parse(JSON.stringify(annotations));
+    pushHistory(currentSnapshot);
+
+    setAnnotations(prev => prev.map(ann =>
+      ann.id === shapeEditAnnotation.id ? {
+        ...ann,
+        points: JSON.parse(JSON.stringify(shapeEditAnnotation.points)),
+        segmentation: JSON.parse(JSON.stringify(shapeEditAnnotation.points)),
+        x: xMin,
+        y: yMin,
+        width: xMax - xMin,
+        height: yMax - yMin
+      } : ann
+    ));
+
+    try {
+      await AnnotationAPI.updateAnnotation(shapeEditAnnotation.id, {
+        x_min: xMin,
+        y_min: yMin,
+        x_max: xMax,
+        y_max: yMax,
+        segmentation: JSON.parse(JSON.stringify(shapeEditAnnotation.points))
+      });
+
+      const savedDraft = JSON.parse(JSON.stringify({
+        ...shapeEditAnnotation,
+        x: xMin,
+        y: yMin,
+        width: xMax - xMin,
+        height: yMax - yMin,
+        segmentation: shapeEditAnnotation.points
+      }));
+      setSelectedAnnotation(savedDraft);
+      setShapeEditAnnotation(null);
+      setShapeEditOriginal(null);
+      message.success('Shape updated');
+    } catch (error) {
+      console.error('Failed to update polygon shape:', error);
+      message.error('Failed to save shape');
+      if (shapeEditOriginal) {
+        setAnnotations(prev => prev.map(ann =>
+          ann.id === shapeEditOriginal.id ? JSON.parse(JSON.stringify(shapeEditOriginal)) : ann
+        ));
+        setSelectedAnnotation(shapeEditOriginal);
+      }
+    } finally {
+      setShapeEditSaving(false);
+    }
+  }, [shapeEditAnnotation, shapeEditOriginal, annotations, pushHistory]);
+
   const handleAnnotationSelect = useCallback((annotation) => {
+    if (shapeEditAnnotation) {
+      if (annotation?.id !== shapeEditAnnotation.id) {
+        message.info('Save or cancel shape edit first');
+      }
+      return;
+    }
+
     logUserClick('ManualLabeling', 'annotation_select', {
       datasetId,
       imageId: imageData?.id,
@@ -2052,7 +2195,7 @@ const ManualLabeling = () => {
       setEditingAnnotation(annotation);
       setShowLabelPopup(true);
     }
-  }, [activeTool, datasetId, imageData]);
+  }, [activeTool, datasetId, imageData, shapeEditAnnotation]);
 
   const handleAnnotationDelete = useCallback(async (annotationId) => {
     try {
@@ -2433,6 +2576,9 @@ const ManualLabeling = () => {
                 onPolygonStateChange={handlePolygonStateChange}
                 onToolChange={setActiveTool}
                 onZoomChange={setZoomLevel}
+                polygonEditMode={!!shapeEditAnnotation}
+                editableAnnotation={shapeEditAnnotation}
+                onPolygonEditChange={updatePolygonShapeDraft}
                 style={{
                   maxWidth: '100%',
                   maxHeight: '100%',
@@ -2441,6 +2587,38 @@ const ManualLabeling = () => {
                   margin: '0 auto'
                 }}
               />
+            )}
+            {shapeEditAnnotation && (
+              <div style={{
+                position: 'absolute',
+                top: 16,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 2500,
+                display: 'flex',
+                gap: 8,
+                padding: '8px 10px',
+                borderRadius: 8,
+                background: 'rgba(0, 0, 0, 0.72)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)'
+              }}>
+                <Button
+                  type="primary"
+                  size="small"
+                  loading={shapeEditSaving}
+                  onClick={savePolygonShapeEdit}
+                >
+                  Save Shape
+                </Button>
+                <Button
+                  size="small"
+                  disabled={shapeEditSaving}
+                  onClick={cancelPolygonShapeEdit}
+                >
+                  Cancel
+                </Button>
+              </div>
             )}
           </div>
         </Content>
@@ -2685,6 +2863,7 @@ const ManualLabeling = () => {
         defaultLabel={editingAnnotation?.label || null}
         shapeType={(editingAnnotation?.type || pendingShape?.type || 'box')}
         isEditing={!!editingAnnotation}
+        onEditShape={editingAnnotation?.type === 'polygon' ? startPolygonShapeEdit : null}
       />
     </Layout>
   );
