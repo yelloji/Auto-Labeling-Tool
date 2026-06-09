@@ -605,6 +605,10 @@ class TrainingSession(Base):
     acknowledged = Column(Boolean, default=False)  # Track if completion notification was dismissed
     error_msg = Column(Text, nullable=True)
 
+    # Remote GPU training (RunPod agent)
+    remote_node_id = Column(Integer, nullable=True)   # FK to remote_training_nodes.id (not enforced — node may be deleted)
+    remote_job_id = Column(String(64), nullable=True) # job_id on the remote agent
+
     __table_args__ = (
         sa.Index("ix_training_sessions_project_name", "project_id", "name", unique=True),
         sa.Index("ix_training_sessions_project_status", "project_id", "status"),
@@ -760,3 +764,19 @@ class DevModeSetting(Base):
     password_hash = Column(Text, nullable=True)
     master_password_hash = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class RemoteTrainingNode(Base):
+    """Registered remote GPU VM (RunPod or similar) used for offloading training."""
+    __tablename__ = "remote_training_nodes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)       # user-friendly label e.g. "RunPod RTX 6000"
+    host = Column(String(512), nullable=False)        # IP or hostname
+    port = Column(Integer, default=12000, nullable=False)
+    status = Column(String(32), default="unknown")   # unknown|online|offline
+    last_seen = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    def __repr__(self):
+        return f"<RemoteTrainingNode(id={self.id}, name='{self.name}', host='{self.host}:{self.port}', status='{self.status}')>"

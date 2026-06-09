@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space, Row, Col, Collapse } from 'antd';
-import { systemAPI } from '../../../../services/api';
+import { Form, InputNumber, Switch, Radio, Modal, Select, Tag, Button, Spin, Space, Row, Col, Collapse, Input, Divider, Tooltip, message } from 'antd';
+import { PlusOutlined, DeleteOutlined, ReloadOutlined, CloudServerOutlined } from '@ant-design/icons';
+import { systemAPI, remoteNodesAPI } from '../../../../services/api';
 import { mergeTrainingGuideState } from '../trainingGuideState';
 
 
@@ -20,6 +21,15 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [loadingHW, setLoadingHW] = useState(false);
   const [hw, setHW] = useState(null);
+  const [remoteGpus, setRemoteGpus] = useState([]);
+
+  // Remote node management
+  const [showNodesModal, setShowNodesModal] = useState(false);
+  const [nodes, setNodes] = useState([]);
+  const [loadingNodes, setLoadingNodes] = useState(false);
+  const [pingingNode, setPingingNode] = useState(null);
+  const [newNode, setNewNode] = useState({ name: '', host: '', port: 12000 });
+  const [addingNode, setAddingNode] = useState(false);
 
   useEffect(() => {
     mergeTrainingGuideState({
@@ -35,19 +45,95 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
     };
   }, [showDeviceModal, hw]);
 
+  const [loadingRemote, setLoadingRemote] = useState(false);
+
   const openDeviceModal = async () => {
     setShowDeviceModal(true);
     setLoadingHW(true);
+
+    // Load local GPU first — fast, no network delay
     try {
       const info = await systemAPI.getHardware();
       setHW(info);
-      if (!info?.torch_cuda_available || !info?.gpus?.length) {
-        onChange({ device: 'cpu', gpuIndex: null });
-      }
+    } catch (e) {
+      setHW(null);
     } finally {
       setLoadingHW(false);
     }
+
+    // Load remote GPUs separately in background — won't block dialog
+    setLoadingRemote(true);
+    try {
+      const remoteData = await remoteNodesAPI.allGpus();
+      setRemoteGpus(remoteData?.remote_gpus || []);
+    } catch (e) {
+      setRemoteGpus([]);
+    } finally {
+      setLoadingRemote(false);
+    }
   };
+  const loadNodes = async () => {
+    setLoadingNodes(true);
+    try {
+      const data = await remoteNodesAPI.list();
+      setNodes(data);
+    } catch (e) {
+      message.error('Failed to load remote nodes');
+    } finally {
+      setLoadingNodes(false);
+    }
+  };
+
+  const openNodesModal = async () => {
+    setShowNodesModal(true);
+    await loadNodes();
+  };
+
+  const handleAddNode = async () => {
+    if (!newNode.name.trim() || !newNode.host.trim()) {
+      message.warning('Name and Host are required');
+      return;
+    }
+    setAddingNode(true);
+    try {
+      await remoteNodesAPI.register(newNode.name.trim(), newNode.host.trim(), newNode.port || 12000);
+      setNewNode({ name: '', host: '', port: 12000 });
+      await loadNodes();
+      message.success('Remote node registered');
+    } catch (e) {
+      message.error('Failed to register node');
+    } finally {
+      setAddingNode(false);
+    }
+  };
+
+  const handleDeleteNode = async (nodeId) => {
+    try {
+      await remoteNodesAPI.remove(nodeId);
+      setNodes(prev => prev.filter(n => n.id !== nodeId));
+      message.success('Node removed');
+    } catch (e) {
+      message.error('Failed to remove node');
+    }
+  };
+
+  const handlePingNode = async (nodeId) => {
+    setPingingNode(nodeId);
+    try {
+      const result = await remoteNodesAPI.ping(nodeId);
+      setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, status: result.status, gpus: result.gpus } : n));
+      if (result.status === 'online') {
+        message.success(`Online — ${result.gpus?.length || 0} GPU(s) found`);
+      } else {
+        message.warning('Node is offline or unreachable');
+      }
+    } catch (e) {
+      message.error('Ping failed');
+    } finally {
+      setPingingNode(null);
+    }
+  };
+
   return (
     <Form layout="vertical">
       {isDeveloper ? (
@@ -72,7 +158,7 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
             <Col span={12}>
               <Form.Item label="Device">
                 <Radio.Group
-                  value={device}
+                  value={device === 'remote' ? 'gpu' : device}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val === 'gpu') {
@@ -88,6 +174,9 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                 </Radio.Group>
                 {device === 'gpu' && typeof gpuIndex === 'number' && (
                   <Tag style={{ marginLeft: 8 }}>GPU #{gpuIndex}</Tag>
+                )}
+                {device === 'remote' && gpuIndex && (
+                  <Tag color="purple" style={{ marginLeft: 8 }}>Remote GPU</Tag>
                 )}
               </Form.Item>
             </Col>
@@ -150,7 +239,7 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
               </Form.Item>
               <Form.Item label="Device">
                 <Radio.Group
-                  value={device}
+                  value={device === 'remote' ? 'gpu' : device}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val === 'gpu') {
@@ -166,6 +255,9 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                 </Radio.Group>
                 {device === 'gpu' && typeof gpuIndex === 'number' && (
                   <Tag style={{ marginLeft: 8 }}>GPU #{gpuIndex}</Tag>
+                )}
+                {device === 'remote' && gpuIndex && (
+                  <Tag color="purple" style={{ marginLeft: 8 }}>Remote GPU</Tag>
                 )}
               </Form.Item>
               <Form.Item label="Epochs" tooltip="Maximum number of training epochs" required>
@@ -391,7 +483,7 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
         open={showDeviceModal}
         onCancel={() => setShowDeviceModal(false)}
         onOk={() => setShowDeviceModal(false)}
-        okButtonProps={{ disabled: !hw?.gpus?.length }}
+        okButtonProps={{ disabled: !hw?.gpus?.length && !remoteGpus.length }}
       >
         {loadingHW ? (
           <Spin />
@@ -405,23 +497,161 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
             </div>
             <Select
               style={{ width: '100%' }}
-              placeholder={hw.gpus?.length ? 'Choose a GPU' : 'No GPUs found'}
-              value={typeof gpuIndex === 'number' ? gpuIndex : undefined}
-              onChange={(val) => onChange({ device: 'gpu', gpuIndex: val })}
-              disabled={!hw.gpus?.length}
+              placeholder={hw.gpus?.length || remoteGpus.length ? 'Choose a GPU' : 'No GPUs found'}
+              value={device === 'remote' ? gpuIndex : (typeof gpuIndex === 'number' ? gpuIndex : undefined)}
+              onChange={(val) => {
+                if (typeof val === 'string' && val.startsWith('remote:')) {
+                  onChange({ device: 'remote', gpuIndex: val });
+                } else {
+                  onChange({ device: 'gpu', gpuIndex: val });
+                }
+              }}
+              disabled={!hw.gpus?.length && !remoteGpus.length}
             >
-              {(hw.gpus || []).map((g) => (
-                <Select.Option key={g.id} value={g.id}>
-                  #{g.id} • {g.name} • {g.memory_mb ? `${g.memory_mb} MB` : ''}
+              {hw.gpus?.length > 0 && (
+                <Select.OptGroup label="Local GPU">
+                  {(hw.gpus || []).map((g) => (
+                    <Select.Option key={g.id} value={g.id}>
+                      #{g.id} • {g.name} • {g.memory_mb ? `${g.memory_mb} MB` : ''}
+                    </Select.Option>
+                  ))}
+                </Select.OptGroup>
+              )}
+              {loadingRemote && (
+                <Select.Option disabled value="loading-remote">
+                  Loading remote GPUs...
                 </Select.Option>
-              ))}
+              )}
+              {!loadingRemote && remoteGpus.length > 0 && (
+                <Select.OptGroup label="Remote GPU (Cloud)">
+                  {remoteGpus.map((g) => (
+                    <Select.Option key={g.value} value={g.value}>
+                      {g.label}
+                    </Select.Option>
+                  ))}
+                </Select.OptGroup>
+              )}
             </Select>
-            {!hw.gpus?.length && (
+            {!hw.gpus?.length && !remoteGpus.length && (
               <div style={{ marginTop: 8 }}>No compatible GPUs detected. Using CPU.</div>
             )}
+            {remoteGpus.length > 0 && (
+              <div style={{ marginTop: 8, color: '#888', fontSize: 12 }}>
+                Remote GPUs require the VM to be running before training starts.
+              </div>
+            )}
+            <Divider style={{ margin: '12px 0' }} />
+            <Button
+              type="link"
+              icon={<CloudServerOutlined />}
+              style={{ padding: 0, fontSize: 13 }}
+              onClick={() => { setShowDeviceModal(false); openNodesModal(); }}
+            >
+              Manage Remote Nodes
+            </Button>
           </div>
         ) : (
-          <div>Error loading hardware info</div>
+          <div>
+            Error loading hardware info.
+            <Button type="link" onClick={openNodesModal} style={{ padding: '0 4px' }}>Manage Remote Nodes</Button>
+          </div>
+        )}
+      </Modal>
+
+      {/* Remote Node Management Modal */}
+      <Modal
+        title={<Space><CloudServerOutlined /> Remote Training Nodes</Space>}
+        open={showNodesModal}
+        onCancel={() => { setShowNodesModal(false); setShowDeviceModal(true); openDeviceModal(); }}
+        footer={[
+          <Button key="back" onClick={() => { setShowNodesModal(false); setShowDeviceModal(true); openDeviceModal(); }}>
+            Back to GPU Select
+          </Button>
+        ]}
+        width={520}
+      >
+        {/* Add new node */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Add New Node</div>
+          <Row gutter={8}>
+            <Col span={8}>
+              <Input
+                placeholder="Name (e.g. RunPod)"
+                value={newNode.name}
+                onChange={e => setNewNode(p => ({ ...p, name: e.target.value }))}
+              />
+            </Col>
+            <Col span={10}>
+              <Input
+                placeholder="Host / IP address"
+                value={newNode.host}
+                onChange={e => setNewNode(p => ({ ...p, host: e.target.value }))}
+              />
+            </Col>
+            <Col span={4}>
+              <InputNumber
+                placeholder="Port"
+                value={newNode.port}
+                onChange={v => setNewNode(p => ({ ...p, port: v }))}
+                style={{ width: '100%' }}
+              />
+            </Col>
+            <Col span={2}>
+              <Tooltip title="Add node">
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  loading={addingNode}
+                  onClick={handleAddNode}
+                />
+              </Tooltip>
+            </Col>
+          </Row>
+        </div>
+
+        <Divider style={{ margin: '8px 0' }} />
+
+        {/* Existing nodes */}
+        {loadingNodes ? <Spin /> : nodes.length === 0 ? (
+          <div style={{ color: '#888', textAlign: 'center', padding: '16px 0' }}>
+            No remote nodes registered yet.
+          </div>
+        ) : (
+          nodes.map(node => (
+            <div key={node.id} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 0', borderBottom: '1px solid #f0f0f0'
+            }}>
+              <Tag color={node.status === 'online' ? 'green' : node.status === 'offline' ? 'red' : 'default'}>
+                {node.status}
+              </Tag>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600 }}>{node.name}</div>
+                <div style={{ fontSize: 12, color: '#888' }}>{node.host}:{node.port}</div>
+                {node.gpus?.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#52c41a' }}>
+                    {node.gpus.map(g => `${g.name} (${g.vram_gb} GB)`).join(', ')}
+                  </div>
+                )}
+              </div>
+              <Tooltip title="Ping node">
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  loading={pingingNode === node.id}
+                  onClick={() => handlePingNode(node.id)}
+                />
+              </Tooltip>
+              <Tooltip title="Remove node">
+                <Button
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => handleDeleteNode(node.id)}
+                />
+              </Tooltip>
+            </div>
+          ))
         )}
       </Modal>
     </Form>

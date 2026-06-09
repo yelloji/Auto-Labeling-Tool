@@ -12,6 +12,7 @@ from api.services.model_serialization import serialize_ai_model
 from models.training.model_selector import get_trainable_models
 from models.training.training_extraction import is_extracted, extract_release_zip
 from models.training.config import load_base_config, resolve_config, build_args_preview
+from models.training.remote_dispatcher import is_remote_device, parse_remote_device, dispatch_remote_training
 from models.training.dataset_summary import summarize_dataset, find_and_summarize
 from models.training.yaml_generator import generate_ultralytics_training_yaml
 from models.training.executor import start_ultralytics_training
@@ -164,34 +165,92 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         # Inject project and name for YOLO output directory control
         if 'train' not in resolved_config:
             resolved_config['train'] = {}
-            
+
+        # ── Remote GPU branch ─────────────────────────────────────────────────
+        # Detect remote device (e.g. "remote:1:0") before local YAML generation.
+        # Local training path below is completely untouched.
+        device_val = resolved_config.get('train', {}).get('device', '0')
+        if is_remote_device(str(device_val)):
+            try:
+                node_id, gpu_index = parse_remote_device(str(device_val))
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+            # Generate full YAML locally using same yaml_generator as local training
+            # This ensures all base config defaults + user overrides are included
+            # Agent will replace only the path-specific fields (data, model, project)
+            import tempfile as _tempfile, os as _os
+            remote_resolved = dict(resolved_config)
+            if 'train' not in remote_resolved:
+                remote_resolved['train'] = {}
+            remote_resolved['train']['project'] = str(abs_base_dir.parent)
+            remote_resolved['train']['name'] = ts.name
+            _tmp = _tempfile.NamedTemporaryFile(suffix='.yaml', delete=False)
+            _tmp.close()
+            try:
+                generate_ultralytics_training_yaml(remote_resolved, _tmp.name, ts.framework, ts.task)
+                with open(_tmp.name, 'r', encoding='utf-8') as _f:
+                    remote_yaml_content = _f.read()
+            finally:
+                _os.unlink(_tmp.name)
+
+            # Set up local dirs so log WebSocket can find training.log
+            ts.status = "running"
+            ts.progress_pct = 0
+            ts.started_at = datetime.utcnow()
+            ts.last_update_at = ts.started_at
+            db.add(ts)
+            db.commit()
+
+            # Dispatch to remote agent in a background thread
+            import threading as _threading
+            _threading.Thread(
+                target=dispatch_remote_training,
+                args=(ts.id, node_id, gpu_index, resolved_config, ts.logs_dir, remote_yaml_content),
+                daemon=True,
+            ).start()
+
+            return {
+                "ok": True,
+                "paths": {
+                    "run_dir": ts.run_dir,
+                    "weights_dir": ts.weights_dir,
+                    "logs_dir": ts.logs_dir,
+                    "artifacts_dir": ts.artifacts_dir,
+                },
+                "status": "running",
+                "process_started": True,
+                "remote": True,
+            }
+        # ── End remote GPU branch ─────────────────────────────────────────────
+
         # Use ABSOLUTE path for YOLO project dir (ultralytics 8.4.x breaking change:
         # relative paths get prepended with runs/{task}/ internally, breaking our output dir)
         # DB paths (ts.run_dir, ts.weights_dir etc.) remain relative for portability.
         resolved_config['train']['project'] = str(abs_base_dir.parent)
         resolved_config['train']['name'] = ts.name
-        
+
         # Generate temporary YAML config
         temp_yaml_path = artifacts_dir / "temp_training_config.yaml"
         try:
             generate_ultralytics_training_yaml(resolved_config, str(temp_yaml_path), ts.framework, ts.task)
-            
+
             # Save snapshot to DB
             with open(temp_yaml_path, 'r', encoding='utf-8') as f:
                 ts.training_config_snapshot = f.read()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to generate training config: {str(e)}")
-        
+
         # Start training process
         process = start_ultralytics_training(str(temp_yaml_path), ts, db)
-        
+
         # Clean up temp file - REMOVED to prevent race condition
         # We keep the file in artifacts_dir for debugging and ensuring YOLO can read it
         # try:
         #     temp_yaml_path.unlink()
         # except Exception:
         #     pass
-        
+
         if process is None:
             raise HTTPException(status_code=500, detail="Failed to start training process (check server logs)")
 
@@ -200,7 +259,7 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
         ts.progress_pct = 0
         ts.started_at = datetime.utcnow()
         ts.last_update_at = ts.started_at
-        
+
         # Commit to DB
         db.add(ts)
         db.commit()
@@ -1340,19 +1399,52 @@ async def stop_training_session(
     if exp.status != "running":
         raise HTTPException(status_code=400, detail="Training session is not currently running")
 
+    # Remote training — stop via agent HTTP call
+    if exp.remote_job_id and exp.remote_node_id:
+        try:
+            from database.models import RemoteTrainingNode
+            node = db.query(RemoteTrainingNode).filter(RemoteTrainingNode.id == exp.remote_node_id).first()
+            if node:
+                import requests as _requests
+                _requests.post(
+                    f"http://{node.host}:{node.port}/agent/stop/{exp.remote_job_id}",
+                    timeout=10,
+                )
+        except Exception as _e:
+            logger.warning("operations.training", f"Failed to stop remote job: {_e}", "remote_stop_failed", {"error": str(_e)})
+        exp.status = "stopped"
+        exp.error_msg = "Stopped by user"
+        db.commit()
+        return {"message": "Remote training stopped"}
+
     if not exp.process_pid:
         raise HTTPException(status_code=400, detail="No process PID found for this session")
 
     try:
         process = psutil.Process(exp.process_pid)
-        if process.is_running():
-            process.terminate()
-            process.wait(timeout=5)
-    except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+        # Kill entire process tree (parent + all children)
+        # This is critical on Windows where YOLO spawns worker subprocesses
+        children = process.children(recursive=True)
+        for child in children:
+            try:
+                child.kill()
+            except psutil.NoSuchProcess:
+                pass
+        try:
+            process.kill()
+        except psutil.NoSuchProcess:
+            pass
+        # Wait for all to die
+        psutil.wait_procs([process] + children, timeout=5)
+    except psutil.NoSuchProcess:
         pass
     except Exception:
+        # Last resort: Windows taskkill to force-kill process tree
         try:
-            os.kill(exp.process_pid, signal.SIGTERM)
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(exp.process_pid)],
+                capture_output=True, timeout=5
+            )
         except Exception:
             pass
 

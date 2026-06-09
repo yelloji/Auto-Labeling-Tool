@@ -1,0 +1,12 @@
+# Gevis Remote Training Agent — RunPod requirements
+# Install: pip install -r requirements.txt
+# Note: Do NOT install torch — use RunPod's pre-installed PyTorch
+# IMPORTANT: numpy must stay <2.0 — RunPod's torch 2.2.0 is built against numpy 1.x.
+#            numpy 2.x causes "RuntimeError: Numpy is not available" during training.
+
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+ultralytics==8.4.23
+PyYAML>=6.0.0
+numpy<2.0

@@ -27,6 +27,7 @@ from api.routes import analytics, augmentation, dataset_management
 from api.routes import image_transformations, logs, frontend_logs, release_detail_view, project_transfer, retraining
 from api.routes import onnx_export
 from api.routes import dev_password
+from api.routes import remote_nodes
 from core.config import settings
 from database.database import init_db
 # Import professional logging system
@@ -152,6 +153,7 @@ app.include_router(release_detail_view.router, prefix="/api/v1", tags=["release-
 app.include_router(project_transfer.router, prefix="/api/v1", tags=["project-transfer"])
 app.include_router(retraining.router, prefix="/api/v1", tags=["retraining"])
 app.include_router(onnx_export.router, prefix="/api/v1", tags=["onnx-export"])
+app.include_router(remote_nodes.router, prefix="/api/v1", tags=["remote-nodes"])
 app.include_router(training_api.router, prefix="/api/v1", tags=["training"])
 
 # Include model lab routes
@@ -495,16 +497,39 @@ async def startup_event():
         _db = SessionLocal()
         try:
             orphaned_trainings = _db.query(TrainingSession).filter(TrainingSession.status == 'running').all()
+            reset_count = 0
+            reattached = []
             for t in orphaned_trainings:
+                # Remote training runs on a separate VM — backend restart does NOT kill it.
+                # Re-attach the poller instead of marking it failed.
+                if getattr(t, 'remote_job_id', None) and getattr(t, 'remote_node_id', None):
+                    reattached.append(t)
+                    continue
                 t.status = 'failed'
                 t.process_pid = None
+                reset_count += 1
             orphaned_experiments = _db.query(ModelExperiment).filter(ModelExperiment.status == 'running').all()
             for ex in orphaned_experiments:
                 ex.status = 'failed'
                 ex.process_pid = None
             _db.commit()
+
+            # Re-attach pollers for remote sessions that were running before restart
+            for t in reattached:
+                try:
+                    from models.training.remote_dispatcher import _poll_remote_training
+                    import threading as _th
+                    _th.Thread(
+                        target=_poll_remote_training,
+                        args=(t.id, t.remote_node_id, t.remote_job_id, t.logs_dir),
+                        daemon=True,
+                    ).start()
+                    logger.info("app.startup", f"Re-attached remote training poller for session {t.id}", "remote_poller_reattach")
+                except Exception as _re:
+                    logger.error("app.startup", f"Failed to re-attach remote poller for session {t.id}: {_re}", "remote_poller_reattach_error")
+
             if orphaned_trainings or orphaned_experiments:
-                logger.info("app.startup", f"Reset {len(orphaned_trainings)} orphaned trainings and {len(orphaned_experiments)} orphaned experiments to failed", "orphan_reset")
+                logger.info("app.startup", f"Reset {reset_count} orphaned trainings, re-attached {len(reattached)} remote, reset {len(orphaned_experiments)} experiments", "orphan_reset")
         finally:
             _db.close()
     except Exception as e:

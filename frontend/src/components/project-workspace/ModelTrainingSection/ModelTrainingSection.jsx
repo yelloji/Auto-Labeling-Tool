@@ -582,7 +582,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
           overlap_mask: form.overlap_mask,
           mask_ratio: form.mask_ratio,
           freeze: form.freeze,
-          device: form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu',
+          device: form.device === 'remote' ? form.gpuIndex : (form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu'),
           patience: form.patience,
           save_period: form.save_period,
           workers: form.workers,

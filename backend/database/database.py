@@ -494,3 +494,36 @@ def get_db():
                     logger.info("app.database", "Added column tile_enabled to projects", "projects_add_tile_enabled")
         except Exception as mig_err:
             logger.warning("errors.system", f"Schema migration for projects tile_enabled failed: {mig_err}", "projects_add_tile_enabled_failed", {"error": str(mig_err)})
+
+        # Migration: remote_training_nodes table
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS remote_training_nodes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        host TEXT NOT NULL,
+                        port INTEGER NOT NULL DEFAULT 12000,
+                        status TEXT DEFAULT 'unknown',
+                        last_seen DATETIME,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.commit()
+        except Exception as mig_err:
+            logger.warning("errors.system", f"Schema migration for remote_training_nodes failed: {mig_err}", "remote_nodes_migration_failed", {"error": str(mig_err)})
+
+        # Migration: add remote columns to training_sessions
+        try:
+            with engine.connect() as conn:
+                cols = conn.execute(text("PRAGMA table_info(training_sessions)")).fetchall()
+                col_names = {c[1] for c in cols}
+                for col, sql in {
+                    "remote_node_id": "ALTER TABLE training_sessions ADD COLUMN remote_node_id INTEGER",
+                    "remote_job_id": "ALTER TABLE training_sessions ADD COLUMN remote_job_id TEXT",
+                }.items():
+                    if col not in col_names:
+                        conn.execute(text(sql))
+                conn.commit()
+        except Exception as mig_err:
+            logger.warning("errors.system", f"Schema migration for training_sessions remote columns failed: {mig_err}", "remote_training_migration_failed", {"error": str(mig_err)})

@@ -1518,6 +1518,29 @@ export const systemAPI = {
   }
 };
 
+export const remoteNodesAPI = {
+  list: async () => {
+    const r = await api.get('/api/v1/remote-nodes');
+    return r.data;
+  },
+  register: async (name, host, port = 12000) => {
+    const r = await api.post('/api/v1/remote-nodes', { name, host, port });
+    return r.data;
+  },
+  remove: async (nodeId) => {
+    const r = await api.delete(`/api/v1/remote-nodes/${nodeId}`);
+    return r.data;
+  },
+  ping: async (nodeId) => {
+    const r = await api.get(`/api/v1/remote-nodes/${nodeId}/ping`);
+    return r.data;
+  },
+  allGpus: async () => {
+    const r = await api.get('/api/v1/remote-nodes/all-gpus');
+    return r.data;
+  },
+};
+
 // Phase 7.1: Missed Ground Truth Detections
 export const missedDetectionsAPI = {
   getMissedDetections: async (experimentId, imageName, iouThreshold = 0.3) => {

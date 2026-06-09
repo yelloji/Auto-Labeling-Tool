@@ -10,6 +10,49 @@ from core.config import settings
 
 logger = get_professional_logger()
 
+
+def _parse_and_update_metrics(db, session):
+    """
+    Parse the session's training.log and update live metrics on the DB row.
+    Used for BOTH local and remote training (remote logs are mirrored locally by the poller).
+    Returns the parsed metrics dict (or None).
+    """
+    try:
+        from pathlib import Path
+        from .metrics_parser import parse_training_log
+        import json
+
+        project_root = settings.BASE_DIR
+        log_file_path = project_root / session.logs_dir / "training.log"
+        if not log_file_path.exists():
+            return None
+
+        metrics = parse_training_log(log_file_path, framework=session.framework, task=session.task)
+        metrics_str = json.dumps(metrics)
+        if session.metrics_json != metrics_str:
+            session.metrics_json = metrics_str
+            if metrics.get("training", {}).get("epoch") and metrics.get("training", {}).get("total_epochs"):
+                epoch = metrics["training"]["epoch"]
+                total = metrics["training"]["total_epochs"]
+                progress_pct = metrics["training"].get("progress_pct", 0)
+                epoch_progress = (epoch - 1) / total * 100
+                intra_epoch = progress_pct / total
+                session.progress_pct = min(99.9, epoch_progress + intra_epoch)
+            if metrics.get("validation"):
+                val = metrics["validation"]
+                session.best_box_map50 = max(session.best_box_map50 or 0.0, val.get("box_map50", 0.0))
+                session.best_box_map95 = max(session.best_box_map95 or 0.0, val.get("box_map50_95", 0.0))
+                if session.best_mask_map50 is None: session.best_mask_map50 = 0.0
+                session.best_mask_map50 = max(session.best_mask_map50, val.get("mask_map50", 0.0))
+                if session.best_mask_map95 is None: session.best_mask_map95 = 0.0
+                session.best_mask_map95 = max(session.best_mask_map95, val.get("mask_map50_95", 0.0))
+            db.commit()
+        return metrics
+    except Exception as e:
+        logger.warning("operations.training", f"Error parsing log metrics: {e}", "log_parse_error")
+        return None
+
+
 def check_training_health():
     """
     Periodically checks the health of running training sessions.
@@ -25,10 +68,17 @@ def check_training_health():
                 running_sessions = db.query(TrainingSession).filter(TrainingSession.status == "running").all()
                 
                 for session in running_sessions:
+                    # Remote training (RunPod): no local PID. The poller mirrors the log
+                    # locally and handles completion + model download. Here we only parse
+                    # metrics so the live Status card updates exactly like local training.
+                    if getattr(session, 'remote_job_id', None) and getattr(session, 'remote_node_id', None):
+                        _parse_and_update_metrics(db, session)
+                        continue
+
                     if not session.process_pid:
                         # Skip sessions without PID (legacy or error)
                         continue
-                        
+
                     pid = session.process_pid
                     
                     # Check if process is still running
