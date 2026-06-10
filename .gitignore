@@ -77,3 +77,4 @@ projects/**
 # Local database exports (do NOT commit)
 database_exports/**
 develop-logs/**.claude-memory.md
+database.db
