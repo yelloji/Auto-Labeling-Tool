@@ -515,6 +515,34 @@ def _download_results(db, session_id: int, base_url: str, remote_job_id: str, pr
                 except Exception:
                     pass
 
+        # Rewrite pod paths -> local paths inside args.yaml so the folder is
+        # uniform with a local training (Model Lab / any tool reading args.yaml).
+        try:
+            args_path = run_dir / "args.yaml"
+            if args_path.exists():
+                with open(args_path, "r", encoding="utf-8", errors="ignore") as _af:
+                    _args_txt = _af.read()
+                # Replace the remote job output dir and project dir with local ones
+                _args_txt = _args_txt.replace(
+                    f"/workspace/jobs/{remote_job_id}/output", str(run_dir)
+                ).replace(
+                    f"/workspace/jobs/{remote_job_id}", str(run_dir.parent)
+                )
+                # Replace any cached-release data path with the local training_data path
+                import re as _re
+                _args_txt = _re.sub(
+                    r"/workspace/releases_cache/[^\s\"']+/data\.yaml",
+                    str((project_root / (session.dataset_release_dir or "")) / "data.yaml")
+                    if session.dataset_release_dir else "data.yaml",
+                    _args_txt,
+                )
+                # The agent runs YOLO with name=output; rewrite it to the real session name
+                _args_txt = _re.sub(r"(?m)^name:\s*output\s*$", f"name: {session.name}", _args_txt)
+                with open(args_path, "w", encoding="utf-8") as _af:
+                    _af.write(_args_txt)
+        except Exception as _e:
+            logger.warning("operations.training", f"Could not rewrite args.yaml paths: {_e}", "remote_args_rewrite_failed", {"error": str(_e)})
+
         # Set best_weights_path (weights/best.pt under the run dir)
         best_pt_path = run_dir / "weights" / "best.pt"
         if best_pt_path.exists():

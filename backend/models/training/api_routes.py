@@ -194,6 +194,10 @@ async def start_training_session(payload: SessionStart, db: Session = Depends(ge
             finally:
                 _os.unlink(_tmp.name)
 
+            # Save config snapshot to DB — same as local training, so Model Lab's
+            # Config View can display it for remote trainings too.
+            ts.training_config_snapshot = remote_yaml_content
+
             # Set up local dirs so log WebSocket can find training.log
             ts.status = "running"
             ts.progress_pct = 0
