@@ -691,6 +691,16 @@ export const projectsAPI = {
     }
   },
 
+  // Get per-split counts of full original images available for SAHI
+  getSahiAvailableImages: async (trainingId) => {
+    try {
+      const response = await api.get(`/api/v1/training/${trainingId}/sahi-prediction/available-images`);
+      return response.data;
+    } catch (error) {
+      return { split_counts: {}, total: 0, available_splits: [] };
+    }
+  },
+
   // Initialize a SAHI prediction draft
   initSahiPrediction: async (trainingId, payload) => {
     const response = await api.post(`/api/v1/training/${trainingId}/sahi-prediction/init`, payload);

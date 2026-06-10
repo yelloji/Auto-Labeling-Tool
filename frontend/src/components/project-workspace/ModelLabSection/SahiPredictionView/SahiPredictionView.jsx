@@ -14,6 +14,7 @@ import {
     InputNumber,
     List,
     Modal,
+    Radio,
     Row,
     Select,
     Space,
@@ -50,6 +51,7 @@ const { Option } = Select;
 const DEFAULT_CONFIG = {
     name: '',
     dataset_source: 'dataset_images',
+    split: 'all',
     task: 'detect',
     weights_type: 'best',
     confidence: 0.5,
@@ -181,6 +183,7 @@ const SahiPredictionView = ({ training }) => {
     const [projectLabels, setProjectLabels] = useState([]);
     const [verifications, setVerifications] = useState([]);
     const [historyHeight, setHistoryHeight] = useState('100%');
+    const [sahiCounts, setSahiCounts] = useState({ split_counts: {}, total: 0, available_splits: [] });
     const selectedExpRef = useRef(null);
     const syncTimeoutRef = useRef(null);
     const galleryRef = useRef(null);
@@ -199,6 +202,7 @@ const SahiPredictionView = ({ training }) => {
             ...params,
             name: experiment?.name || params.name || defaultConfig.name,
             dataset_source: params.dataset_source || experiment?.dataset_source || 'dataset_images',
+            split: params.split || defaultConfig.split,
             confidence: params.confidence ?? params.confidence_threshold ?? experiment?.confidence ?? 0.5,
             task: params.task || defaultConfig.task
         });
@@ -261,6 +265,19 @@ const SahiPredictionView = ({ training }) => {
         form.setFieldsValue(defaultConfig);
         fetchExperiments(false);
     }, [defaultConfig, fetchExperiments, form, training?.id]);
+
+    // Fetch SAHI full-image counts per split (different from release/tile counts)
+    useEffect(() => {
+        if (!training?.id) {
+            setSahiCounts({ split_counts: {}, total: 0, available_splits: [] });
+            return;
+        }
+        let cancelled = false;
+        projectsAPI.getSahiAvailableImages(training.id).then((data) => {
+            if (!cancelled && data) setSahiCounts(data);
+        });
+        return () => { cancelled = true; };
+    }, [training?.id]);
 
     const projectId = training?.project_id || training?.projectId;
 
@@ -974,10 +991,48 @@ const SahiPredictionView = ({ training }) => {
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} sm={12} lg={6}>
-                                    <Form.Item name="dataset_source" label="Image Source">
-                                        <Select disabled>
-                                            <Option value="dataset_images">Dataset Images</Option>
-                                        </Select>
+                                    <Form.Item name="split" label="Image Source">
+                                        <Radio.Group
+                                            disabled={running || (selectedExp && selectedExp.status !== 'queued')}
+                                            style={{ width: '100%' }}
+                                        >
+                                            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                                <Radio value="all" className="sahi-source-radio">
+                                                    <span className="sahi-source-label">All (Train + Val + Test)</span>
+                                                    <Badge
+                                                        count={sahiCounts.total || 0}
+                                                        overflowCount={99999}
+                                                        style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
+                                                    />
+                                                </Radio>
+                                                <Radio value="train" className="sahi-source-radio">
+                                                    <span className="sahi-source-label">Training Set</span>
+                                                    <Badge
+                                                        count={sahiCounts.split_counts?.train || 0}
+                                                        overflowCount={99999}
+                                                        style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
+                                                    />
+                                                </Radio>
+                                                <Radio value="val" className="sahi-source-radio">
+                                                    <span className="sahi-source-label">Validation Set</span>
+                                                    <Badge
+                                                        count={sahiCounts.split_counts?.val || 0}
+                                                        overflowCount={99999}
+                                                        style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
+                                                    />
+                                                </Radio>
+                                                {(sahiCounts.split_counts?.test || 0) > 0 && (
+                                                    <Radio value="test" className="sahi-source-radio">
+                                                        <span className="sahi-source-label">Test Set</span>
+                                                        <Badge
+                                                            count={sahiCounts.split_counts?.test || 0}
+                                                            overflowCount={99999}
+                                                            style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
+                                                        />
+                                                    </Radio>
+                                                )}
+                                            </Space>
+                                        </Radio.Group>
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} sm={12} lg={6}>

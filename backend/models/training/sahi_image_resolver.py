@@ -47,15 +47,23 @@ def _is_generated_or_non_dataset_path(path_value: str) -> bool:
     return any(marker in normalized for marker in EXCLUDED_GENERATED_PATH_MARKERS)
 
 
-def resolve_dataset_stage_images(db: Session, project_id: int) -> Dict[str, Any]:
+def resolve_dataset_stage_images(db: Session, project_id: int, split: Optional[str] = None) -> Dict[str, Any]:
     """
     Resolve full original images that are ready for release/training.
 
     SAHI must not use loose project uploads or tiled release outputs. The source of
     truth is the images table after split assignment: split_type='dataset' with a
     train/val/test split_section.
+
+    split: optional 'train' | 'val' | 'test' to restrict to one split. None or 'all'
+           returns every dataset image (the original behavior).
     """
-    rows = (
+    # Normalize the split filter. Anything other than a real split means "all".
+    split_filter = (split or "").strip().lower()
+    if split_filter not in DATASET_SPLITS:
+        split_filter = None
+
+    query = (
         db.query(Image, Dataset)
         .join(Dataset, Image.dataset_id == Dataset.id)
         .filter(
@@ -63,9 +71,11 @@ def resolve_dataset_stage_images(db: Session, project_id: int) -> Dict[str, Any]
             Image.split_type == "dataset",
             Image.split_section.in_(DATASET_SPLITS),
         )
-        .order_by(Image.split_section, Dataset.name, Image.filename)
-        .all()
     )
+    if split_filter is not None:
+        query = query.filter(Image.split_section == split_filter)
+
+    rows = query.order_by(Image.split_section, Dataset.name, Image.filename).all()
 
     images: List[str] = []
     items: List[Dict[str, Any]] = []
@@ -172,9 +182,10 @@ def resolve_sahi_input_images(
     project_id: int,
     dataset_source: str,
     uploaded_images: Optional[List[str]] = None,
+    split: Optional[str] = None,
 ) -> Dict[str, Any]:
     if dataset_source == "dataset_images":
-        return resolve_dataset_stage_images(db, project_id)
+        return resolve_dataset_stage_images(db, project_id, split=split)
     if dataset_source == "upload":
         return resolve_uploaded_images(uploaded_images)
     raise ValueError("SAHI prediction source must be 'dataset_images' or 'upload'")

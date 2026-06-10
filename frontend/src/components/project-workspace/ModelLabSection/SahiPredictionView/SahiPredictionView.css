@@ -423,3 +423,26 @@
         max-height: 28rem;
     }
 }
+
+/* SAHI image-source radio cards (split selection with counts) */
+.sahi-source-radio {
+    display: flex !important;
+    width: 100%;
+    margin: 0 !important;
+    padding: 6px 10px;
+    border: 1px solid #f0f0f0;
+    border-radius: 6px;
+}
+.sahi-source-radio:hover {
+    border-color: #b37feb;
+}
+.sahi-source-radio > span:last-child {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 8px;
+}
+.sahi-source-label {
+    flex: 1;
+}

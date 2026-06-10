@@ -16,7 +16,7 @@ from core.config import settings
 from database.database import get_db
 from database.models import ModelExperiment, Project, TrainingSession
 from logging_system.professional_logger import get_professional_logger
-from models.training.sahi_image_resolver import resolve_sahi_input_images
+from models.training.sahi_image_resolver import resolve_sahi_input_images, resolve_dataset_stage_images
 
 
 logger = get_professional_logger()
@@ -24,6 +24,9 @@ router = APIRouter()
 
 SAHI_EXPERIMENT_TYPE = "sahi_prediction"
 SAHI_DATASET_SOURCES = {"dataset_images", "upload"}
+# Optional split filter for the 'dataset_images' source. 'all' = every dataset image
+# (original behavior); train/val/test restricts to that split's full images.
+SAHI_SPLITS = {"all", "train", "val", "test"}
 SAHI_PARAM_FIELDS = {
     "slice_height",
     "slice_width",
@@ -42,6 +45,7 @@ class SahiPredictionRequest(BaseModel):
     """Request model for SAHI prediction experiments on full original images."""
     name: str
     dataset_source: str = "dataset_images"  # 'dataset_images' or 'upload'
+    split: str = "all"  # 'all' | 'train' | 'val' | 'test' (only for dataset_images)
     weights_type: str = "best"  # 'best' or 'last'
     task: Optional[str] = None  # 'detect' or 'segment'; defaults to the training task
     confidence: float = 0.5
@@ -64,6 +68,7 @@ class SahiPredictionUpdate(BaseModel):
     """Update model for queued SAHI prediction experiments."""
     name: Optional[str] = None
     dataset_source: Optional[str] = None
+    split: Optional[str] = None
     weights_type: Optional[str] = None
     task: Optional[str] = None
     confidence: Optional[float] = None
@@ -91,6 +96,11 @@ def _sahi_params_from_payload(payload: BaseModel) -> Dict[str, Any]:
         if key in payload_data and payload_data[key] is not None
     }
 
+    # Persist the dataset-image split choice (used only for image resolution,
+    # NOT a SAHI executor param, so it stays out of SAHI_PARAM_FIELDS).
+    split_value = payload_data.get("split")
+    sahi_params["split"] = (str(split_value).strip().lower() if split_value else "all")
+
     extra_params = payload_data.get("custom_params")
     if extra_params:
         sahi_params.update(extra_params)
@@ -115,10 +125,22 @@ def _validate_sahi_dataset_source(dataset_source: str) -> None:
         )
 
 
+def _validate_sahi_split(split: Optional[str]) -> None:
+    if split is None:
+        return
+    if str(split).strip().lower() not in SAHI_SPLITS:
+        raise HTTPException(
+            status_code=400,
+            detail="SAHI split must be 'all', 'train', 'val', or 'test'"
+        )
+
+
 def _apply_sahi_update(exp: ModelExperiment, payload: BaseModel) -> None:
     update_data = payload.dict(exclude_unset=True)
     if "dataset_source" in update_data:
         _validate_sahi_dataset_source(update_data["dataset_source"])
+    if "split" in update_data:
+        _validate_sahi_split(update_data["split"])
 
     direct_fields = {
         "name",
@@ -157,6 +179,9 @@ def _apply_sahi_update(exp: ModelExperiment, payload: BaseModel) -> None:
         for key in SAHI_PARAM_FIELDS
         if key in update_data and update_data[key] is not None
     }
+    # Split is stored in custom_params (not a SAHI executor param)
+    if "split" in update_data and update_data["split"] is not None:
+        sahi_updates["split"] = str(update_data["split"]).strip().lower()
     if "custom_params" in update_data and update_data["custom_params"]:
         sahi_updates.update(update_data["custom_params"])
     if sahi_updates:
@@ -164,17 +189,21 @@ def _apply_sahi_update(exp: ModelExperiment, payload: BaseModel) -> None:
 
 
 def _resolve_and_apply_sahi_input_summary(db: Session, exp: ModelExperiment) -> Dict[str, Any]:
+    params = exp.custom_params if isinstance(exp.custom_params, dict) else {}
+    split = params.get("split", "all")
+
     resolved = resolve_sahi_input_images(
         db=db,
         project_id=exp.project_id,
         dataset_source=exp.dataset_source,
         uploaded_images=exp.input_images if exp.dataset_source == "upload" else None,
+        split=split,
     )
 
     exp.image_count = resolved["count"]
-    params = exp.custom_params if isinstance(exp.custom_params, dict) else {}
     exp.custom_params = {
         **params,
+        "split": split,
         "input_source": resolved["source"],
         "input_split_counts": resolved["split_counts"],
         "input_skipped_count": len(resolved["skipped"]),
@@ -228,6 +257,26 @@ def _finalize_sahi_experiment_from_payload(exp: ModelExperiment, ts: TrainingSes
     exp.dataset_path = None
 
 
+@router.get("/training/{training_id}/sahi-prediction/available-images")
+async def get_sahi_available_images(training_id: int, db: Session = Depends(get_db)):
+    """
+    Return per-split counts of the FULL original images SAHI can run on.
+    These are the dataset-stage images (full, not tiles) — different from the
+    release/tile counts shown in normal prediction.
+    """
+    ts = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not ts:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    resolved = resolve_dataset_stage_images(db, ts.project_id)
+    counts = resolved["split_counts"]
+    return {
+        "split_counts": counts,
+        "total": resolved["count"],
+        "available_splits": [s for s in ("test", "val", "train") if counts.get(s, 0) > 0],
+    }
+
+
 @router.get("/training/{training_id}/sahi-prediction/queued")
 async def get_queued_sahi_prediction(training_id: int, db: Session = Depends(get_db)):
     """Find existing queued SAHI prediction experiment for a model."""
@@ -264,6 +313,7 @@ async def init_sahi_prediction(training_id: int, payload: SahiPredictionRequest,
 
     project = _ensure_tile_project_for_sahi(ts, db)
     _validate_sahi_dataset_source(payload.dataset_source)
+    _validate_sahi_split(payload.split)
 
     exp = ModelExperiment(
         id=str(uuid.uuid4()),
@@ -311,6 +361,7 @@ async def trigger_sahi_prediction(
 
     project = _ensure_tile_project_for_sahi(ts, db)
     _validate_sahi_dataset_source(payload.dataset_source)
+    _validate_sahi_split(payload.split)
 
     experiment = (
         db.query(ModelExperiment)
