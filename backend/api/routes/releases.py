@@ -1576,7 +1576,11 @@ def delete_release(release_id: str, db: Session = Depends(get_db)):
                     if target_abs and os.path.exists(target_abs):
                         try:
                             import shutil
-                            shutil.rmtree(target_abs)
+                            # Long-path-safe: the extracted folder can contain files
+                            # whose full path exceeds Windows' 260-char limit; a plain
+                            # rmtree fails on those and leaves a stale folder behind.
+                            from models.training.training_extraction import _winlong
+                            shutil.rmtree(_winlong(str(target_abs)))
                             logger.info("operations.releases", "Extracted training_data folder deleted", "release_extract_folder_delete_success", {
                                 "release_id": release_id,
                                 "project_name": project_name,
