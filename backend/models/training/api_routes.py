@@ -2885,14 +2885,13 @@ async def get_missed_ground_truth(
     
     try:
         # Resolve absolute path to dataset base
-        # dataset_path is like "projects/.../images/train"
-        # We need "projects/.../"
+        # dataset_path is like "projects/.../<release>/images/train"
+        # We need "projects/.../<release>"
+        # IMPORTANT: split only at the real "/images/" FOLDER, not at the word
+        # "images" inside the release folder name (e.g. "...comp-images-1-balanced...").
         rel_path = experiment.dataset_path
-        if "images" in rel_path:
-            # Get everything before "images"
-            base_rel_path = rel_path.split("images")[0].rstrip("/\\")
-        else:
-            base_rel_path = rel_path
+        _base_parts = re.split(r'[/\\]images[/\\]', rel_path, maxsplit=1)
+        base_rel_path = _base_parts[0] if len(_base_parts) > 1 else rel_path
             
         project_root = settings.BASE_DIR
         abs_dataset_path = (project_root / base_rel_path).resolve()
