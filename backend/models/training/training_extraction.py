@@ -1,4 +1,5 @@
 import os
+import shutil
 import zipfile
 from pathlib import Path
 from typing import Optional, Tuple
@@ -12,6 +13,43 @@ try:
     from utils.path_utils import path_manager
 except Exception:
     path_manager = None  # type: ignore
+
+
+def _winlong(path_str: str) -> str:
+    """
+    Return a Windows extended-length path (\\\\?\\ prefix) to bypass the 260-char
+    MAX_PATH limit. On non-Windows, returns the path unchanged.
+    """
+    if os.name != "nt":
+        return path_str
+    abs_path = os.path.abspath(path_str)
+    if abs_path.startswith("\\\\?\\"):
+        return abs_path
+    if abs_path.startswith("\\\\"):  # UNC share \\server\share
+        return "\\\\?\\UNC\\" + abs_path[2:]
+    return "\\\\?\\" + abs_path
+
+
+def _extract_zip_no_path_limit(zf: zipfile.ZipFile, target_abs: Path) -> None:
+    """
+    Extract every file in the zip, writing through long-path-safe targets so a
+    single over-260-char filename cannot abort the whole extraction (Windows).
+    Includes a zip-slip guard so entries can't escape target_abs.
+    """
+    base = os.path.abspath(str(target_abs))
+    for member in zf.infolist():
+        name = member.filename
+        if not name or name.endswith("/"):
+            continue  # directory entry
+        rel = name.replace("/", os.sep).replace("\\", os.sep)
+        dest = os.path.normpath(os.path.join(base, rel))
+        # zip-slip guard: dest must stay inside base
+        if not (dest == base or dest.startswith(base + os.sep)):
+            logger.warning("operations.training", f"Skipping unsafe zip entry: {name}", "training_extract_unsafe_entry", {"entry": name})
+            continue
+        os.makedirs(_winlong(os.path.dirname(dest)), exist_ok=True)
+        with zf.open(member) as src, open(_winlong(dest), "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
 
 def _safe_slug(filename: str) -> str:
@@ -68,18 +106,40 @@ def extract_release_zip(zip_relative_path: str, project_name_hint: Optional[str]
     if not zip_abs.exists():
         raise FileNotFoundError(f"ZIP not found: {zip_abs}")
 
-    # Idempotent: if already extracted and not empty, skip
+    # Number of real files in the ZIP (exclude directory entries)
+    with zipfile.ZipFile(str(zip_abs), 'r') as zf:
+        zip_file_count = sum(1 for n in zf.namelist() if not n.endswith('/'))
+
+    # Idempotent ONLY when the existing extraction is COMPLETE.
+    # A release that was deleted and recreated with the SAME name can leave a
+    # stale/incomplete folder behind. Blindly skipping would train on the old
+    # data (e.g. missing val/labels). So we compare file counts and re-extract
+    # if the folder doesn't fully match the ZIP.
     if target_abs.exists() and any(target_abs.iterdir()):
-        logger.info("operations.training", "Zip already extracted; skipping", "training_extract_skip", {
+        extracted_count = sum(1 for fp in target_abs.rglob("*") if fp.is_file())
+        # Complete when no files are missing. Extra files are fine (e.g. YOLO
+        # writes labels/*.cache after training), so use >= not ==.
+        if extracted_count >= zip_file_count:
+            logger.info("operations.training", "Zip already extracted (complete); skipping", "training_extract_skip", {
+                "zip_path": zip_relative_path,
+                "target_dir": rel_dir,
+                "file_count": extracted_count,
+            })
+            return rel_dir
+        logger.warning("operations.training", "Existing extraction is stale/incomplete; re-extracting", "training_extract_stale", {
             "zip_path": zip_relative_path,
-            "target_dir": rel_dir
+            "target_dir": rel_dir,
+            "extracted_count": extracted_count,
+            "zip_file_count": zip_file_count,
         })
-        return rel_dir
+        shutil.rmtree(_winlong(str(target_abs)), ignore_errors=True)
 
     target_abs.mkdir(parents=True, exist_ok=True)
 
+    # Long-path-safe extraction: a single >260-char filename must not abort the
+    # whole extraction on Windows (that left releases with missing val/labels).
     with zipfile.ZipFile(str(zip_abs), 'r') as zf:
-        zf.extractall(str(target_abs))
+        _extract_zip_no_path_limit(zf, target_abs)
 
     # Auto-fix data.yaml path to be project-relative
     # This ensures YOLO can find the dataset regardless of where the command is run from
