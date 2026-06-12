@@ -38,6 +38,7 @@ const initialFormState = {
   earlyStop: true,
   saveBestOnly: true,
   resume: false,
+  cache: 'none',
   device: 'cpu',
   gpuIndex: null,
   optimizerMode: 'smart-auto',
@@ -488,6 +489,14 @@ const ModelTrainingSection = ({ projectId, project }) => {
             if (isValidValue(t.workers)) patch.workers = t.workers;
             else if (isValidValue(cfg.workers)) patch.workers = cfg.workers;
 
+            // cache: True/'ram'/'disk' map to the dropdown; False/None -> 'none'
+            {
+              const _cacheVal = isValidValue(t.cache) ? t.cache : cfg.cache;
+              if (_cacheVal === 'ram' || _cacheVal === 'disk') patch.cache = _cacheVal;
+              else if (_cacheVal === true) patch.cache = 'ram';
+              else if (_cacheVal === false || _cacheVal === null || _cacheVal === undefined) patch.cache = 'none';
+            }
+
             if (typeof t.data === 'string') {
               const normalizedData = t.data.replace(/\\/g, '/');
               if (normalizedData.endsWith('/data.yaml')) {
@@ -586,6 +595,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
           patience: form.patience,
           save_period: form.save_period,
           workers: form.workers,
+          cache: (form.cache && form.cache !== 'none') ? form.cache : false,
         };
         if (typeof form.datasetReleaseDir === 'string' && form.datasetReleaseDir.length) {
           trainOverrides.data = `${form.datasetReleaseDir}/data.yaml`;
@@ -673,6 +683,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     form.patience,
     form.save_period,
     form.workers,
+    form.cache,
     form.box,
     form.cls,
     form.dfl,
@@ -951,6 +962,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 patience={form.patience}
                 save_period={form.save_period}
                 workers={form.workers}
+                cache={form.cache}
                 warmup_epochs={form.warmup_epochs}
                 warmup_momentum={form.warmup_momentum}
                 warmup_bias_lr={form.warmup_bias_lr}

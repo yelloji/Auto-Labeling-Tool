@@ -5,7 +5,7 @@ import { systemAPI, remoteNodesAPI } from '../../../../services/api';
 import { mergeTrainingGuideState } from '../trainingGuideState';
 
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, max_det, taskType, datasetSummary, disabled }) {
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, cache, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, max_det, taskType, datasetSummary, disabled }) {
 
   const OPTIMIZER_PRESETS = {
     SGD: { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 },
@@ -424,6 +424,13 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
                 </Form.Item>
                 <Form.Item label="Workers" tooltip="Data loader workers">
                   <InputNumber min={0} placeholder={8} value={workers} onChange={(v) => onChange({ workers: v })} disabled={disabled} />
+                </Form.Item>
+                <Form.Item label="Cache" tooltip="Cache decoded images to speed up training (no disk re-read each epoch). 'ram' is fastest (needs free RAM); 'disk' persists and is deterministic; 'none' reads from disk each epoch.">
+                  <Select value={cache || 'none'} onChange={(v) => onChange({ cache: v })} disabled={disabled} style={{ width: '100%' }}>
+                    <Select.Option value="none">None (read each epoch)</Select.Option>
+                    <Select.Option value="ram">RAM (fastest)</Select.Option>
+                    <Select.Option value="disk">Disk (deterministic)</Select.Option>
+                  </Select>
                 </Form.Item>
               </Col>
             </Row>

@@ -208,6 +208,10 @@ def _run_training(job: JobState, config: TrainingConfig):
             }
             yolo_args.update(config.extra)
 
+        # Cache is controlled by the user via the training UI (Developer →
+        # hyperparameters → Cache: none/ram/disk) and arrives in the config.
+        # No silent injection here.
+
         with open(cfg_yaml, "w") as f:
             yaml.dump(yolo_args, f, sort_keys=False)
 
@@ -231,6 +235,10 @@ def _run_training(job: JobState, config: TrainingConfig):
 
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        # Reclaim VRAM lost to fragmentation (the "reserved but unallocated" memory).
+        # Lets large batches / 1312px segmentation use the full GPU instead of OOMing
+        # mid-validation. Recommended by PyTorch itself. No effect if already set.
+        env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
         proc = subprocess.Popen(
             cmd,
