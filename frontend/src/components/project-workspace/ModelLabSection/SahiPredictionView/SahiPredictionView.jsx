@@ -381,27 +381,31 @@ const SahiPredictionView = ({ training }) => {
     }, [experiments, fetchExperiments, running]);
 
     useEffect(() => {
+        let cancelled = false;
+
         const loadGallery = async () => {
             if (!selectedExp || selectedExp.status !== 'completed') {
                 setGalleryImages([]);
                 return;
             }
-            // Clear immediately so old filenames never render with the new experiment ID
             setGalleryImages([]);
             setGalleryLoading(true);
             try {
                 const images = await projectsAPI.getExperimentImages(selectedExp.id);
-                setGalleryImages(Array.isArray(images) ? images : []);
+                if (!cancelled) setGalleryImages(Array.isArray(images) ? images : []);
             } catch (error) {
-                console.error('Failed to load SAHI result images:', error);
-                setGalleryImages([]);
+                if (!cancelled) {
+                    console.error('Failed to load SAHI result images:', error);
+                    setGalleryImages([]);
+                }
             } finally {
-                setGalleryLoading(false);
+                if (!cancelled) setGalleryLoading(false);
             }
         };
 
         loadGallery();
-    }, [selectedExp]);
+        return () => { cancelled = true; };
+    }, [selectedExp?.id, selectedExp?.status]);
 
     const selectedStats = useMemo(() => {
         const totalDetections = countDetections(selectedExp);
