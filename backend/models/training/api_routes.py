@@ -2168,6 +2168,28 @@ async def get_experiment_original_image(
                     original_path = p
                     break
     
+    # Fallback for SAHI experiments: manifest path is stale (old absolute path, moved files).
+    # Search the project's current dataset images in the DB by filename.
+    if not original_path and exp.experiment_type == "sahi_prediction" and exp.project_id:
+        try:
+            requested_name = Path(filename).name
+            db_image = (
+                db.query(DBImage)
+                .join(Dataset, DBImage.dataset_id == Dataset.id)
+                .filter(
+                    Dataset.project_id == exp.project_id,
+                    DBImage.filename == requested_name,
+                )
+                .first()
+            )
+            if db_image and db_image.file_path:
+                raw = Path(db_image.file_path)
+                candidate = raw if raw.is_absolute() else (project_root / raw).resolve()
+                if candidate.exists():
+                    original_path = candidate
+        except Exception as e:
+            logger.warning("errors.system", f"SAHI DB fallback failed for {filename}: {e}", "sahi_db_fallback_failed")
+
     if not original_path or not original_path.exists():
         logger.warning("errors.system", f"Original source image not found for {filename} in {exp.dataset_source}", "original_image_not_found")
         raise HTTPException(status_code=404, detail="Original image not found on disk")
