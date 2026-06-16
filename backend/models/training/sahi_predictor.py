@@ -2,7 +2,10 @@ import gc
 import inspect
 import os
 import shutil
+import subprocess
 import sys
+import threading
+import time
 import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -14,6 +17,50 @@ from models.training.predictor import BasePredictor
 
 
 logger = get_professional_logger()
+
+
+def _sample_gpu_utilization() -> Optional[int]:
+    """Return current GPU core utilization % via nvidia-smi, or None if unavailable."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=2
+        )
+        if result.returncode == 0:
+            return int(result.stdout.strip().split('\n')[0])
+    except Exception:
+        pass
+    return None
+
+
+class _GpuSampler:
+    """Background thread that polls GPU utilization every second."""
+    def __init__(self):
+        self.samples: List[int] = []
+        self._stop = threading.Event()
+
+    def start(self):
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        self._thread.join(timeout=3)
+
+    def _run(self):
+        while not self._stop.is_set():
+            val = _sample_gpu_utilization()
+            if val is not None:
+                self.samples.append(val)
+            time.sleep(1)
+
+    @property
+    def peak(self) -> int:
+        return max(self.samples) if self.samples else 0
+
+    @property
+    def avg(self) -> float:
+        return round(sum(self.samples) / len(self.samples), 1) if self.samples else 0.0
 
 
 class SahiUltralyticsPredictor(BasePredictor):
@@ -42,13 +89,17 @@ class SahiUltralyticsPredictor(BasePredictor):
         )
 
         detection_model = None
+        gpu_sampler = _GpuSampler()
+        model_load_time = 0.0
         try:
+            t_load_start = time.perf_counter()
             detection_model = AutoDetectionModel.from_pretrained(
                 model_type="ultralytics",
                 model_path=model_path,
                 confidence_threshold=confidence,
                 device=device,
             )
+            model_load_time = time.perf_counter() - t_load_start
 
             predictions: Dict[str, List[Dict[str, Any]]] = {}
             total_detections = 0
@@ -63,15 +114,19 @@ class SahiUltralyticsPredictor(BasePredictor):
                 "0.5-0.8": 0,
                 "0.8-1.0": 0,
             }
+            inference_times: List[float] = []
+            gpu_sampler.start()
 
             for image_path in img_list:
                 image_name = Path(image_path).name
+                t0 = time.perf_counter()
                 result = get_sliced_prediction(**self._build_sahi_prediction_kwargs(
                     get_sliced_prediction=get_sliced_prediction,
                     image_path=image_path,
                     detection_model=detection_model,
                     params=params,
                 ))
+                inference_times.append(time.perf_counter() - t0)
 
                 image_predictions = []
                 for object_prediction in getattr(result, "object_prediction_list", []) or []:
@@ -97,9 +152,12 @@ class SahiUltralyticsPredictor(BasePredictor):
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
+            gpu_sampler.stop()
             image_count = len(img_list)
             avg_confidence = confidence_sum / confidence_count if confidence_count else 0.0
             avg_detections_per_image = total_detections / image_count if image_count else 0.0
+            total_inference_time = sum(inference_times)
+            avg_inference_time = total_inference_time / len(inference_times) if inference_times else 0.0
             analytics_summary = {
                 "total_detections": total_detections,
                 "avg_detections_per_image": round(avg_detections_per_image, 2),
@@ -111,6 +169,12 @@ class SahiUltralyticsPredictor(BasePredictor):
                 "prediction_mode": "sahi",
                 "slice_height": int(params.get("slice_height", params.get("imgsz", 896))),
                 "slice_width": int(params.get("slice_width", params.get("imgsz", 896))),
+                "model_load_time_sec": round(model_load_time, 1),
+                "avg_inference_time_sec": round(avg_inference_time, 2),
+                "total_inference_time_sec": round(total_inference_time, 1),
+                "peak_gpu_percent": gpu_sampler.peak,
+                "avg_gpu_percent": gpu_sampler.avg,
+                "device": device,
             }
 
             logger.info(
@@ -132,6 +196,10 @@ class SahiUltralyticsPredictor(BasePredictor):
             logger.error("errors.system", f"SAHI prediction task hit a critical error: {str(exc)}", "sahi_prediction_critical_error")
             raise
         finally:
+            try:
+                gpu_sampler.stop()
+            except Exception:
+                pass
             try:
                 if detection_model is not None:
                     del detection_model

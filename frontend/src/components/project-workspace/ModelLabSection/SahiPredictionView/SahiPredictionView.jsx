@@ -34,11 +34,13 @@ import {
     DownloadOutlined,
     EyeOutlined,
     FileImageOutlined,
+    HddOutlined,
     LoadingOutlined,
     PlayCircleOutlined,
     PlusOutlined,
     SearchOutlined,
-    ScissorOutlined
+    ScissorOutlined,
+    ThunderboltOutlined
 } from '@ant-design/icons';
 import ImageViewerModal from '../PredictionView/ImageViewerModal';
 import { projectsAPI, handleAPIError } from '../../../../services/api';
@@ -184,6 +186,7 @@ const SahiPredictionView = ({ training }) => {
     const [verifications, setVerifications] = useState([]);
     const [historyHeight, setHistoryHeight] = useState('100%');
     const [sahiCounts, setSahiCounts] = useState({ split_counts: {}, total: 0, available_splits: [] });
+    const [liveGpu, setLiveGpu] = useState({ available: false, utilization: 0, memory_used_mb: 0, memory_total_mb: 0, device_name: '' });
     const selectedExpRef = useRef(null);
     const syncTimeoutRef = useRef(null);
     const galleryRef = useRef(null);
@@ -312,6 +315,20 @@ const SahiPredictionView = ({ training }) => {
         fetchVerifications();
     }, [fetchProjectLabels, fetchVerifications]);
 
+    // Poll live GPU utilization while a prediction is running
+    useEffect(() => {
+        if (selectedExp?.status !== 'running') return undefined;
+        const poll = async () => {
+            try {
+                const data = await projectsAPI.getGpuStatus();
+                setLiveGpu(data);
+            } catch (_) {}
+        };
+        poll();
+        const id = window.setInterval(poll, 2000);
+        return () => window.clearInterval(id);
+    }, [selectedExp?.status]);
+
     useEffect(() => {
         return () => {
             if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
@@ -379,14 +396,19 @@ const SahiPredictionView = ({ training }) => {
     const selectedStats = useMemo(() => {
         const totalDetections = countDetections(selectedExp);
         const imageCount = selectedExp?.image_count || selectedExp?.analytics_summary?.image_count || galleryImages.length || 0;
-        const averageConfidence = selectedExp?.analytics_summary?.average_confidence;
+        const summary = selectedExp?.analytics_summary || {};
         const params = getExperimentParams(selectedExp);
 
         return {
             imageCount,
             totalDetections,
-            averageConfidence,
-            splitCounts: params.input_split_counts || selectedExp?.analytics_summary?.input_split_counts || {}
+            averageConfidence: summary.avg_confidence,
+            modelLoadTimeSec: summary.model_load_time_sec,
+            avgInferenceSec: summary.avg_inference_time_sec,
+            totalInferenceSec: summary.total_inference_time_sec,
+            peakGpuPercent: summary.peak_gpu_percent,
+            avgGpuPercent: summary.avg_gpu_percent,
+            splitCounts: params.input_split_counts || summary.input_split_counts || {}
         };
     }, [galleryImages.length, selectedExp]);
 
@@ -1086,27 +1108,107 @@ const SahiPredictionView = ({ training }) => {
                         </Form>
                     </section>
 
-                    <Row gutter={[16, 16]} className="sahi-stats-row">
+                    {/* Row 1 — Results */}
+                    <Row gutter={[12, 12]} className="sahi-stats-row">
                         <Col xs={24} md={8}>
-                            <div className="sahi-stat-card">
-                                <Statistic title="Images" value={selectedStats.imageCount} prefix={<FileImageOutlined />} />
+                            <div className="sahi-stat-card sahi-stat-blue">
+                                <div className="sahi-stat-icon sahi-stat-icon-blue"><FileImageOutlined /></div>
+                                <div className="sahi-stat-body">
+                                    <div className="sahi-stat-value">{selectedStats.imageCount ?? '—'}</div>
+                                    <div className="sahi-stat-label">Images</div>
+                                </div>
                             </div>
                         </Col>
                         <Col xs={24} md={8}>
-                            <div className="sahi-stat-card">
-                                <Statistic title="Detections" value={selectedStats.totalDetections} />
+                            <div className="sahi-stat-card sahi-stat-purple">
+                                <div className="sahi-stat-icon sahi-stat-icon-purple"><ScissorOutlined /></div>
+                                <div className="sahi-stat-body">
+                                    <div className="sahi-stat-value">{selectedStats.totalDetections ?? '—'}</div>
+                                    <div className="sahi-stat-label">Detections</div>
+                                </div>
                             </div>
                         </Col>
                         <Col xs={24} md={8}>
-                            <div className="sahi-stat-card">
-                                <Statistic
-                                    title="Avg Confidence"
-                                    value={selectedStats.averageConfidence ?? 0}
-                                    precision={2}
-                                />
+                            <div className="sahi-stat-card sahi-stat-green">
+                                <div className="sahi-stat-icon sahi-stat-icon-green"><CheckCircleOutlined /></div>
+                                <div className="sahi-stat-body">
+                                    <div className="sahi-stat-value">
+                                        {selectedStats.averageConfidence != null ? (selectedStats.averageConfidence * 100).toFixed(1) + '%' : '—'}
+                                    </div>
+                                    <div className="sahi-stat-label">Avg Confidence</div>
+                                </div>
                             </div>
                         </Col>
                     </Row>
+
+                    {/* Row 2 — Performance (shown when experiment exists) */}
+                    {selectedExp && (
+                        <Row gutter={[12, 12]} className="sahi-stats-row">
+                            <Col xs={24} md={6}>
+                                <div className="sahi-stat-card sahi-stat-orange">
+                                    <div className="sahi-stat-icon sahi-stat-icon-orange"><ThunderboltOutlined /></div>
+                                    <div className="sahi-stat-body">
+                                        <div className="sahi-stat-value">
+                                            {selectedStats.avgInferenceSec != null ? `${selectedStats.avgInferenceSec}s` : '—'}
+                                        </div>
+                                        <div className="sahi-stat-label">Inference / Image</div>
+                                    </div>
+                                </div>
+                            </Col>
+                            <Col xs={24} md={6}>
+                                <div className="sahi-stat-card sahi-stat-teal">
+                                    <div className="sahi-stat-icon sahi-stat-icon-teal"><ClockCircleOutlined /></div>
+                                    <div className="sahi-stat-body">
+                                        <div className="sahi-stat-value">
+                                            {selectedStats.totalInferenceSec != null ? `${selectedStats.totalInferenceSec}s` : '—'}
+                                        </div>
+                                        <div className="sahi-stat-label">Total Inference</div>
+                                    </div>
+                                </div>
+                            </Col>
+                            <Col xs={24} md={6}>
+                                {selectedExp.status === 'running' ? (
+                                    <div className="sahi-stat-card sahi-stat-gpu-live">
+                                        <div className="sahi-stat-icon sahi-stat-icon-gpu-live">
+                                            <span className="sahi-gpu-pulse" />
+                                        </div>
+                                        <div className="sahi-stat-body">
+                                            <div className="sahi-stat-value sahi-stat-live-value">
+                                                {liveGpu.available ? `${liveGpu.utilization}%` : '—'}
+                                            </div>
+                                            <div className="sahi-stat-label">
+                                                GPU Live
+                                                {liveGpu.available && liveGpu.memory_total_mb > 0 && (
+                                                    <span className="sahi-gpu-mem"> · {(liveGpu.memory_used_mb / 1024).toFixed(1)} / {(liveGpu.memory_total_mb / 1024).toFixed(0)} GB</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="sahi-stat-card sahi-stat-grape">
+                                        <div className="sahi-stat-icon sahi-stat-icon-grape">⚡</div>
+                                        <div className="sahi-stat-body">
+                                            <div className="sahi-stat-value">
+                                                {selectedStats.peakGpuPercent != null ? `${selectedStats.peakGpuPercent}%` : '—'}
+                                            </div>
+                                            <div className="sahi-stat-label">Peak GPU</div>
+                                        </div>
+                                    </div>
+                                )}
+                            </Col>
+                            <Col xs={24} md={6}>
+                                <div className="sahi-stat-card sahi-stat-cyan">
+                                    <div className="sahi-stat-icon sahi-stat-icon-cyan"><HddOutlined /></div>
+                                    <div className="sahi-stat-body">
+                                        <div className="sahi-stat-value">
+                                            {selectedStats.modelLoadTimeSec != null ? `${selectedStats.modelLoadTimeSec}s` : '—'}
+                                        </div>
+                                        <div className="sahi-stat-label">Model Load Time</div>
+                                    </div>
+                                </div>
+                            </Col>
+                        </Row>
+                    )}
 
                     <section className="gallery-section-container sahi-gallery-panel" ref={galleryRef}>
                         <div className="gallery-header">
