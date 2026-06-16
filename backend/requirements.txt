@@ -10,8 +10,8 @@ alembic==1.12.1
 
 # Computer Vision and ML - YOLO11 Latest
 ultralytics==8.4.23  # Pinned: YOLO11 + YOLO26 support. Test before upgrading — 8.3→8.4 had breaking log format + path changes.
-sahi>=0.11.36  # Required for SAHI sliced inference on tile-enabled model predictions
-opencv-python>=4.8.0
+sahi>=0.12.1  # Required for SAHI sliced inference with real batch_size support
+opencv-python>=4.12.0.88
 
 # PyTorch (CPU version - for CUDA see requirements-cuda.txt)
 torch>=2.2.0
