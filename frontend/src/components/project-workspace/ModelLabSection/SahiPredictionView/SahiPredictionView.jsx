@@ -386,6 +386,8 @@ const SahiPredictionView = ({ training }) => {
                 setGalleryImages([]);
                 return;
             }
+            // Clear immediately so old filenames never render with the new experiment ID
+            setGalleryImages([]);
             setGalleryLoading(true);
             try {
                 const images = await projectsAPI.getExperimentImages(selectedExp.id);

@@ -110,7 +110,7 @@ def resolve_dataset_stage_images(db: Session, project_id: int, split: Optional[s
 
         absolute_path = abs_path.resolve().as_posix()
         relative_path = _to_relative_path(abs_path, source_path)
-        images.append(absolute_path)
+        images.append(relative_path)  # store relative so manifest is portable
         split_counts[split_section] += 1
         items.append({
             "image_id": image.id,
@@ -159,7 +159,7 @@ def resolve_uploaded_images(uploaded_images: Optional[List[str]]) -> Dict[str, A
 
         absolute_path = abs_path.resolve().as_posix()
         relative_path = _to_relative_path(abs_path, source_path)
-        images.append(absolute_path)
+        images.append(relative_path)  # store relative so manifest is portable
         items.append({
             "filename": abs_path.name,
             "split_section": "upload",

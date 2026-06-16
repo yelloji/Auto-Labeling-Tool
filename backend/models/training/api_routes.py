@@ -2109,7 +2109,10 @@ async def get_experiment_original_image(
                 with open(manifest_path, "r", encoding="utf-8") as manifest_file:
                     manifest_images = json.load(manifest_file)
                 for image_path_str in manifest_images:
-                    candidate = Path(image_path_str).resolve()
+                    raw = Path(image_path_str)
+                    # Manifest may store relative paths (portable) or legacy absolute paths
+                    candidate = raw if raw.is_absolute() else (project_root / raw)
+                    candidate = candidate.resolve()
                     if candidate.name == requested_name and candidate.exists():
                         original_path = candidate
                         break

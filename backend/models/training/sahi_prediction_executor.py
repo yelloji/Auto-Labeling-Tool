@@ -42,7 +42,17 @@ def calculate_md5(file_path: str):
 def load_images(args) -> list:
     if args.images_manifest:
         with open(args.images_manifest, "r", encoding="utf-8") as manifest_file:
-            return json.load(manifest_file)
+            raw = json.load(manifest_file)
+        # Manifest stores relative paths (relative to project root / BASE_DIR).
+        # Convert to absolute so the predictor can open files directly.
+        project_root = Path(os.getcwd())
+        resolved = []
+        for p in raw:
+            path = Path(p)
+            if not path.is_absolute():
+                path = (project_root / p).resolve()
+            resolved.append(str(path))
+        return resolved
     if args.images_json:
         return json.loads(args.images_json)
     raise ValueError("SAHI prediction executor requires either --images_manifest or --images_json")
