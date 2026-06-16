@@ -57,6 +57,14 @@ class CacheControlMiddleware(BaseHTTPMiddleware):
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
 
+        # Experiment prediction images never change — allow 1-hour browser cache
+        if "/original-image/" in request.url.path:
+            response.headers["Cache-Control"] = "public, max-age=3600"
+            if "Pragma" in response.headers:
+                del response.headers["Pragma"]
+            if "Expires" in response.headers:
+                del response.headers["Expires"]
+
         # Prevent caching for images served by backend
         if request.url.path.startswith("/uploads/"):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"

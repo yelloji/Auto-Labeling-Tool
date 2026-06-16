@@ -315,6 +315,16 @@ const ImageViewerModal = ({
         loadStartTime.current = performance.now();
     }, [currentImage]);
 
+    // Preload adjacent images so next/prev navigation feels instant
+    React.useEffect(() => {
+        if (!currentImage || !experiment?.id || !images.length) return;
+        const idx = images.indexOf(currentImage);
+        [images[idx + 1], images[idx - 1]].filter(Boolean).forEach((imgName) => {
+            const pre = new window.Image();
+            pre.src = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experiment.id}/original-image/${imgName}`;
+        });
+    }, [currentImage, experiment?.id, images]);
+
     // 2. DETECTION AUTO-SELECT TRIGGER
     // Refreshes selection whenever data OR filters change, without hiding the image.
     React.useEffect(() => {

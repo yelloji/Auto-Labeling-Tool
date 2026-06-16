@@ -2157,16 +2157,23 @@ async def get_experiment_original_image(
     if thumbnail:
         try:
             thumb_size = max(32, min(size, 1024))
-            with Image.open(original_path) as img:
-                if img.mode not in ("RGB", "RGBA"):
-                    img = img.convert("RGB")
-                img.thumbnail((thumb_size, thumb_size), Image.Resampling.LANCZOS)
-                output = io.BytesIO()
-                save_format = "PNG" if img.mode == "RGBA" else "JPEG"
-                img.save(output, format=save_format, quality=85, optimize=True)
-                output.seek(0)
-            media_type = "image/png" if save_format == "PNG" else "image/jpeg"
-            return StreamingResponse(output, media_type=media_type)
+            # Store under BASE_DIR/thumb_cache/<experiment_id>/<size>/ — always writable in both dev and EXE
+            thumb_cache_dir = settings.BASE_DIR / "thumb_cache" / experiment_id / str(thumb_size)
+            thumb_cache_dir.mkdir(parents=True, exist_ok=True)
+            cached = thumb_cache_dir / (original_path.stem + ".jpg")
+
+            if not cached.exists():
+                with Image.open(original_path) as img:
+                    if img.mode not in ("RGB", "RGBA", "L"):
+                        img = img.convert("RGB")
+                    if img.mode == "RGBA":
+                        bg = Image.new("RGB", img.size, (255, 255, 255))
+                        bg.paste(img, mask=img.split()[3])
+                        img = bg
+                    img.thumbnail((thumb_size, thumb_size), Image.Resampling.LANCZOS)
+                    img.save(cached, format="JPEG", quality=85, optimize=True)
+
+            return FileResponse(str(cached), media_type="image/jpeg")
         except Exception as e:
             logger.warning(
                 "errors.system",
@@ -2251,6 +2258,14 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
 
     # 4. Delete associated Human Verifications (cleanup matching records)
     db.query(HumanVerification).filter(HumanVerification.experiment_id == experiment_id).delete()
+
+    # Clean up thumbnail disk cache for this experiment
+    thumb_cache_exp = settings.BASE_DIR / "thumb_cache" / experiment_id
+    if thumb_cache_exp.exists():
+        try:
+            shutil.rmtree(thumb_cache_exp)
+        except Exception:
+            pass
 
     # 5. Delete the database record
     db.delete(exp)

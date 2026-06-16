@@ -612,6 +612,14 @@ const SahiPredictionView = ({ training }) => {
         setPreviewImage(nextImage);
     };
 
+    const handleGalleryImageClick = (imageName) => {
+        // Start loading the full-res image immediately so browser has a head start
+        // before the modal finishes opening (~300ms modal animation)
+        const preWarm = new window.Image();
+        preWarm.src = buildImageUrl(selectedExp.id, imageName, false);
+        setPreviewImage(imageName);
+    };
+
     const handleVerify = async (payload) => {
         if (!projectId) return;
         try {
@@ -1142,7 +1150,7 @@ const SahiPredictionView = ({ training }) => {
                                             type="button"
                                             key={imageName}
                                             className="sahi-gallery-item"
-                                            onClick={() => setPreviewImage(imageName)}
+                                            onClick={() => handleGalleryImageClick(imageName)}
                                             title={imageName}
                                         >
                                             <div className="sahi-image-thumb">
