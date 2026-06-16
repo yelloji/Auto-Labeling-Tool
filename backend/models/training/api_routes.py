@@ -2830,7 +2830,7 @@ async def trigger_prediction(
 async def get_missed_ground_truth(
     experiment_id: str,
     image_name: str,
-    iou_threshold: float = Query(0.3, ge=0.1, le=0.9),
+    iou_threshold: float = Query(0.3, ge=0.01, le=0.9),
     db: Session = Depends(get_db)
 ):
     """Get ground truth objects that the model failed to detect."""
