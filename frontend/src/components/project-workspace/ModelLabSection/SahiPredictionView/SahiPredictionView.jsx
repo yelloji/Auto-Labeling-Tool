@@ -24,6 +24,7 @@ import {
     Tag,
     Tooltip,
     Typography,
+    Upload,
     message
 } from 'antd';
 import {
@@ -40,7 +41,8 @@ import {
     PlusOutlined,
     SearchOutlined,
     ScissorOutlined,
-    ThunderboltOutlined
+    ThunderboltOutlined,
+    UploadOutlined
 } from '@ant-design/icons';
 import ImageViewerModal from '../PredictionView/ImageViewerModal';
 import { projectsAPI, handleAPIError } from '../../../../services/api';
@@ -187,6 +189,9 @@ const SahiPredictionView = ({ training }) => {
     const [historyHeight, setHistoryHeight] = useState('100%');
     const [sahiCounts, setSahiCounts] = useState({ split_counts: {}, total: 0, available_splits: [] });
     const [liveGpu, setLiveGpu] = useState({ available: false, utilization: 0, memory_used_mb: 0, memory_total_mb: 0, device_name: '' });
+    const [imageSource, setImageSource] = useState('dataset_images');
+    const [pendingFiles, setPendingFiles] = useState([]);
+    const [uploading, setUploading] = useState(false);
     const selectedExpRef = useRef(null);
     const syncTimeoutRef = useRef(null);
     const galleryRef = useRef(null);
@@ -262,6 +267,9 @@ const SahiPredictionView = ({ training }) => {
     useEffect(() => {
         if (!selectedExp || selectedExp.status === 'queued') return;
         hydrateFormFromExperiment(selectedExp);
+        const ds = selectedExp.dataset_source || getExperimentParams(selectedExp).dataset_source || 'dataset_images';
+        setImageSource(ds === 'upload' ? 'upload' : 'dataset_images');
+        setPendingFiles([]);
     }, [selectedExp?.id, selectedExp?.status, hydrateFormFromExperiment]);
 
     useEffect(() => {
@@ -534,7 +542,7 @@ const SahiPredictionView = ({ training }) => {
                 const payload = {
                     ...allValues,
                     name,
-                    dataset_source: 'dataset_images',
+                    dataset_source: imageSource === 'upload' ? 'upload' : 'dataset_images',
                     custom_params: { ...allValues, name }
                 };
                 const draft = await projectsAPI.initSahiPrediction(training.id, payload);
@@ -601,11 +609,38 @@ const SahiPredictionView = ({ training }) => {
                 message.warning('Name must be at least 3 characters');
                 return;
             }
+            if (imageSource === 'upload' && pendingFiles.length === 0) {
+                message.warning('Please select images to upload first');
+                return;
+            }
             setRunning(true);
+
+            let draftExp = selectedExpRef.current;
+
+            if (imageSource === 'upload') {
+                // Ensure we have a queued draft to attach uploads to
+                if (!draftExp || draftExp.status !== 'queued') {
+                    const initPayload = {
+                        ...values,
+                        name,
+                        dataset_source: 'upload',
+                        uploaded_images: []
+                    };
+                    draftExp = await projectsAPI.initSahiPrediction(training.id, initPayload);
+                    selectedExpRef.current = draftExp;
+                }
+                // Upload the staged files
+                setUploading(true);
+                const formData = new FormData();
+                pendingFiles.forEach((file) => formData.append('files', file));
+                await projectsAPI.uploadPredictionImages(training.id, draftExp.id, formData);
+                setUploading(false);
+            }
+
             const payload = {
                 ...values,
                 name,
-                dataset_source: 'dataset_images',
+                dataset_source: imageSource === 'upload' ? 'upload' : 'dataset_images',
                 custom_params: { ...values, name }
             };
             const response = await projectsAPI.triggerSahiPrediction(training.id, payload);
@@ -617,6 +652,7 @@ const SahiPredictionView = ({ training }) => {
             handleAPIError(error, 'Failed to start SAHI prediction');
         } finally {
             setRunning(false);
+            setUploading(false);
         }
     };
 
@@ -628,6 +664,8 @@ const SahiPredictionView = ({ training }) => {
         setPreviewImage(null);
         setFilters(resetFilterState());
         form.setFieldsValue(defaultConfig);
+        setImageSource('dataset_images');
+        setPendingFiles([]);
         message.info('Ready for a new SAHI prediction');
     };
 
@@ -986,7 +1024,7 @@ const SahiPredictionView = ({ training }) => {
                                 )}
                                 <Button
                                     type="primary"
-                                    icon={<PlayCircleOutlined />}
+                                    icon={uploading ? <LoadingOutlined /> : <PlayCircleOutlined />}
                                     loading={running}
                                     onClick={handleRun}
                                     disabled={
@@ -995,16 +1033,18 @@ const SahiPredictionView = ({ training }) => {
                                         watchedName?.trim().length < 3
                                     }
                                 >
-                                    Run SAHI
+                                    {uploading ? 'Uploading...' : 'Run SAHI'}
                                 </Button>
                             </Space>
                         </div>
-                        <Alert
-                            type="info"
-                            showIcon
-                            className="sahi-config-alert"
-                            message="Input source is fixed to full original dataset-stage images for this first SAHI workflow."
-                        />
+                        {imageSource === 'upload' && (
+                            <Alert
+                                type="info"
+                                showIcon
+                                className="sahi-config-alert"
+                                message="Upload your own images and run SAHI sliced inference on them."
+                            />
+                        )}
                         <Form
                             form={form}
                             layout="vertical"
@@ -1027,19 +1067,75 @@ const SahiPredictionView = ({ training }) => {
                                         />
                                     </Form.Item>
                                 </Col>
-                                <Col xs={24} sm={12} lg={6}>
-                                    <Form.Item name="split" label="Image Source">
-                                        <Select>
-                                            <Option value="all">All (Train + Val + Test) — {sahiCounts.total || 0}</Option>
-                                            <Option value="train">Training Set — {sahiCounts.split_counts?.train || 0}</Option>
-                                            <Option value="val">Validation Set — {sahiCounts.split_counts?.val || 0}</Option>
-                                            {(sahiCounts.split_counts?.test || 0) > 0 && (
-                                                <Option value="test">Test Set — {sahiCounts.split_counts?.test || 0}</Option>
-                                            )}
+                                <Col xs={24} sm={12} lg={4}>
+                                    <Form.Item label="Image Source">
+                                        <Select
+                                            value={imageSource}
+                                            onChange={(val) => {
+                                                setImageSource(val);
+                                                setPendingFiles([]);
+                                            }}
+                                        >
+                                            <Option value="dataset_images">Dataset Images</Option>
+                                            <Option value="upload">Upload Images</Option>
                                         </Select>
                                     </Form.Item>
                                 </Col>
-                                <Col xs={24} sm={12} lg={6}>
+                                {imageSource === 'dataset_images' ? (
+                                    <Col xs={24} sm={12} lg={4}>
+                                        <Form.Item name="split" label="Dataset Split">
+                                            <Select>
+                                                <Option value="all">All — {sahiCounts.total || 0}</Option>
+                                                <Option value="train">Train — {sahiCounts.split_counts?.train || 0}</Option>
+                                                <Option value="val">Val — {sahiCounts.split_counts?.val || 0}</Option>
+                                                {(sahiCounts.split_counts?.test || 0) > 0 && (
+                                                    <Option value="test">Test — {sahiCounts.split_counts?.test || 0}</Option>
+                                                )}
+                                            </Select>
+                                        </Form.Item>
+                                    </Col>
+                                ) : (
+                                    <Col xs={24} sm={12} lg={4}>
+                                        <Form.Item label="Files">
+                                            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                                <Upload
+                                                    beforeUpload={(file) => {
+                                                        setPendingFiles((prev) => [...prev, file]);
+                                                        return false;
+                                                    }}
+                                                    onRemove={(file) => {
+                                                        setPendingFiles((prev) => prev.filter((f) => f.uid !== file.uid));
+                                                    }}
+                                                    multiple
+                                                    accept=".jpg,.jpeg,.png,.bmp,.webp,.tif,.tiff"
+                                                    fileList={pendingFiles.map((f) => ({ uid: f.uid, name: f.name, status: 'done' }))}
+                                                    showUploadList={false}
+                                                >
+                                                    <Button icon={<UploadOutlined />} size="small">
+                                                        Select Files
+                                                    </Button>
+                                                </Upload>
+                                                {pendingFiles.length > 0 && (
+                                                    <Space>
+                                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                                            {pendingFiles.length} file{pendingFiles.length !== 1 ? 's' : ''} ready
+                                                        </Text>
+                                                        <Button
+                                                            type="link"
+                                                            size="small"
+                                                            danger
+                                                            style={{ padding: 0, fontSize: 11 }}
+                                                            onClick={() => setPendingFiles([])}
+                                                        >
+                                                            Clear
+                                                        </Button>
+                                                    </Space>
+                                                )}
+                                            </Space>
+                                        </Form.Item>
+                                    </Col>
+                                )}
+                                <Col xs={24} sm={12} lg={4}>
                                     <Form.Item name="weights_type" label="Weights">
                                         <Select>
                                             <Option value="best">Best</Option>

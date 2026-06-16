@@ -256,8 +256,11 @@ def _finalize_sahi_experiment_from_payload(exp: ModelExperiment, ts: TrainingSes
     exp.imgsz = max(payload.slice_height, payload.slice_width)
     exp.device = payload.device
     exp.custom_params = _sahi_params_from_payload(payload)
-    exp.input_images = payload.uploaded_images
-    exp.dataset_path = None
+    # For upload source: preserve the dataset_path set by the upload endpoint (prediction_temp/ folder).
+    # For dataset_images: clear it so the executor does not try to treat it as an upload folder.
+    if payload.dataset_source != "upload":
+        exp.input_images = payload.uploaded_images
+        exp.dataset_path = None
 
 
 @router.get("/training/{training_id}/sahi-prediction/available-images")
