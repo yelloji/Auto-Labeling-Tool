@@ -96,6 +96,10 @@ cat > /workspace/agent.py
 nohup python /workspace/agent.py > /workspace/agent.log 2>&1 &
 cat /workspace/agent.log
 ```
+
+to watch uplaoding  us etshei 
+-----   watch -n 2 "awk '/eth0/{printf \"Uploaded: %.2f GB of ~4.3 GB\\n\", \$2/1024/1024/1024}' /proc/net/dev"    -------
+
 You should see:
 ```
 Gevis Remote Training Agent v1.0.0
@@ -197,6 +201,7 @@ When finished training for now:
 | `CUDA out of memory` **during validation** (training was fine) | Segmentation validation spikes VRAM higher than training | Lower **batch** (batch 4 for 1312px seg on 48 GB) |
 | Stuck `yolo` processes after a crash (RAM stays high) | Crashed training left orphan workers | `pkill -f "yolo cfg="`, verify `ps aux | grep yolo` is empty |
 | Re-uploading 4.4 GB every run | Release not cached / changed | First run uploads once; same release after = auto-skips. New/regenerated release = uploads once more |
+| `OSError: [Errno 5] Input/output error` writing `results.csv` mid-training | `/workspace` is a **network filesystem** (MooseFS `mfs#...runpod.net`); YOLO's constant small writes (results.csv + checkpoints every epoch) hit a network glitch | Agent now writes job output to the **local disk `/jobs`** (not `/workspace`). Re-upload the updated `agent.py`, restart the agent, restart training. Disk being full is NOT the cause — check `df -h` (overlay `/` has plenty). |
 
 ---
 

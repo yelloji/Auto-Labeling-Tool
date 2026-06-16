@@ -33,11 +33,18 @@ import uvicorn
 AGENT_VERSION = "1.0.0"
 PORT = 12000
 WORKSPACE = Path("/workspace")
-JOBS_DIR = WORKSPACE / "jobs"
+
+# Training output (results.csv, checkpoints) is written CONSTANTLY during training.
+# /workspace on RunPod is a NETWORK filesystem (MooseFS) that throws
+# "OSError: [Errno 5] Input/output error" under these frequent small writes.
+# So write job output to the LOCAL container disk (fast + reliable). The output is
+# downloaded back to the user's PC anyway, so it does not need to survive a pod Stop.
+JOBS_DIR = Path("/jobs")
 JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Release cache — extracted training data keyed by release name.
-# Lets repeat trainings of the same release skip the (slow) upload entirely.
+# Release cache — extracted training data keyed by release name. Kept on /workspace
+# so it survives a pod Stop (no re-upload). Reads are infrequent (cache=ram loads
+# images into RAM after the first epoch), so the network volume is fine for reads.
 RELEASES_CACHE = WORKSPACE / "releases_cache"
 RELEASES_CACHE.mkdir(parents=True, exist_ok=True)
 
