@@ -38,6 +38,7 @@ SAHI_PARAM_FIELDS = {
     "no_sliced_prediction",
     "visual_hide_labels",
     "visual_hide_conf",
+    "batch_size",
 }
 
 
@@ -60,6 +61,7 @@ class SahiPredictionRequest(BaseModel):
     visual_hide_labels: bool = False
     visual_hide_conf: bool = False
     device: str = "auto"
+    batch_size: int = 1
     custom_params: Optional[Dict[str, Any]] = None
     uploaded_images: Optional[List[str]] = None
 
@@ -83,6 +85,7 @@ class SahiPredictionUpdate(BaseModel):
     visual_hide_labels: Optional[bool] = None
     visual_hide_conf: Optional[bool] = None
     device: Optional[str] = None
+    batch_size: Optional[int] = None
     custom_params: Optional[Dict[str, Any]] = None
     uploaded_images: Optional[List[str]] = None
 

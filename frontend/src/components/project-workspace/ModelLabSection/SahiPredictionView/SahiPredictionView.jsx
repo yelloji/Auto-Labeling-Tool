@@ -14,7 +14,6 @@ import {
     InputNumber,
     List,
     Modal,
-    Radio,
     Row,
     Select,
     Space,
@@ -65,7 +64,8 @@ const DEFAULT_CONFIG = {
     no_sliced_prediction: false,
     visual_hide_labels: false,
     visual_hide_conf: false,
-    device: 'auto'
+    device: 'auto',
+    batch_size: 1
 };
 
 const DEFAULT_FILTERS = {
@@ -254,6 +254,12 @@ const SahiPredictionView = ({ training }) => {
     useEffect(() => {
         selectedExpRef.current = selectedExp;
     }, [selectedExp]);
+
+    // When user clicks a completed/running/failed experiment in history, load its actual params into the form
+    useEffect(() => {
+        if (!selectedExp || selectedExp.status === 'queued') return;
+        hydrateFormFromExperiment(selectedExp);
+    }, [selectedExp?.id, selectedExp?.status, hydrateFormFromExperiment]);
 
     useEffect(() => {
         if (!training?.id) return;
@@ -974,6 +980,7 @@ const SahiPredictionView = ({ training }) => {
                             initialValues={defaultConfig}
                             className="sahi-config-form"
                             onValuesChange={handleFormChange}
+                            disabled={running || (selectedExp && selectedExp.status !== 'queued')}
                         >
                             <Row gutter={12}>
                                 <Col xs={24} lg={12}>
@@ -986,53 +993,19 @@ const SahiPredictionView = ({ training }) => {
                                             placeholder="Enter prediction name"
                                             autoComplete="off"
                                             onBlur={handleNameBlur}
-                                            disabled={running || (selectedExp && selectedExp.status !== 'queued')}
                                         />
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} sm={12} lg={6}>
                                     <Form.Item name="split" label="Image Source">
-                                        <Radio.Group
-                                            disabled={running || (selectedExp && selectedExp.status !== 'queued')}
-                                            style={{ width: '100%' }}
-                                        >
-                                            <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                                                <Radio value="all" className="sahi-source-radio">
-                                                    <span className="sahi-source-label">All (Train + Val + Test)</span>
-                                                    <Badge
-                                                        count={sahiCounts.total || 0}
-                                                        overflowCount={99999}
-                                                        style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
-                                                    />
-                                                </Radio>
-                                                <Radio value="train" className="sahi-source-radio">
-                                                    <span className="sahi-source-label">Training Set</span>
-                                                    <Badge
-                                                        count={sahiCounts.split_counts?.train || 0}
-                                                        overflowCount={99999}
-                                                        style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
-                                                    />
-                                                </Radio>
-                                                <Radio value="val" className="sahi-source-radio">
-                                                    <span className="sahi-source-label">Validation Set</span>
-                                                    <Badge
-                                                        count={sahiCounts.split_counts?.val || 0}
-                                                        overflowCount={99999}
-                                                        style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
-                                                    />
-                                                </Radio>
-                                                {(sahiCounts.split_counts?.test || 0) > 0 && (
-                                                    <Radio value="test" className="sahi-source-radio">
-                                                        <span className="sahi-source-label">Test Set</span>
-                                                        <Badge
-                                                            count={sahiCounts.split_counts?.test || 0}
-                                                            overflowCount={99999}
-                                                            style={{ backgroundColor: '#f0f2f5', color: '#8c8c8c', boxShadow: 'none' }}
-                                                        />
-                                                    </Radio>
-                                                )}
-                                            </Space>
-                                        </Radio.Group>
+                                        <Select>
+                                            <Option value="all">All (Train + Val + Test) — {sahiCounts.total || 0}</Option>
+                                            <Option value="train">Training Set — {sahiCounts.split_counts?.train || 0}</Option>
+                                            <Option value="val">Validation Set — {sahiCounts.split_counts?.val || 0}</Option>
+                                            {(sahiCounts.split_counts?.test || 0) > 0 && (
+                                                <Option value="test">Test Set — {sahiCounts.split_counts?.test || 0}</Option>
+                                            )}
+                                        </Select>
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} sm={12} lg={6}>
@@ -1091,6 +1064,14 @@ const SahiPredictionView = ({ training }) => {
                                 <Col xs={24} sm={12} lg={6}>
                                     <Form.Item name="postprocess_class_agnostic" label="Class-Agnostic Merge" valuePropName="checked">
                                         <Switch />
+                                    </Form.Item>
+                                </Col>
+                            </Row>
+
+                            <Row gutter={12}>
+                                <Col xs={24} sm={12} lg={6}>
+                                    <Form.Item name="batch_size" label="Batch Size" tooltip="Number of slices processed per GPU call. Higher = faster but uses more VRAM. Try 4 or 8 to improve GPU utilization.">
+                                        <InputNumber min={1} max={64} step={1} precision={0} />
                                     </Form.Item>
                                 </Col>
                             </Row>

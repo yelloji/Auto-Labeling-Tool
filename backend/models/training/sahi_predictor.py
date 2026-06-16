@@ -191,6 +191,9 @@ class SahiUltralyticsPredictor(BasePredictor):
         if "no_sliced_prediction" in supported_keys:
             kwargs["no_sliced_prediction"] = bool(params.get("no_sliced_prediction", False))
 
+        if "batch_size" in supported_keys:
+            kwargs["batch_size"] = int(params.get("batch_size", 1))
+
         return {key: value for key, value in kwargs.items() if key in supported_keys}
 
     def _convert_object_prediction(self, object_prediction: Any) -> Dict[str, Any]:
