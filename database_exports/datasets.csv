@@ -3,15 +3,29 @@ ID,Name,Description,Project ID,Project Name,Created,Updated,Total Images,Labeled
 cb17fee5-e822-4232-a2a7-b1c1a4264b71,Reject,Images uploaded to gevis,1,gevis,2025-09-22 07:07:14,2026-04-14 07:58:19.888804,1,1,0,9
 86451fe3-1dff-4290-adfb-e4bc03b1d2be,bread_dataset,Images uploaded to gevis,1,gevis,2026-01-20 10:03:43,2026-04-13 09:05:29.551636,3,3,0,3
 95946074-6a52-4894-a994-77cb0e325d75,one,Images uploaded to gevis,1,gevis,2026-04-14 07:58:04,2026-04-14 07:58:10.450191,1,0,1,0
+45700734-198e-46e7-9db7-1f9dc60c69ab,first,Images uploaded to gevis,1,gevis,2026-04-28 08:37:42,2026-04-28 08:38:01.884981,1,1,0,1
+4333bc06-b326-40b1-b914-e6900e552b76,fff,Images uploaded to gevis,1,gevis,2026-04-28 08:48:15,2026-04-28 08:48:29.783872,1,1,0,1
 859a7b3d-1fa0-4bbf-8dbc-f0dee78994f7,Reject,Images uploaded to MASMAC-O-RING,3,MASMAC-O-RING,2025-09-23 10:32:21,2025-09-30 15:28:47.702206,9,9,0,82
 70b93505-ee97-4374-abea-117769200707,rejects,Images uploaded to cuffia-ext,5,cuffia-ext,2025-09-25 07:24:30,2025-09-27 07:47:19.144652,6,6,0,28
 38ffde84-e9b2-4445-91f7-9df234238d14,rejects,Images uploaded to cuffia-int,6,cuffia-int,2025-09-25 10:15:49,2025-09-28 08:03:56.651915,6,6,0,41
 b7d194f0-e372-46e0-bd1e-80b4a4b9fcf8,external_square,Images uploaded to Sensore di Forza external,7,Sensore di Forza external,2025-09-30 09:08:38,2025-12-29 14:46:20.065475,12,12,0,88
 3c6d9c52-a839-4322-8043-7386b4d949e8,GOOD,Images uploaded to Sensore di Forza external,7,Sensore di Forza external,2025-09-30 12:17:11,2025-11-10 10:22:15.816802,10,10,0,10
 bfc1403f-b242-48ee-86e6-2e531a1ae06c,internal_square,Images uploaded to Sensore di Forza internal,8,Sensore di Forza internal,2025-09-29 13:27:16,2026-04-08 13:42:17.871113,4,4,0,27
-acf243bd-49b6-4405-a670-1b4fb7115567,int2_square,Images uploaded to Sensore di Forza internal,8,Sensore di Forza internal,2025-09-29 14:01:17,2026-04-08 12:52:59.658216,8,8,0,51
+acf243bd-49b6-4405-a670-1b4fb7115567,int2_square,Images uploaded to Sensore di Forza internal,8,Sensore di Forza internal,2025-09-29 14:01:17,2026-04-21 13:48:13.282595,8,8,0,51
 87f8771e-1a6d-47e2-a43a-c366d0d9d772,good,Images uploaded to Sensore di Forza internal,8,Sensore di Forza internal,2025-09-30 07:32:29,2026-04-07 15:13:29.051099,10,10,0,10
+e6a28eef-cdea-4bba-b0e6-2672edc781a2,new,Images uploaded to Sensore di Forza internal,8,Sensore di Forza internal,2026-04-23 12:30:40,2026-04-23 12:30:40.515313,4,0,4,0
 f5bfa707-704a-4e60-8f05-4ed3ed334190,custom-train,Imported with labels (YOLO),9,multi-label-project,2026-04-05 07:03:53,2026-04-05 09:30:58.320154,452,452,0,1454
 39e9299c-4749-4a78-9a2b-b3255e8f2357,custom-val,Imported with labels (YOLO),9,multi-label-project,2026-04-05 07:04:17,2026-04-05 09:31:04.496694,91,91,0,304
 7310593b-3570-4cd8-ad7a-ebae13fc6434,custom-test,Imported with labels (YOLO),9,multi-label-project,2026-04-05 07:04:30,2026-04-05 20:26:08.456362,60,60,0,195
+f812a4ad-66d4-4d71-ba93-e1097a91e8ff,chekc,Images uploaded to multi-label-project,9,multi-label-project,2026-04-23 13:43:23,2026-04-23 13:59:39.639274,2,2,0,2
 0e560763-f2fb-4aed-a682-517eb26f8526,internal_square,Imported with labels (YOLO),10,POWER,2026-04-08 13:47:49,2026-04-08 13:48:21.712272,4,4,0,27
+78cce2c6-5c99-40e4-9f7c-917fc4e680ba,mix,Images uploaded to POWER,10,POWER,2026-04-22 13:36:07,2026-04-22 14:58:07.899927,8,8,0,8
+e4dfee1a-4117-428c-ab73-10f893759ef8,rok,Images uploaded to POWER,10,POWER,2026-04-23 08:26:12,2026-04-28 07:05:52.972266,2,2,0,2
+c9162a6c-665c-4340-ab16-975933dfb1eb,rakesh,Images uploaded to POWER,10,POWER,2026-04-28 07:07:01,2026-04-28 07:32:58.703123,0,0,0,0
+daa50a82-a886-4450-b469-eb9631fb8b0a,rakehs,Images uploaded to POWER,10,POWER,2026-04-28 07:38:15,2026-04-28 07:38:30.789346,1,1,0,1
+e0af38f3-7ae2-4bf8-8034-a941a8c6f8e7,images,Imported with labels (YOLO),11,discs-sahi,2026-04-29 08:03:18,2026-05-14 08:25:56.545527,17,17,0,39
+5a6b0ff4-5b96-4f2d-bb88-8344ecfc25d2,new,Images uploaded to discs-sahi,11,discs-sahi,2026-05-06 12:44:10,2026-05-14 08:24:34.865795,3,3,0,6
+8d69d6c9-f73b-47f3-b98d-9fe439029508,FOR-AI-PNG,Images uploaded to disk,12,disk,2026-05-18 06:52:04,2026-06-08 11:57:32.523889,9,9,0,13
+361fb252-dc5e-4113-824a-28b9b8b8cb6d,FORAI-NEW-25-05-2026,Images uploaded to disk,12,disk,2026-05-29 12:33:50,2026-06-15 06:14:37.326491,68,68,0,235
+1a4e2840-4f1e-4cfa-bb0d-6d7b7c47ed11,processed,Images uploaded to disk,12,disk,2026-06-04 12:40:01,2026-06-15 06:14:00.378467,69,69,0,237
+da81e526-cb61-444f-a3d1-9f1072ab29a2,FORAI-NEW-15-06-2026-d16-d21,Images uploaded to disk,12,disk,2026-06-15 13:01:05,2026-06-15 13:06:42.127753,27,27,0,28
