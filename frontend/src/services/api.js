@@ -713,6 +713,12 @@ export const projectsAPI = {
     return response.data;
   },
 
+  // Get live GPU utilization for display during inference
+  getGpuStatus: async () => {
+    const response = await api.get('/api/v1/gpu-status');
+    return response.data;
+  },
+
   // Start SAHI prediction subprocess
   triggerSahiPrediction: async (trainingId, payload) => {
     const response = await api.post(`/api/v1/training/${trainingId}/sahi-predict`, payload);

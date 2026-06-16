@@ -254,13 +254,130 @@
     flex-shrink: 0;
 }
 
+/* ── Base stat card ── */
 .sahi-stat-card {
     background: #ffffff;
-    border-radius: 0.5rem;
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     padding: 0.75rem 1rem;
     height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    position: relative;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+}
+
+.sahi-stat-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 4px 0 0 4px;
+}
+
+.sahi-stat-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+}
+
+.sahi-stat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.sahi-stat-body {
+    min-width: 0;
+}
+
+.sahi-stat-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #1a1a2e;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sahi-stat-device {
+    font-size: 1rem;
+}
+
+.sahi-stat-label {
+    font-size: 0.7rem;
+    color: #8c8c8c;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+/* ── Color variants ── */
+.sahi-stat-blue::before  { background: #1890ff; }
+.sahi-stat-purple::before { background: #722ed1; }
+.sahi-stat-green::before  { background: #52c41a; }
+.sahi-stat-orange::before { background: #fa8c16; }
+.sahi-stat-teal::before   { background: #13c2c2; }
+.sahi-stat-grape::before  { background: #722ed1; }
+.sahi-stat-cyan::before   { background: #36cfc9; }
+.sahi-stat-gpu-live::before { background: #52c41a; }
+
+.sahi-stat-icon-blue   { background: #e6f4ff; color: #1890ff; }
+.sahi-stat-icon-purple { background: #f9f0ff; color: #722ed1; }
+.sahi-stat-icon-green  { background: #f6ffed; color: #52c41a; }
+.sahi-stat-icon-orange { background: #fff7e6; color: #fa8c16; }
+.sahi-stat-icon-teal   { background: #e6fffb; color: #13c2c2; }
+.sahi-stat-icon-grape  { background: #f9f0ff; color: #722ed1; font-size: 1.2rem; }
+.sahi-stat-icon-cyan   { background: #e6fffb; color: #36cfc9; }
+
+/* ── Live GPU card ── */
+.sahi-stat-gpu-live {
+    background: linear-gradient(135deg, #ffffff 60%, #f6ffed);
+}
+
+.sahi-stat-icon-gpu-live {
+    background: #f6ffed;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.sahi-gpu-pulse {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #52c41a;
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.5);
+    animation: sahi-pulse 1.4s infinite;
+}
+
+@keyframes sahi-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.5); }
+    70%  { box-shadow: 0 0 0 10px rgba(82, 196, 26, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(82, 196, 26, 0); }
+}
+
+.sahi-stat-live-value {
+    color: #52c41a;
+}
+
+.sahi-gpu-mem {
+    font-size: 0.65rem;
+    color: #52c41a;
+    font-weight: 400;
 }
 
 .sahi-gallery-panel {

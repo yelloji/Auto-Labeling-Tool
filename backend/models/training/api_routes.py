@@ -2054,6 +2054,29 @@ async def list_experiment_images(experiment_id: str, db: Session = Depends(get_d
     return image_files
 
 
+@router.get("/gpu-status")
+async def get_gpu_status():
+    """Return current GPU utilization and memory for live display during inference."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,name",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=3
+        )
+        if result.returncode == 0:
+            parts = [p.strip() for p in result.stdout.strip().split(',')]
+            return {
+                "available": True,
+                "utilization": int(parts[0]),
+                "memory_used_mb": int(parts[1]),
+                "memory_total_mb": int(parts[2]),
+                "device_name": parts[3] if len(parts) > 3 else "GPU"
+            }
+    except Exception:
+        pass
+    return {"available": False, "utilization": 0, "memory_used_mb": 0, "memory_total_mb": 0, "device_name": "CPU"}
+
+
 @router.get("/experiments/{experiment_id}/original-image/{filename:path}")
 async def get_experiment_original_image(
     experiment_id: str, 
