@@ -408,6 +408,7 @@ const SahiPredictionView = ({ training }) => {
             totalInferenceSec: summary.total_inference_time_sec,
             peakGpuPercent: summary.peak_gpu_percent,
             avgGpuPercent: summary.avg_gpu_percent,
+            peakGpuMemoryMb: summary.peak_gpu_memory_mb,
             splitCounts: params.input_split_counts || summary.input_split_counts || {}
         };
     }, [galleryImages.length, selectedExp]);
@@ -1191,7 +1192,12 @@ const SahiPredictionView = ({ training }) => {
                                             <div className="sahi-stat-value">
                                                 {selectedStats.peakGpuPercent != null ? `${selectedStats.peakGpuPercent}%` : '—'}
                                             </div>
-                                            <div className="sahi-stat-label">Peak GPU</div>
+                                            <div className="sahi-stat-label">
+                                                Peak GPU
+                                                {selectedStats.peakGpuMemoryMb > 0 && (
+                                                    <span className="sahi-gpu-mem"> · {(selectedStats.peakGpuMemoryMb / 1024).toFixed(1)} GB VRAM</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 )}

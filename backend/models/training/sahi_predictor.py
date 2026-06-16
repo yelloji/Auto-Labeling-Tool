@@ -19,24 +19,26 @@ from models.training.predictor import BasePredictor
 logger = get_professional_logger()
 
 
-def _sample_gpu_utilization() -> Optional[int]:
-    """Return current GPU core utilization % via nvidia-smi, or None if unavailable."""
+def _sample_gpu() -> Optional[tuple]:
+    """Return (utilization%, memory_used_mb) via nvidia-smi, or None if unavailable."""
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=2
         )
         if result.returncode == 0:
-            return int(result.stdout.strip().split('\n')[0])
+            parts = result.stdout.strip().split('\n')[0].split(',')
+            return int(parts[0].strip()), int(parts[1].strip())
     except Exception:
         pass
     return None
 
 
 class _GpuSampler:
-    """Background thread that polls GPU utilization every second."""
+    """Background thread that polls GPU utilization and memory every second."""
     def __init__(self):
         self.samples: List[int] = []
+        self.memory_samples: List[int] = []
         self._stop = threading.Event()
 
     def start(self):
@@ -49,9 +51,10 @@ class _GpuSampler:
 
     def _run(self):
         while not self._stop.is_set():
-            val = _sample_gpu_utilization()
+            val = _sample_gpu()
             if val is not None:
-                self.samples.append(val)
+                self.samples.append(val[0])
+                self.memory_samples.append(val[1])
             time.sleep(1)
 
     @property
@@ -61,6 +64,10 @@ class _GpuSampler:
     @property
     def avg(self) -> float:
         return round(sum(self.samples) / len(self.samples), 1) if self.samples else 0.0
+
+    @property
+    def peak_memory_mb(self) -> int:
+        return max(self.memory_samples) if self.memory_samples else 0
 
 
 class SahiUltralyticsPredictor(BasePredictor):
@@ -174,6 +181,7 @@ class SahiUltralyticsPredictor(BasePredictor):
                 "total_inference_time_sec": round(total_inference_time, 1),
                 "peak_gpu_percent": gpu_sampler.peak,
                 "avg_gpu_percent": gpu_sampler.avg,
+                "peak_gpu_memory_mb": gpu_sampler.peak_memory_mb,
                 "device": device,
             }
 
