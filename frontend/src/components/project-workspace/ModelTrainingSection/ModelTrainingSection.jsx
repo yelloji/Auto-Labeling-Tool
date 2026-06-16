@@ -534,6 +534,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
             if (isValidValue(a.scale)) patch.scale = a.scale;
             if (isValidValue(a.shear)) patch.shear = a.shear;
             if (isValidValue(a.perspective)) patch.perspective = a.perspective;
+            if (isValidValue(a.copy_paste)) patch.copy_paste = a.copy_paste;
+            if (isValidValue(a.erasing)) patch.erasing = a.erasing;
             if (isValidValue(a.close_mosaic)) patch.close_mosaic = a.close_mosaic;
 
             if (isValidValue(v.iou)) patch.val_iou = v.iou;
@@ -629,6 +631,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
             scale: form.scale,
             shear: form.shear,
             perspective: form.perspective,
+            copy_paste: form.copy_paste,
+            erasing: form.erasing,
           },
           val: {
             iou: form.val_iou,
@@ -700,6 +704,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
     form.scale,
     form.shear,
     form.perspective,
+    form.copy_paste,
+    form.erasing,
     form.val_iou,
     form.val_conf,
     form.val_plots,
@@ -983,6 +989,8 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 scale={form.scale}
                 shear={form.shear}
                 perspective={form.perspective}
+                copy_paste={form.copy_paste}
+                erasing={form.erasing}
                 single_cls={form.single_cls}
                 rect={form.rect}
                 overlap_mask={form.overlap_mask}

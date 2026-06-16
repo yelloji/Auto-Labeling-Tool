@@ -5,7 +5,7 @@ import { systemAPI, remoteNodesAPI } from '../../../../services/api';
 import { mergeTrainingGuideState } from '../trainingGuideState';
 
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, cache, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, max_det, taskType, datasetSummary, disabled }) {
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, cache, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, copy_paste, erasing, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, max_det, taskType, datasetSummary, disabled }) {
 
   const OPTIMIZER_PRESETS = {
     SGD: { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 },
@@ -466,6 +466,12 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
               <Col span={4}><Form.Item label="Shear" tooltip="Shear fraction"><InputNumber min={0} max={1} step={0.01} placeholder={0.0} value={shear} onChange={(v) => onChange({ shear: v })} disabled={disabled} /></Form.Item></Col>
               <Col span={4}><Form.Item label="Perspective" tooltip="Perspective fraction"><InputNumber min={0} max={1} step={0.001} placeholder={0.0} value={perspective} onChange={(v) => onChange({ perspective: v })} disabled={disabled} /></Form.Item></Col>
             </Row>
+            {isDeveloper && (
+              <Row gutter={12}>
+                <Col span={4}><Form.Item label="Copy-Paste" tooltip="Segmentation copy-paste probability (pastes object instances)"><InputNumber min={0} max={1} step={0.01} placeholder={0.03} value={copy_paste} onChange={(v) => onChange({ copy_paste: v })} disabled={disabled} /></Form.Item></Col>
+                <Col span={4}><Form.Item label="Erasing" tooltip="Random erasing probability (cutout for robustness)"><InputNumber min={0} max={1} step={0.01} placeholder={0.2} value={erasing} onChange={(v) => onChange({ erasing: v })} disabled={disabled} /></Form.Item></Col>
+              </Row>
+            )}
           </Collapse.Panel>
           <Collapse.Panel header="Task & Segmentation" key="task">
             <Row gutter={12}>
