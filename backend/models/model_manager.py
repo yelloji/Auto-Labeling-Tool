@@ -194,6 +194,18 @@ class ModelManager:
                 "model_name": "yolo11s-seg.pt",
             },
             {
+                "id": "yolo11m",
+                "name": "YOLO11 Medium",
+                "type": ModelType.OBJECT_DETECTION,
+                "model_name": "yolo11m.pt",
+            },
+            {
+                "id": "yolo11m-seg",
+                "name": "YOLO11 Medium Segmentation",
+                "type": ModelType.INSTANCE_SEGMENTATION,
+                "model_name": "yolo11m-seg.pt",
+            },
+            {
                 "id": "yolo26n",
                 "name": "YOLO26 Nano",
                 "type": ModelType.OBJECT_DETECTION,
@@ -206,6 +218,12 @@ class ModelManager:
                 "model_name": "yolo26s.pt",
             },
             {
+                "id": "yolo26m",
+                "name": "YOLO26 Medium",
+                "type": ModelType.OBJECT_DETECTION,
+                "model_name": "yolo26m.pt",
+            },
+            {
                 "id": "yolo26n-seg",
                 "name": "YOLO26 Nano Segmentation",
                 "type": ModelType.INSTANCE_SEGMENTATION,
@@ -216,6 +234,12 @@ class ModelManager:
                 "name": "YOLO26 Small Segmentation",
                 "type": ModelType.INSTANCE_SEGMENTATION,
                 "model_name": "yolo26s-seg.pt",
+            },
+            {
+                "id": "yolo26m-seg",
+                "name": "YOLO26 Medium Segmentation",
+                "type": ModelType.INSTANCE_SEGMENTATION,
+                "model_name": "yolo26m-seg.pt",
             },
         ]
 
