@@ -62,6 +62,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
 
   const [form, setForm] = useState({ ...initialFormState, projectId, sessionId: null, status: 'queued' });
   const [isStopping, setIsStopping] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
   const [activeTab, setActiveTab] = useState('config');
   const [serverConfig, setServerConfig] = useState({});
   const isTraining = form.status === 'running';
@@ -777,6 +778,18 @@ const ModelTrainingSection = ({ projectId, project }) => {
     }
   };
 
+  const handleResumeRemote = async () => {
+    if (!form.projectId || !form.sessionId) return;
+    setIsResuming(true);
+    try {
+      await trainingAPI.resumeRemoteSession(form.projectId, form.sessionId);
+    } catch (e) {
+      // ignore — user will see status update via polling
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
   const showInitializing = activeTab === 'status' &&
     form.status === 'running' &&
     (!form.liveMetrics || !form.liveMetrics.training || !form.liveMetrics.training.epoch);
@@ -1072,6 +1085,18 @@ const ModelTrainingSection = ({ projectId, project }) => {
                                 onClick={handleStopTraining}
                               >
                                 Stop Training
+                              </Button>
+                            </div>
+                          )}
+                          {form.status === 'failed' && form.device === 'remote' && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                              <Button
+                                type="primary"
+                                loading={isResuming}
+                                disabled={isResuming}
+                                onClick={handleResumeRemote}
+                              >
+                                Resume Remote Training
                               </Button>
                             </div>
                           )}

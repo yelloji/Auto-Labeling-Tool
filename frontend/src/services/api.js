@@ -1099,6 +1099,11 @@ export const trainingAPI = {
   stopSession: async (projectId, sessionId) => {
     const response = await api.post(`/api/v1/projects/${projectId}/training/sessions/${sessionId}/stop`);
     return response.data;
+  },
+
+  resumeRemoteSession: async (projectId, sessionId) => {
+    const response = await api.post(`/api/v1/projects/${projectId}/training/sessions/${sessionId}/resume-remote`);
+    return response.data;
   }
 };
 

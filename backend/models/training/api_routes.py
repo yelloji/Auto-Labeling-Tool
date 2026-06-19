@@ -1464,6 +1464,62 @@ async def stop_training_session(
     return {"message": "Training stopped successfully"}
 
 
+@router.post("/projects/{project_id}/training/sessions/{session_id}/resume-remote")
+async def resume_remote_training_session(
+    project_id: int,
+    session_id: str,
+    db: Session = Depends(get_db)
+):
+    """Resume polling a remote training job that was marked failed due to connection loss."""
+    exp = db.query(TrainingSession).filter(TrainingSession.id == session_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Training session not found")
+    if not exp.remote_job_id or not exp.remote_node_id:
+        raise HTTPException(status_code=400, detail="This session has no remote job to resume")
+    if exp.status == "completed":
+        raise HTTPException(status_code=400, detail="Training already completed")
+
+    from database.models import RemoteTrainingNode
+    from models.training.remote_dispatcher import _poll_remote_training
+    node = db.query(RemoteTrainingNode).filter(RemoteTrainingNode.id == exp.remote_node_id).first()
+    if not node:
+        raise HTTPException(status_code=404, detail="Remote node not found")
+
+    # Verify the agent is reachable before resuming
+    try:
+        import requests as _requests
+        ping = _requests.get(f"http://{node.host}:{node.port}/agent/status/{exp.remote_job_id}", timeout=10)
+        if ping.status_code != 200:
+            raise HTTPException(status_code=502, detail="Remote agent not reachable — check your connection and try again")
+        remote_status = ping.json().get("status", "unknown")
+        if remote_status == "failed":
+            raise HTTPException(status_code=400, detail="Remote job also failed on the agent — cannot resume")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Cannot reach remote agent: {str(e)}")
+
+    # Reset session to running and restart the poller
+    exp.status = "running"
+    exp.error_msg = None
+    db.commit()
+
+    import threading
+    poller = threading.Thread(
+        target=_poll_remote_training,
+        args=(exp.id, exp.remote_node_id, exp.remote_job_id, exp.logs_dir),
+        daemon=True,
+        name=f"remote-poller-resume-{session_id}",
+    )
+    poller.start()
+
+    logger.info("operations.training", f"Resumed remote poller for session {session_id}", "remote_poller_resumed", {
+        "session_id": session_id,
+        "remote_job_id": exp.remote_job_id,
+    })
+    return {"message": "Remote training poller resumed", "remote_job_id": exp.remote_job_id}
+
+
 @router.get("/projects/{project_id}/training/{training_id}/confusion_matrix.png")
 async def get_confusion_matrix(
     project_id: int,
