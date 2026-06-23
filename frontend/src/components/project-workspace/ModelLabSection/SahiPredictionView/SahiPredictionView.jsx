@@ -166,6 +166,89 @@ const calculateIoU = (bbox1, bbox2) => {
     return union > 0 ? intersection / union : 0;
 };
 
+const resolvePredictionClassName = (detection, projectLabels = []) => {
+    const genericNames = new Set(['item', 'object', 'objects', 'class', 'unknown']);
+    const meaningfulLabels = projectLabels.filter((label) => {
+        const name = String(label.name || '').trim().toLowerCase();
+        return name && !genericNames.has(name);
+    });
+    const labelByName = new Map(
+        projectLabels
+            .map(label => [String(label.name || '').trim().toLowerCase(), label.name])
+            .filter(([name]) => name)
+    );
+
+    const nameCandidates = [
+        detection?.class_name,
+        detection?.label,
+        detection?.category_name,
+        detection?.name,
+        detection?.class
+    ];
+
+    for (const candidate of nameCandidates) {
+        const value = String(candidate ?? '').trim();
+        if (!value || /^\d+$/.test(value)) continue;
+
+        const normalized = value.toLowerCase();
+        if (genericNames.has(normalized)) continue;
+        if (labelByName.has(normalized)) return labelByName.get(normalized);
+        return value;
+    }
+
+    if (meaningfulLabels.length === 1 && meaningfulLabels[0]?.name) {
+        return meaningfulLabels[0].name;
+    }
+
+    const idCandidates = [
+        detection?.class_id,
+        detection?.class_idx,
+        detection?.category_id,
+        detection?.category,
+        detection?.class
+    ];
+
+    for (const candidate of idCandidates) {
+        const classIndex = Number(candidate);
+        if (Number.isInteger(classIndex) && classIndex >= 0 && projectLabels[classIndex]?.name) {
+            const labelName = projectLabels[classIndex].name;
+            return genericNames.has(String(labelName).trim().toLowerCase()) && meaningfulLabels.length === 1
+                ? meaningfulLabels[0].name
+                : labelName;
+        }
+    }
+
+    if (projectLabels.length === 1 && projectLabels[0]?.name) {
+        return projectLabels[0].name;
+    }
+
+    return 'item';
+};
+
+const normalizePredictionDisplayLabels = (experiment, projectLabels = []) => {
+    if (!experiment?.predictions || projectLabels.length === 0) return experiment;
+
+    const predictions = Object.entries(experiment.predictions).reduce((acc, [imageName, detections]) => {
+        acc[imageName] = Array.isArray(detections)
+            ? detections.map((detection) => {
+                const className = resolvePredictionClassName(detection, projectLabels);
+                return {
+                    ...detection,
+                    class: className,
+                    class_name: className,
+                    label: className
+                };
+            })
+            : detections;
+        return acc;
+    }, {});
+
+    return {
+        ...experiment,
+        predictions
+    };
+};
+
 const resetFilterState = () => ({
     ...DEFAULT_FILTERS,
     selectedClasses: [],
@@ -196,6 +279,11 @@ const SahiPredictionView = ({ training }) => {
     const syncTimeoutRef = useRef(null);
     const galleryRef = useRef(null);
     const layoutRef = useRef(null);
+
+    const displaySelectedExp = useMemo(
+        () => normalizePredictionDisplayLabels(selectedExp, projectLabels),
+        [projectLabels, selectedExp]
+    );
 
     const defaultConfig = useMemo(() => ({
         ...DEFAULT_CONFIG,
@@ -408,7 +496,7 @@ const SahiPredictionView = ({ training }) => {
     }, [selectedExp?.id, selectedExp?.status]);
 
     const selectedStats = useMemo(() => {
-        const totalDetections = countDetections(selectedExp);
+        const totalDetections = countDetections(displaySelectedExp);
         const imageCount = selectedExp?.image_count || selectedExp?.analytics_summary?.image_count || galleryImages.length || 0;
         const summary = selectedExp?.analytics_summary || {};
         const params = getExperimentParams(selectedExp);
@@ -425,15 +513,16 @@ const SahiPredictionView = ({ training }) => {
             peakGpuMemoryMb: summary.peak_gpu_memory_mb,
             splitCounts: params.input_split_counts || summary.input_split_counts || {}
         };
-    }, [galleryImages.length, selectedExp]);
+    }, [displaySelectedExp, galleryImages.length, selectedExp]);
 
     const availableClasses = useMemo(() => {
-        if (selectedExp?.analytics_summary?.classes_detected) {
-            return Object.keys(selectedExp.analytics_summary.classes_detected);
+        if (displaySelectedExp?.analytics_summary?.classes_detected) {
+            return Object.keys(displaySelectedExp.analytics_summary.classes_detected)
+                .map(className => resolvePredictionClassName({ class: className }, projectLabels));
         }
-        if (!selectedExp?.predictions) return [];
+        if (!displaySelectedExp?.predictions) return [];
         const classes = new Set();
-        Object.values(selectedExp.predictions).forEach((detections) => {
+        Object.values(displaySelectedExp.predictions).forEach((detections) => {
             if (Array.isArray(detections)) {
                 detections.forEach((detection) => {
                     if (detection?.class) classes.add(detection.class);
@@ -441,12 +530,12 @@ const SahiPredictionView = ({ training }) => {
             }
         });
         return Array.from(classes).sort();
-    }, [selectedExp]);
+    }, [displaySelectedExp, projectLabels]);
 
     const sizeGroups = useMemo(() => {
-        if (!selectedExp?.predictions) return { thresholds: [0, 0, 0], count: 0 };
+        if (!displaySelectedExp?.predictions) return { thresholds: [0, 0, 0], count: 0 };
         const areas = [];
-        Object.values(selectedExp.predictions).forEach((detections) => {
+        Object.values(displaySelectedExp.predictions).forEach((detections) => {
             if (Array.isArray(detections)) {
                 detections.forEach((detection) => {
                     if (detection?.bbox?.length === 4) {
@@ -466,10 +555,10 @@ const SahiPredictionView = ({ training }) => {
             ],
             count: areas.length
         };
-    }, [selectedExp]);
+    }, [displaySelectedExp]);
 
     const filteredImages = useMemo(() => {
-        if (!selectedExp || selectedExp.status !== 'completed') return galleryImages;
+        if (!displaySelectedExp || displaySelectedExp.status !== 'completed') return galleryImages;
         const minConf = filters.confidenceRange[0] / 100;
         const maxConf = filters.confidenceRange[1] / 100;
 
@@ -479,7 +568,7 @@ const SahiPredictionView = ({ training }) => {
                 return false;
             }
 
-            const allDetections = getImageDetections(selectedExp, imageName);
+            const allDetections = getImageDetections(displaySelectedExp, imageName);
             const imageVerifications = verifications.filter((verification) => verification.image_name === fileName);
             if (filters.reviewStatus !== 'any') {
                 if (filters.reviewStatus === 'unverified') {
@@ -535,7 +624,7 @@ const SahiPredictionView = ({ training }) => {
             }
             return true;
         });
-    }, [filters, galleryImages, selectedExp, sizeGroups, verifications]);
+    }, [displaySelectedExp, filters, galleryImages, sizeGroups, verifications]);
 
     const handleFormChange = async (changedValues, allValues) => {
         if (!training?.id) return;
@@ -1353,7 +1442,7 @@ const SahiPredictionView = ({ training }) => {
                         ) : (
                             <div className="sahi-gallery-grid">
                                 {filteredImages.map((imageName) => {
-                                    const detections = getImageDetections(selectedExp, imageName);
+                                    const detections = getImageDetections(displaySelectedExp, imageName);
                                     const displayName = imageName.split('/').pop();
                                     return (
                                         <button
@@ -1391,7 +1480,7 @@ const SahiPredictionView = ({ training }) => {
                 onCancel={() => setPreviewImage(null)}
                 currentImage={previewImage}
                 images={filteredImages}
-                experiment={selectedExp}
+                experiment={displaySelectedExp}
                 onNavigate={navigatePreview}
                 filters={filters}
                 setFilters={setFilters}

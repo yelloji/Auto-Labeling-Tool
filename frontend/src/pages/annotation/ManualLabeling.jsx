@@ -14,7 +14,8 @@ import {
   Input,
   Tag,
   Alert,
-  Empty
+  Empty,
+  Radio
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -41,6 +42,7 @@ const { Content, Sider } = Layout;
 const { Text, Title } = Typography;
 const { Option } = Select;
 const PREVIEW_COPY_PREFIX = 'copy-preview-';
+const PREDICTION_EXPERIMENT_TYPES = ['prediction', 'sahi_prediction'];
 
 const getImageDisplayUrl = (image) => {
   if (!image) return '';
@@ -304,8 +306,18 @@ const ManualLabeling = () => {
   const [copySearchText, setCopySearchText] = useState('');
   const [copySelectedImage, setCopySelectedImage] = useState(null);
   const [copyPreviewAnnotations, setCopyPreviewAnnotations] = useState([]);
+  const [copySourceMode, setCopySourceMode] = useState('image');
   const [copyLoading, setCopyLoading] = useState(false);
   const [copyApplying, setCopyApplying] = useState(false);
+  const [predictionImportTrainings, setPredictionImportTrainings] = useState([]);
+  const [predictionImportTrainingId, setPredictionImportTrainingId] = useState(null);
+  const [predictionImportExperiments, setPredictionImportExperiments] = useState([]);
+  const [predictionImportExperimentId, setPredictionImportExperimentId] = useState(null);
+  const [predictionImportScope, setPredictionImportScope] = useState('current');
+  const [predictionImportConflictMode, setPredictionImportConflictMode] = useState('skip');
+  const [predictionImportPreview, setPredictionImportPreview] = useState(null);
+  const [predictionImportLoading, setPredictionImportLoading] = useState(false);
+  const [predictionImportApplying, setPredictionImportApplying] = useState(false);
 
   // Dataset progress
   const [datasetProgress, setDatasetProgress] = useState({
@@ -972,10 +984,17 @@ const ManualLabeling = () => {
   };
 
   const resetCopyLabelsState = () => {
+    setCopySourceMode('image');
     setCopySearchText('');
     setCopySelectedImage(null);
     setCopySourceImages([]);
     setCopyPreviewAnnotations([]);
+    setPredictionImportTrainingId(null);
+    setPredictionImportExperiments([]);
+    setPredictionImportExperimentId(null);
+    setPredictionImportScope('current');
+    setPredictionImportConflictMode('skip');
+    setPredictionImportPreview(null);
   };
 
   const openCopyLabelsModal = async () => {
@@ -1006,9 +1025,19 @@ const ManualLabeling = () => {
       if (initialDatasetId) {
         await loadCopySourceImages(initialDatasetId);
       }
+      const trainingResponse = await axios.get(`${API_BASE}/projects/${projectId}/training/sessions`);
+      const trainings = (Array.isArray(trainingResponse.data) ? trainingResponse.data : [])
+        .filter(session => session?.id && !String(session.id).startsWith('unmanaged_'));
+      setPredictionImportTrainings(trainings);
+
+      const initialTraining = trainings[0] || null;
+      if (initialTraining) {
+        setPredictionImportTrainingId(initialTraining.id);
+        await loadPredictionImportExperiments(initialTraining.id, 'current', 'skip');
+      }
     } catch (error) {
       console.error('Failed to prepare copy labels modal:', error);
-      message.error('Failed to load source datasets');
+      message.error('Failed to load copy label sources');
     } finally {
       setCopyLoading(false);
     }
@@ -1165,6 +1194,308 @@ const ManualLabeling = () => {
       });
     } else {
       await saveCopiedAnnotations();
+    }
+  };
+
+  const parsePredictionMap = (predictions) => {
+    if (!predictions) return {};
+    if (typeof predictions === 'string') {
+      try {
+        return JSON.parse(predictions) || {};
+      } catch (error) {
+        console.error('Failed to parse experiment predictions:', error);
+        return {};
+      }
+    }
+    return predictions;
+  };
+
+  const getBaseFilename = (value) => {
+    if (!value) return '';
+    const normalized = String(value).replace(/\\/g, '/');
+    return normalized.split('/').pop().toLowerCase();
+  };
+
+  const getImageMatchNames = (image) => {
+    return [
+      image?.filename,
+      image?.original_filename,
+      image?.name,
+      image?.file_path,
+      image?.path,
+      image?.url
+    ]
+      .filter(Boolean)
+      .map(getBaseFilename)
+      .filter(Boolean);
+  };
+
+  const findPredictionEntryForImage = (predictionMap, image) => {
+    const imageNames = new Set(getImageMatchNames(image));
+    if (imageNames.size === 0) return null;
+
+    for (const [key, detections] of Object.entries(predictionMap || {})) {
+      const predictionName = getBaseFilename(key);
+      if (imageNames.has(predictionName)) {
+        return { key, detections: Array.isArray(detections) ? detections : [] };
+      }
+    }
+
+    return null;
+  };
+
+  const normalizePredictionSegmentation = (segmentationValue) => {
+    if (!Array.isArray(segmentationValue) || segmentationValue.length === 0) return null;
+    if (typeof segmentationValue[0] === 'number') {
+      const points = [];
+      for (let i = 0; i < segmentationValue.length - 1; i += 2) {
+        points.push({ x: Number(segmentationValue[i]), y: Number(segmentationValue[i + 1]) });
+      }
+      return points.filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+    }
+    if (Array.isArray(segmentationValue[0]) && typeof segmentationValue[0][0] === 'number') {
+      return segmentationValue
+        .map(point => ({ x: Number(point[0]), y: Number(point[1]) }))
+        .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+    }
+    return segmentationValue
+      .map(point => ({ x: Number(point.x), y: Number(point.y) }))
+      .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+  };
+
+  const resolvePredictionLabelName = (detection) => {
+    const genericNames = new Set(['item', 'object', 'objects', 'class', 'unknown']);
+    const meaningfulLabels = projectLabels.filter((label) => {
+      const name = String(label.name || '').trim().toLowerCase();
+      return name && !genericNames.has(name);
+    });
+    const projectLabelByName = new Map(
+      projectLabels.map(label => [String(label.name || '').trim().toLowerCase(), label.name]).filter(([name]) => name)
+    );
+
+    const rawNameCandidates = [
+      detection.class_name,
+      detection.label,
+      detection.category_name,
+      detection.name,
+      detection.class
+    ];
+
+    for (const candidate of rawNameCandidates) {
+      const value = String(candidate ?? '').trim();
+      if (!value || /^\d+$/.test(value)) continue;
+
+      const normalized = value.toLowerCase();
+      if (genericNames.has(normalized)) continue;
+      if (projectLabelByName.has(normalized)) {
+        return projectLabelByName.get(normalized);
+      }
+      return value;
+    }
+
+    if (meaningfulLabels.length === 1 && meaningfulLabels[0]?.name) {
+      return meaningfulLabels[0].name;
+    }
+
+    const classIdCandidates = [
+      detection.class_id,
+      detection.class_idx,
+      detection.category_id,
+      detection.category,
+      detection.class
+    ];
+
+    for (const candidate of classIdCandidates) {
+      const classIndex = Number(candidate);
+      if (Number.isInteger(classIndex) && classIndex >= 0 && projectLabels[classIndex]?.name) {
+        const labelName = projectLabels[classIndex].name;
+        return genericNames.has(String(labelName).trim().toLowerCase()) && meaningfulLabels.length === 1
+          ? meaningfulLabels[0].name
+          : labelName;
+      }
+    }
+
+    if (projectLabels.length === 1 && projectLabels[0]?.name) {
+      return projectLabels[0].name;
+    }
+
+    return 'item';
+  };
+
+  const predictionToAnnotation = (detection, imageIdForSave) => {
+    const labelName = resolvePredictionLabelName(detection);
+    const segmentation = normalizePredictionSegmentation(detection.segmentation || detection.mask);
+    const annotation = {
+      image_id: imageIdForSave,
+      class_name: labelName,
+      label: labelName,
+      confidence: Number(detection.confidence ?? detection.score ?? 1.0) || 1.0,
+      color: resolveLabelColor(labelName),
+      type: segmentation && segmentation.length > 2 ? 'polygon' : 'box',
+      segmentation: segmentation && segmentation.length > 2 ? segmentation : null
+    };
+
+    if (annotation.type === 'polygon') {
+      const xs = segmentation.map(point => point.x);
+      const ys = segmentation.map(point => point.y);
+      annotation.points = segmentation;
+      annotation.x = Math.min(...xs);
+      annotation.y = Math.min(...ys);
+      annotation.width = Math.max(...xs) - annotation.x;
+      annotation.height = Math.max(...ys) - annotation.y;
+      return annotation;
+    }
+
+    const bbox = Array.isArray(detection.bbox) ? detection.bbox : null;
+    const xMin = Number(detection.x_min ?? detection.x ?? bbox?.[0] ?? 0);
+    const yMin = Number(detection.y_min ?? detection.y ?? bbox?.[1] ?? 0);
+    const xMax = Number(detection.x_max ?? bbox?.[2] ?? (xMin + Number(detection.width || 0)));
+    const yMax = Number(detection.y_max ?? bbox?.[3] ?? (yMin + Number(detection.height || 0)));
+
+    annotation.x = xMin;
+    annotation.y = yMin;
+    annotation.width = Math.max(0, xMax - xMin);
+    annotation.height = Math.max(0, yMax - yMin);
+    return annotation;
+  };
+
+  const buildPredictionImportPreview = async (experiment, scope = predictionImportScope, conflictMode = predictionImportConflictMode) => {
+    if (!experiment) {
+      setPredictionImportPreview(null);
+      return null;
+    }
+
+    setPredictionImportLoading(true);
+    try {
+      const predictionMap = parsePredictionMap(experiment.predictions);
+      const predictionKeys = Object.keys(predictionMap || {});
+      const targetImages = scope === 'current'
+        ? [imageData].filter(Boolean)
+        : (await AnnotationAPI.getDatasetImages(datasetId, 0, 10000)).images || [];
+
+      const usedPredictionKeys = new Set();
+      const rows = targetImages.map(image => {
+        const match = findPredictionEntryForImage(predictionMap, image);
+        const detections = match?.detections || [];
+        const annotationsToImport = detections
+          .map(det => predictionToAnnotation(det, image.id))
+          .filter(ann => ann.width > 0 || ann.height > 0 || (ann.segmentation && ann.segmentation.length > 2));
+        const hasLabels = Boolean(image?.is_labeled);
+        const skipped = conflictMode === 'skip' && hasLabels;
+
+        if (match?.key) usedPredictionKeys.add(match.key);
+
+        return {
+          image,
+          predictionKey: match?.key || null,
+          detections,
+          annotationsToImport,
+          hasLabels,
+          skipped,
+          importable: Boolean(match) && annotationsToImport.length > 0 && !skipped
+        };
+      });
+
+      const importRows = rows.filter(row => row.importable);
+      const matchedRows = rows.filter(row => row.predictionKey);
+      const skippedRows = rows.filter(row => row.skipped && row.predictionKey);
+      const unmatchedPredictionKeys = predictionKeys.filter(key => !usedPredictionKeys.has(key));
+      const preview = {
+        experiment,
+        scope,
+        conflictMode,
+        rows,
+        importRows,
+        matchedCount: matchedRows.length,
+        skippedCount: skippedRows.length,
+        unmatchedPredictionKeys,
+        importImageCount: importRows.length,
+        importAnnotationCount: importRows.reduce((sum, row) => sum + row.annotationsToImport.length, 0),
+        predictionImageCount: predictionKeys.length,
+        targetImageCount: targetImages.length
+      };
+
+      setPredictionImportPreview(preview);
+      return preview;
+    } catch (error) {
+      console.error('Failed to build prediction import preview:', error);
+      message.error('Failed to prepare prediction import preview');
+      setPredictionImportPreview(null);
+      return null;
+    } finally {
+      setPredictionImportLoading(false);
+    }
+  };
+
+  const loadPredictionImportExperiments = async (trainingId, scope = predictionImportScope, conflictMode = predictionImportConflictMode) => {
+    if (!trainingId) return [];
+
+    setPredictionImportLoading(true);
+    setPredictionImportExperiments([]);
+    setPredictionImportExperimentId(null);
+    setPredictionImportPreview(null);
+
+    try {
+      const response = await axios.get(`${API_BASE}/training/${trainingId}/experiments`);
+      const experiments = (Array.isArray(response.data) ? response.data : [])
+        .filter(exp =>
+          PREDICTION_EXPERIMENT_TYPES.includes(exp.experiment_type) &&
+          exp.status === 'completed' &&
+          exp.predictions
+        );
+      setPredictionImportExperiments(experiments);
+
+      const initialExperiment = experiments[0] || null;
+      if (initialExperiment) {
+        setPredictionImportExperimentId(initialExperiment.id);
+        await buildPredictionImportPreview(initialExperiment, scope, conflictMode);
+      }
+
+      return experiments;
+    } catch (error) {
+      console.error('Failed to load prediction experiments:', error);
+      message.error('Failed to load prediction experiments');
+      return [];
+    } finally {
+      setPredictionImportLoading(false);
+    }
+  };
+
+  const applyPredictionImport = async () => {
+    if (!predictionImportPreview || predictionImportPreview.importRows.length === 0) {
+      message.warning('No prediction annotations ready to import');
+      return;
+    }
+
+    setPredictionImportApplying(true);
+    try {
+      for (const row of predictionImportPreview.importRows) {
+        const annotationsToSave = row.annotationsToImport.map(({ color, points, ...ann }) => ({
+          ...ann,
+          image_id: row.image.id,
+          segmentation: ann.segmentation ? JSON.parse(JSON.stringify(ann.segmentation)) : null
+        }));
+
+        await axios.post(`${API_BASE}/images/${row.image.id}/annotations`, {
+          annotations: annotationsToSave
+        });
+      }
+
+      const currentImported = predictionImportPreview.importRows.some(row => row.image.id === imageData?.id);
+      if (currentImported) {
+        await loadImageData({ ...imageData, is_labeled: true });
+      }
+      await loadDatasetImages();
+
+      const importedCount = predictionImportPreview.importAnnotationCount;
+      setCopyModalVisible(false);
+      resetCopyLabelsState();
+      message.success(`Imported ${importedCount} prediction annotation${importedCount !== 1 ? 's' : ''}`);
+    } catch (error) {
+      console.error('Failed to import prediction annotations:', error);
+      message.error('Failed to import prediction annotations');
+    } finally {
+      setPredictionImportApplying(false);
     }
   };
 
@@ -2663,158 +2994,357 @@ const ManualLabeling = () => {
           setCopyModalVisible(false);
           resetCopyLabelsState();
         }}
-        width={900}
-        okText="Apply Labels"
+        width={copySourceMode === 'prediction' ? 920 : 900}
+        okText={copySourceMode === 'prediction' ? 'Import Annotations' : 'Apply Labels'}
         okButtonProps={{
-          disabled: isTargetMarkedNull || !selectedCopySizeMatches || copyPreviewAnnotations.length === 0,
-          loading: copyApplying
+          disabled: copySourceMode === 'prediction'
+            ? (!predictionImportPreview || predictionImportPreview.importRows.length === 0)
+            : (isTargetMarkedNull || !selectedCopySizeMatches || copyPreviewAnnotations.length === 0),
+          loading: copySourceMode === 'prediction' ? predictionImportApplying : copyApplying
         }}
-        onOk={applyCopiedLabels}
+        onOk={copySourceMode === 'prediction' ? applyPredictionImport : applyCopiedLabels}
       >
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
-          <Alert
-            type="info"
-            showIcon
-            message="Choose the exact labeled source image. Labels are only saved after Apply Labels."
-          />
+          <div>
+            <Text strong>Copy source</Text>
+            <Radio.Group
+              value={copySourceMode}
+              onChange={(event) => setCopySourceMode(event.target.value)}
+              style={{ display: 'block', marginTop: 8 }}
+              buttonStyle="solid"
+            >
+              <Radio.Button value="image">Image Labels</Radio.Button>
+              <Radio.Button value="prediction">Prediction Results</Radio.Button>
+            </Radio.Group>
+          </div>
 
-          {annotations.length > 0 && (
-            <Alert
-              type={isTargetMarkedNull ? 'error' : 'warning'}
-              showIcon
-              message={isTargetMarkedNull
-                ? 'Current image is marked Null. Remove Null before copying labels.'
-                : 'Current image already has labels. Applying will add copied labels to the existing labels.'}
-            />
+          {copySourceMode === 'image' && (
+            <>
+              <Alert
+                type="info"
+                showIcon
+                message="Choose the exact labeled source image. Labels are only saved after Apply Labels."
+              />
+
+              {annotations.length > 0 && (
+                <Alert
+                  type={isTargetMarkedNull ? 'error' : 'warning'}
+                  showIcon
+                  message={isTargetMarkedNull
+                    ? 'Current image is marked Null. Remove Null before copying labels.'
+                    : 'Current image already has labels. Applying will add copied labels to the existing labels.'}
+                />
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <Text strong>Source dataset / batch</Text>
+                  <Select
+                    value={copySourceDatasetId}
+                    loading={copyLoading}
+                    style={{ width: '100%', marginTop: 6 }}
+                    placeholder="Select source dataset"
+                    onChange={(value) => {
+                      setCopySourceDatasetId(value);
+                      loadCopySourceImages(value);
+                    }}
+                  >
+                    {copyDatasets.map(dataset => (
+                      <Option key={dataset.id} value={dataset.id}>
+                        {dataset.name}
+                      </Option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Text strong>Search source image</Text>
+                  <Input
+                    value={copySearchText}
+                    onChange={(event) => setCopySearchText(event.target.value)}
+                    placeholder="Type part of filename..."
+                    allowClear
+                    style={{ marginTop: 6 }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(260px, 0.8fr)', gap: 16 }}>
+                <div style={{
+                  border: '1px solid #f0f0f0',
+                  borderRadius: 8,
+                  padding: 12,
+                  maxHeight: 360,
+                  overflowY: 'auto'
+                }}>
+                  {filteredCopySourceImages.length === 0 ? (
+                    <Empty description={copyLoading ? 'Loading labeled images...' : 'No labeled source images found'} />
+                  ) : (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                      gap: 10
+                    }}>
+                      {filteredCopySourceImages.map(sourceImage => {
+                        const sameSize = imageData && Number(sourceImage.width) === Number(imageData.width) && Number(sourceImage.height) === Number(imageData.height);
+                        const selected = copySelectedImage?.id === sourceImage.id;
+                        return (
+                          <button
+                            key={sourceImage.id}
+                            type="button"
+                            onClick={() => selectCopySourceImage(sourceImage)}
+                            style={{
+                              textAlign: 'left',
+                              border: selected ? '2px solid #1677ff' : '1px solid #d9d9d9',
+                              borderRadius: 8,
+                              padding: 8,
+                              background: selected ? '#e6f4ff' : '#fff',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div style={{
+                              height: 82,
+                              borderRadius: 6,
+                              overflow: 'hidden',
+                              background: '#f5f5f5',
+                              marginBottom: 6
+                            }}>
+                              {getImageDisplayUrl(sourceImage) && (
+                                <img
+                                  src={getImageDisplayUrl(sourceImage)}
+                                  alt=""
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                              )}
+                            </div>
+                            <Text style={{
+                              display: 'block',
+                              fontSize: 12,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              {sourceImage.filename}
+                            </Text>
+                            <Space size={4} wrap style={{ marginTop: 6 }}>
+                              <Tag color="blue">{sourceImage.annotation_count} labels</Tag>
+                              <Tag color={sameSize ? 'green' : 'red'}>
+                                {sameSize ? 'Same size' : 'Different size'}
+                              </Tag>
+                            </Space>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
+                  <Text strong>Selected source</Text>
+                  {!copySelectedImage ? (
+                    <div style={{ marginTop: 16 }}>
+                      <Text type="secondary">Select a labeled source image to preview labels on the current image.</Text>
+                    </div>
+                  ) : (
+                    <Space direction="vertical" size={8} style={{ width: '100%', marginTop: 12 }}>
+                      <Text>{copySelectedImage.filename}</Text>
+                      <Text type="secondary">
+                        Source: {copySelectedImage.width} x {copySelectedImage.height}
+                      </Text>
+                      <Text type="secondary">
+                        Target: {imageData?.width} x {imageData?.height}
+                      </Text>
+                      <Tag color={selectedCopySizeMatches ? 'green' : 'red'}>
+                        {selectedCopySizeMatches ? 'Safe to copy' : 'Blocked: image sizes differ'}
+                      </Tag>
+                      <Text type="secondary">
+                        Preview labels: {copyPreviewAnnotations.length}
+                      </Text>
+                    </Space>
+                  )}
+                </div>
+              </div>
+            </>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <Text strong>Source dataset / batch</Text>
-              <Select
-                value={copySourceDatasetId}
-                loading={copyLoading}
-                style={{ width: '100%', marginTop: 6 }}
-                placeholder="Select source dataset"
-                onChange={(value) => {
-                  setCopySourceDatasetId(value);
-                  loadCopySourceImages(value);
-                }}
-              >
-                {copyDatasets.map(dataset => (
-                  <Option key={dataset.id} value={dataset.id}>
-                    {dataset.name}
-                  </Option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <Text strong>Search source image</Text>
-              <Input
-                value={copySearchText}
-                onChange={(event) => setCopySearchText(event.target.value)}
-                placeholder="Type part of filename..."
-                allowClear
-                style={{ marginTop: 6 }}
+          {copySourceMode === 'prediction' && (
+            <>
+              <Alert
+                type="info"
+                showIcon
+                message="Import stored prediction detections as real manual annotations."
               />
-            </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(260px, 0.8fr)', gap: 16 }}>
-            <div style={{
-              border: '1px solid #f0f0f0',
-              borderRadius: 8,
-              padding: 12,
-              maxHeight: 360,
-              overflowY: 'auto'
-            }}>
-              {filteredCopySourceImages.length === 0 ? (
-                <Empty description={copyLoading ? 'Loading labeled images...' : 'No labeled source images found'} />
-              ) : (
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-                  gap: 10
-                }}>
-                  {filteredCopySourceImages.map(sourceImage => {
-                    const sameSize = imageData && Number(sourceImage.width) === Number(imageData.width) && Number(sourceImage.height) === Number(imageData.height);
-                    const selected = copySelectedImage?.id === sourceImage.id;
-                    return (
-                      <button
-                        key={sourceImage.id}
-                        type="button"
-                        onClick={() => selectCopySourceImage(sourceImage)}
-                        style={{
-                          textAlign: 'left',
-                          border: selected ? '2px solid #1677ff' : '1px solid #d9d9d9',
-                          borderRadius: 8,
-                          padding: 8,
-                          background: selected ? '#e6f4ff' : '#fff',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <div style={{
-                          height: 82,
-                          borderRadius: 6,
-                          overflow: 'hidden',
-                          background: '#f5f5f5',
-                          marginBottom: 6
-                        }}>
-                          {getImageDisplayUrl(sourceImage) && (
-                            <img
-                              src={getImageDisplayUrl(sourceImage)}
-                              alt=""
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                          )}
-                        </div>
-                        <Text style={{
-                          display: 'block',
-                          fontSize: 12,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
-                        }}>
-                          {sourceImage.filename}
-                        </Text>
-                        <Space size={4} wrap style={{ marginTop: 6 }}>
-                          <Tag color="blue">{sourceImage.annotation_count} labels</Tag>
-                          <Tag color={sameSize ? 'green' : 'red'}>
-                            {sameSize ? 'Same size' : 'Different size'}
-                          </Tag>
-                        </Space>
-                      </button>
-                    );
-                  })}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <Text strong>Training session</Text>
+                  <Select
+                    value={predictionImportTrainingId}
+                    loading={predictionImportLoading}
+                    style={{ width: '100%', marginTop: 6 }}
+                    placeholder="Select training"
+                    onChange={async (value) => {
+                      setPredictionImportTrainingId(value);
+                      await loadPredictionImportExperiments(value, predictionImportScope, predictionImportConflictMode);
+                    }}
+                  >
+                    {predictionImportTrainings.map(training => (
+                      <Option key={training.id} value={training.id}>
+                        {training.name} {training.status ? `(${training.status})` : ''}
+                      </Option>
+                    ))}
+                  </Select>
                 </div>
+                <div>
+                  <Text strong>Prediction experiment</Text>
+                  <Select
+                    value={predictionImportExperimentId}
+                    loading={predictionImportLoading}
+                    style={{ width: '100%', marginTop: 6 }}
+                    placeholder="Select prediction run"
+                    onChange={async (value) => {
+                      setPredictionImportExperimentId(value);
+                      const experiment = predictionImportExperiments.find(exp => exp.id === value);
+                      await buildPredictionImportPreview(experiment, predictionImportScope, predictionImportConflictMode);
+                    }}
+                  >
+                    {predictionImportExperiments.map(experiment => (
+                      <Option key={experiment.id} value={experiment.id}>
+                        {experiment.name || 'Unnamed'} - {experiment.experiment_type === 'sahi_prediction' ? 'SAHI' : 'Prediction'}
+                      </Option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <Text strong>Import scope</Text>
+                  <Select
+                    value={predictionImportScope}
+                    style={{ width: '100%', marginTop: 6 }}
+                    onChange={async (value) => {
+                      setPredictionImportScope(value);
+                      const experiment = predictionImportExperiments.find(exp => exp.id === predictionImportExperimentId);
+                      await buildPredictionImportPreview(experiment, value, predictionImportConflictMode);
+                    }}
+                  >
+                    <Option value="current">Current image only</Option>
+                    <Option value="all">All matching images in this dataset</Option>
+                  </Select>
+                </div>
+                <div>
+                  <Text strong>Existing labels</Text>
+                  <Select
+                    value={predictionImportConflictMode}
+                    style={{ width: '100%', marginTop: 6 }}
+                    onChange={async (value) => {
+                      setPredictionImportConflictMode(value);
+                      const experiment = predictionImportExperiments.find(exp => exp.id === predictionImportExperimentId);
+                      await buildPredictionImportPreview(experiment, predictionImportScope, value);
+                    }}
+                  >
+                    <Option value="skip">Skip images with labels</Option>
+                    <Option value="append">Append to existing labels</Option>
+                  </Select>
+                </div>
+              </div>
+
+              {predictionImportConflictMode === 'skip' && (
+                <Alert
+                  type="success"
+                  showIcon
+                  message="Safe mode is active: images that already have labels will be skipped."
+                />
               )}
-            </div>
+              {predictionImportConflictMode === 'append' && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message="Append mode will add prediction annotations to images that already have labels."
+                />
+              )}
 
-            <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
-              <Text strong>Selected source</Text>
-              {!copySelectedImage ? (
-                <div style={{ marginTop: 16 }}>
-                  <Text type="secondary">Select a labeled source image to preview labels on the current image.</Text>
-                </div>
-              ) : (
-                <Space direction="vertical" size={8} style={{ width: '100%', marginTop: 12 }}>
-                  <Text>{copySelectedImage.filename}</Text>
-                  <Text type="secondary">
-                    Source: {copySelectedImage.width} x {copySelectedImage.height}
-                  </Text>
-                  <Text type="secondary">
-                    Target: {imageData?.width} x {imageData?.height}
-                  </Text>
-                  <Tag color={selectedCopySizeMatches ? 'green' : 'red'}>
-                    {selectedCopySizeMatches ? 'Safe to copy' : 'Blocked: image sizes differ'}
-                  </Tag>
-                  <Text type="secondary">
-                    Preview labels: {copyPreviewAnnotations.length}
-                  </Text>
+              {!predictionImportLoading && predictionImportTrainings.length === 0 && (
+                <Empty description="No managed training sessions found for this project" />
+              )}
+              {!predictionImportLoading && predictionImportTrainingId && predictionImportExperiments.length === 0 && (
+                <Empty description="No completed prediction or SAHI prediction experiments found for this training" />
+              )}
+
+              {predictionImportPreview && (
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                    <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
+                      <Text type="secondary">Prediction Images</Text>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>{predictionImportPreview.predictionImageCount}</div>
+                    </div>
+                    <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
+                      <Text type="secondary">Matched Images</Text>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>{predictionImportPreview.matchedCount}</div>
+                    </div>
+                    <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
+                      <Text type="secondary">Skipped Labeled</Text>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>{predictionImportPreview.skippedCount}</div>
+                    </div>
+                    <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
+                      <Text type="secondary">Annotations To Import</Text>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>{predictionImportPreview.importAnnotationCount}</div>
+                    </div>
+                  </div>
+
+                  {predictionImportPreview.importRows.length === 0 ? (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message="No annotations will be imported with the current settings."
+                    />
+                  ) : (
+                    <div style={{
+                      border: '1px solid #f0f0f0',
+                      borderRadius: 8,
+                      padding: 12,
+                      maxHeight: 220,
+                      overflowY: 'auto'
+                    }}>
+                      <Text strong>Ready to import</Text>
+                      <div style={{ marginTop: 8 }}>
+                        {predictionImportPreview.importRows.slice(0, 12).map(row => (
+                          <div
+                            key={row.image.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 12,
+                              padding: '6px 0',
+                              borderBottom: '1px solid #f5f5f5'
+                            }}
+                          >
+                            <Text ellipsis style={{ maxWidth: 420 }}>{row.image.filename || row.predictionKey}</Text>
+                            <Space>
+                              <Tag color={row.image.is_labeled ? 'orange' : 'green'}>
+                                {row.image.is_labeled ? 'has labels' : 'unlabeled'}
+                              </Tag>
+                              <Tag color="blue">{row.annotationsToImport.length} detections</Tag>
+                            </Space>
+                          </div>
+                        ))}
+                        {predictionImportPreview.importRows.length > 12 && (
+                          <Text type="secondary">+ {predictionImportPreview.importRows.length - 12} more images</Text>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {predictionImportPreview.unmatchedPredictionKeys.length > 0 && (
+                    <Text type="secondary">
+                      {predictionImportPreview.unmatchedPredictionKeys.length} prediction image(s) did not match images in this dataset.
+                    </Text>
+                  )}
                 </Space>
               )}
-            </div>
-          </div>
+            </>
+          )}
         </Space>
       </Modal>
 

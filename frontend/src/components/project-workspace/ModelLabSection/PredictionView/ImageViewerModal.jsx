@@ -34,6 +34,66 @@ const MIN_VIEWER_SCALE = 0.5;
 const MAX_VIEWER_SCALE = 64;
 const clampViewerScale = (value) => Math.max(MIN_VIEWER_SCALE, Math.min(value, MAX_VIEWER_SCALE));
 
+const resolveDetectionClassName = (detection, projectLabels = []) => {
+    const genericNames = new Set(['item', 'object', 'objects', 'class', 'unknown']);
+    const normalizedLabels = Array.isArray(projectLabels) ? projectLabels : [];
+    const meaningfulLabels = normalizedLabels.filter((label) => {
+        const name = String(label.name || '').trim().toLowerCase();
+        return name && !genericNames.has(name);
+    });
+    const labelByName = new Map(
+        normalizedLabels
+            .map(label => [String(label.name || '').trim().toLowerCase(), label.name])
+            .filter(([name]) => name)
+    );
+
+    const nameCandidates = [
+        detection?.class_name,
+        detection?.label,
+        detection?.category_name,
+        detection?.name,
+        detection?.class
+    ];
+
+    for (const candidate of nameCandidates) {
+        const value = String(candidate ?? '').trim();
+        if (!value || /^\d+$/.test(value)) continue;
+
+        const normalized = value.toLowerCase();
+        if (genericNames.has(normalized)) continue;
+        if (labelByName.has(normalized)) return labelByName.get(normalized);
+        return value;
+    }
+
+    if (meaningfulLabels.length === 1 && meaningfulLabels[0]?.name) {
+        return meaningfulLabels[0].name;
+    }
+
+    const idCandidates = [
+        detection?.class_id,
+        detection?.class_idx,
+        detection?.category_id,
+        detection?.category,
+        detection?.class
+    ];
+
+    for (const candidate of idCandidates) {
+        const classIndex = Number(candidate);
+        if (Number.isInteger(classIndex) && classIndex >= 0 && normalizedLabels[classIndex]?.name) {
+            const labelName = normalizedLabels[classIndex].name;
+            return genericNames.has(String(labelName).trim().toLowerCase()) && meaningfulLabels.length === 1
+                ? meaningfulLabels[0].name
+                : labelName;
+        }
+    }
+
+    if (normalizedLabels.length === 1 && normalizedLabels[0]?.name) {
+        return normalizedLabels[0].name;
+    }
+
+    return String(detection?.class || detection?.class_name || 'item');
+};
+
 /**
  * ImageViewerModal Component
  * 
@@ -197,6 +257,9 @@ const ImageViewerModal = ({
         return experiment.predictions[fileName] || [];
     };
     const allDets = getDetectionsForImage(currentImage);
+    const getDisplayClassName = React.useCallback((detection) => (
+        resolveDetectionClassName(detection, projectLabels)
+    ), [projectLabels]);
 
     // Phase 7.0: Calculate IoU (Intersection over Union) for accurate box comparison
     const calculateIoU = (bbox1, bbox2) => {
@@ -225,9 +288,10 @@ const ImageViewerModal = ({
         if (!filters) return true;
         const [minConf, maxConf] = [filters.confidenceRange[0] / 100, filters.confidenceRange[1] / 100];
         const confMatch = d.confidence >= minConf && d.confidence <= maxConf;
+        const displayClassName = getDisplayClassName(d);
         const classMatch = (filters.selectedClasses && filters.selectedClasses.length > 0)
-            ? filters.selectedClasses.includes(d.class)
-            : (filters.className === 'all' || d.class === filters.className);
+            ? filters.selectedClasses.includes(displayClassName)
+            : (filters.className === 'all' || displayClassName === filters.className);
 
         // Apply Strict Risk Level Filter
         const riskLevel = filters.riskLevel;
@@ -571,7 +635,8 @@ const ImageViewerModal = ({
 
             // C. Draw Label (MATCH SVG DYNAMIC LOGIC PIXEL-PER-PIXEL)
             if (showLabels) {
-                const labelText = `${d.class} ${(d.confidence * 100).toFixed(0)}%`;
+                const displayClassName = getDisplayClassName(d);
+                const labelText = `${displayClassName} ${(d.confidence * 100).toFixed(0)}%`;
                 const fontSize = 14;
                 ctx.font = `bold ${fontSize}px monospace`; // MIRROR FONT
                 const textWidth = ctx.measureText(labelText).width;
@@ -1883,6 +1948,7 @@ const ImageViewerModal = ({
                                 {filteredDets.map((d, i) => {
                                     if (!selectedIndices.includes(i)) return null;
 
+                                    const displayClassName = getDisplayClassName(d);
                                     const isHovered = hoveredIndex === i;
                                     // Risk coloring logic
                                     let riskColor = '#52c41a';
@@ -1910,13 +1976,13 @@ const ImageViewerModal = ({
                                     const area = Math.round(w * h);
 
                                     const indexLabel = `#${i + 1}`;
-                                    const baseLabel = `${indexLabel} ${d.class} ${(d.confidence * 100).toFixed(0)}%`;
+                                    const baseLabel = `${indexLabel} ${displayClassName} ${(d.confidence * 100).toFixed(0)}%`;
                                     const fpTag = isPossibleFP ? ' [FALSE POSITIVE]' : '';  // Clearer tag
                                     const sizeLabel = ` [${w}x${h} | ${area.toLocaleString()}px²]`;
                                     const labelText = isHovered ? `${baseLabel}${fpTag}${sizeLabel}` : `${baseLabel}${fpTag}`;
 
                                     const tooltipText = isPossibleFP
-                                        ? `Suspected False Positive: The model found a ${d.class} here, but it does NOT match human-verified data.\n\nThis specific detection is likely an AI error.\n\nACTION: Please confirm if this is a real ${d.class} using the PASS/FAIL buttons in the bottom bar.`
+                                        ? `Suspected False Positive: The model found a ${displayClassName} here, but it does NOT match human-verified data.\n\nThis specific detection is likely an AI error.\n\nACTION: Please confirm if this is a real ${displayClassName} using the PASS/FAIL buttons in the bottom bar.`
                                         : null;
 
                                     const charWidth = 8.2;
@@ -1971,7 +2037,7 @@ const ImageViewerModal = ({
                                                     onMouseEnter={(e) => {
                                                         setHoveredIndex(i);
                                                         if (isPossibleFP) {
-                                                            const content = `Suspected False Positive: The model found a ${d.class} here, but it does NOT match human-verified data.\n\nThis specific detection is likely an AI error.\n\nACTION: Please confirm if this is a real ${d.class} using the PASS/FAIL buttons in the bottom bar.`;
+                                                            const content = `Suspected False Positive: The model found a ${displayClassName} here, but it does NOT match human-verified data.\n\nThis specific detection is likely an AI error.\n\nACTION: Please confirm if this is a real ${displayClassName} using the PASS/FAIL buttons in the bottom bar.`;
                                                             handleBoxMouseEnter(e, content, 'hint');
                                                         }
                                                     }}
@@ -2000,7 +2066,7 @@ const ImageViewerModal = ({
                                                     onMouseEnter={(e) => {
                                                         setHoveredIndex(i);
                                                         if (isPossibleFP) {
-                                                            const content = `Suspected False Positive: The model found a ${d.class} here, but it does NOT match human-verified data.\n\nThis specific detection is likely an AI error.\n\nACTION: Please confirm if this is a real ${d.class} using the PASS/FAIL buttons in the bottom bar.`;
+                                                        const content = `Suspected False Positive: The model found a ${displayClassName} here, but it does NOT match human-verified data.\n\nThis specific detection is likely an AI error.\n\nACTION: Please confirm if this is a real ${displayClassName} using the PASS/FAIL buttons in the bottom bar.`;
                                                             handleBoxMouseEnter(e, content, 'hint');
                                                         }
                                                     }}
@@ -2202,6 +2268,7 @@ const ImageViewerModal = ({
                         )}
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '8px' }}>
                             {filteredDets.length > 0 ? filteredDets.map((d, i) => {
+                                const displayClassName = getDisplayClassName(d);
                                 let color = '#1890ff'; // Default Blue
                                 let bg = 'rgba(24, 144, 255, 0.15)';
 
@@ -2248,7 +2315,7 @@ const ImageViewerModal = ({
                                     const isIdentityMatch = hashMatch || nameMatch;
 
                                     const isMatch = isIdentityMatch &&
-                                        v.class_name === d.class &&
+                                        v.class_name === displayClassName &&
                                         Math.abs(v.bbox[0] - d.bbox[0]) < 1.0 &&
                                         Math.abs(v.bbox[1] - d.bbox[1]) < 1.0 &&
                                         Math.abs(v.bbox[2] - d.bbox[2]) < 1.0 &&
@@ -2311,7 +2378,7 @@ const ImageViewerModal = ({
                                         <Text
                                             style={{ color: isSelected ? color : '#888', fontSize: '0.8125rem', fontWeight: 500 }}
                                         >
-                                            <strong>{d.class}</strong>: {(d.confidence * 100).toFixed(1)}%
+                                            <strong>{displayClassName}</strong>: {(d.confidence * 100).toFixed(1)}%
                                             <span style={{ fontSize: '0.7rem', color: '#666', marginLeft: '8px', fontStyle: 'italic' }}>
                                                 ({Math.round(d.bbox[2] - d.bbox[0])} × {Math.round(d.bbox[3] - d.bbox[1])} px)
                                             </span>
@@ -2335,7 +2402,7 @@ const ImageViewerModal = ({
                                                     e.stopPropagation();
                                                     onVerify({
                                                         image_name: fileName,
-                                                        class_name: d.class,
+                                                        class_name: displayClassName,
                                                         bbox: d.bbox,
                                                         status: 'unverified',
                                                         experiment_id: experiment.id
@@ -2361,7 +2428,7 @@ const ImageViewerModal = ({
                                                     e.stopPropagation();
                                                     onVerify({
                                                         image_name: fileName,
-                                                        class_name: d.class,
+                                                        class_name: displayClassName,
                                                         bbox: d.bbox,
                                                         status: 'pass',
                                                         experiment_id: experiment.id
@@ -2387,7 +2454,7 @@ const ImageViewerModal = ({
                                                     e.stopPropagation();
                                                     onVerify({
                                                         image_name: fileName,
-                                                        class_name: d.class,
+                                                        class_name: displayClassName,
                                                         bbox: d.bbox,
                                                         status: 'fail',
                                                         experiment_id: experiment.id
