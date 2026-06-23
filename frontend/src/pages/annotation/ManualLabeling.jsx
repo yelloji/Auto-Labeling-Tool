@@ -15,7 +15,9 @@ import {
   Tag,
   Alert,
   Empty,
-  Radio
+  Radio,
+  Switch,
+  Slider
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -318,6 +320,8 @@ const ManualLabeling = () => {
   const [predictionImportPreview, setPredictionImportPreview] = useState(null);
   const [predictionImportLoading, setPredictionImportLoading] = useState(false);
   const [predictionImportApplying, setPredictionImportApplying] = useState(false);
+  const [predictionImportSimplifyEnabled, setPredictionImportSimplifyEnabled] = useState(true);
+  const [predictionImportSimplifyTolerance, setPredictionImportSimplifyTolerance] = useState(2);
 
   // Dataset progress
   const [datasetProgress, setDatasetProgress] = useState({
@@ -995,6 +999,8 @@ const ManualLabeling = () => {
     setPredictionImportScope('current');
     setPredictionImportConflictMode('skip');
     setPredictionImportPreview(null);
+    setPredictionImportSimplifyEnabled(true);
+    setPredictionImportSimplifyTolerance(2);
   };
 
   const openCopyLabelsModal = async () => {
@@ -1263,6 +1269,74 @@ const ManualLabeling = () => {
       .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
   };
 
+  const getSquaredDistanceToSegment = (point, start, end) => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+
+    if (dx === 0 && dy === 0) {
+      return ((point.x - start.x) ** 2) + ((point.y - start.y) ** 2);
+    }
+
+    const t = Math.max(0, Math.min(1, (((point.x - start.x) * dx) + ((point.y - start.y) * dy)) / ((dx * dx) + (dy * dy))));
+    const projectedX = start.x + (t * dx);
+    const projectedY = start.y + (t * dy);
+    return ((point.x - projectedX) ** 2) + ((point.y - projectedY) ** 2);
+  };
+
+  const simplifyLineRdp = (points, tolerance) => {
+    if (!Array.isArray(points) || points.length <= 2) return points || [];
+
+    const toleranceSquared = tolerance * tolerance;
+    let maxDistance = 0;
+    let maxIndex = 0;
+    const start = points[0];
+    const end = points[points.length - 1];
+
+    for (let i = 1; i < points.length - 1; i += 1) {
+      const distance = getSquaredDistanceToSegment(points[i], start, end);
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        maxIndex = i;
+      }
+    }
+
+    if (maxDistance > toleranceSquared) {
+      const left = simplifyLineRdp(points.slice(0, maxIndex + 1), tolerance);
+      const right = simplifyLineRdp(points.slice(maxIndex), tolerance);
+      return left.slice(0, -1).concat(right);
+    }
+
+    return [start, end];
+  };
+
+  const simplifyPredictionPolygon = (points, tolerance, minPoints = 8) => {
+    if (!Array.isArray(points) || points.length <= minPoints) return points || [];
+
+    const uniquePoints = points.filter((point, index) => {
+      if (index === 0) return true;
+      const previous = points[index - 1];
+      return point.x !== previous.x || point.y !== previous.y;
+    });
+    const last = uniquePoints[uniquePoints.length - 1];
+    const first = uniquePoints[0];
+    const openPoints = last && first && last.x === first.x && last.y === first.y
+      ? uniquePoints.slice(0, -1)
+      : uniquePoints;
+
+    if (openPoints.length <= minPoints) return openPoints;
+
+    const attempts = [tolerance, tolerance * 0.5, tolerance * 0.25, tolerance * 0.1].filter(value => value > 0);
+    for (const attemptTolerance of attempts) {
+      const closedLine = [...openPoints, openPoints[0]];
+      const simplified = simplifyLineRdp(closedLine, attemptTolerance).slice(0, -1);
+      if (simplified.length >= minPoints && simplified.length < openPoints.length) {
+        return simplified;
+      }
+    }
+
+    return openPoints;
+  };
+
   const resolvePredictionLabelName = (detection) => {
     const genericNames = new Set(['item', 'object', 'objects', 'class', 'unknown']);
     const meaningfulLabels = projectLabels.filter((label) => {
@@ -1322,9 +1396,14 @@ const ManualLabeling = () => {
     return 'item';
   };
 
-  const predictionToAnnotation = (detection, imageIdForSave) => {
+  const predictionToAnnotation = (detection, imageIdForSave, simplifyEnabled = true, simplifyTolerance = 2) => {
     const labelName = resolvePredictionLabelName(detection);
-    const segmentation = normalizePredictionSegmentation(detection.segmentation || detection.mask);
+    const rawSegmentation = normalizePredictionSegmentation(detection.segmentation || detection.mask);
+    const originalPointCount = rawSegmentation?.length || 0;
+    const segmentation = simplifyEnabled && rawSegmentation && rawSegmentation.length > 8
+      ? simplifyPredictionPolygon(rawSegmentation, simplifyTolerance)
+      : rawSegmentation;
+    const simplifiedPointCount = segmentation?.length || 0;
     const annotation = {
       image_id: imageIdForSave,
       class_name: labelName,
@@ -1332,7 +1411,10 @@ const ManualLabeling = () => {
       confidence: Number(detection.confidence ?? detection.score ?? 1.0) || 1.0,
       color: resolveLabelColor(labelName),
       type: segmentation && segmentation.length > 2 ? 'polygon' : 'box',
-      segmentation: segmentation && segmentation.length > 2 ? segmentation : null
+      segmentation: segmentation && segmentation.length > 2 ? segmentation : null,
+      original_point_count: originalPointCount,
+      simplified_point_count: simplifiedPointCount,
+      simplification_tolerance: simplifyEnabled ? simplifyTolerance : 0
     };
 
     if (annotation.type === 'polygon') {
@@ -1359,7 +1441,13 @@ const ManualLabeling = () => {
     return annotation;
   };
 
-  const buildPredictionImportPreview = async (experiment, scope = predictionImportScope, conflictMode = predictionImportConflictMode) => {
+  const buildPredictionImportPreview = async (
+    experiment,
+    scope = predictionImportScope,
+    conflictMode = predictionImportConflictMode,
+    simplifyEnabled = predictionImportSimplifyEnabled,
+    simplifyTolerance = predictionImportSimplifyTolerance
+  ) => {
     if (!experiment) {
       setPredictionImportPreview(null);
       return null;
@@ -1378,7 +1466,7 @@ const ManualLabeling = () => {
         const match = findPredictionEntryForImage(predictionMap, image);
         const detections = match?.detections || [];
         const annotationsToImport = detections
-          .map(det => predictionToAnnotation(det, image.id))
+          .map(det => predictionToAnnotation(det, image.id, simplifyEnabled, simplifyTolerance))
           .filter(ann => ann.width > 0 || ann.height > 0 || (ann.segmentation && ann.segmentation.length > 2));
         const hasLabels = Boolean(image?.is_labeled);
         const skipped = conflictMode === 'skip' && hasLabels;
@@ -1411,6 +1499,14 @@ const ManualLabeling = () => {
         unmatchedPredictionKeys,
         importImageCount: importRows.length,
         importAnnotationCount: importRows.reduce((sum, row) => sum + row.annotationsToImport.length, 0),
+        originalPointCount: importRows.reduce((sum, row) => (
+          sum + row.annotationsToImport.reduce((rowSum, ann) => rowSum + (ann.original_point_count || 0), 0)
+        ), 0),
+        simplifiedPointCount: importRows.reduce((sum, row) => (
+          sum + row.annotationsToImport.reduce((rowSum, ann) => rowSum + (ann.simplified_point_count || 0), 0)
+        ), 0),
+        simplifyEnabled,
+        simplifyTolerance,
         predictionImageCount: predictionKeys.length,
         targetImageCount: targetImages.length
       };
@@ -1470,7 +1566,14 @@ const ManualLabeling = () => {
     setPredictionImportApplying(true);
     try {
       for (const row of predictionImportPreview.importRows) {
-        const annotationsToSave = row.annotationsToImport.map(({ color, points, ...ann }) => ({
+        const annotationsToSave = row.annotationsToImport.map(({
+          color,
+          points,
+          original_point_count,
+          simplified_point_count,
+          simplification_tolerance,
+          ...ann
+        }) => ({
           ...ann,
           image_id: row.image.id,
           segmentation: ann.segmentation ? JSON.parse(JSON.stringify(ann.segmentation)) : null
@@ -3249,6 +3352,63 @@ const ManualLabeling = () => {
                 </div>
               </div>
 
+              <div style={{
+                border: '1px solid #f0f0f0',
+                borderRadius: 8,
+                padding: 12,
+                background: '#fafafa'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                  <div>
+                    <Text strong>Simplify polygons for editing</Text>
+                    <div>
+                      <Text type="secondary">
+                        Reduces dense YOLO/SAHI segmentation points before saving manual annotations.
+                      </Text>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={predictionImportSimplifyEnabled}
+                    onChange={async (checked) => {
+                      setPredictionImportSimplifyEnabled(checked);
+                      const experiment = predictionImportExperiments.find(exp => exp.id === predictionImportExperimentId);
+                      await buildPredictionImportPreview(
+                        experiment,
+                        predictionImportScope,
+                        predictionImportConflictMode,
+                        checked,
+                        predictionImportSimplifyTolerance
+                      );
+                    }}
+                  />
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text type="secondary">Tolerance</Text>
+                    <Text>{predictionImportSimplifyTolerance}px</Text>
+                  </div>
+                  <Slider
+                    min={1}
+                    max={3}
+                    step={0.5}
+                    value={predictionImportSimplifyTolerance}
+                    disabled={!predictionImportSimplifyEnabled}
+                    marks={{ 1: '1px', 2: '2px', 3: '3px' }}
+                    onChange={setPredictionImportSimplifyTolerance}
+                    onChangeComplete={async (value) => {
+                      const experiment = predictionImportExperiments.find(exp => exp.id === predictionImportExperimentId);
+                      await buildPredictionImportPreview(
+                        experiment,
+                        predictionImportScope,
+                        predictionImportConflictMode,
+                        predictionImportSimplifyEnabled,
+                        value
+                      );
+                    }}
+                  />
+                </div>
+              </div>
+
               {predictionImportConflictMode === 'skip' && (
                 <Alert
                   type="success"
@@ -3292,6 +3452,16 @@ const ManualLabeling = () => {
                     </div>
                   </div>
 
+                  {predictionImportPreview.originalPointCount > 0 && (
+                    <Alert
+                      type={predictionImportPreview.simplifyEnabled ? 'info' : 'warning'}
+                      showIcon
+                      message={predictionImportPreview.simplifyEnabled
+                        ? `Polygon simplification: ${predictionImportPreview.originalPointCount.toLocaleString()} points -> ${predictionImportPreview.simplifiedPointCount.toLocaleString()} points at ${predictionImportPreview.simplifyTolerance}px.`
+                        : `Polygon simplification is off. Import will keep ${predictionImportPreview.originalPointCount.toLocaleString()} polygon points.`}
+                    />
+                  )}
+
                   {predictionImportPreview.importRows.length === 0 ? (
                     <Alert
                       type="warning"
@@ -3326,6 +3496,14 @@ const ManualLabeling = () => {
                                 {row.image.is_labeled ? 'has labels' : 'unlabeled'}
                               </Tag>
                               <Tag color="blue">{row.annotationsToImport.length} detections</Tag>
+                              {row.annotationsToImport.some(ann => ann.original_point_count > 0) && (
+                                <Tag color="purple">
+                                  {row.annotationsToImport.reduce((sum, ann) => sum + (ann.original_point_count || 0), 0)}
+                                  {' -> '}
+                                  {row.annotationsToImport.reduce((sum, ann) => sum + (ann.simplified_point_count || 0), 0)}
+                                  {' pts'}
+                                </Tag>
+                              )}
                             </Space>
                           </div>
                         ))}
