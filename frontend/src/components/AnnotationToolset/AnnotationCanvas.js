@@ -357,17 +357,19 @@ const AnnotationCanvas = ({
     const consistentW = baseW * (zoomLevel / 100);
     const consistentH = baseH * (zoomLevel / 100);
 
-    // Determine canvas size: expand when zoomed in to avoid clipping
+    // Determine canvas size: expand when zoomed in to avoid clipping.
+    // Hard cap at 15000px: browser canvas limit is ~16384px — exceeding it causes silent white screen.
+    const MAX_CANVAS_DIM = 15000;
     let canvasWidth = containerWidth;
     let canvasHeight = containerHeight;
     if (zoomLevel >= 25) {
-      canvasWidth = Math.max(containerWidth, Math.ceil(consistentW) + 40);
-      canvasHeight = Math.max(containerHeight, Math.ceil(consistentH) + 40);
+      canvasWidth = Math.min(Math.max(containerWidth, Math.ceil(consistentW) + 40), MAX_CANVAS_DIM);
+      canvasHeight = Math.min(Math.max(containerHeight, Math.ceil(consistentH) + 40), MAX_CANVAS_DIM);
     }
 
-    // Center within the actual canvas size
-    const x = (canvasWidth - consistentW) / 2;
-    const y = (canvasHeight - consistentH) / 2;
+    // Center within the actual canvas size; clamp to 0 so image never starts off-canvas when capped
+    const x = Math.max(0, (canvasWidth - consistentW) / 2);
+    const y = Math.max(0, (canvasHeight - consistentH) / 2);
 
     const newPosition = { x, y };
     setImagePosition(newPosition);
@@ -381,8 +383,13 @@ const AnnotationCanvas = ({
     canvas.height = canvasHeight;
 
     const zoomAnchor = wheelZoomAnchorRef.current;
-    if (zoomAnchor?.targetZoom === zoomLevel) {
-      wheelZoomAnchorRef.current = null;
+    if (zoomAnchor) {
+      // Clear anchor only when this render matches the final target zoom of the gesture.
+      // Apply scroll correction on every intermediate render too — this keeps the cursor-anchored
+      // point stable during fast scroll (multiple wheel events before a render).
+      if (zoomAnchor.targetZoom === zoomLevel) {
+        wheelZoomAnchorRef.current = null;
+      }
       window.requestAnimationFrame(() => {
         const viewport = viewportRef.current;
         if (!viewport) return;
@@ -1157,7 +1164,7 @@ const AnnotationCanvas = ({
     const nextZoom = Math.max(25, Math.min(500, currentTargetZoom + (direction * 25)));
     if (nextZoom !== currentTargetZoom) {
       const viewport = viewportRef.current;
-      if (viewport && !wheelZoomAnchorRef.current) {
+      if (viewport) {
         const viewportRect = viewport.getBoundingClientRect();
         const viewportX = e.clientX - viewportRect.left;
         const viewportY = e.clientY - viewportRect.top;
@@ -1165,15 +1172,19 @@ const AnnotationCanvas = ({
         const canvasY = viewport.scrollTop + viewportY;
         const currentScale = zoomLevel / 100;
 
-        wheelZoomAnchorRef.current = {
-          imageX: (canvasX - imagePosition.x) / currentScale,
-          imageY: (canvasY - imagePosition.y) / currentScale,
-          viewportX,
-          viewportY,
-          targetZoom: nextZoom
-        };
-      } else if (wheelZoomAnchorRef.current) {
-        wheelZoomAnchorRef.current.targetZoom = nextZoom;
+        if (!wheelZoomAnchorRef.current) {
+          // First event in gesture: capture cursor anchor using current rendered state
+          wheelZoomAnchorRef.current = {
+            imageX: (canvasX - imagePosition.x) / currentScale,
+            imageY: (canvasY - imagePosition.y) / currentScale,
+            viewportX,
+            viewportY,
+            targetZoom: nextZoom
+          };
+        } else {
+          // Subsequent events: only advance the target zoom, keep original cursor anchor
+          wheelZoomAnchorRef.current.targetZoom = nextZoom;
+        }
       }
 
       onZoomChange(nextZoom);
