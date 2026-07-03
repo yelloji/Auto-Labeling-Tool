@@ -21,7 +21,17 @@ const API = '/api/v1';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
+// Full original image — for the annotation canvas
 const getImageUrl = (image) => {
+  if (!image) return '';
+  const path = image.url || image.file_path;
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  return path.startsWith('/') ? path : `/${path}`;
+};
+
+// Thumbnail — for the bottom strip only
+const getThumbnailUrl = (image) => {
   if (!image) return '';
   const path = image.thumbnail_url || image.url || image.file_path;
   if (!path) return '';
@@ -772,7 +782,7 @@ const AutoLabeling = () => {
                 title={img.filename}
               >
                 <img
-                  src={getImageUrl(img)}
+                  src={getThumbnailUrl(img)}
                   alt={img.filename}
                   style={S.thumbImg}
                   loading="lazy"
