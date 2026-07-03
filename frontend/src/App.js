@@ -17,6 +17,7 @@ import RetrainingWorkspace from './components/retraining/RetrainingWorkspace';
 import AnnotateLauncher from './pages/annotation/AnnotateLauncher';
 import AnnotateProgress from './pages/annotation/AnnotateProgress';
 import ManualLabeling from './pages/annotation/ManualLabeling';
+import AutoLabeling from './pages/annotation/AutoLabeling';
 import GlobalTrainingNotification from './components/GlobalTrainingNotification';
 import GuideBot from './components/guide-bot';
 import { AppModeProvider, useAppMode } from './context/AppModeContext';
@@ -123,6 +124,7 @@ function App() {
                 <Route path="/annotate-progress/:datasetId" element={<AnnotateProgress />} />
                 <Route path="/annotate/:datasetId" element={<ManualLabeling />} />
                 <Route path="/annotate/:datasetId/manual" element={<ManualLabeling />} />
+                <Route path="/annotate/:datasetId/auto" element={<AutoLabeling />} />
                 {/* Removed standalone routes: /datasets, /active-learning, /projects/:projectId/annotate */}
                 {/* These features will be integrated within project workflows */}
               </Routes>

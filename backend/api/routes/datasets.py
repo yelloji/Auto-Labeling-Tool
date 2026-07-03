@@ -88,6 +88,13 @@ class AutoLabelRequest(BaseModel):
     overwrite_existing: bool = False
 
 
+class AutoLabelPreviewRequest(BaseModel):
+    """Request model for preview — runs model and returns predictions WITHOUT saving to DB"""
+    model_id: str
+    confidence_threshold: float = 0.5
+    iou_threshold: float = 0.45
+
+
 @router.get("/", response_model=List[Dict[str, Any]])
 async def get_datasets(
     project_id: Optional[str] = None,
@@ -575,6 +582,49 @@ async def start_auto_labeling(
             "error": str(e)
         })
         raise HTTPException(status_code=500, detail=f"Failed to start auto-labeling: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# POST /datasets/{dataset_id}/images/{image_id}/auto-label/preview
+# Runs model on ONE image and returns predictions as JSON — NOTHING saved to DB.
+# Used by the Auto Labeling UI so user can review/edit before confirming.
+# ---------------------------------------------------------------------------
+@router.post("/{dataset_id}/images/{image_id}/auto-label/preview")
+async def preview_auto_label(
+    dataset_id: str,
+    image_id: str,
+    request: AutoLabelPreviewRequest,
+    db: Session = Depends(get_db)
+):
+    image = ImageOperations.get_image(db, image_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    if str(image.dataset_id) != str(dataset_id):
+        raise HTTPException(status_code=400, detail="Image does not belong to this dataset")
+
+    model_info = model_manager.get_model_info(request.model_id)
+    if not model_info:
+        raise HTTPException(status_code=400, detail="Invalid model ID")
+
+    model = auto_labeler.load_model(request.model_id)
+    if not model:
+        raise HTTPException(status_code=500, detail="Failed to load model")
+
+    try:
+        predictions, processing_time = auto_labeler.predict_image(
+            image.file_path,
+            model,
+            confidence_threshold=request.confidence_threshold,
+            iou_threshold=request.iou_threshold
+        )
+        return {
+            "image_id": image_id,
+            "predictions": predictions,
+            "prediction_count": len(predictions),
+            "processing_time": round(processing_time, 3)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
 @router.get("/{dataset_id}/images")
