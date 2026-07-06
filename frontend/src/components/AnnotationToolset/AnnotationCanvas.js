@@ -1105,7 +1105,9 @@ const AnnotationCanvas = ({
           clickPosition: mousePos
         });
         onAnnotationSelect?.(clickedAnnotation);
-      } else {
+      } else if (!polygonEditMode) {
+        // In polygon edit mode, clicking empty canvas keeps the annotation selected
+        // so the user can continue dragging other handle points
         logInfo('app.frontend.interactions', 'annotation_deselected', 'Annotation deselected - clicked outside', {
           imageId,
           clickPosition: mousePos,
@@ -1121,7 +1123,7 @@ const AnnotationCanvas = ({
       });
       smartPolygonTool.handleCanvasClick(e);
     }
-  }, [activeTool, annotations, onAnnotationSelect, zoomLevel, imagePosition, imageId, screenToImageCoords]);
+  }, [activeTool, annotations, onAnnotationSelect, zoomLevel, imagePosition, imageId, screenToImageCoords, polygonEditMode]);
 
   // Handle right-click for smart polygon tool, or suppress the browser menu after panning.
   const handleRightClick = useCallback((e) => {
