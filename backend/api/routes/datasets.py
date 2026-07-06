@@ -13,7 +13,7 @@ from database.operations import (
     DatasetOperations, ProjectOperations, ImageOperations, 
     AutoLabelJobOperations
 )
-from database.models import Annotation, Image
+from database.models import Annotation, Image, AiModel
 from core.file_handler import file_handler
 from core.auto_labeler import auto_labeler
 from models.model_manager import model_manager
@@ -93,6 +93,16 @@ class AutoLabelPreviewRequest(BaseModel):
     model_id: str
     confidence_threshold: float = 0.5
     iou_threshold: float = 0.45
+
+
+class AutoLabelSahiPreviewRequest(BaseModel):
+    """Request model for SAHI sliced inference preview — nothing saved to DB"""
+    model_id: str
+    confidence_threshold: float = 0.5
+    iou_threshold: float = 0.3
+    slice_height: int = 896
+    slice_width: int = 896
+    overlap_ratio: float = 0.25
 
 
 @router.get("/", response_model=List[Dict[str, Any]])
@@ -602,17 +612,27 @@ async def preview_auto_label(
     if str(image.dataset_id) != str(dataset_id):
         raise HTTPException(status_code=400, detail="Image does not belong to this dataset")
 
-    model_info = model_manager.get_model_info(request.model_id)
-    if not model_info:
+    ai_model = db.query(AiModel).filter(AiModel.id == request.model_id).first()
+    if not ai_model:
         raise HTTPException(status_code=400, detail="Invalid model ID")
 
-    model = auto_labeler.load_model(request.model_id)
-    if not model:
-        raise HTTPException(status_code=500, detail="Failed to load model")
+    from ultralytics import YOLO as _YOLO
+    from core.config import settings as _settings
+    from pathlib import Path as _Path
+    _model_path = _Path(ai_model.file_path)
+    if not _model_path.is_absolute():
+        _model_path = _Path(_settings.BASE_DIR) / ai_model.file_path
+    _image_path = _Path(image.file_path)
+    if not _image_path.is_absolute():
+        _image_path = _Path(_settings.BASE_DIR) / image.file_path
+    try:
+        model = _YOLO(str(_model_path))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load model: {e}")
 
     try:
         predictions, processing_time = auto_labeler.predict_image(
-            image.file_path,
+            str(_image_path),
             model,
             confidence_threshold=request.confidence_threshold,
             iou_threshold=request.iou_threshold
@@ -625,6 +645,171 @@ async def preview_auto_label(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# POST /datasets/{dataset_id}/images/{image_id}/auto-label/preview-sahi
+# SAHI sliced inference on ONE image — predictions returned as JSON, nothing saved.
+# ---------------------------------------------------------------------------
+@router.post("/{dataset_id}/images/{image_id}/auto-label/preview-sahi")
+async def preview_auto_label_sahi(
+    dataset_id: str,
+    image_id: str,
+    request: AutoLabelSahiPreviewRequest,
+    db: Session = Depends(get_db)
+):
+    """Run SAHI sliced inference on a single image, return predictions without saving to DB."""
+    try:
+        from sahi import AutoDetectionModel
+        from sahi.predict import get_sliced_prediction
+        import inspect as _inspect
+    except ImportError:
+        raise HTTPException(status_code=503, detail="SAHI is not installed on this server")
+
+    import cv2 as _cv2
+    import torch as _torch
+    import gc as _gc
+
+    image = ImageOperations.get_image(db, image_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    if str(image.dataset_id) != str(dataset_id):
+        raise HTTPException(status_code=400, detail="Image does not belong to this dataset")
+
+    ai_model_row = db.query(AiModel).filter(AiModel.id == request.model_id).first()
+    if not ai_model_row:
+        raise HTTPException(status_code=400, detail="Invalid model ID")
+
+    from core.config import settings as _settings
+    from pathlib import Path as _Path
+    _model_path = _Path(ai_model_row.file_path)
+    if not _model_path.is_absolute():
+        _model_path = _Path(_settings.BASE_DIR) / ai_model_row.file_path
+
+    _image_path_sahi = _Path(image.file_path)
+    if not _image_path_sahi.is_absolute():
+        _image_path_sahi = _Path(_settings.BASE_DIR) / image.file_path
+
+    img_cv = _cv2.imread(str(_image_path_sahi))
+    if img_cv is None:
+        raise HTTPException(status_code=500, detail="Failed to read image file")
+    img_h, img_w = img_cv.shape[:2]
+    del img_cv
+
+    detection_model = None
+    try:
+        device = "cuda:0" if _torch.cuda.is_available() else "cpu"
+
+        detection_model = AutoDetectionModel.from_pretrained(
+            model_type="ultralytics",
+            model_path=str(_model_path),
+            confidence_threshold=request.confidence_threshold,
+            device=device,
+        )
+
+        sig = _inspect.signature(get_sliced_prediction)
+        supported = set(sig.parameters.keys())
+        kwargs = dict(
+            image=str(_image_path_sahi),
+            detection_model=detection_model,
+            slice_height=request.slice_height,
+            slice_width=request.slice_width,
+            overlap_height_ratio=request.overlap_ratio,
+            overlap_width_ratio=request.overlap_ratio,
+            postprocess_match_threshold=request.iou_threshold,
+            verbose=0,
+        )
+        if "perform_standard_pred" in supported:
+            kwargs["perform_standard_pred"] = True
+        elif "no_standard_prediction" in supported:
+            kwargs["no_standard_prediction"] = False
+        kwargs = {k: v for k, v in kwargs.items() if k in supported or k == "image"}
+
+        result = get_sliced_prediction(**kwargs)
+
+        predictions = []
+        for op in getattr(result, "object_prediction_list", []) or []:
+            category = getattr(op, "category", None)
+            score = getattr(op, "score", None)
+            class_name = str(getattr(category, "name", "unknown"))
+            confidence = float(getattr(score, "value", 0.0))
+
+            # Pixel bbox → normalized
+            bbox_obj = getattr(op, "bbox", None)
+            x1, y1, x2, y2 = 0.0, 0.0, 0.0, 0.0
+            if bbox_obj is not None:
+                extracted = False
+                for method_name in ("to_xyxy", "to_voc_bbox"):
+                    m = getattr(bbox_obj, method_name, None)
+                    if callable(m):
+                        try:
+                            coords = list(m())
+                            x1, y1, x2, y2 = float(coords[0]), float(coords[1]), float(coords[2]), float(coords[3])
+                            extracted = True
+                            break
+                        except Exception:
+                            pass
+                if not extracted:
+                    x1 = float(getattr(bbox_obj, "minx", 0.0))
+                    y1 = float(getattr(bbox_obj, "miny", 0.0))
+                    x2 = float(getattr(bbox_obj, "maxx", 0.0))
+                    y2 = float(getattr(bbox_obj, "maxy", 0.0))
+
+            # Segmentation: try direct attribute first, then bool_mask → cv2 contour
+            segmentation = None
+            mask_obj = getattr(op, "mask", None)
+            if mask_obj is not None:
+                # Path 1: COCO segmentation [[x0,y0,x1,y1,...], ...] — pick largest polygon
+                for attr_name in ("segmentation", "full_shape_segmentation"):
+                    seg_raw = getattr(mask_obj, attr_name, None)
+                    if not seg_raw:
+                        continue
+                    flat = []
+                    if isinstance(seg_raw, list) and seg_raw:
+                        first = seg_raw[0]
+                        if isinstance(first, (int, float)):
+                            # Already a flat list [x0, y0, x1, y1, ...]
+                            poly = seg_raw
+                        else:
+                            # COCO outer list of polygons — take the largest one
+                            poly = max(seg_raw, key=lambda p: len(p) if isinstance(p, (list, tuple)) else 0)
+                        for si in range(0, len(poly) - 1, 2):
+                            flat.extend([float(poly[si]) / img_w, float(poly[si + 1]) / img_h])
+                    if len(flat) >= 6:
+                        segmentation = flat
+                        break
+
+
+            predictions.append({
+                "class_name": class_name,
+                "confidence": confidence,
+                "x_min": x1 / img_w,
+                "y_min": y1 / img_h,
+                "x_max": x2 / img_w,
+                "y_max": y2 / img_h,
+                "segmentation": segmentation,
+            })
+
+        return {
+            "image_id": image_id,
+            "predictions": predictions,
+            "prediction_count": len(predictions),
+            "mode": "sahi",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SAHI prediction failed: {str(e)}")
+    finally:
+        try:
+            if detection_model is not None:
+                del detection_model
+            _gc.collect()
+            if _torch.cuda.is_available():
+                _torch.cuda.empty_cache()
+        except Exception:
+            pass
 
 
 @router.get("/{dataset_id}/images")

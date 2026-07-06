@@ -17,6 +17,20 @@ html {
 }
 
 
+/* Auto Labeling dark InputNumber — silver text on dark background */
+.al-num-input .ant-input-number-input {
+  color: #c4b5fd !important;
+  font-weight: 800 !important;
+  font-size: 0.72rem !important;
+  text-align: center;
+}
+.al-num-input.sahi .ant-input-number-input {
+  color: #38bdf8 !important;
+}
+.al-num-input .ant-input-number-input::placeholder {
+  color: rgba(255,255,255,0.3) !important;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',

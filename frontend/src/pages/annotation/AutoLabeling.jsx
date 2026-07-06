@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Button, Select, Slider, Switch, Tooltip, message, Spin, Tag, Progress,
-  Empty, Badge
+  Button, Select, Slider, InputNumber, Tooltip, message, Spin, Tag, Progress, Empty,
 } from 'antd';
 import {
   ArrowLeftOutlined, ThunderboltOutlined, PlayCircleOutlined,
@@ -19,43 +18,137 @@ import { logInfo } from '../../utils/professional_logger';
 
 const API = '/api/v1';
 
-// ── helpers ─────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
-// Full original image — for the annotation canvas
 const getImageUrl = (image) => {
   if (!image) return '';
   const path = image.url || image.file_path;
   if (!path) return '';
-  if (path.startsWith('http')) return path;
-  return path.startsWith('/') ? path : `/${path}`;
+  return path.startsWith('http') ? path : (path.startsWith('/') ? path : `/${path}`);
 };
 
-// Thumbnail — for the bottom strip only
 const getThumbnailUrl = (image) => {
   if (!image) return '';
   const path = image.thumbnail_url || image.url || image.file_path;
   if (!path) return '';
-  if (path.startsWith('http')) return path;
-  return path.startsWith('/') ? path : `/${path}`;
+  return path.startsWith('http') ? path : (path.startsWith('/') ? path : `/${path}`);
 };
 
 let _draftCounter = 0;
 const draftId = () => `draft-${++_draftCounter}-${Date.now()}`;
+const isDraftId = (id) => String(id).startsWith('draft-');
 
-const predsToDraft = (predictions) =>
-  predictions.map((p) => ({
-    id: draftId(),
-    class_name: p.class_name,
-    confidence: p.confidence,
-    x_min: p.x_min,
-    y_min: p.y_min,
-    x_max: p.x_max,
-    y_max: p.y_max,
-    segmentation: p.segmentation || [],
-    type: p.segmentation && p.segmentation.length > 0 ? 'polygon' : 'box',
-    isDraft: true,
-    is_auto_generated: true,
-  }));
+// Convert a flat [x0, y0, x1, y1, ...] or [{x,y},...] segmentation to [{x,y},...] points
+const toPoints = (seg) => {
+  if (!seg || seg.length === 0) return [];
+  if (typeof seg[0] === 'object' && seg[0] !== null) return seg;  // already [{x,y}]
+  const pts = [];
+  for (let i = 0; i + 1 < seg.length; i += 2) pts.push({ x: seg[i], y: seg[i + 1] });
+  return pts;
+};
+
+// RDP polygon simplification — same algorithm as ManualLabeling's prediction import
+const _rdpSquaredDist = (pt, s, e) => {
+  const dx = e.x - s.x, dy = e.y - s.y;
+  if (dx === 0 && dy === 0) return (pt.x - s.x) ** 2 + (pt.y - s.y) ** 2;
+  const t = Math.max(0, Math.min(1, ((pt.x - s.x) * dx + (pt.y - s.y) * dy) / (dx * dx + dy * dy)));
+  return (pt.x - (s.x + t * dx)) ** 2 + (pt.y - (s.y + t * dy)) ** 2;
+};
+const _rdpSimplify = (pts, tol) => {
+  if (pts.length <= 2) return pts;
+  const tolSq = tol * tol;
+  let maxD = 0, maxI = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const d = _rdpSquaredDist(pts[i], pts[0], pts[pts.length - 1]);
+    if (d > maxD) { maxD = d; maxI = i; }
+  }
+  if (maxD > tolSq) {
+    const l = _rdpSimplify(pts.slice(0, maxI + 1), tol);
+    const r = _rdpSimplify(pts.slice(maxI), tol);
+    return l.slice(0, -1).concat(r);
+  }
+  return [pts[0], pts[pts.length - 1]];
+};
+const simplifyPolygon = (points, tolerance = 2, minPoints = 8) => {
+  if (!Array.isArray(points) || points.length <= minPoints) return points || [];
+  const unique = points.filter((p, i) => i === 0 || p.x !== points[i - 1].x || p.y !== points[i - 1].y);
+  const last = unique[unique.length - 1], first = unique[0];
+  const open = last && first && last.x === first.x && last.y === first.y ? unique.slice(0, -1) : unique;
+  if (open.length <= minPoints) return open;
+  for (const tol of [tolerance, tolerance * 0.5, tolerance * 0.25, tolerance * 0.1]) {
+    const simplified = _rdpSimplify([...open, open[0]], tol).slice(0, -1);
+    if (simplified.length >= minPoints && simplified.length < open.length) return simplified;
+  }
+  return open;
+};
+
+// Same generic-name list as ManualLabeling's resolvePredictionLabelName
+const GENERIC_CLASS_NAMES = new Set(['item', 'object', 'objects', 'class', 'unknown']);
+
+// Resolve raw model class_name → real project label name (mirrors ManualLabeling logic)
+const resolveLabel = (rawName, labels = []) => {
+  const meaningfulLabels = labels.filter(l => !GENERIC_CLASS_NAMES.has(String(l.name || '').trim().toLowerCase()));
+  const byName = new Map(labels.map(l => [String(l.name || '').trim().toLowerCase(), l.name]));
+
+  const normalized = String(rawName || '').trim().toLowerCase();
+  if (normalized && !GENERIC_CLASS_NAMES.has(normalized) && byName.has(normalized))
+    return byName.get(normalized);
+  if (normalized && !GENERIC_CLASS_NAMES.has(normalized) && normalized.length > 0)
+    return rawName;
+
+  // rawName is generic — fall back to sole meaningful project label
+  if (meaningfulLabels.length === 1) return meaningfulLabels[0].name;
+  if (labels.length === 1) return labels[0].name;
+  return rawName || 'item';
+};
+
+// Auto-label predictions: backend returns normalized [0,1] coords — scale to pixels for canvas
+const predsToDraft = (predictions, imgW, imgH, labels = []) =>
+  predictions.map((p) => {
+    const sw = imgW || 1;
+    const sh = imgH || 1;
+    const x_min = p.x_min * sw;
+    const y_min = p.y_min * sh;
+    const x_max = p.x_max * sw;
+    const y_max = p.y_max * sh;
+    const rawPoints = toPoints(p.segmentation).map(pt => ({ x: pt.x * sw, y: pt.y * sh }));
+    const points = rawPoints.length > 8 ? simplifyPolygon(rawPoints) : rawPoints;
+    const type = points.length >= 3 ? 'polygon' : 'box';
+    const resolvedLabel = resolveLabel(p.class_name, labels);
+    return {
+      id: draftId(),
+      type,
+      label: resolvedLabel,
+      class_name: resolvedLabel,
+      confidence: p.confidence,
+      x: x_min, y: y_min,
+      width: x_max - x_min,
+      height: y_max - y_min,
+      x_min, y_min, x_max, y_max,
+      points, segmentation: points,
+      isDraft: true, is_auto_generated: true,
+    };
+  });
+
+// Existing DB annotations: segmentation stored as [{x,y},...] objects
+const dbAnnotationToDraft = (ann) => {
+  const points = toPoints(ann.segmentation || ann.points || []);
+  const type = ann.type || (points.length >= 3 ? 'polygon' : 'box');
+  return {
+    id: ann.id,   // real DB id — not draft-*, so save won't re-create it
+    type,
+    label: ann.class_name || ann.label || 'unknown',
+    class_name: ann.class_name || ann.label || 'unknown',
+    confidence: ann.confidence ?? 1.0,
+    x: ann.x_min, y: ann.y_min,
+    width: ann.x_max - ann.x_min,
+    height: ann.y_max - ann.y_min,
+    x_min: ann.x_min, y_min: ann.y_min,
+    x_max: ann.x_max, y_max: ann.y_max,
+    points, segmentation: points,
+    isDraft: false, isExisting: true,
+  };
+};
 
 const confColor = (c) => {
   if (c >= 0.8) return '#10b981';
@@ -69,25 +162,27 @@ const statusBorder = (imageId, savedIds, allPreds) => {
   return '3px solid transparent';
 };
 
-// ── component ────────────────────────────────────────────────────────────────
+// ── component ─────────────────────────────────────────────────────────────────
 
 const AutoLabeling = () => {
   const { datasetId } = useParams();
   const navigate = useNavigate();
 
-  // dataset + images
   const [dataset, setDataset] = useState(null);
   const [images, setImages] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loadingImages, setLoadingImages] = useState(true);
 
-  // models
   const [models, setModels] = useState([]);
   const [selectedModelId, setSelectedModelId] = useState(null);
   const [confidence, setConfidence] = useState(0.50);
   const [iou, setIou] = useState(0.45);
 
-  // predictions / canvas
+  // prediction mode: 'normal' | 'sahi'
+  const [predictionMode, setPredictionMode] = useState('normal');
+  const [sliceSize, setSliceSize] = useState(896);
+  const [overlapRatio, setOverlapRatio] = useState(0.25);
+
   const [draftAnnotations, setDraftAnnotations] = useState([]);
   const [allPredictions, setAllPredictions] = useState({});   // imageId → draft[]
   const [savedImageIds, setSavedImageIds] = useState(new Set());
@@ -96,17 +191,18 @@ const AutoLabeling = () => {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [isSaving, setIsSaving] = useState(false);
 
-  // canvas
   const [activeTool, setActiveTool] = useState('select');
   const [zoomLevel, setZoomLevel] = useState(50);
   const [labels, setLabels] = useState([]);
-
-  // label popup for manually drawn shapes
   const [pendingShape, setPendingShape] = useState(null);
 
   const thumbnailStripRef = useRef(null);
+  // tracks which imageIds are currently being async-loaded (prevents double-fetch)
+  const loadingAnnotationsRef = useRef(new Set());
+  // tracks which real DB annotation IDs were loaded for each image
+  const initialAnnotationIdsRef = useRef({});
 
-  // ── load ──────────────────────────────────────────────────────────────────
+  // ── data loading ──────────────────────────────────────────────────────────
 
   const loadDataset = useCallback(async () => {
     try {
@@ -121,8 +217,7 @@ const AutoLabeling = () => {
       const r = await fetch(`${API}/datasets/${datasetId}/images?limit=500`);
       if (!r.ok) return;
       const data = await r.json();
-      const imgs = Array.isArray(data) ? data : (data.images || []);
-      setImages(imgs);
+      setImages(Array.isArray(data) ? data : (data.images || []));
     } catch {
       message.error('Failed to load images');
     } finally {
@@ -140,7 +235,6 @@ const AutoLabeling = () => {
       const ready = list.filter(m => m.status === 'ready' || m.status === 'Ready' || !m.status);
       setModels(ready);
       if (ready.length > 0 && !selectedModelId) {
-        // prefer trained project model
         const trained = ready.find(m => m.type === 'trained' || m.is_project_model);
         setSelectedModelId(trained?.id || ready[0].id);
       }
@@ -161,14 +255,42 @@ const AutoLabeling = () => {
   useEffect(() => { loadDataset(); loadImages(); }, [loadDataset, loadImages]);
   useEffect(() => { if (dataset) { loadModels(); loadLabels(); } }, [dataset, loadModels, loadLabels]);
 
-  // sync draft annotations when navigating between images
+  // Effect 1: When navigating to a new image, populate allPredictions cache.
+  // If image is already labeled in DB and not yet loaded, fetch existing annotations.
+  // Intentionally does NOT depend on allPredictions to avoid re-triggering.
   useEffect(() => {
     const img = images[currentIndex];
     if (!img) return;
+    if (allPredictions[img.id] !== undefined) return;   // already cached
+    if (loadingAnnotationsRef.current.has(img.id)) return;  // already loading
+
+    if (img.is_labeled) {
+      loadingAnnotationsRef.current.add(img.id);
+      AnnotationAPI.getImageAnnotations(img.id)
+        .then(existing => {
+          const drafts = (existing || []).map(dbAnnotationToDraft);
+          initialAnnotationIdsRef.current[img.id] = new Set((existing || []).map(a => a.id));
+          setAllPredictions(prev => ({ ...prev, [img.id]: drafts }));
+        })
+        .catch(() => {
+          setAllPredictions(prev => ({ ...prev, [img.id]: [] }));
+        })
+        .finally(() => {
+          loadingAnnotationsRef.current.delete(img.id);
+        });
+    } else {
+      setAllPredictions(prev => ({ ...prev, [img.id]: [] }));
+    }
+  }, [currentIndex, images]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Effect 2: Sync draftAnnotations whenever the cache or navigation changes.
+  useEffect(() => {
+    const img = images[currentIndex];
+    if (!img) { setDraftAnnotations([]); return; }
     setDraftAnnotations(allPredictions[img.id] || []);
   }, [currentIndex, images, allPredictions]);
 
-  // scroll thumbnail strip to keep current thumb visible
+  // Scroll thumbnail into view
   useEffect(() => {
     const strip = thumbnailStripRef.current;
     if (!strip) return;
@@ -176,33 +298,40 @@ const AutoLabeling = () => {
     if (thumb) thumb.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   }, [currentIndex]);
 
-  // ── prediction ─────────────────────────────────────────────────────────────
+  // ── prediction ────────────────────────────────────────────────────────────
 
   const currentImage = images[currentIndex] || null;
 
+  const getPreviewEndpoint = useCallback((imgId) => {
+    const suffix = predictionMode === 'sahi' ? 'preview-sahi' : 'preview';
+    return `${API}/datasets/${datasetId}/images/${imgId}/auto-label/${suffix}`;
+  }, [datasetId, predictionMode]);
+
+  const getPreviewBody = useCallback(() => ({
+    model_id: selectedModelId,
+    confidence_threshold: confidence,
+    iou_threshold: iou,
+    ...(predictionMode === 'sahi' ? {
+      slice_height: sliceSize, slice_width: sliceSize, overlap_ratio: overlapRatio,
+    } : {}),
+  }), [selectedModelId, confidence, iou, predictionMode, sliceSize, overlapRatio]);
+
   const runPreview = useCallback(async (imgOverride) => {
     const img = imgOverride || currentImage;
-    if (!img || !selectedModelId) {
-      message.warning('Select a model first');
-      return;
-    }
+    if (!img || !selectedModelId) { message.warning('Select a model first'); return; }
     setIsRunning(true);
     try {
-      const r = await fetch(`${API}/datasets/${datasetId}/images/${img.id}/auto-label/preview`, {
+      const r = await fetch(getPreviewEndpoint(img.id), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model_id: selectedModelId,
-          confidence_threshold: confidence,
-          iou_threshold: iou,
-        }),
+        body: JSON.stringify(getPreviewBody()),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         throw new Error(err.detail || 'Prediction failed');
       }
       const data = await r.json();
-      const drafts = predsToDraft(data.predictions || []);
+      const drafts = predsToDraft(data.predictions || [], img.width, img.height, labels);
       setDraftAnnotations(drafts);
       setAllPredictions(prev => ({ ...prev, [img.id]: drafts }));
       if (drafts.length === 0) message.info('No predictions found on this image');
@@ -211,27 +340,24 @@ const AutoLabeling = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [currentImage, selectedModelId, datasetId, confidence, iou]);
+  }, [currentImage, selectedModelId, getPreviewEndpoint, getPreviewBody, labels]);
 
   const runAll = useCallback(async () => {
-    if (!selectedModelId || images.length === 0) {
-      message.warning('Select a model first');
-      return;
-    }
+    if (!selectedModelId || images.length === 0) { message.warning('Select a model first'); return; }
     setIsRunningAll(true);
     setBatchProgress({ current: 0, total: images.length });
     const collected = {};
     for (let i = 0; i < images.length; i++) {
       const img = images[i];
       try {
-        const r = await fetch(`${API}/datasets/${datasetId}/images/${img.id}/auto-label/preview`, {
+        const r = await fetch(getPreviewEndpoint(img.id), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model_id: selectedModelId, confidence_threshold: confidence, iou_threshold: iou }),
+          body: JSON.stringify(getPreviewBody()),
         });
         if (r.ok) {
           const data = await r.json();
-          collected[img.id] = predsToDraft(data.predictions || []);
+          collected[img.id] = predsToDraft(data.predictions || [], img.width, img.height, labels);
         }
       } catch {}
       setBatchProgress({ current: i + 1, total: images.length });
@@ -242,28 +368,53 @@ const AutoLabeling = () => {
     setIsRunningAll(false);
     const total = Object.values(collected).reduce((s, a) => s + a.length, 0);
     message.success(`Batch complete — ${total} predictions across ${images.length} images`);
-  }, [selectedModelId, images, datasetId, confidence, iou, currentIndex]);
+  }, [selectedModelId, images, getPreviewEndpoint, getPreviewBody, currentIndex, labels]);
 
-  // ── save ───────────────────────────────────────────────────────────────────
+  // ── save ──────────────────────────────────────────────────────────────────
 
   const saveCurrentImage = useCallback(async () => {
-    if (!currentImage || draftAnnotations.length === 0) {
-      message.info('Nothing to save');
+    if (!currentImage) return;
+
+    const existingInView = draftAnnotations.filter(a => !isDraftId(a.id));
+    const newDrafts = draftAnnotations.filter(a => isDraftId(a.id));
+
+    // Determine which initial DB annotations the user removed
+    const initialIds = initialAnnotationIdsRef.current[currentImage.id] || new Set();
+    const keptIds = new Set(existingInView.map(a => a.id));
+    const toDelete = [...initialIds].filter(id => !keptIds.has(id));
+
+    if (newDrafts.length === 0 && toDelete.length === 0) {
+      message.info('No changes to save');
       return;
     }
+
     setIsSaving(true);
     try {
-      for (const ann of draftAnnotations) {
+      // Delete removed existing annotations from DB
+      for (const id of toDelete) {
+        await AnnotationAPI.deleteAnnotation(id);
+      }
+      // Create new draft annotations in DB
+      for (const ann of newDrafts) {
         await AnnotationAPI.createAnnotation({ ...ann, image_id: currentImage.id });
       }
+
+      // Update initial IDs to reflect current DB state
+      initialAnnotationIdsRef.current[currentImage.id] = keptIds;
+
       setSavedImageIds(prev => new Set([...prev, currentImage.id]));
       setImages(prev => prev.map(img =>
         img.id === currentImage.id ? { ...img, is_labeled: true } : img
       ));
+
       logInfo('app.frontend.interactions', 'auto_label_saved', 'Auto label annotations saved', {
-        imageId: currentImage.id, count: draftAnnotations.length,
+        imageId: currentImage.id, created: newDrafts.length, deleted: toDelete.length,
       });
-      message.success(`Saved ${draftAnnotations.length} annotation${draftAnnotations.length !== 1 ? 's' : ''}`);
+
+      const parts = [];
+      if (newDrafts.length > 0) parts.push(`${newDrafts.length} added`);
+      if (toDelete.length > 0) parts.push(`${toDelete.length} removed`);
+      message.success(`Saved — ${parts.join(', ')}`);
     } catch {
       message.error('Failed to save annotations');
     } finally {
@@ -273,19 +424,11 @@ const AutoLabeling = () => {
 
   // ── canvas callbacks ───────────────────────────────────────────────────────
 
-  const handleShapeComplete = useCallback((shape) => {
-    setPendingShape(shape);
-  }, []);
+  const handleShapeComplete = useCallback((shape) => { setPendingShape(shape); }, []);
 
   const handleLabelSelect = useCallback((labelName) => {
     if (!pendingShape) return;
-    const newAnn = {
-      ...pendingShape,
-      id: draftId(),
-      class_name: labelName,
-      confidence: 1.0,
-      isDraft: true,
-    };
+    const newAnn = { ...pendingShape, id: draftId(), label: labelName, class_name: labelName, confidence: 1.0, isDraft: true };
     setDraftAnnotations(prev => {
       const updated = [...prev, newAnn];
       if (currentImage) setAllPredictions(p => ({ ...p, [currentImage.id]: updated }));
@@ -302,16 +445,14 @@ const AutoLabeling = () => {
     });
   }, [currentImage]);
 
-  const handleRemovePrediction = useCallback((id) => {
-    handleAnnotationDelete(id);
-  }, [handleAnnotationDelete]);
+  const handleRemovePrediction = handleAnnotationDelete;
 
   const handleClearAll = useCallback(() => {
     setDraftAnnotations([]);
     if (currentImage) setAllPredictions(p => ({ ...p, [currentImage.id]: [] }));
   }, [currentImage]);
 
-  // ── navigation ─────────────────────────────────────────────────────────────
+  // ── navigation ────────────────────────────────────────────────────────────
 
   const goTo = useCallback((idx) => {
     if (idx < 0 || idx >= images.length) return;
@@ -319,14 +460,16 @@ const AutoLabeling = () => {
     setActiveTool('select');
   }, [images.length]);
 
-  // ── derived ────────────────────────────────────────────────────────────────
+  // ── derived ───────────────────────────────────────────────────────────────
 
   const savedCount = savedImageIds.size;
   const pendingCount = Object.values(allPredictions).filter(a => a.length > 0).length;
   const totalPreds = draftAnnotations.length;
+  const existingCount = draftAnnotations.filter(a => !isDraftId(a.id)).length;
+  const newCount = draftAnnotations.filter(a => isDraftId(a.id)).length;
   const imageUrl = currentImage ? getImageUrl(currentImage) : '';
 
-  // ── styles ─────────────────────────────────────────────────────────────────
+  // ── styles ────────────────────────────────────────────────────────────────
 
   const S = {
     root: {
@@ -334,7 +477,7 @@ const AutoLabeling = () => {
       background: '#0f172a', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     },
     topBar: {
-      display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0 1rem',
+      display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0 0.85rem',
       height: 56, flexShrink: 0,
       background: 'linear-gradient(135deg, #10172a 0%, #1d1647 60%, #111827 100%)',
       borderBottom: '1px solid rgba(124,58,237,0.25)',
@@ -347,15 +490,28 @@ const AutoLabeling = () => {
       cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700, flexShrink: 0,
     },
     divider: { width: 1, height: 28, background: 'rgba(255,255,255,0.10)', flexShrink: 0 },
-    datasetName: {
-      color: '#fff', fontWeight: 800, fontSize: '0.9rem', letterSpacing: '-0.01em', flexShrink: 0,
-    },
+    datasetName: { color: '#fff', fontWeight: 800, fontSize: '0.9rem', flexShrink: 0 },
     imgCount: { color: 'rgba(255,255,255,0.45)', fontSize: '0.75rem', fontWeight: 600, flexShrink: 0 },
     spacer: { flex: 1 },
-    // model picker
-    modelSelect: { width: 200, flexShrink: 0 },
+    modelSelect: { width: 185, flexShrink: 0 },
+    modeToggle: {
+      display: 'flex', borderRadius: 8, overflow: 'hidden', flexShrink: 0,
+      border: '1px solid rgba(124,58,237,0.35)',
+    },
+    modeBtn: (active) => ({
+      background: active ? 'rgba(124,58,237,0.55)' : 'rgba(255,255,255,0.04)',
+      color: active ? '#fff' : 'rgba(255,255,255,0.38)',
+      border: 'none', cursor: 'pointer',
+      padding: '5px 11px', fontSize: '0.67rem', fontWeight: 900,
+      letterSpacing: '0.05em', textTransform: 'uppercase', transition: 'all 0.15s',
+    }),
     confLabel: { color: 'rgba(255,255,255,0.5)', fontSize: '0.7rem', fontWeight: 700 },
     confValue: { color: '#c4b5fd', fontSize: '0.75rem', fontWeight: 800, minWidth: 28, textAlign: 'right' },
+    numInput: {
+      width: 58, fontSize: '0.72rem', fontWeight: 800,
+      background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+      borderRadius: 6, color: '#c4b5fd',
+    },
     runBtn: {
       background: selectedModelId ? 'linear-gradient(135deg, #7c3aed, #5b21b6)' : undefined,
       border: 'none', borderRadius: 8, fontWeight: 800, height: 34, fontSize: '0.8rem',
@@ -371,32 +527,38 @@ const AutoLabeling = () => {
       border: 'none', borderRadius: 8, fontWeight: 800, height: 34, fontSize: '0.8rem',
       boxShadow: draftAnnotations.length > 0 ? '0 4px 14px rgba(16,185,129,0.35)' : 'none',
     },
-    // main
     main: { display: 'flex', flex: 1, overflow: 'hidden' },
-    // left panel
     leftPanel: {
       width: 256, flexShrink: 0, display: 'flex', flexDirection: 'column',
       background: 'rgba(15,23,42,0.95)', borderRight: '1px solid rgba(124,58,237,0.18)',
     },
     leftHeader: {
-      padding: '0.85rem 0.95rem 0.6rem',
+      padding: '0.85rem 0.95rem 0.65rem',
       borderBottom: '1px solid rgba(255,255,255,0.06)',
     },
-    predTitle: { color: 'rgba(255,255,255,0.55)', fontSize: '0.65rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em' },
-    predList: { flex: 1, overflowY: 'auto', padding: '0.5rem 0.7rem', display: 'flex', flexDirection: 'column', gap: 5 },
-    predItem: (conf) => ({
+    predTitle: {
+      color: 'rgba(255,255,255,0.55)', fontSize: '0.65rem', fontWeight: 900,
+      textTransform: 'uppercase', letterSpacing: '0.08em',
+    },
+    predList: {
+      flex: 1, overflowY: 'auto', padding: '0.5rem 0.7rem',
+      display: 'flex', flexDirection: 'column', gap: 5,
+    },
+    predItem: (ann) => ({
       background: 'rgba(255,255,255,0.04)',
-      border: `1px solid ${confColor(conf)}33`,
-      borderLeft: `3px solid ${confColor(conf)}`,
-      borderRadius: 8,
-      padding: '0.5rem 0.6rem',
-      display: 'flex', alignItems: 'center', gap: '0.5rem',
-      cursor: 'default',
+      border: ann.isExisting
+        ? '1px solid rgba(96,165,250,0.35)'
+        : `1px solid ${confColor(ann.confidence || 1)}33`,
+      borderLeft: ann.isExisting
+        ? '3px solid rgba(96,165,250,0.75)'
+        : `3px solid ${confColor(ann.confidence || 1)}`,
+      borderRadius: 8, padding: '0.5rem 0.6rem',
+      display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'default',
     }),
-    predClass: { color: '#fff', fontSize: '0.8rem', fontWeight: 800, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-    predConf: (conf) => ({
-      color: confColor(conf), fontSize: '0.7rem', fontWeight: 800, flexShrink: 0,
-    }),
+    predClass: {
+      color: '#fff', fontSize: '0.8rem', fontWeight: 800, flex: 1,
+      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+    },
     removeBtn: {
       color: 'rgba(255,255,255,0.3)', background: 'transparent', border: 'none',
       cursor: 'pointer', padding: '2px 4px', borderRadius: 4, fontSize: '0.75rem',
@@ -406,7 +568,6 @@ const AutoLabeling = () => {
       padding: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)',
       display: 'flex', flexDirection: 'column', gap: '0.5rem',
     },
-    // center canvas
     canvasWrap: {
       flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative',
     },
@@ -416,13 +577,11 @@ const AutoLabeling = () => {
       background: 'rgba(15,23,42,0.8)', borderBottom: '1px solid rgba(255,255,255,0.06)',
     },
     canvasViewport: { flex: 1, overflow: 'hidden', position: 'relative' },
-    // right panel
     rightPanel: {
       width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column',
       background: 'rgba(15,23,42,0.95)', borderLeft: '1px solid rgba(124,58,237,0.18)',
       padding: '0.85rem',
     },
-    // bottom strip
     bottomStrip: {
       height: 80, flexShrink: 0,
       background: 'rgba(10,14,26,0.98)', borderTop: '1px solid rgba(124,58,237,0.18)',
@@ -435,14 +594,15 @@ const AutoLabeling = () => {
       display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
       flexShrink: 0, fontSize: '0.8rem',
     },
-    thumbStrip: { flex: 1, display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 },
+    thumbStrip: {
+      flex: 1, display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2,
+    },
     thumb: (idx, cur, imageId, savedIds, allPreds) => ({
       width: 56, height: 56, flexShrink: 0, borderRadius: 7, overflow: 'hidden',
       cursor: 'pointer', position: 'relative',
       border: idx === cur ? '2px solid #7c3aed' : statusBorder(imageId, savedIds, allPreds),
       boxShadow: idx === cur ? '0 0 0 2px rgba(124,58,237,0.4)' : 'none',
-      opacity: idx === cur ? 1 : 0.7,
-      transition: 'all 0.15s',
+      opacity: idx === cur ? 1 : 0.7, transition: 'all 0.15s',
     }),
     thumbImg: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
     thumbBadge: {
@@ -452,13 +612,15 @@ const AutoLabeling = () => {
     },
   };
 
-  // ── render ─────────────────────────────────────────────────────────────────
+  // ── render ────────────────────────────────────────────────────────────────
 
   if (loadingImages) {
     return (
       <div style={{ ...S.root, alignItems: 'center', justifyContent: 'center' }}>
         <Spin size="large" />
-        <span style={{ color: 'rgba(255,255,255,0.5)', marginTop: 12, fontSize: '0.85rem' }}>Loading images…</span>
+        <span style={{ color: 'rgba(255,255,255,0.5)', marginTop: 12, fontSize: '0.85rem' }}>
+          Loading images…
+        </span>
       </div>
     );
   }
@@ -473,6 +635,7 @@ const AutoLabeling = () => {
           Back
         </button>
         <div style={S.divider} />
+
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2, flexShrink: 0 }}>
           <span style={S.datasetName}>{dataset?.name || 'Auto Labeling'}</span>
           <span style={S.imgCount}>{images.length} images · {savedCount} saved</span>
@@ -487,110 +650,184 @@ const AutoLabeling = () => {
           style={S.modelSelect}
           size="small"
           dropdownStyle={{ background: '#1e293b', border: '1px solid rgba(124,58,237,0.3)' }}
-          notFoundContent={<span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem' }}>No ready models</span>}
+          notFoundContent={
+            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem' }}>No ready models</span>
+          }
         >
           {models.map(m => (
             <Select.Option key={m.id} value={m.id}>
               <span style={{ fontWeight: 700 }}>{m.name}</span>
-              {m.is_project_model && <Tag color="purple" style={{ marginLeft: 5, fontSize: '0.6rem' }}>Project</Tag>}
+              {m.is_project_model && (
+                <Tag color="purple" style={{ marginLeft: 5, fontSize: '0.6rem' }}>Project</Tag>
+              )}
             </Select.Option>
           ))}
         </Select>
 
-        {/* Confidence */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <span style={S.confLabel}>CONF</span>
-          <Slider
-            min={0.1} max={0.9} step={0.05} value={confidence}
-            onChange={setConfidence}
-            style={{ width: 80 }}
-            tooltip={{ formatter: v => `${Math.round(v * 100)}%` }}
-          />
-          <span style={S.confValue}>{Math.round(confidence * 100)}%</span>
+        {/* Normal / SAHI mode toggle */}
+        <div style={S.modeToggle}>
+          <button style={S.modeBtn(predictionMode === 'normal')} onClick={() => setPredictionMode('normal')}>
+            Normal
+          </button>
+          <button style={S.modeBtn(predictionMode === 'sahi')} onClick={() => setPredictionMode('sahi')}>
+            SAHI
+          </button>
         </div>
 
-        {/* IOU */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <span style={S.confLabel}>IOU</span>
-          <Slider
-            min={0.1} max={0.9} step={0.05} value={iou}
-            onChange={setIou}
-            style={{ width: 70 }}
-            tooltip={{ formatter: v => v.toFixed(2) }}
-          />
-          <span style={S.confValue}>{iou.toFixed(2)}</span>
+        {/* Confidence — slider + input */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <span style={S.confLabel}>CONF</span>
+          <Slider min={1} max={99} step={1} value={Math.round(confidence * 100)}
+            onChange={v => setConfidence(v / 100)}
+            style={{ width: 60 }} tooltip={{ formatter: v => `${v}%` }} />
+          <InputNumber
+            min={1} max={99} step={1} value={Math.round(confidence * 100)}
+            onChange={v => v != null && setConfidence(Math.min(0.99, Math.max(0.01, v / 100)))}
+            formatter={v => `${v}%`} parser={v => v.replace('%', '')}
+            size="small" style={S.numInput} controls={false} className="al-num-input" />
         </div>
+
+        {/* IOU (normal mode) or Slice size (SAHI mode) — slider + input */}
+        {predictionMode === 'normal' ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            <span style={S.confLabel}>IOU</span>
+            <Slider min={1} max={95} step={1} value={Math.round(iou * 100)}
+              onChange={v => setIou(v / 100)}
+              style={{ width: 55 }} tooltip={{ formatter: v => `${v}%` }} />
+            <InputNumber
+              min={1} max={95} step={1} value={Math.round(iou * 100)}
+              onChange={v => v != null && setIou(Math.min(0.95, Math.max(0.01, v / 100)))}
+              formatter={v => `${v}%`} parser={v => v.replace('%', '')}
+              size="small" style={S.numInput} controls={false} className="al-num-input" />
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            <span style={{ ...S.confLabel, color: '#38bdf8' }}>SLICE</span>
+            <Slider min={256} max={4096} step={64} value={sliceSize}
+              onChange={setSliceSize}
+              style={{ width: 70 }} tooltip={{ formatter: v => `${v}px` }} />
+            <InputNumber
+              min={32} step={64} value={sliceSize}
+              onChange={v => v != null && setSliceSize(Math.max(32, v))}
+              formatter={v => `${v}px`} parser={v => parseInt(v.replace('px', ''), 10) || 256}
+              size="small" style={{ ...S.numInput, width: 72 }} controls={false}
+              className="al-num-input sahi" />
+          </div>
+        )}
 
         <div style={S.spacer} />
 
-        {/* Run image */}
-        <Button
-          icon={<PlayCircleOutlined />}
-          loading={isRunning}
+        <Button icon={<PlayCircleOutlined />} loading={isRunning}
           disabled={!selectedModelId || isRunningAll}
-          onClick={() => runPreview()}
-          style={S.runBtn}
-          size="small"
-        >
+          onClick={() => runPreview()} style={S.runBtn} size="small">
           Run Image
         </Button>
 
-        {/* Run all */}
-        <Button
-          icon={<ThunderboltOutlined />}
-          loading={isRunningAll}
+        <Button icon={<ThunderboltOutlined />} loading={isRunningAll}
           disabled={!selectedModelId || isRunning}
-          onClick={runAll}
-          style={S.runAllBtn}
-          size="small"
-        >
+          onClick={runAll} style={S.runAllBtn} size="small">
           {isRunningAll
             ? `${batchProgress.current}/${batchProgress.total}`
-            : 'Run All Batch'}
+            : 'Run All'}
         </Button>
 
-        {/* Save */}
-        <Button
-          icon={<SaveOutlined />}
-          loading={isSaving}
+        <Button icon={<SaveOutlined />} loading={isSaving}
           disabled={draftAnnotations.length === 0}
-          onClick={saveCurrentImage}
-          style={S.saveBtn}
-          size="small"
-        >
-          Save Image ({totalPreds})
+          onClick={saveCurrentImage} style={S.saveBtn} size="small">
+          Save ({totalPreds})
         </Button>
       </div>
 
       {/* ── MAIN ── */}
       <div style={S.main}>
 
-        {/* LEFT PANEL — prediction list */}
+        {/* LEFT PANEL — annotation list */}
         <div style={S.leftPanel}>
           <div style={S.leftHeader}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={S.predTitle}>Predictions</span>
+              <span style={S.predTitle}>Annotations</span>
               <span style={{
                 background: 'rgba(124,58,237,0.18)', border: '1px solid rgba(124,58,237,0.3)',
-                color: '#c4b5fd', borderRadius: 12, padding: '1px 8px', fontSize: '0.68rem', fontWeight: 900,
+                color: '#c4b5fd', borderRadius: 12, padding: '1px 8px',
+                fontSize: '0.68rem', fontWeight: 900,
               }}>
-                {draftAnnotations.length}
+                {totalPreds}
               </span>
             </div>
+
+            {/* SAHI extra params */}
+            {predictionMode === 'sahi' && (
+              <div style={{
+                marginTop: 8, padding: '0.5rem 0.6rem',
+                background: 'rgba(14,165,233,0.08)', borderRadius: 8,
+                border: '1px solid rgba(14,165,233,0.2)',
+              }}>
+                <span style={{
+                  color: '#38bdf8', fontSize: '0.62rem', fontWeight: 900,
+                  display: 'block', marginBottom: 6, letterSpacing: '0.06em',
+                }}>
+                  SAHI — Overlap
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                  <Slider min={5} max={50} step={1} value={Math.round(overlapRatio * 100)}
+                    onChange={v => setOverlapRatio(v / 100)}
+                    style={{ flex: 1, margin: 0 }}
+                    tooltip={{ formatter: v => `${v}%` }} />
+                  <InputNumber
+                    min={5} max={50} step={1} value={Math.round(overlapRatio * 100)}
+                    onChange={v => v != null && setOverlapRatio(Math.min(0.5, Math.max(0.05, v / 100)))}
+                    formatter={v => `${v}%`} parser={v => parseInt(v.replace('%', ''), 10) || 25}
+                    size="small" controls={false}
+                    className="al-num-input sahi"
+                    style={{ width: 52, fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8',
+                      background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.3)',
+                      borderRadius: 6 }} />
+                </div>
+              </div>
+            )}
+
+            {/* Existing vs new badges */}
+            {(existingCount > 0 || newCount > 0) && (
+              <div style={{ display: 'flex', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
+                {existingCount > 0 && (
+                  <span style={{
+                    background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)',
+                    color: '#60a5fa', borderRadius: 10, padding: '1px 7px',
+                    fontSize: '0.62rem', fontWeight: 800,
+                  }}>
+                    {existingCount} existing
+                  </span>
+                )}
+                {newCount > 0 && (
+                  <span style={{
+                    background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.3)',
+                    color: '#c4b5fd', borderRadius: 10, padding: '1px 7px',
+                    fontSize: '0.62rem', fontWeight: 800,
+                  }}>
+                    {newCount} new
+                  </span>
+                )}
+              </div>
+            )}
+
             {isRunning && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
                 <Spin size="small" />
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.72rem' }}>Running model…</span>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.72rem' }}>
+                  Running {predictionMode === 'sahi' ? 'SAHI' : 'model'}…
+                </span>
               </div>
             )}
             {isRunningAll && (
               <div style={{ marginTop: 8 }}>
                 <Progress
                   percent={Math.round((batchProgress.current / batchProgress.total) * 100)}
-                  size="small"
-                  strokeColor="#7c3aed"
-                  trailColor="rgba(255,255,255,0.08)"
-                  format={() => <span style={{ color: '#c4b5fd', fontSize: '0.65rem' }}>{batchProgress.current}/{batchProgress.total}</span>}
+                  size="small" strokeColor="#7c3aed" trailColor="rgba(255,255,255,0.08)"
+                  format={() => (
+                    <span style={{ color: '#c4b5fd', fontSize: '0.65rem' }}>
+                      {batchProgress.current}/{batchProgress.total}
+                    </span>
+                  )}
                 />
               </div>
             )}
@@ -599,7 +836,10 @@ const AutoLabeling = () => {
           <div style={S.predList}>
             {draftAnnotations.length === 0 ? (
               <div style={{ padding: '2rem 0', textAlign: 'center' }}>
-                <RobotOutlined style={{ fontSize: '1.8rem', color: 'rgba(255,255,255,0.12)', display: 'block', marginBottom: 8 }} />
+                <RobotOutlined style={{
+                  fontSize: '1.8rem', color: 'rgba(255,255,255,0.12)',
+                  display: 'block', marginBottom: 8,
+                }} />
                 <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.78rem' }}>
                   {isRunning ? 'Predicting…' : 'Run model to see predictions'}
                 </span>
@@ -608,13 +848,22 @@ const AutoLabeling = () => {
               [...draftAnnotations]
                 .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
                 .map((ann) => (
-                  <div key={ann.id} style={S.predItem(ann.confidence || 1)}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: confColor(ann.confidence || 1), flexShrink: 0 }} />
+                  <div key={ann.id} style={S.predItem(ann)}>
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                      background: ann.isExisting ? '#60a5fa' : confColor(ann.confidence || 1),
+                    }} />
                     <span style={S.predClass}>{ann.class_name}</span>
-                    <span style={S.predConf(ann.confidence || 1)}>
-                      {ann.confidence != null ? `${Math.round(ann.confidence * 100)}%` : '—'}
+                    <span style={{
+                      color: ann.isExisting ? '#60a5fa' : confColor(ann.confidence || 1),
+                      fontSize: '0.7rem', fontWeight: 800, flexShrink: 0,
+                    }}>
+                      {ann.isExisting ? 'DB' : (ann.confidence != null
+                        ? `${Math.round(ann.confidence * 100)}%` : '—')}
                     </span>
-                    <Tooltip title="Remove prediction">
+                    <Tooltip title={ann.isExisting
+                      ? 'Remove (deletes from DB on Save)'
+                      : 'Remove prediction'}>
                       <button style={S.removeBtn} onClick={() => handleRemovePrediction(ann.id)}>
                         <CloseCircleOutlined />
                       </button>
@@ -626,24 +875,16 @@ const AutoLabeling = () => {
 
           <div style={S.leftActions}>
             {draftAnnotations.length > 0 && (
-              <Button
-                size="small" danger ghost
-                icon={<DeleteOutlined />}
-                onClick={handleClearAll}
-                style={{ borderRadius: 7, fontWeight: 700 }}
-              >
+              <Button size="small" danger ghost icon={<DeleteOutlined />}
+                onClick={handleClearAll} style={{ borderRadius: 7, fontWeight: 700 }}>
                 Clear All
               </Button>
             )}
-            <Button
-              size="small"
-              icon={<ReloadOutlined />}
+            <Button size="small" icon={<ReloadOutlined />}
               disabled={!selectedModelId || isRunning || isRunningAll}
-              loading={isRunning}
-              onClick={() => runPreview()}
+              loading={isRunning} onClick={() => runPreview()}
               style={{ borderRadius: 7, fontWeight: 700, borderColor: 'rgba(124,58,237,0.4)', color: '#c4b5fd' }}
-              ghost
-            >
+              ghost>
               Re-run on this image
             </Button>
           </div>
@@ -651,16 +892,25 @@ const AutoLabeling = () => {
 
         {/* CENTER — canvas */}
         <div style={S.canvasWrap}>
-          {/* mini toolbar row */}
           <div style={S.canvasToolbar}>
             <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.68rem', fontWeight: 700 }}>
               {currentImage?.filename || '—'}
             </span>
             <div style={{ flex: 1 }} />
+            {predictionMode === 'sahi' && (
+              <span style={{
+                background: 'rgba(14,165,233,0.15)', border: '1px solid rgba(14,165,233,0.3)',
+                color: '#38bdf8', borderRadius: 20, padding: '2px 9px',
+                fontSize: '0.65rem', fontWeight: 800,
+              }}>
+                SAHI {sliceSize}px
+              </span>
+            )}
             {savedImageIds.has(currentImage?.id) && (
               <span style={{
                 background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)',
-                color: '#10b981', borderRadius: 20, padding: '2px 10px', fontSize: '0.68rem', fontWeight: 800,
+                color: '#10b981', borderRadius: 20, padding: '2px 10px',
+                fontSize: '0.68rem', fontWeight: 800,
                 display: 'flex', alignItems: 'center', gap: 4,
               }}>
                 <CheckCircleOutlined style={{ fontSize: '0.7rem' }} /> Saved
@@ -671,11 +921,12 @@ const AutoLabeling = () => {
             </span>
           </div>
 
-          {/* canvas area */}
           <div style={S.canvasViewport}>
             {!currentImage ? (
               <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Empty description={<span style={{ color: 'rgba(255,255,255,0.3)' }}>No images in this batch</span>} />
+                <Empty description={
+                  <span style={{ color: 'rgba(255,255,255,0.3)' }}>No images in this batch</span>
+                } />
               </div>
             ) : (
               <AnnotationCanvas
@@ -692,7 +943,6 @@ const AutoLabeling = () => {
             )}
           </div>
 
-          {/* label popup for manually drawn shapes */}
           {pendingShape && (
             <LabelSelectionPopup
               visible={!!pendingShape}
@@ -705,25 +955,26 @@ const AutoLabeling = () => {
           )}
         </div>
 
-        {/* RIGHT PANEL — batch status + tools */}
+        {/* RIGHT PANEL — stats + tools */}
         <div style={S.rightPanel}>
           <div style={{ marginBottom: '1rem' }}>
             <span style={{ ...S.predTitle, display: 'block', marginBottom: 8 }}>Batch Status</span>
             {[
               ['Saved', savedCount, '#10b981'],
-              ['With predictions', pendingCount, '#7c3aed'],
+              ['With annotations', pendingCount, '#7c3aed'],
               ['Total images', images.length, 'rgba(255,255,255,0.4)'],
             ].map(([label, val, color]) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div key={label} style={{
+                display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', marginBottom: 6,
+              }}>
                 <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.72rem' }}>{label}</span>
                 <span style={{ color, fontWeight: 900, fontSize: '0.85rem' }}>{val}</span>
               </div>
             ))}
             <Progress
               percent={images.length > 0 ? Math.round((savedCount / images.length) * 100) : 0}
-              size="small"
-              strokeColor="#10b981"
-              trailColor="rgba(255,255,255,0.06)"
+              size="small" strokeColor="#10b981" trailColor="rgba(255,255,255,0.06)"
               style={{ marginTop: 6 }}
             />
           </div>
@@ -742,9 +993,10 @@ const AutoLabeling = () => {
 
           <span style={{ ...S.predTitle, display: 'block', marginBottom: 8 }}>Legend</span>
           {[
-            ['#10b981', 'Saved'],
-            ['#7c3aed', 'Has predictions'],
-            ['rgba(255,255,255,0.2)', 'Empty'],
+            ['#60a5fa', 'Existing in DB'],
+            ['#10b981', 'High confidence'],
+            ['#f59e0b', 'Medium confidence'],
+            ['#ef4444', 'Low confidence'],
           ].map(([color, label]) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
               <span style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />
@@ -754,10 +1006,17 @@ const AutoLabeling = () => {
 
           <div style={{ flex: 1 }} />
 
-          <div style={{ padding: '0.6rem', background: 'rgba(124,58,237,0.08)', borderRadius: 8, border: '1px solid rgba(124,58,237,0.2)' }}>
-            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.68rem', lineHeight: 1.55, display: 'block' }}>
+          <div style={{
+            padding: '0.6rem', background: 'rgba(124,58,237,0.08)',
+            borderRadius: 8, border: '1px solid rgba(124,58,237,0.2)',
+          }}>
+            <span style={{
+              color: 'rgba(255,255,255,0.4)', fontSize: '0.68rem', lineHeight: 1.55, display: 'block',
+            }}>
               <InfoCircleOutlined style={{ marginRight: 5, color: '#c4b5fd' }} />
-              Predictions are NOT saved until you click <strong style={{ color: '#10b981' }}>Save Image</strong>. Edit or remove any shape before saving.
+              Existing labels show in <strong style={{ color: '#60a5fa' }}>blue</strong>.
+              Click Save to apply changes — new predictions will be added,
+              removed ones deleted from DB.
             </span>
           </div>
         </div>

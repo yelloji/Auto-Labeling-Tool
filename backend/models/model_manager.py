@@ -569,6 +569,10 @@ class ModelManager:
             "image_shape": results[0].orig_shape if results else None
         }
     
+    def get_model_info(self, model_id: str) -> Optional[ModelInfo]:
+        """Get ModelInfo for a specific model by ID."""
+        return self.models_info.get(model_id)
+
     def get_models_list(self) -> List[Dict[str, Any]]:
         """Get list of all available models"""
         models_list = []
