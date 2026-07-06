@@ -488,13 +488,6 @@ const AutoLabeling = () => {
     const newId = wasDB ? draftId() : ann.id;
     const updated = { ...ann, id: newId, points: newPoints, segmentation: newPoints, isDraft: wasDB };
 
-    if (wasDB && currentImage) {
-      const cur = initialAnnotationIdsRef.current[currentImage.id] || new Set();
-      const next = new Set(cur);
-      next.delete(ann.id);
-      initialAnnotationIdsRef.current[currentImage.id] = next;
-    }
-
     // Update ref immediately so next drag event sees the new ID
     selectedAnnotationRef.current = updated;
     setSelectedAnnotation(updated);
