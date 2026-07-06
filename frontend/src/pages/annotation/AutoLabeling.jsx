@@ -192,6 +192,7 @@ const AutoLabeling = () => {
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [isSaving, setIsSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
   const [activeTool, setActiveTool] = useState('select');
   const [zoomLevel, setZoomLevel] = useState(50);
@@ -200,6 +201,7 @@ const AutoLabeling = () => {
   const [selectedAnnotation, setSelectedAnnotation] = useState(null);
 
   const thumbnailStripRef = useRef(null);
+  const prevImageIdRef = useRef(null);
   // tracks which imageIds are currently being async-loaded (prevents double-fetch)
   const loadingAnnotationsRef = useRef(new Set());
   // tracks which real DB annotation IDs were loaded for each image
@@ -287,10 +289,17 @@ const AutoLabeling = () => {
   }, [currentIndex, images]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Effect 2: Sync draftAnnotations whenever the cache or navigation changes.
+  // isDirty is only auto-reset on actual image switch — not on every allPredictions update.
   useEffect(() => {
     const img = images[currentIndex];
     if (!img) { setDraftAnnotations([]); return; }
-    setDraftAnnotations(allPredictions[img.id] || []);
+    const anns = allPredictions[img.id] || [];
+    setDraftAnnotations(anns);
+    if (img.id !== prevImageIdRef.current) {
+      prevImageIdRef.current = img.id;
+      // Auto-detect dirty: image has unsaved draft predictions (e.g. from Run All)
+      setIsDirty(anns.some(a => isDraftId(a.id)));
+    }
   }, [currentIndex, images, allPredictions]);
 
   // Scroll thumbnail into view
@@ -337,6 +346,7 @@ const AutoLabeling = () => {
       const drafts = predsToDraft(data.predictions || [], img.width, img.height, labels);
       setDraftAnnotations(drafts);
       setAllPredictions(prev => ({ ...prev, [img.id]: drafts }));
+      setIsDirty(drafts.length > 0);
       if (drafts.length === 0) message.info('No predictions found on this image');
     } catch (e) {
       message.error(e.message || 'Prediction failed');
@@ -367,7 +377,10 @@ const AutoLabeling = () => {
     }
     setAllPredictions(collected);
     const cur = images[currentIndex];
-    if (cur) setDraftAnnotations(collected[cur.id] || []);
+    if (cur) {
+      setDraftAnnotations(collected[cur.id] || []);
+      if ((collected[cur.id]?.length || 0) > 0) setIsDirty(true);
+    }
     setIsRunningAll(false);
     const total = Object.values(collected).reduce((s, a) => s + a.length, 0);
     message.success(`Batch complete — ${total} predictions across ${images.length} images`);
@@ -402,8 +415,13 @@ const AutoLabeling = () => {
         await AnnotationAPI.createAnnotation({ ...ann, image_id: currentImage.id });
       }
 
-      // Update initial IDs to reflect current DB state
-      initialAnnotationIdsRef.current[currentImage.id] = keptIds;
+      // Reload from DB so annotations have real IDs — prevents re-save on next click
+      const fresh = await AnnotationAPI.getImageAnnotations(currentImage.id);
+      const freshDrafts = (fresh || []).map(dbAnnotationToDraft);
+      initialAnnotationIdsRef.current[currentImage.id] = new Set((fresh || []).map(a => a.id));
+      setDraftAnnotations(freshDrafts);
+      setAllPredictions(p => ({ ...p, [currentImage.id]: freshDrafts }));
+      setIsDirty(false);
 
       setSavedImageIds(prev => new Set([...prev, currentImage.id]));
       setImages(prev => prev.map(img =>
@@ -437,6 +455,7 @@ const AutoLabeling = () => {
       if (currentImage) setAllPredictions(p => ({ ...p, [currentImage.id]: updated }));
       return updated;
     });
+    setIsDirty(true);
     setPendingShape(null);
   }, [pendingShape, currentImage]);
 
@@ -447,6 +466,7 @@ const AutoLabeling = () => {
       return updated;
     });
     setSelectedAnnotation(prev => (prev?.id === id ? null : prev));
+    setIsDirty(true);
   }, [currentImage]);
 
   const handleAnnotationSelect = useCallback((ann) => {
@@ -462,6 +482,7 @@ const AutoLabeling = () => {
       if (currentImage) setAllPredictions(p => ({ ...p, [currentImage.id]: next }));
       return next;
     });
+    setIsDirty(true);
   }, [selectedAnnotation, currentImage]);
 
   // Delete key removes the selected annotation
@@ -481,6 +502,7 @@ const AutoLabeling = () => {
   const handleClearAll = useCallback(() => {
     setDraftAnnotations([]);
     if (currentImage) setAllPredictions(p => ({ ...p, [currentImage.id]: [] }));
+    setIsDirty(true);
   }, [currentImage]);
 
   // ── navigation ────────────────────────────────────────────────────────────
@@ -554,10 +576,10 @@ const AutoLabeling = () => {
       border: 'none', borderRadius: 8, fontWeight: 800, height: 34, fontSize: '0.8rem',
     },
     saveBtn: {
-      background: draftAnnotations.length > 0
+      background: isDirty
         ? 'linear-gradient(135deg, #10b981, #059669)' : undefined,
       border: 'none', borderRadius: 8, fontWeight: 800, height: 34, fontSize: '0.8rem',
-      boxShadow: draftAnnotations.length > 0 ? '0 4px 14px rgba(16,185,129,0.35)' : 'none',
+      boxShadow: isDirty ? '0 4px 14px rgba(16,185,129,0.35)' : 'none',
     },
     main: { display: 'flex', flex: 1, overflow: 'hidden' },
     leftPanel: {
@@ -764,7 +786,7 @@ const AutoLabeling = () => {
         </Button>
 
         <Button icon={<SaveOutlined />} loading={isSaving}
-          disabled={draftAnnotations.length === 0 || isSaving}
+          disabled={!isDirty || isSaving}
           onClick={saveCurrentImage} style={S.saveBtn} size="small">
           Save ({totalPreds})
         </Button>
