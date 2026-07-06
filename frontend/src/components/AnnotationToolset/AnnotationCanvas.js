@@ -454,8 +454,9 @@ const AnnotationCanvas = ({
 
       // Draw label
       if (annotation.label) {
+        const displayText = annotation.displayLabel || annotation.label;
         ctx.font = `bold ${labelFontSize}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-        const textMetrics = ctx.measureText(annotation.label);
+        const textMetrics = ctx.measureText(displayText);
         const paddingX = 0.5 * baseRem;
         const paddingY = 0.25 * baseRem;
         const labelHeight = labelFontSize + paddingY * 2;
@@ -463,7 +464,7 @@ const AnnotationCanvas = ({
         ctx.fillStyle = annotation.color || '#1890ff';
         ctx.fillRect(x, y - labelHeight, textMetrics.width + paddingX * 2, labelHeight);
         ctx.fillStyle = '#fff';
-        ctx.fillText(annotation.label, x + paddingX, y - paddingY - 2);
+        ctx.fillText(displayText, x + paddingX, y - paddingY - 2);
       }
     } else if (annotation.type === 'polygon' && annotation.points) {
       // Make sure we have valid points
@@ -530,12 +531,13 @@ const AnnotationCanvas = ({
 
       // Draw label for polygon too
       if (annotation.label) {
+        const displayText = annotation.displayLabel || annotation.label;
         // Find the topmost point to place the label
         const topY = Math.min(...annotation.points.map(p => p.y)) * scale + imagePosition.y;
         const leftX = Math.min(...annotation.points.map(p => p.x)) * scale + imagePosition.x;
 
         ctx.font = `bold ${labelFontSize}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-        const textMetrics = ctx.measureText(annotation.label);
+        const textMetrics = ctx.measureText(displayText);
         const paddingX = 0.5 * baseRem;
         const paddingY = 0.25 * baseRem;
         const labelHeight = labelFontSize + paddingY * 2;
@@ -543,7 +545,7 @@ const AnnotationCanvas = ({
         ctx.fillStyle = annotation.color || '#1890ff';
         ctx.fillRect(leftX, topY - labelHeight, textMetrics.width + paddingX * 2, labelHeight);
         ctx.fillStyle = '#fff';
-        ctx.fillText(annotation.label, leftX + paddingX, topY - paddingY - 2);
+        ctx.fillText(displayText, leftX + paddingX, topY - paddingY - 2);
       }
     }
 

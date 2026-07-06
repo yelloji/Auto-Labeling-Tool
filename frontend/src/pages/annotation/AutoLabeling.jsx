@@ -115,11 +115,13 @@ const predsToDraft = (predictions, imgW, imgH, labels = []) =>
     const points = rawPoints.length > 8 ? simplifyPolygon(rawPoints) : rawPoints;
     const type = points.length >= 3 ? 'polygon' : 'box';
     const resolvedLabel = resolveLabel(p.class_name, labels);
+    const confPct = Math.round((p.confidence || 0) * 100);
     return {
       id: draftId(),
       type,
       label: resolvedLabel,
       class_name: resolvedLabel,
+      displayLabel: `${resolvedLabel} ${confPct}%`,
       confidence: p.confidence,
       x: x_min, y: y_min,
       width: x_max - x_min,
@@ -195,6 +197,7 @@ const AutoLabeling = () => {
   const [zoomLevel, setZoomLevel] = useState(50);
   const [labels, setLabels] = useState([]);
   const [pendingShape, setPendingShape] = useState(null);
+  const [selectedAnnotation, setSelectedAnnotation] = useState(null);
 
   const thumbnailStripRef = useRef(null);
   // tracks which imageIds are currently being async-loaded (prevents double-fetch)
@@ -443,7 +446,35 @@ const AutoLabeling = () => {
       if (currentImage) setAllPredictions(p => ({ ...p, [currentImage.id]: updated }));
       return updated;
     });
+    setSelectedAnnotation(prev => (prev?.id === id ? null : prev));
   }, [currentImage]);
+
+  const handleAnnotationSelect = useCallback((ann) => {
+    setSelectedAnnotation(ann);
+  }, []);
+
+  const handlePolygonEditChange = useCallback((newPoints) => {
+    if (!selectedAnnotation) return;
+    const updated = { ...selectedAnnotation, points: newPoints, segmentation: newPoints };
+    setSelectedAnnotation(updated);
+    setDraftAnnotations(prev => {
+      const next = prev.map(a => a.id === updated.id ? updated : a);
+      if (currentImage) setAllPredictions(p => ({ ...p, [currentImage.id]: next }));
+      return next;
+    });
+  }, [selectedAnnotation, currentImage]);
+
+  // Delete key removes the selected annotation
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAnnotation &&
+          !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+        handleAnnotationDelete(selectedAnnotation.id);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedAnnotation, handleAnnotationDelete]);
 
   const handleRemovePrediction = handleAnnotationDelete;
 
@@ -458,6 +489,7 @@ const AutoLabeling = () => {
     if (idx < 0 || idx >= images.length) return;
     setCurrentIndex(idx);
     setActiveTool('select');
+    setSelectedAnnotation(null);
   }, [images.length]);
 
   // ── derived ───────────────────────────────────────────────────────────────
@@ -939,6 +971,10 @@ const AutoLabeling = () => {
                 onZoomChange={setZoomLevel}
                 onShapeComplete={handleShapeComplete}
                 onAnnotationDelete={handleAnnotationDelete}
+                onAnnotationSelect={handleAnnotationSelect}
+                polygonEditMode={selectedAnnotation?.type === 'polygon'}
+                editableAnnotation={selectedAnnotation?.type === 'polygon' ? selectedAnnotation : null}
+                onPolygonEditChange={handlePolygonEditChange}
               />
             )}
           </div>
