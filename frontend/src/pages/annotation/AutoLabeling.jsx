@@ -199,6 +199,7 @@ const AutoLabeling = () => {
   const [labels, setLabels] = useState([]);
   const [pendingShape, setPendingShape] = useState(null);
   const [selectedAnnotation, setSelectedAnnotation] = useState(null);
+  const selectedAnnotationRef = useRef(null);
 
   const thumbnailStripRef = useRef(null);
   const prevImageIdRef = useRef(null);
@@ -309,6 +310,9 @@ const AutoLabeling = () => {
     const thumb = strip.querySelector(`[data-index="${currentIndex}"]`);
     if (thumb) thumb.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   }, [currentIndex]);
+
+  // Keep ref in sync with selectedAnnotation state (avoids stale closures during rapid drag)
+  useEffect(() => { selectedAnnotationRef.current = selectedAnnotation; }, [selectedAnnotation]);
 
   // ── prediction ────────────────────────────────────────────────────────────
 
@@ -474,16 +478,33 @@ const AutoLabeling = () => {
   }, []);
 
   const handlePolygonEditChange = useCallback((newPoints) => {
-    if (!selectedAnnotation) return;
-    const updated = { ...selectedAnnotation, points: newPoints, segmentation: newPoints };
+    // Use ref to get the current annotation — avoids stale closure during rapid drag events
+    const ann = selectedAnnotationRef.current;
+    if (!ann) return;
+
+    // If this is a DB annotation being edited for the first time, give it a new draft ID
+    // so saveCurrentImage treats it as: delete old DB record + create updated one
+    const wasDB = !isDraftId(ann.id);
+    const newId = wasDB ? draftId() : ann.id;
+    const updated = { ...ann, id: newId, points: newPoints, segmentation: newPoints, isDraft: wasDB };
+
+    if (wasDB && currentImage) {
+      const cur = initialAnnotationIdsRef.current[currentImage.id] || new Set();
+      const next = new Set(cur);
+      next.delete(ann.id);
+      initialAnnotationIdsRef.current[currentImage.id] = next;
+    }
+
+    // Update ref immediately so next drag event sees the new ID
+    selectedAnnotationRef.current = updated;
     setSelectedAnnotation(updated);
     setDraftAnnotations(prev => {
-      const next = prev.map(a => a.id === updated.id ? updated : a);
+      const next = prev.map(a => a.id === ann.id ? updated : a);
       if (currentImage) setAllPredictions(p => ({ ...p, [currentImage.id]: next }));
       return next;
     });
     setIsDirty(true);
-  }, [selectedAnnotation, currentImage]);
+  }, [currentImage]); // no selectedAnnotation dep — uses ref to avoid stale closures
 
   // Delete key removes the selected annotation
   useEffect(() => {
