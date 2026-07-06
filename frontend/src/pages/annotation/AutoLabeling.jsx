@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Button, Select, Slider, InputNumber, Tooltip, message, Spin, Tag, Progress, Empty,
+  Button, Select, Slider, InputNumber, Tooltip, message, Spin, Tag, Empty, Progress,
 } from 'antd';
 import {
   ArrowLeftOutlined, ThunderboltOutlined, PlayCircleOutlined,
   SaveOutlined, DeleteOutlined, RobotOutlined, CheckCircleOutlined,
   CloseCircleOutlined, EyeOutlined, LeftOutlined, RightOutlined,
-  ReloadOutlined, InfoCircleOutlined,
+  ReloadOutlined, DragOutlined, BorderOutlined, ExpandOutlined,
+  BlockOutlined, ZoomInOutlined, ZoomOutOutlined,
 } from '@ant-design/icons';
 
+
 import AnnotationCanvas from '../../components/AnnotationToolset/AnnotationCanvas';
-import AnnotationToolbox from '../../components/AnnotationToolset/AnnotationToolbox';
 import LabelSelectionPopup from '../../components/AnnotationToolset/LabelSelectionPopup';
 import AnnotationAPI from '../../components/AnnotationToolset/AnnotationAPI';
 import { logInfo } from '../../utils/professional_logger';
@@ -600,6 +601,38 @@ const AutoLabeling = () => {
       width: 256, flexShrink: 0, display: 'flex', flexDirection: 'column',
       background: 'rgba(15,23,42,0.95)', borderRight: '1px solid rgba(124,58,237,0.18)',
     },
+    toolStrip: {
+      padding: '0.55rem 0.65rem 0.45rem',
+      borderBottom: '1px solid rgba(255,255,255,0.06)',
+      display: 'flex', flexDirection: 'column', gap: 6,
+    },
+    toolRow: {
+      display: 'flex', gap: 5,
+    },
+    toolBtn: (active) => ({
+      flex: 1, height: 34, border: 'none', borderRadius: 7, cursor: 'pointer',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 1, padding: '2px 0',
+      background: active ? 'rgba(124,58,237,0.65)' : 'rgba(255,255,255,0.07)',
+      color: active ? '#fff' : 'rgba(255,255,255,0.5)',
+      boxShadow: active ? '0 0 0 1px rgba(124,58,237,0.6)' : 'none',
+      transition: 'all 0.12s',
+    }),
+    toolBtnIcon: { fontSize: '0.8rem' },
+    toolBtnLabel: { fontSize: '0.58rem', fontWeight: 800, letterSpacing: '0.03em' },
+    zoomRow: {
+      display: 'flex', alignItems: 'center', gap: 5,
+    },
+    zoomBtn: {
+      flex: 'none', width: 28, height: 24, border: '1px solid rgba(255,255,255,0.1)',
+      borderRadius: 5, cursor: 'pointer', background: 'rgba(255,255,255,0.06)',
+      color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', fontSize: '0.75rem',
+    },
+    zoomVal: {
+      flex: 1, textAlign: 'center', color: 'rgba(255,255,255,0.5)',
+      fontSize: '0.7rem', fontWeight: 800,
+    },
     leftHeader: {
       padding: '0.85rem 0.95rem 0.65rem',
       borderBottom: '1px solid rgba(255,255,255,0.06)',
@@ -645,11 +678,6 @@ const AutoLabeling = () => {
       background: 'rgba(15,23,42,0.8)', borderBottom: '1px solid rgba(255,255,255,0.06)',
     },
     canvasViewport: { flex: 1, overflow: 'hidden', position: 'relative' },
-    rightPanel: {
-      width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column',
-      background: 'rgba(15,23,42,0.95)', borderLeft: '1px solid rgba(124,58,237,0.18)',
-      padding: '0.85rem',
-    },
     bottomStrip: {
       height: 80, flexShrink: 0,
       background: 'rgba(10,14,26,0.98)', borderTop: '1px solid rgba(124,58,237,0.18)',
@@ -809,8 +837,41 @@ const AutoLabeling = () => {
       {/* ── MAIN ── */}
       <div style={S.main}>
 
-        {/* LEFT PANEL — annotation list */}
+        {/* LEFT PANEL — tools + annotation list */}
         <div style={S.leftPanel}>
+
+          {/* Tool strip */}
+          <div style={S.toolStrip}>
+            <div style={S.toolRow}>
+              {[
+                { key: 'select',  label: 'Select',  Icon: DragOutlined },
+                { key: 'box',     label: 'Box',     Icon: BorderOutlined },
+                { key: 'polygon', label: 'Polygon', Icon: ExpandOutlined },
+                { key: 'smart_polygon', label: 'Smart', Icon: ThunderboltOutlined },
+                { key: 'null',    label: 'Null',    Icon: BlockOutlined },
+              ].map(({ key, label, Icon }) => (
+                <Tooltip key={key} title={label} placement="bottom">
+                  <button
+                    style={S.toolBtn(activeTool === key)}
+                    onClick={() => setActiveTool(key)}
+                  >
+                    <Icon style={S.toolBtnIcon} />
+                    <span style={S.toolBtnLabel}>{label}</span>
+                  </button>
+                </Tooltip>
+              ))}
+            </div>
+            <div style={S.zoomRow}>
+              <button style={S.zoomBtn} onClick={() => setZoomLevel(z => Math.max(10, z - 25))}>
+                <ZoomOutOutlined />
+              </button>
+              <span style={S.zoomVal}>{zoomLevel}%</span>
+              <button style={S.zoomBtn} onClick={() => setZoomLevel(z => Math.min(500, z + 25))}>
+                <ZoomInOutlined />
+              </button>
+            </div>
+          </div>
+
           <div style={S.leftHeader}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={S.predTitle}>Annotations</span>
@@ -1027,71 +1088,6 @@ const AutoLabeling = () => {
           )}
         </div>
 
-        {/* RIGHT PANEL — stats + tools */}
-        <div style={S.rightPanel}>
-          <div style={{ marginBottom: '1rem' }}>
-            <span style={{ ...S.predTitle, display: 'block', marginBottom: 8 }}>Batch Status</span>
-            {[
-              ['Saved', savedCount, '#10b981'],
-              ['With annotations', pendingCount, '#7c3aed'],
-              ['Total images', images.length, 'rgba(255,255,255,0.4)'],
-            ].map(([label, val, color]) => (
-              <div key={label} style={{
-                display: 'flex', justifyContent: 'space-between',
-                alignItems: 'center', marginBottom: 6,
-              }}>
-                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.72rem' }}>{label}</span>
-                <span style={{ color, fontWeight: 900, fontSize: '0.85rem' }}>{val}</span>
-              </div>
-            ))}
-            <Progress
-              percent={images.length > 0 ? Math.round((savedCount / images.length) * 100) : 0}
-              size="small" strokeColor="#10b981" trailColor="rgba(255,255,255,0.06)"
-              style={{ marginTop: 6 }}
-            />
-          </div>
-
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.5rem 0 1rem' }} />
-
-          <span style={{ ...S.predTitle, display: 'block', marginBottom: 8 }}>Drawing Tools</span>
-          <AnnotationToolbox
-            activeTool={activeTool}
-            onToolChange={setActiveTool}
-            zoomLevel={zoomLevel}
-            onZoomChange={setZoomLevel}
-          />
-
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.9rem 0' }} />
-
-          <span style={{ ...S.predTitle, display: 'block', marginBottom: 8 }}>Legend</span>
-          {[
-            ['#60a5fa', 'Existing in DB'],
-            ['#10b981', 'High confidence'],
-            ['#f59e0b', 'Medium confidence'],
-            ['#ef4444', 'Low confidence'],
-          ].map(([color, label]) => (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />
-              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.72rem' }}>{label}</span>
-            </div>
-          ))}
-
-          <div style={{ flex: 1 }} />
-
-          <div style={{
-            padding: '0.6rem', background: 'rgba(124,58,237,0.08)',
-            borderRadius: 8, border: '1px solid rgba(124,58,237,0.2)',
-          }}>
-            <span style={{
-              color: 'rgba(255,255,255,0.4)', fontSize: '0.68rem', lineHeight: 1.55, display: 'block',
-            }}>
-              <InfoCircleOutlined style={{ marginRight: 5, color: '#c4b5fd' }} />
-              Existing labels show in <strong style={{ color: '#60a5fa' }}>blue</strong>.
-              Click Save to apply changes — new predictions will be added,
-              removed ones deleted from DB.
-            </span>
-          </div>
-        </div>
       </div>
 
       {/* ── BOTTOM STRIP ── */}
