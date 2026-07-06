@@ -376,7 +376,7 @@ const AutoLabeling = () => {
   // ── save ──────────────────────────────────────────────────────────────────
 
   const saveCurrentImage = useCallback(async () => {
-    if (!currentImage) return;
+    if (!currentImage || isSaving) return;
 
     const existingInView = draftAnnotations.filter(a => !isDraftId(a.id));
     const newDrafts = draftAnnotations.filter(a => isDraftId(a.id));
@@ -764,7 +764,7 @@ const AutoLabeling = () => {
         </Button>
 
         <Button icon={<SaveOutlined />} loading={isSaving}
-          disabled={draftAnnotations.length === 0}
+          disabled={draftAnnotations.length === 0 || isSaving}
           onClick={saveCurrentImage} style={S.saveBtn} size="small">
           Save ({totalPreds})
         </Button>
