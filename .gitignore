@@ -76,5 +76,32 @@ projects/**
 
 # Local database exports (do NOT commit)
 database_exports/**
-develop-logs/**.claude-memory.md
+develop-logs/
+.claude-memory.md
 database.db
+
+# Local-only planning, debug, data, and runtime artifacts (do NOT commit)
+.claude/
+/MODELLAB_BOT_PLAN.md
+/Persistent Memory Guide (March 2026).docx.md
+/add_image_hash_column.py
+/database.db.*.bak
+/debug.md
+desktop.ini
+/docs/CEO_REPORT_PHASE1.md
+/docs/COMMANDS.md
+/docs/GIT_COMMANDS_REFERENCE.md
+/docs/RGB_CLEAN_RELEASE_TRAINING_PLAN.md
+/docs/USER_MANUAL_DRAFT.md
+/docs/USER_MANUAL_HANDOFF.md
+/docs/doc.md
+/docs/imp_doc/
+/frontend/build_output.txt
+/image-reconstruction-app/
+/projects.zip
+/recon.md
+/robo-img/
+/runs/
+/sahi-inference.ipynb
+/thumb_cache/
+/yolo/
