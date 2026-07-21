@@ -4,11 +4,11 @@
 
 - Feature: Inspection Runtime — Brake-disc reconstruction
 - Current phase: Planning
-- Current task: Task 2 — Dataset audit awaiting approval
+- Current task: Task 2 — Dataset audit (`APPROVED`)
 - Code changes started: No
 - Database changes started: No
 - Inference changes started: No
-- User approval required before Task 2: Yes
+- Task 2 completion approval: Pending
 
 ## Purpose
 
@@ -226,7 +226,7 @@ Commands will be selected proportionally for each task. Full UI, Electron, or in
 
 ### Task 2 — Audit the 16-Frame Reconstruction Dataset
 
-Status: `PLANNED`
+Status: `APPROVED`
 
 Work:
 
@@ -243,6 +243,19 @@ Deliverable:
 
 - Read-only dataset audit report.
 - Approved reconstruction geometry and quality thresholds.
+- Report: `tasks/INSPECTION_RUNTIME_DATASET_AUDIT.md`
+
+Audit result recorded on 2026-07-21:
+
+- Exactly 16 unique RGB JPEG frames were found in numeric order, all 6560 x 4948 pixels.
+- The `10%` folder name denotes JPEG-compressed development copies used for faster trials, not 10 percent overlap or reduced pixel dimensions; production acceptance must be repeated with original-quality acquisitions.
+- The sequence is continuous and uses one consistent negative rotation sign in top-left-origin image coordinates.
+- Constrained apparent increments span 20.8-24.4 degrees and total 357.9 degrees before final camera calibration.
+- All neighbor boundaries, including `16 -> 1`, contain usable constrained overlap; measured pre-calibration valid-field overlap spans approximately 9.4-20.6 percent.
+- A single fixed camera-to-disc calibration and source-validity mask are required. Independent free-form homographies are not approved.
+- Lens-distortion or projective correction may be added only if Task 4 demonstrates systematic residual reduction from one reusable calibration model.
+- Initial measurable integrity, geometry, coverage, seam, sharpness, and provenance gates are defined in the audit report.
+- No source image, application code, database, dependency, or configuration was changed.
 
 Acceptance:
 
@@ -539,3 +552,4 @@ Status: `DEFERRED`
 |---|---|---|---|---|---|
 | 2026-07-21 | Planning document | READY FOR USER REVIEW | Documentation review pending | Pending | Not committed |
 | 2026-07-21 | Task 1 — Safe feature baseline | APPROVED FOR COMMIT | Local branch created; baseline audited; local-only artifacts verified ignored | Approved | Task 1 baseline commit |
+| 2026-07-21 | Task 2 — Dataset audit | APPROVED | 16-frame inventory, integrity, photometric, neighbor, direction, closure, calibration, and threshold audit completed | Approved | Pending focused commit |
