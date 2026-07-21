@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "inspection_id": "inspection-001",
+  "state": "draft",
+  "input_width_px": 6560,
+  "input_height_px": 4948,
+  "output_width_px": 12000,
+  "output_height_px": 12000,
+  "usable_source_roi": {"x": 0, "y": 900, "width": 6560, "height": 4048},
+  "valid_source_mask_path": "projects/brake-disc-demo/inspections/inspection-001/calibration/source-mask.png",
+  "source_disc_center_px": {"x": 3532.0, "y": -10664.0},
+  "reconstruction_disc_center_px": {"x": 6000.0, "y": 6000.0},
+  "inner_radius_px": 1800.0,
+  "outer_radius_px": 5900.0,
+  "reference_ray_deg": 0.0,
+  "pixels_per_mm": null,
+  "source_to_calibrated_matrix": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+  "calibrated_to_source_matrix": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+  "lens_distortion": {"model": "none", "coefficients": []}
+}

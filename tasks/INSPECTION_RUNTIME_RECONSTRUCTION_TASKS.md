@@ -4,7 +4,7 @@
 
 - Feature: Inspection Runtime — Brake-disc reconstruction
 - Current phase: Planning
-- Current task: Task 2 — Dataset audit (`APPROVED`)
+- Current task: Task 3 — Reconstruction data contracts (`APPROVED`)
 - Code changes started: No
 - Database changes started: No
 - Inference changes started: No
@@ -266,7 +266,7 @@ Acceptance:
 
 ### Task 3 — Define Reconstruction Data Contracts
 
-Status: `PLANNED`
+Status: `APPROVED`
 
 Work:
 
@@ -282,6 +282,20 @@ Acceptance:
 - Schemas support future point, box, polygon, and mask projection.
 - All angles, units, coordinate origins, and transform direction are unambiguous.
 - Schema fixtures validate successfully.
+
+Implementation result recorded on 2026-07-21:
+
+- Added strict, versioned Pydantic 2 contracts for the acquisition manifest, calibration, per-frame transforms, and reconstruction report.
+- Defined top-left pixel-centre coordinates, right/down axes, degrees, negative source-to-next-frame image rotation, row-major matrices, homogeneous column vectors, and explicit source-to-reconstruction transform direction.
+- Required exactly 16 ordered 22.5-degree frames with consistent geometry, unique source paths, unique SHA-256 values, and immutable source identity fields.
+- Required safe POSIX-style paths relative to `settings.BASE_DIR`; absolute paths, drive paths, parent traversal, and Windows separators are rejected.
+- Limited fine angle correction to +/-2.0 degrees and required forward/inverse matrices to be numerically consistent.
+- Declared point, box, polygon, and mask projection support in the permanent transform contract.
+- Added explicit validation states and stable reconstruction error codes.
+- A report can be marked passed only with all 16 contributing frames, zero uncovered annulus pixels, all 15 neighbor checks, and the `16 -> 1` loop-closure check passing.
+- Added four representative JSON fixtures and focused positive and rejection tests.
+- Verification: schema source compiled in-memory; `13 passed` in the focused pytest suite. Eight warnings originate from existing SQLAlchemy, Pydantic-v1-style, and FastAPI lifecycle code outside Task 3.
+- No API, database, UI, reconstruction algorithm, inference code, dependency, or existing application behavior was changed.
 
 ### Task 4 — Implement Calibration Core
 
@@ -552,4 +566,5 @@ Status: `DEFERRED`
 |---|---|---|---|---|---|
 | 2026-07-21 | Planning document | READY FOR USER REVIEW | Documentation review pending | Pending | Not committed |
 | 2026-07-21 | Task 1 — Safe feature baseline | APPROVED FOR COMMIT | Local branch created; baseline audited; local-only artifacts verified ignored | Approved | Task 1 baseline commit |
-| 2026-07-21 | Task 2 — Dataset audit | APPROVED | 16-frame inventory, integrity, photometric, neighbor, direction, closure, calibration, and threshold audit completed | Approved | Pending focused commit |
+| 2026-07-21 | Task 2 — Dataset audit | COMMITTED | 16-frame inventory, integrity, photometric, neighbor, direction, closure, calibration, and threshold audit completed | Approved | `8d173be` |
+| 2026-07-21 | Task 3 — Reconstruction data contracts | APPROVED | Contract compile passed; four JSON fixtures validated; focused pytest suite: 13 passed | Approved | Pending focused commit |

@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "inspection_id": "inspection-001",
+  "state": "pending",
+  "created_at": "2026-07-21T10:00:00Z",
+  "completed_at": null,
+  "manifest_path": "projects/brake-disc-demo/inspections/inspection-001/manifests/acquisition.json",
+  "calibration_path": "projects/brake-disc-demo/inspections/inspection-001/calibration/calibration.json",
+  "transforms_path": "projects/brake-disc-demo/inspections/inspection-001/reconstruction/transforms.json",
+  "output_width_px": 12000,
+  "output_height_px": 12000,
+  "approved_annulus_pixel_count": 1000000,
+  "uncovered_annulus_pixel_count": 1000000,
+  "minimum_coverage_count": 0,
+  "contributing_frames": [],
+  "pair_validations": [],
+  "issues": [],
+  "artifacts": {
+    "reconstructed_disc_tiff": "projects/brake-disc-demo/inspections/inspection-001/reconstruction/reconstructed_disc.tiff",
+    "reconstructed_preview_png": "projects/brake-disc-demo/inspections/inspection-001/reconstruction/reconstructed_preview.png",
+    "transforms_json": "projects/brake-disc-demo/inspections/inspection-001/reconstruction/transforms.json",
+    "coverage_map_png": "projects/brake-disc-demo/inspections/inspection-001/reconstruction/coverage_map.png",
+    "reconstruction_report_json": "projects/brake-disc-demo/inspections/inspection-001/reports/reconstruction_report.json",
+    "provenance_map": "projects/brake-disc-demo/inspections/inspection-001/reconstruction/provenance_map.tiff"
+  }
+}
