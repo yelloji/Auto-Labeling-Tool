@@ -4,7 +4,7 @@
 
 - Feature: Inspection Runtime — Brake-disc reconstruction
 - Current phase: Planning
-- Current task: Task 3 — Reconstruction data contracts (`APPROVED`)
+- Current task: Task 4 — Calibration core (`APPROVED`)
 - Code changes started: No
 - Database changes started: No
 - Inference changes started: No
@@ -299,7 +299,7 @@ Implementation result recorded on 2026-07-21:
 
 ### Task 4 — Implement Calibration Core
 
-Status: `PLANNED`
+Status: `APPROVED`
 
 Work:
 
@@ -313,6 +313,19 @@ Acceptance:
 - Calibration reload reproduces the same mapping.
 - Disc edges and stable hole landmarks align within the Task 2 threshold.
 - Invalid calibration is rejected with a clear reason.
+
+Implementation result recorded on 2026-07-21:
+
+- Added a fixed-camera calibration core that estimates one robust off-frame rotation centre from bounded adjacent-frame evidence.
+- Added explicit rejection for incorrect neighbor order, rotation, scale, evidence count, residual, singular geometry, and centre outliers.
+- Added deterministic JSON serialization, atomic persistence beneath a caller-owned base directory, safe reload, and output-path containment.
+- Added a full-resolution diagnostic overlay for the source ROI, radial limits, and off-frame centre direction.
+- Added synthetic tests for recovered geometry, invalid evidence, deterministic round trip, unsafe paths, and overlay behavior.
+- Real read-only dataset run accepted 11 reliable pairs, found source centre `(3528.13, -10651.79)` px, measured `2.27 px` median residual, and retained `113.03 px` maximum centre spread.
+- The provisional native reconstruction canvas is `31991 x 31991` px. Later tasks must use tiled or memory-mapped processing and BigTIFF-compatible output rather than dense full-canvas floating-point buffers.
+- Lens distortion remains disabled because Task 2/4 evidence does not prove it is required.
+- Detailed report: `tasks/INSPECTION_RUNTIME_CALIBRATION_REPORT.md`.
+- Verification: calibration plus contract suites `21 passed`; temporary JSON and PNG diagnostics generated under `C:\tmp`; no source image modified.
 
 ### Task 5 — Implement Nominal Circular Placement
 
@@ -567,4 +580,5 @@ Status: `DEFERRED`
 | 2026-07-21 | Planning document | READY FOR USER REVIEW | Documentation review pending | Pending | Not committed |
 | 2026-07-21 | Task 1 — Safe feature baseline | APPROVED FOR COMMIT | Local branch created; baseline audited; local-only artifacts verified ignored | Approved | Task 1 baseline commit |
 | 2026-07-21 | Task 2 — Dataset audit | COMMITTED | 16-frame inventory, integrity, photometric, neighbor, direction, closure, calibration, and threshold audit completed | Approved | `8d173be` |
-| 2026-07-21 | Task 3 — Reconstruction data contracts | APPROVED | Contract compile passed; four JSON fixtures validated; focused pytest suite: 13 passed | Approved | Pending focused commit |
+| 2026-07-21 | Task 3 — Reconstruction data contracts | COMMITTED | Contract compile passed; four JSON fixtures validated; focused pytest suite: 13 passed | Approved | `c031d4d` |
+| 2026-07-21 | Task 4 — Calibration core | APPROVED | 21 focused tests passed; real dataset accepted 11 pairs at 2.27 px median residual; overlay inspected | Approved | Pending focused commit |
