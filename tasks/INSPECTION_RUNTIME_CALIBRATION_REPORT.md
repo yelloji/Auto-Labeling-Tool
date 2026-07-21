@@ -36,8 +36,8 @@ The real read-only run used all 16 frames in numeric order at quarter resolution
 | Maximum retained centre spread | `113.03` px |
 | Median accepted pair residual | `2.27` px |
 | Provisional usable source ROI | `x=0, y=900, width=6560, height=4048` |
-| Measured valid radial band | `11551.79-15993.79` px |
-| Native output canvas | `31991 x 31991` px |
+| Continuously covered radial band | `11826-15597` px |
+| Native output canvas | `31197 x 31197` px |
 | Source reference ray | `91.0471` degrees |
 | Lens-distortion model | `none` |
 
@@ -66,7 +66,7 @@ The overlay shows the accepted source ROI, radial limits, and direction toward t
 
 ## Memory and output implication
 
-A native `31991 x 31991` RGB canvas contains approximately 1.02 billion pixel locations. A dense 8-bit RGB buffer alone would require about 3.07 GB, before masks, blending weights, provenance, or intermediate arrays. The valid annular band is smaller but still large.
+A native `31197 x 31197` RGB canvas contains approximately 973 million pixel locations. A dense 8-bit RGB buffer alone would require about 2.92 GB, before masks, blending weights, provenance, or intermediate arrays. The valid annular band contains approximately 325 million pixels and is still large.
 
 Task 5 and later compositing must therefore use tiled or memory-mapped processing and a tiled BigTIFF-compatible output path. The implementation must not allocate several complete full-resolution floating-point canvases in memory.
 
@@ -79,6 +79,8 @@ Task 5 and later compositing must therefore use tiled or memory-mapped processin
 - Real accepted median residual `2.27 px`: passed the Task 2 `<=4 px` threshold.
 - Diagnostic overlay: generated and visually inspected.
 - Source image modifications: none.
+
+Task 5 integration initially showed that using the ROI's nearest and farthest points as radial limits covered only 91.14 percent of the complete nominal annulus. The calibration rule was therefore tightened to the largest radial interval visible across every ray in a complete 22.5-degree source sector, with a two-pixel inward safety margin. Recalibration produced the corrected `11826-15597` pixel band and Task 5 verified 100 percent sampled nominal coverage. The earlier wider band is rejected.
 
 ## Remaining limits
 

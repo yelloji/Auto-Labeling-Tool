@@ -19,7 +19,7 @@ from inspection_runtime.reconstruction import (
 from inspection_runtime.schemas import RoiRectangle
 
 
-def observation(frame, center=(100.0, -500.0), angle_deg=-22.5, inliers=20, residual=2.0):
+def observation(frame, center=(150.0, -500.0), angle_deg=-22.5, inliers=20, residual=2.0):
     radians = math.radians(angle_deg)
     cosine, sine = math.cos(radians), math.sin(radians)
     rotation = ((cosine, -sine), (sine, cosine))
@@ -44,9 +44,9 @@ def calibration_estimate():
     return build_calibration(
         inspection_id="inspection-test",
         attempts=[observation(frame) for frame in range(1, 9)],
-        input_width_px=200,
+        input_width_px=300,
         input_height_px=200,
-        usable_source_roi=RoiRectangle(x=0, y=100, width=200, height=100),
+        usable_source_roi=RoiRectangle(x=0, y=100, width=300, height=100),
         valid_source_mask_path="projects/demo/inspections/inspection-test/calibration/source-mask.png",
     )
 
@@ -55,14 +55,26 @@ def test_build_calibration_recovers_common_off_frame_center_and_radial_band():
     result = calibration_estimate()
     calibration = result.calibration
 
-    assert calibration.source_disc_center_px.x == pytest.approx(100.0)
+    assert calibration.source_disc_center_px.x == pytest.approx(150.0)
     assert calibration.source_disc_center_px.y == pytest.approx(-500.0)
-    assert calibration.inner_radius_px == pytest.approx(600.0)
-    assert calibration.outer_radius_px == pytest.approx(math.hypot(100.0, 700.0))
+    assert calibration.inner_radius_px == pytest.approx(614.0)
+    assert calibration.outer_radius_px == pytest.approx(698.0)
     assert calibration.state.value == "validated"
     assert result.accepted_pairs == tuple(f"{frame}->{frame + 1}" for frame in range(1, 9))
     assert result.rejected_pairs == ()
     assert result.median_pair_residual_px == 2.0
+
+
+def test_calibrated_band_is_visible_across_the_complete_nominal_sector():
+    calibration = calibration_estimate().calibration
+    center = np.array([calibration.source_disc_center_px.x, calibration.source_disc_center_px.y])
+    roi = calibration.usable_source_roi
+    for radius in (calibration.inner_radius_px, calibration.outer_radius_px):
+        for angle in np.linspace(calibration.reference_ray_deg - 11.25, calibration.reference_ray_deg + 11.25, 257):
+            radians = math.radians(angle)
+            point = center + radius * np.array([math.cos(radians), math.sin(radians)])
+            assert roi.x <= point[0] < roi.x + roi.width
+            assert roi.y <= point[1] < roi.y + roi.height
 
 
 def test_calibration_rejects_insufficient_or_physically_unbounded_evidence():
@@ -72,9 +84,9 @@ def test_calibration_rejects_insufficient_or_physically_unbounded_evidence():
         build_calibration(
             inspection_id="inspection-test",
             attempts=attempts,
-            input_width_px=200,
+            input_width_px=300,
             input_height_px=200,
-            usable_source_roi=RoiRectangle(x=0, y=100, width=200, height=100),
+            usable_source_roi=RoiRectangle(x=0, y=100, width=300, height=100),
             valid_source_mask_path="projects/demo/inspections/inspection-test/calibration/source-mask.png",
         )
 
@@ -99,7 +111,7 @@ def test_calibration_save_rejects_unsafe_output_paths(tmp_path, unsafe):
 
 def test_diagnostic_overlay_preserves_dimensions_and_draws_geometry():
     calibration = calibration_estimate().calibration
-    source = np.zeros((200, 200, 3), dtype=np.uint8)
+    source = np.zeros((200, 300, 3), dtype=np.uint8)
     overlay = draw_calibration_overlay(source, calibration)
 
     assert overlay.shape == source.shape

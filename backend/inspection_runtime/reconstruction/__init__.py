@@ -13,6 +13,18 @@ from .calibration import (
     serialize_calibration,
     write_calibration_overlay,
 )
+from .placement import (
+    OutputTile,
+    PlacementFailure,
+    build_nominal_transform_set,
+    frame_output_bounds,
+    iter_output_tiles,
+    load_transform_set,
+    map_points,
+    render_validity_tile,
+    save_transform_set,
+    serialize_transform_set,
+)
 
 __all__ = [
     "CalibrationEstimate",
@@ -26,4 +38,14 @@ __all__ = [
     "save_calibration",
     "serialize_calibration",
     "write_calibration_overlay",
+    "OutputTile",
+    "PlacementFailure",
+    "build_nominal_transform_set",
+    "frame_output_bounds",
+    "iter_output_tiles",
+    "load_transform_set",
+    "map_points",
+    "render_validity_tile",
+    "save_transform_set",
+    "serialize_transform_set",
 ]

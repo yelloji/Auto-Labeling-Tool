@@ -150,18 +150,44 @@ def _robust_common_center(
     return (final_x, final_y), tuple(observation for observation, _ in retained), tuple(rejected), spread
 
 
-def _radial_extent(center: Tuple[float, float], roi: RoiRectangle) -> Tuple[float, float]:
-    center_x, center_y = center
-    left, top = float(roi.x), float(roi.y)
-    right, bottom = float(roi.x + roi.width), float(roi.y + roi.height)
-    delta_x = max(left - center_x, 0.0, center_x - right)
-    delta_y = max(top - center_y, 0.0, center_y - bottom)
-    inner = math.hypot(delta_x, delta_y)
-    outer = max(
-        math.hypot(x - center_x, y - center_y)
-        for x, y in ((left, top), (right, top), (left, bottom), (right, bottom))
-    )
-    return inner, outer
+def _ray_rectangle_interval(
+    center: Tuple[float, float], roi: RoiRectangle, angle_rad: float
+) -> Tuple[float, float]:
+    """Return entry/exit radii where one centre ray crosses the ROI."""
+    direction = (math.cos(angle_rad), math.sin(angle_rad))
+    lower, upper = 0.0, math.inf
+    for origin, component, minimum, maximum in (
+        (center[0], direction[0], float(roi.x), float(roi.x + roi.width)),
+        (center[1], direction[1], float(roi.y), float(roi.y + roi.height)),
+    ):
+        if abs(component) < 1e-12:
+            if origin < minimum or origin > maximum:
+                raise CalibrationFailure("calibration sector ray does not intersect the source ROI")
+            continue
+        first, second = (minimum - origin) / component, (maximum - origin) / component
+        lower = max(lower, min(first, second))
+        upper = min(upper, max(first, second))
+    if upper <= lower or upper <= 0:
+        raise CalibrationFailure("calibration sector ray does not intersect the source ROI")
+    return lower, upper
+
+
+def _continuous_radial_band(
+    center: Tuple[float, float], roi: RoiRectangle, reference_ray_deg: float
+) -> Tuple[float, float]:
+    """Find a conservative band visible across one complete 22.5-degree sector."""
+    half_sector = math.radians(22.5 / 2.0)
+    reference = math.radians(reference_ray_deg)
+    intervals = [
+        _ray_rectangle_interval(center, roi, angle)
+        for angle in np.linspace(reference - half_sector, reference + half_sector, 4097)
+    ]
+    # Two native pixels of inward margin cover angular sampling and interpolation.
+    inner = math.ceil(max(item[0] for item in intervals) + 2.0)
+    outer = math.floor(min(item[1] for item in intervals) - 2.0)
+    if outer <= inner:
+        raise CalibrationFailure("source ROI has no continuously covered 22.5-degree radial band")
+    return float(inner), float(outer)
 
 
 def build_calibration(
@@ -177,18 +203,18 @@ def build_calibration(
     if input_width_px <= 0 or input_height_px <= 0:
         raise CalibrationFailure("input dimensions must be positive")
     center, accepted, rejected, spread = _robust_common_center(attempts)
-    inner_radius, outer_radius = _radial_extent(center, usable_source_roi)
+    roi_center = (
+        usable_source_roi.x + usable_source_roi.width / 2.0,
+        usable_source_roi.y + usable_source_roi.height / 2.0,
+    )
+    reference_ray = math.degrees(math.atan2(roi_center[1] - center[1], roi_center[0] - center[0])) % 360.0
+    inner_radius, outer_radius = _continuous_radial_band(center, usable_source_roi, reference_ray)
     output_radius = math.ceil(outer_radius) + 1
     output_center = (float(output_radius), float(output_radius))
     translate_x = output_center[0] - center[0]
     translate_y = output_center[1] - center[1]
     forward = [[1.0, 0.0, translate_x], [0.0, 1.0, translate_y], [0.0, 0.0, 1.0]]
     inverse = [[1.0, 0.0, -translate_x], [0.0, 1.0, -translate_y], [0.0, 0.0, 1.0]]
-    roi_center = (
-        usable_source_roi.x + usable_source_roi.width / 2.0,
-        usable_source_roi.y + usable_source_roi.height / 2.0,
-    )
-    reference_ray = math.degrees(math.atan2(roi_center[1] - center[1], roi_center[0] - center[0])) % 360.0
     calibration = Calibration(
         inspection_id=inspection_id,
         state=CalibrationState.VALIDATED,

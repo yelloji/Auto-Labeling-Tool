@@ -4,7 +4,7 @@
 
 - Feature: Inspection Runtime — Brake-disc reconstruction
 - Current phase: Planning
-- Current task: Task 4 — Calibration core (`APPROVED`)
+- Current task: Task 5 — Nominal circular placement (`APPROVED`)
 - Code changes started: No
 - Database changes started: No
 - Inference changes started: No
@@ -329,7 +329,7 @@ Implementation result recorded on 2026-07-21:
 
 ### Task 5 — Implement Nominal Circular Placement
 
-Status: `PLANNED`
+Status: `APPROVED`
 
 Work:
 
@@ -345,6 +345,19 @@ Acceptance:
 - The placement is deterministic.
 - No frame is omitted or used twice.
 - Transform round-trip tests pass within the approved numerical tolerance.
+
+Implementation result recorded on 2026-07-21:
+
+- Added deterministic source-to-reconstruction and reconstruction-to-source transforms for all 16 nominal angles.
+- Applied the inverse of the measured image-sequence rotation so every acquisition maps back into frame-1 disc orientation.
+- Added point mapping, clipped per-frame output bounds, tile iteration, and tile-safe ROI/annulus mask evaluation without allocating the full output canvas.
+- Limited any validity tile to 1,048,576 pixels to control intermediate memory.
+- Added deterministic atomic `transforms.json` persistence and strict reload.
+- Added rejection for non-validated calibration, inspection mismatch, image-geometry mismatch, unsafe paths, unsafe tiles, and infinite mappings.
+- Real integration testing rejected an initial 91.14-percent wider annulus and corrected calibration to the continuously covered `11826-15597` px radial band.
+- The corrected real run produced 16 unique transforms, `5.46e-12 px` maximum round-trip error, contribution from every frame, and 100-percent sampled nominal annulus coverage with 1-2 contributors per pixel.
+- Detailed report: `tasks/INSPECTION_RUNTIME_NOMINAL_PLACEMENT_REPORT.md`.
+- Verification: schema, calibration, and placement suites `31 passed`; no existing application component or source image changed.
 
 ### Task 6 — Implement Fine Registration
 
@@ -581,4 +594,5 @@ Status: `DEFERRED`
 | 2026-07-21 | Task 1 — Safe feature baseline | APPROVED FOR COMMIT | Local branch created; baseline audited; local-only artifacts verified ignored | Approved | Task 1 baseline commit |
 | 2026-07-21 | Task 2 — Dataset audit | COMMITTED | 16-frame inventory, integrity, photometric, neighbor, direction, closure, calibration, and threshold audit completed | Approved | `8d173be` |
 | 2026-07-21 | Task 3 — Reconstruction data contracts | COMMITTED | Contract compile passed; four JSON fixtures validated; focused pytest suite: 13 passed | Approved | `c031d4d` |
-| 2026-07-21 | Task 4 — Calibration core | APPROVED | 21 focused tests passed; real dataset accepted 11 pairs at 2.27 px median residual; overlay inspected | Approved | Pending focused commit |
+| 2026-07-21 | Task 4 — Calibration core | COMMITTED | 21 focused tests passed; real dataset accepted 11 pairs at 2.27 px median residual; overlay inspected | Approved | `0b9297c` |
+| 2026-07-21 | Task 5 — Nominal circular placement | APPROVED | 31 focused tests passed; 16 unique transforms; 5.46e-12 px round trip; sampled annulus coverage 100% | Approved | Pending focused commit |
