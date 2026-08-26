@@ -38,6 +38,9 @@ requests>=2.31.0
 tqdm>=4.66.0
 PyYAML>=6.0.0
 onnx>=1.14.0  # Optional but recommended: enables ONNX input-size metadata parsing
+onnxslim>=0.1.71  # Production ONNX export: simplify=True
+onnxruntime-gpu>=1.19.0  # Production ONNX export: CUDA validation pipeline (needs CUDA 12 + cuDNN 9, see nvidia-cudnn-cu12 below)
+nvidia-cudnn-cu12>=9.0.0  # Supplies cudnn64_9.dll for onnxruntime-gpu's CUDA execution provider
 
 # Development and testing
 pytest>=7.4.0

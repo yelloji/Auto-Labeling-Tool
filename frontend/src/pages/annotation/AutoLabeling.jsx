@@ -185,6 +185,10 @@ const AutoLabeling = () => {
   const [predictionMode, setPredictionMode] = useState('normal');
   const [sliceSize, setSliceSize] = useState(896);
   const [overlapRatio, setOverlapRatio] = useState(0.25);
+  // Merge threshold: how much overlap between detections from different SAHI
+  // slices counts as "the same object" and gets merged into one, instead of
+  // kept as a duplicate. SAHI-only — normal mode uses the IOU slider instead.
+  const [mergeThreshold, setMergeThreshold] = useState(0.20);
 
   const [draftAnnotations, setDraftAnnotations] = useState([]);
   const [allPredictions, setAllPredictions] = useState({});   // imageId → draft[]
@@ -327,11 +331,13 @@ const AutoLabeling = () => {
   const getPreviewBody = useCallback(() => ({
     model_id: selectedModelId,
     confidence_threshold: confidence,
-    iou_threshold: iou,
+    // SAHI's iou_threshold is the tile-boundary MERGE threshold (postprocess_match_threshold
+    // server-side), a different concept from normal mode's NMS IOU — each mode gets its own value.
+    iou_threshold: predictionMode === 'sahi' ? mergeThreshold : iou,
     ...(predictionMode === 'sahi' ? {
       slice_height: sliceSize, slice_width: sliceSize, overlap_ratio: overlapRatio,
     } : {}),
-  }), [selectedModelId, confidence, iou, predictionMode, sliceSize, overlapRatio]);
+  }), [selectedModelId, confidence, iou, predictionMode, sliceSize, overlapRatio, mergeThreshold]);
 
   const runPreview = useCallback(async (imgOverride) => {
     const img = imgOverride || currentImage;
@@ -906,6 +912,28 @@ const AutoLabeling = () => {
                     min={5} max={50} step={1} value={Math.round(overlapRatio * 100)}
                     onChange={v => v != null && setOverlapRatio(Math.min(0.5, Math.max(0.05, v / 100)))}
                     formatter={v => `${v}%`} parser={v => parseInt(v.replace('%', ''), 10) || 25}
+                    size="small" controls={false}
+                    className="al-num-input sahi"
+                    style={{ width: 52, fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8',
+                      background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.3)',
+                      borderRadius: 6 }} />
+                </div>
+
+                <span style={{
+                  color: '#38bdf8', fontSize: '0.62rem', fontWeight: 900,
+                  display: 'block', margin: '8px 0 6px', letterSpacing: '0.06em',
+                }}>
+                  SAHI — Merge Threshold
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                  <Slider min={5} max={95} step={1} value={Math.round(mergeThreshold * 100)}
+                    onChange={v => setMergeThreshold(v / 100)}
+                    style={{ flex: 1, margin: 0 }}
+                    tooltip={{ formatter: v => `${v}%` }} />
+                  <InputNumber
+                    min={5} max={95} step={1} value={Math.round(mergeThreshold * 100)}
+                    onChange={v => v != null && setMergeThreshold(Math.min(0.95, Math.max(0.05, v / 100)))}
+                    formatter={v => `${v}%`} parser={v => parseInt(v.replace('%', ''), 10) || 20}
                     size="small" controls={false}
                     className="al-num-input sahi"
                     style={{ width: 52, fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8',

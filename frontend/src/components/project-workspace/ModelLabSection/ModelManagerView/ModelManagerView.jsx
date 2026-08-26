@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Button, message, Modal, Input, Spin, Empty, Tag, Tooltip } from 'antd';
+import { Card, Button, message, Modal, Input, Spin, Empty, Tag, Tooltip, Table, Alert, Typography, Checkbox, Switch, Select } from 'antd';
 import {
   DownloadOutlined,
   EditOutlined,
@@ -8,12 +8,14 @@ import {
   TrophyOutlined,
   SaveOutlined,
   SwapOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { mergeModelLabGuideState } from '../modellabGuideState';
 import './ModelManagerView.css';
 
 const { TextArea } = Input;
+const { Text } = Typography;
 
 const ModelManagerView = ({ projectId, trainingId, sessionName }) => {
   const [loading, setLoading] = useState(true);
@@ -25,12 +27,50 @@ const ModelManagerView = ({ projectId, trainingId, sessionName }) => {
   const [deployForm, setDeployForm] = useState({ name: '', description: '' });
 
   // ONNX conversion state
-  const [onnxStatus, setOnnxStatus] = useState('pending'); // pending | converting | done | failed
+  const [onnxStatus, setOnnxStatus] = useState('pending'); // pending | converting | validating | done | failed
+  const [onnxValidation, setOnnxValidation] = useState(null);
+  const [onnxError, setOnnxError] = useState(null);
   const onnxPollRef = useRef(null);
+
+  // Production ONNX options — pre-filled from this project's last-used settings,
+  // editable here before export. Retraining Mode has no picker of its own; it
+  // reuses whatever was last chosen for this project.
+  const ONNX_BATCH_CHOICES = [1, 2, 4, 8, 16, 32, 64];
+  const ONNX_OPSET_CHOICES = [12, 13, 14, 15, 16, 17, 18];
+  const [onnxOptionsOpen, setOnnxOptionsOpen] = useState(false);
+  const [onnxOptions, setOnnxOptions] = useState({
+    batch_sizes: [1, 8, 16, 32],
+    dynamic: true,
+    half: true,
+    opset: 17,
+    simplify: true,
+  });
 
   useEffect(() => {
     loadModels();
   }, [projectId, trainingId]);
+
+  const pollOnnxStatus = () => {
+    clearInterval(onnxPollRef.current);
+    onnxPollRef.current = setInterval(async () => {
+      try {
+        const sr = await fetch(`/api/v1/onnx/training/${trainingId}/status`);
+        if (sr.ok) {
+          const d = await sr.json();
+          setOnnxStatus(d.status);
+          setOnnxValidation(d.validation || null);
+          setOnnxError(d.error || null);
+          if (d.status === 'done') {
+            clearInterval(onnxPollRef.current);
+            message.success('Production ONNX export passed all validation checks.');
+          } else if (d.status === 'failed') {
+            clearInterval(onnxPollRef.current);
+            message.error('Production ONNX export or validation failed.');
+          }
+        }
+      } catch { clearInterval(onnxPollRef.current); }
+    }, 3000);
+  };
 
   // Poll ONNX status on mount / when trainingId changes
   useEffect(() => {
@@ -41,8 +81,13 @@ const ModelManagerView = ({ projectId, trainingId, sessionName }) => {
         if (r.ok) {
           const d = await r.json();
           setOnnxStatus(d.status);
-          if (d.status === 'done' || d.status === 'failed') {
-            clearInterval(onnxPollRef.current);
+          setOnnxValidation(d.validation || null);
+          setOnnxError(d.error || null);
+          if (d.project_defaults) {
+            setOnnxOptions(d.project_defaults);
+          }
+          if (d.status === 'converting' || d.status === 'validating') {
+            pollOnnxStatus();
           }
         }
       } catch { /* non-blocking */ }
@@ -53,29 +98,29 @@ const ModelManagerView = ({ projectId, trainingId, sessionName }) => {
 
   const handleConvertOnnx = async () => {
     setOnnxStatus('converting');
+    setOnnxValidation(null);
+    setOnnxError(null);
     try {
-      const r = await fetch(`/api/v1/onnx/training/${trainingId}/convert`, { method: 'POST' });
+      const r = await fetch(`/api/v1/onnx/training/${trainingId}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(onnxOptions),
+      });
       if (!r.ok) throw new Error('Failed');
-      onnxPollRef.current = setInterval(async () => {
-        try {
-          const sr = await fetch(`/api/v1/onnx/training/${trainingId}/status`);
-          if (sr.ok) {
-            const d = await sr.json();
-            setOnnxStatus(d.status);
-            if (d.status === 'done') {
-              clearInterval(onnxPollRef.current);
-              message.success('ONNX conversion complete. Ready to download.');
-            } else if (d.status === 'failed') {
-              clearInterval(onnxPollRef.current);
-              message.error('ONNX conversion failed.');
-            }
-          }
-        } catch { clearInterval(onnxPollRef.current); }
-      }, 3000);
+      pollOnnxStatus();
     } catch {
       setOnnxStatus('failed');
-      message.error('Could not start ONNX conversion.');
+      message.error('Could not start Production ONNX export.');
     }
+  };
+
+  const toggleBatchSize = (size, checked) => {
+    setOnnxOptions((prev) => {
+      const next = checked
+        ? [...prev.batch_sizes, size]
+        : prev.batch_sizes.filter((b) => b !== size);
+      return { ...prev, batch_sizes: next.sort((a, b) => a - b) };
+    });
   };
 
   const handleDownloadOnnx = () => {
@@ -343,39 +388,176 @@ const ModelManagerView = ({ projectId, trainingId, sessionName }) => {
       <Card
         className="onnx-conversion-card"
         style={{ marginTop: 16 }}
-        title={<span><SwapOutlined style={{ marginRight: 8 }} />ONNX Conversion</span>}
+        title={<span><SwapOutlined style={{ marginRight: 8 }} />Production ONNX</span>}
         extra={
           <Tag color={
             onnxStatus === 'done' ? 'success' :
-            onnxStatus === 'converting' ? 'processing' :
+            (onnxStatus === 'converting' || onnxStatus === 'validating') ? 'processing' :
             onnxStatus === 'failed' ? 'error' : 'default'
           }>
-            {onnxStatus === 'done' ? 'Ready' :
-             onnxStatus === 'converting' ? 'Converting...' :
+            {onnxStatus === 'done' ? '✅ Export passed' :
+             onnxStatus === 'converting' ? 'Exporting...' :
+             onnxStatus === 'validating' ? 'Validating (CUDA)...' :
              onnxStatus === 'failed' ? 'Failed' : 'Pending'}
           </Tag>
         }
       >
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+          <Tag>Image size: {onnxValidation?.imgsz || '—'}×{onnxValidation?.imgsz || '—'} (from training)</Tag>
+          <Tag color="blue">Precision: {onnxOptions.half ? 'FP16' : 'FP32'}</Tag>
+          <Tag color="blue">Dynamic batch: {onnxOptions.dynamic ? 'enabled' : 'disabled'}</Tag>
+          <Tag color="blue">Opset: {onnxOptions.opset}</Tag>
+          <Tag color="blue">{onnxOptions.simplify ? 'Simplified' : 'Not simplified'}</Tag>
+          <Tag color="blue">Batches: {onnxOptions.batch_sizes.join(', ')}</Tag>
+          <Tag color="purple">Task: segmentation</Tag>
+          <Tag color="purple">RGB · NCHW · scale 1/255</Tag>
+        </div>
+
+        <Button
+          type="link"
+          icon={<SettingOutlined />}
+          onClick={() => setOnnxOptionsOpen((v) => !v)}
+          disabled={onnxStatus === 'converting' || onnxStatus === 'validating'}
+          style={{ padding: 0, marginBottom: onnxOptionsOpen ? 12 : 14 }}
+        >
+          {onnxOptionsOpen ? 'Hide export options' : 'Export options'}
+        </Button>
+
+        {onnxOptionsOpen && (
+          <div style={{
+            border: '1px solid #f0f0f0', borderRadius: 8, padding: 14, marginBottom: 14,
+            display: 'flex', flexDirection: 'column', gap: 12,
+          }}>
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>Validated batch sizes</Text>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                {ONNX_BATCH_CHOICES.map((size) => (
+                  <Checkbox
+                    key={size}
+                    checked={onnxOptions.batch_sizes.includes(size)}
+                    disabled={!onnxOptions.dynamic && size !== 1}
+                    onChange={(e) => toggleBatchSize(size, e.target.checked)}
+                  >
+                    {size}
+                  </Checkbox>
+                ))}
+              </div>
+              {!onnxOptions.dynamic && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Dynamic batch is off — a static export only supports batch 1.
+                </Text>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Switch
+                checked={onnxOptions.dynamic}
+                onChange={(checked) => setOnnxOptions((prev) => ({
+                  ...prev,
+                  dynamic: checked,
+                  batch_sizes: checked ? prev.batch_sizes : [1],
+                }))}
+              />
+              <Text>Dynamic batch</Text>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Switch
+                checked={onnxOptions.half}
+                onChange={(checked) => setOnnxOptions((prev) => ({ ...prev, half: checked }))}
+              />
+              <Text>FP16 precision</Text>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Switch
+                checked={onnxOptions.simplify}
+                onChange={(checked) => setOnnxOptions((prev) => ({ ...prev, simplify: checked }))}
+              />
+              <Text>Simplify (onnxslim)</Text>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Text>ONNX opset</Text>
+              <Select
+                size="small"
+                style={{ width: 90 }}
+                value={onnxOptions.opset}
+                onChange={(v) => setOnnxOptions((prev) => ({ ...prev, opset: v }))}
+                options={ONNX_OPSET_CHOICES.map((o) => ({ value: o, label: o }))}
+              />
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Tooltip title={onnxStatus === 'done' ? 'Already converted' : 'Convert best.pt to ONNX format'}>
+          <Tooltip title={onnxStatus === 'done' ? 'Already exported and validated' : 'Export best.pt to a validated Production ONNX file'}>
             <Button
               icon={<SwapOutlined />}
               onClick={handleConvertOnnx}
-              disabled={onnxStatus === 'converting' || onnxStatus === 'done'}
-              loading={onnxStatus === 'converting'}
+              disabled={onnxStatus === 'converting' || onnxStatus === 'validating' || onnxStatus === 'done'}
+              loading={onnxStatus === 'converting' || onnxStatus === 'validating'}
             >
-              {onnxStatus === 'done' ? 'Converted' : 'Convert to ONNX'}
+              {onnxStatus === 'done' ? 'Exported' : 'Export Production ONNX'}
             </Button>
           </Tooltip>
           <Button
             type={onnxStatus === 'done' ? 'primary' : 'default'}
             icon={<DownloadOutlined />}
             onClick={handleDownloadOnnx}
-            disabled={onnxStatus !== 'done'}
+            disabled={!(onnxStatus === 'done' || onnxStatus === 'failed')}
           >
             Download ONNX
           </Button>
         </div>
+
+        {onnxError && !onnxValidation && (
+          <Alert
+            style={{ marginTop: 14 }}
+            type="error"
+            showIcon
+            message="Export failed"
+            description={onnxError}
+          />
+        )}
+
+        {onnxValidation && (
+          <div style={{ marginTop: 16 }}>
+            {onnxValidation.errors && onnxValidation.errors.length > 0 && (
+              <Alert
+                style={{ marginBottom: 12 }}
+                type={onnxValidation.passed ? 'warning' : 'error'}
+                showIcon
+                message={onnxValidation.passed ? 'Completed with warnings' : 'Validation failed'}
+                description={onnxValidation.errors.join(' | ')}
+              />
+            )}
+            <Table
+              size="small"
+              pagination={false}
+              rowKey="batch"
+              dataSource={Object.entries(onnxValidation.batches || {}).map(([batch, r]) => ({ batch, ...r }))}
+              columns={[
+                { title: 'Batch', dataIndex: 'batch', key: 'batch' },
+                {
+                  title: 'Status', dataIndex: 'status', key: 'status',
+                  render: (s) => <Tag color={s === 'passed' ? 'success' : 'error'}>{s === 'passed' ? 'Passed' : 'Failed'}</Tag>,
+                },
+                { title: 'ONNX det.', dataIndex: 'onnx_detections', key: 'onnx_detections' },
+                { title: 'PT det.', dataIndex: 'pt_detections', key: 'pt_detections' },
+                { title: 'Masks', dataIndex: 'has_masks', key: 'has_masks', render: (v) => v ? 'Yes' : 'No' },
+                { title: 'Time / img (ms)', dataIndex: 'inference_time_ms', key: 'inference_time_ms' },
+                { title: 'GPU mem (MB)', dataIndex: 'gpu_memory_mb', key: 'gpu_memory_mb' },
+              ]}
+            />
+            {onnxValidation.checksum_sha256 && (
+              <div style={{ marginTop: 10 }}>
+                <Text type="secondary">SHA-256: </Text>
+                <Text code copyable style={{ fontSize: 12 }}>{onnxValidation.checksum_sha256}</Text>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       {models.additional_files && models.additional_files.length > 0 && (
