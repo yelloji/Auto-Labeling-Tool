@@ -1165,7 +1165,7 @@ const AnnotationCanvas = ({
 
     const direction = e.deltaY < 0 ? 1 : -1;
     const currentTargetZoom = wheelZoomAnchorRef.current?.targetZoom || zoomLevel;
-    const nextZoom = Math.max(25, Math.min(500, currentTargetZoom + (direction * 25)));
+    const nextZoom = Math.max(10, Math.min(500, currentTargetZoom + (direction * 25)));
     if (nextZoom !== currentTargetZoom) {
       const viewport = viewportRef.current;
       if (viewport) {
