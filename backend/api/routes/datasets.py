@@ -18,6 +18,7 @@ from core.file_handler import file_handler
 from core.auto_labeler import auto_labeler
 from models.model_manager import model_manager
 from logging_system.professional_logger import get_professional_logger
+from utils.sahi_stitching import stitch_sahi_fragments
 
 # Initialize professional logger
 logger = get_professional_logger()
@@ -103,6 +104,17 @@ class AutoLabelSahiPreviewRequest(BaseModel):
     slice_height: int = 896
     slice_width: int = 896
     overlap_ratio: float = 0.25
+    # Distance-based fragment stitching (pixels). SAHI's own merge only
+    # combines detections that actually overlap; this joins same-class
+    # detections whose nearest points are within this many pixels of each
+    # other, even with zero overlap — fixes long thin objects (e.g. cracks)
+    # that get sliced into pieces that don't touch. 0 disables it.
+    stitch_distance: float = 0.0
+    # Independent toggle: combine same-class detections that truly overlap
+    # (a real duplicate of the same spot) into one shape. On by default.
+    # Turning it off shows SAHI's raw, untouched predictions for the overlap
+    # case — same pattern as stitch_distance=0 for the gap case.
+    remove_duplicates: bool = True
 
 
 @router.get("/", response_model=List[Dict[str, Any]])
@@ -789,6 +801,15 @@ async def preview_auto_label_sahi(
                 "y_max": y2 / img_h,
                 "segmentation": segmentation,
             })
+
+        try:
+            predictions = stitch_sahi_fragments(
+                predictions, img_w, img_h, request.stitch_distance,
+                remove_duplicates=request.remove_duplicates,
+            )
+        except Exception as e:
+            logger.warning("errors.system", f"SAHI fragment stitching failed, using unstitched predictions: {e}",
+                            "sahi_stitching_failed", {"image_id": image_id})
 
         return {
             "image_id": image_id,

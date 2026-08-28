@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Button, Select, Slider, InputNumber, Tooltip, message, Spin, Tag, Empty, Progress,
+  Button, Select, Slider, InputNumber, Tooltip, message, Spin, Tag, Empty, Progress, Switch,
 } from 'antd';
 import {
   ArrowLeftOutlined, ThunderboltOutlined, PlayCircleOutlined,
@@ -189,6 +189,15 @@ const AutoLabeling = () => {
   // slices counts as "the same object" and gets merged into one, instead of
   // kept as a duplicate. SAHI-only — normal mode uses the IOU slider instead.
   const [mergeThreshold, setMergeThreshold] = useState(0.20);
+  // Stitch distance (pixels): joins same-class detections that are close but
+  // don't actually overlap — fixes long thin objects (cracks) that get cut
+  // into pieces at tile boundaries that Merge Threshold alone can't combine.
+  // 0 = off.
+  const [stitchDistance, setStitchDistance] = useState(30);
+  // Independent toggle: combine detections that truly overlap (real
+  // duplicates of the same spot) into one. On by default. Off shows SAHI's
+  // raw, untouched predictions for the overlap case.
+  const [removeDuplicates, setRemoveDuplicates] = useState(true);
 
   const [draftAnnotations, setDraftAnnotations] = useState([]);
   const [allPredictions, setAllPredictions] = useState({});   // imageId → draft[]
@@ -336,8 +345,9 @@ const AutoLabeling = () => {
     iou_threshold: predictionMode === 'sahi' ? mergeThreshold : iou,
     ...(predictionMode === 'sahi' ? {
       slice_height: sliceSize, slice_width: sliceSize, overlap_ratio: overlapRatio,
+      stitch_distance: stitchDistance, remove_duplicates: removeDuplicates,
     } : {}),
-  }), [selectedModelId, confidence, iou, predictionMode, sliceSize, overlapRatio, mergeThreshold]);
+  }), [selectedModelId, confidence, iou, predictionMode, sliceSize, overlapRatio, mergeThreshold, stitchDistance, removeDuplicates]);
 
   const runPreview = useCallback(async (imgOverride) => {
     const img = imgOverride || currentImage;
@@ -939,6 +949,36 @@ const AutoLabeling = () => {
                     style={{ width: 52, fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8',
                       background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.3)',
                       borderRadius: 6 }} />
+                </div>
+
+                <span style={{
+                  color: '#38bdf8', fontSize: '0.62rem', fontWeight: 900,
+                  display: 'block', margin: '8px 0 6px', letterSpacing: '0.06em',
+                }} title="Joins same-class detections that are close but don't touch — fixes long thin cracks cut apart at tile edges. 0 = off.">
+                  SAHI — Stitch Distance
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                  <Slider min={0} max={150} step={5} value={stitchDistance}
+                    onChange={setStitchDistance}
+                    style={{ flex: 1, margin: 0 }}
+                    tooltip={{ formatter: v => `${v}px` }} />
+                  <InputNumber
+                    min={0} max={150} step={5} value={stitchDistance}
+                    onChange={v => v != null && setStitchDistance(Math.min(150, Math.max(0, v)))}
+                    formatter={v => `${v}px`} parser={v => parseInt(String(v).replace('px', ''), 10) || 0}
+                    size="small" controls={false}
+                    className="al-num-input sahi"
+                    style={{ width: 56, fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8',
+                      background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.3)',
+                      borderRadius: 6 }} />
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}
+                  title="Combine detections that truly overlap (same real spot) into one. Off shows SAHI's raw, untouched predictions for overlapping cases.">
+                  <Switch size="small" checked={removeDuplicates} onChange={setRemoveDuplicates} />
+                  <span style={{ color: '#38bdf8', fontSize: '0.62rem', fontWeight: 900, letterSpacing: '0.06em' }}>
+                    SAHI — Remove Duplicates
+                  </span>
                 </div>
               </div>
             )}
