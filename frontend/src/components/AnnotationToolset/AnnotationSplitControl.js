@@ -59,32 +59,32 @@ const AnnotationSplitControl = ({
   };
 
   return (
-    <Tooltip title="Dataset Split: Assign this image to the Training, Validation, or Testing subset." placement="bottomRight" overlayStyle={{ zIndex: 10000 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, ...style, cursor: 'help' }}>
-        <Tag color={getSplitColor(currentSplit)} style={{ margin: 0, padding: '0 0.5rem', fontSize: '0.8125rem', height: '1.625rem', lineHeight: '1.5rem' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, ...style }}>
+      <Tooltip title="Dataset Split: Assign this image to the Training, Validation, or Testing subset." placement="bottomRight" overlayStyle={{ zIndex: 10000 }}>
+        <Tag color={getSplitColor(currentSplit)} style={{ margin: 0, padding: '0 0.5rem', fontSize: '0.8125rem', height: '1.625rem', lineHeight: '1.5rem', cursor: 'help' }}>
           {getSplitLabel(currentSplit).toUpperCase()}
         </Tag>
-        <Select
-          value={currentSplit}
-          onChange={handleSplitChange}
-          style={{
-            minWidth: '6rem',
-            flexShrink: 0,
-            fontSize: '0.8125rem'
-          }}
-          dropdownStyle={{
-            zIndex: 3100
-          }}
-          className="vector-select"
-          popupClassName="vector-select-dropdown"
-          size="small"
-        >
-          <Option value="train">Training</Option>
-          <Option value="val">Validation</Option>
-          <Option value="test">Testing</Option>
-        </Select>
-      </div>
-    </Tooltip>
+      </Tooltip>
+      <Select
+        value={currentSplit}
+        onChange={handleSplitChange}
+        style={{
+          minWidth: '6rem',
+          flexShrink: 0,
+          fontSize: '0.8125rem'
+        }}
+        dropdownStyle={{
+          zIndex: 3100
+        }}
+        className="vector-select"
+        popupClassName="vector-select-dropdown"
+        size="small"
+      >
+        <Option value="train">Training</Option>
+        <Option value="val">Validation</Option>
+        <Option value="test">Testing</Option>
+      </Select>
+    </div>
   );
 };
 
