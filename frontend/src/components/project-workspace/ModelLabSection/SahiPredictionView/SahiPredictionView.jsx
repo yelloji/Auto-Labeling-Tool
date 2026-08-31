@@ -69,7 +69,12 @@ const DEFAULT_CONFIG = {
     visual_hide_labels: false,
     visual_hide_conf: false,
     device: 'auto',
-    batch_size: 1
+    batch_size: 1,
+    // Off by default here (unlike Auto Labeling) -- real, untouched SAHI
+    // output is the default in Prediction; this is opt-in so real vs.
+    // duplicate counts can be compared deliberately.
+    remove_duplicates: false,
+    duplicate_overlap_fraction: 0.1
 };
 
 const DEFAULT_FILTERS = {
@@ -258,6 +263,7 @@ const resetFilterState = () => ({
 const SahiPredictionView = ({ training }) => {
     const [form] = Form.useForm();
     const watchedName = Form.useWatch('name', form);
+    const watchedRemoveDuplicates = Form.useWatch('remove_duplicates', form);
     const [experiments, setExperiments] = useState([]);
     const [selectedExp, setSelectedExp] = useState(null);
     const [queuedExp, setQueuedExp] = useState(null);
@@ -1294,6 +1300,31 @@ const SahiPredictionView = ({ training }) => {
                                 <Col xs={24} sm={12} lg={6}>
                                     <Form.Item name="batch_size" label="Batch Size" tooltip="Number of slices processed per GPU call. Higher = faster but uses more VRAM. Try 4 or 8 to improve GPU utilization.">
                                         <InputNumber min={1} max={64} step={1} precision={0} />
+                                    </Form.Item>
+                                </Col>
+                            </Row>
+
+                            <Row gutter={12}>
+                                <Col xs={24} sm={12} lg={6}>
+                                    <Form.Item
+                                        name="remove_duplicates"
+                                        label="Remove Duplicates"
+                                        valuePropName="checked"
+                                        tooltip="Combines same-class detections whose boxes substantially overlap into one real shape, so duplicates aren't scored as false positives against ground truth. Off by default -- shows the real, untouched SAHI output."
+                                    >
+                                        <Switch />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} sm={12} lg={6}>
+                                    <Form.Item
+                                        name="duplicate_overlap_fraction"
+                                        label="Duplicate Overlap %"
+                                        tooltip="How much two detections' boxes must overlap to be treated as duplicates and combined."
+                                    >
+                                        <InputNumber
+                                            min={0.05} max={1} step={0.05} precision={2}
+                                            disabled={!watchedRemoveDuplicates}
+                                        />
                                     </Form.Item>
                                 </Col>
                             </Row>

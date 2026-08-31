@@ -300,15 +300,17 @@ def _overlap_fraction(a: tuple[float, float, float, float], b: tuple[float, floa
     return inter_area / smaller
 
 
-def _group_true_overlaps(member_idx: list[int], points_px: list[list[tuple[float, float]]]) -> list[list[int]]:
+def _group_true_overlaps(member_idx: list[int], points_px: list[list[tuple[float, float]]],
+                          overlap_fraction_threshold: float = DUPLICATE_OVERLAP_FRACTION) -> list[list[int]]:
     """
     Within a group of nearby fragments, cluster together whichever ones
     substantially overlap each other's box — real duplicate detections of the
-    same spot. Only a large shared fraction counts; a small incidental touch
-    (common where two genuinely different adjacent pieces meet) does not
-    count, and is left for stitching instead. Returns groups of indices —
-    each group of size > 1 is a duplicate cluster to be combined into one
-    shape (never simply discarded), each singleton passes through untouched.
+    same spot. Only a shared fraction at or above `overlap_fraction_threshold`
+    counts; a small incidental touch (common where two genuinely different
+    adjacent pieces meet) does not count, and is left for stitching instead.
+    Returns groups of indices — each group of size > 1 is a duplicate cluster
+    to be combined into one shape (never simply discarded), each singleton
+    passes through untouched.
     """
     boxes = {i: _bbox_of(points_px[i]) for i in member_idx}
     parent = {i: i for i in member_idx}
@@ -328,7 +330,7 @@ def _group_true_overlaps(member_idx: list[int], points_px: list[list[tuple[float
         for b in member_idx:
             if a >= b:
                 continue
-            if _overlap_fraction(boxes[a], boxes[b]) >= DUPLICATE_OVERLAP_FRACTION:
+            if _overlap_fraction(boxes[a], boxes[b]) >= overlap_fraction_threshold:
                 union(a, b)
 
     groups: dict[int, list[int]] = {}
@@ -374,19 +376,20 @@ def _build_stitched_prediction(class_name: str, points: list[tuple[float, float]
 
 
 def stitch_sahi_fragments(predictions: list[dict], img_w: int, img_h: int, stitch_distance_px: float,
-                           remove_duplicates: bool = True) -> list[dict]:
+                           remove_duplicates: bool = True,
+                           duplicate_overlap_fraction: float = DUPLICATE_OVERLAP_FRACTION) -> list[dict]:
     """
     Two independent stages, run in order. Returns a new list — never
     mutates the input. Each stage has its own on/off control — turning one
     off does not affect the other.
 
     Stage 1 — duplicate removal (on by default; set remove_duplicates=False to
-    disable): same-class detections whose boxes substantially overlap (a real
-    duplicate of the same spot) get combined into one shape covering
-    everything any of them detected — never simply dropped, since a
-    "duplicate" can still cover a bit more area than the one kept. When
-    disabled, every prediction passes through untouched by this stage,
-    exactly like SAHI's own raw output.
+    disable): same-class detections whose boxes overlap by at least
+    `duplicate_overlap_fraction` (a real duplicate of the same spot) get
+    combined into one shape covering everything any of them detected — never
+    simply dropped, since a "duplicate" can still cover a bit more area than
+    the one kept. When disabled, every prediction passes through untouched by
+    this stage, exactly like SAHI's own raw output.
 
     Stage 2 — gap stitching (only runs when stitch_distance_px > 0): whatever
     is left after stage 1 gets joined into one continuous detection if the
@@ -405,7 +408,10 @@ def stitch_sahi_fragments(predictions: list[dict], img_w: int, img_h: int, stitc
 
     effective = []  # each: {"points", "confidence", "class_name", "has_seg", "combined", "count", "original"}
     for class_name, idxs in by_class.items():
-        dup_groups = _group_true_overlaps(idxs, points_px) if remove_duplicates else [[i] for i in idxs]
+        dup_groups = (
+            _group_true_overlaps(idxs, points_px, duplicate_overlap_fraction)
+            if remove_duplicates else [[i] for i in idxs]
+        )
         for dup_idx in dup_groups:
             if len(dup_idx) == 1:
                 i = dup_idx[0]
@@ -479,3 +485,65 @@ def stitch_sahi_fragments(predictions: list[dict], img_w: int, img_h: int, stitc
             merged.append(_build_stitched_prediction(class_name, all_pts, best_conf, img_w, img_h, False, total_sources))
 
     return merged
+
+
+def dedupe_sahi_prediction_results(image_predictions: list[dict], img_w: int, img_h: int,
+                                    remove_duplicates: bool = True,
+                                    duplicate_overlap_fraction: float = DUPLICATE_OVERLAP_FRACTION) -> list[dict]:
+    """
+    Adapter for SAHI Prediction's own result shape — {"class", "class_id",
+    "confidence", "bbox": [x1,y1,x2,y2], "segmentation": [[x,y], [x,y], ...],
+    "mask", "source"}, all in ABSOLUTE PIXEL coordinates — which differs from
+    Auto Labeling's normalized {"class_name", "x_min"..., "segmentation": flat
+    0-1 list} shape that stitch_sahi_fragments expects natively. Converts in,
+    runs duplicate removal only (no gap-stitching here, by design — SAHI
+    Prediction wants to know real vs. duplicate counts, not join distant
+    pieces), converts back out preserving class_id per class name.
+    Returns a new list — never mutates the input.
+    """
+    if not image_predictions:
+        return list(image_predictions)
+
+    class_id_by_name: dict[str, int | None] = {}
+    normalized = []
+    for p in image_predictions:
+        class_name = p.get("class")
+        class_id_by_name.setdefault(class_name, p.get("class_id"))
+
+        x1, y1, x2, y2 = p.get("bbox") or [0.0, 0.0, 0.0, 0.0]
+        seg = p.get("segmentation")
+        seg_flat = None
+        if seg:
+            seg_flat = []
+            for pt in seg:
+                seg_flat.extend([pt[0] / img_w, pt[1] / img_h])
+
+        normalized.append({
+            "class_name": class_name,
+            "confidence": p.get("confidence", 0.0),
+            "x_min": x1 / img_w, "y_min": y1 / img_h,
+            "x_max": x2 / img_w, "y_max": y2 / img_h,
+            "segmentation": seg_flat,
+        })
+
+    deduped = stitch_sahi_fragments(
+        normalized, img_w, img_h, stitch_distance_px=0,
+        remove_duplicates=remove_duplicates, duplicate_overlap_fraction=duplicate_overlap_fraction,
+    )
+
+    result = []
+    for d in deduped:
+        seg_norm = d.get("segmentation")
+        seg_pairs = None
+        if seg_norm:
+            seg_pairs = [[seg_norm[i] * img_w, seg_norm[i + 1] * img_h] for i in range(0, len(seg_norm), 2)]
+        result.append({
+            "class": d.get("class_name"),
+            "class_id": class_id_by_name.get(d.get("class_name")),
+            "confidence": d.get("confidence", 0.0),
+            "bbox": [d["x_min"] * img_w, d["y_min"] * img_h, d["x_max"] * img_w, d["y_max"] * img_h],
+            "segmentation": seg_pairs,
+            "mask": seg_pairs,
+            "source": "sahi",
+        })
+    return result

@@ -39,6 +39,8 @@ SAHI_PARAM_FIELDS = {
     "visual_hide_labels",
     "visual_hide_conf",
     "batch_size",
+    "remove_duplicates",
+    "duplicate_overlap_fraction",
 }
 
 
@@ -62,6 +64,14 @@ class SahiPredictionRequest(BaseModel):
     visual_hide_conf: bool = False
     device: str = "auto"
     batch_size: int = 1
+    # Independent post-processing step: combines same-class detections whose
+    # boxes overlap by at least duplicate_overlap_fraction into one real
+    # pixel-union shape, so duplicate detections aren't scored as false
+    # positives against ground truth. Off by default here (unlike Auto
+    # Labeling) — real, untouched SAHI output is the default in Prediction,
+    # this is opt-in for comparing real vs. duplicate counts.
+    remove_duplicates: bool = False
+    duplicate_overlap_fraction: float = 0.1
     custom_params: Optional[Dict[str, Any]] = None
     uploaded_images: Optional[List[str]] = None
 
@@ -86,6 +96,8 @@ class SahiPredictionUpdate(BaseModel):
     visual_hide_conf: Optional[bool] = None
     device: Optional[str] = None
     batch_size: Optional[int] = None
+    remove_duplicates: Optional[bool] = None
+    duplicate_overlap_fraction: Optional[float] = None
     custom_params: Optional[Dict[str, Any]] = None
     uploaded_images: Optional[List[str]] = None
 

@@ -135,11 +135,30 @@ class SahiUltralyticsPredictor(BasePredictor):
                 ))
                 inference_times.append(time.perf_counter() - t0)
 
-                image_predictions = []
-                for object_prediction in getattr(result, "object_prediction_list", []) or []:
-                    converted = self._convert_object_prediction(object_prediction)
-                    image_predictions.append(converted)
+                image_predictions = [
+                    self._convert_object_prediction(op)
+                    for op in (getattr(result, "object_prediction_list", []) or [])
+                ]
 
+                if params.get("remove_duplicates"):
+                    img_w, img_h = self._get_image_size(image_path)
+                    if img_w and img_h:
+                        try:
+                            from utils.sahi_stitching import dedupe_sahi_prediction_results, DUPLICATE_OVERLAP_FRACTION
+                            image_predictions = dedupe_sahi_prediction_results(
+                                image_predictions, img_w, img_h,
+                                remove_duplicates=True,
+                                duplicate_overlap_fraction=float(
+                                    params.get("duplicate_overlap_fraction", DUPLICATE_OVERLAP_FRACTION)
+                                ),
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "errors.system", f"SAHI duplicate removal failed, using raw predictions: {e}",
+                                "sahi_dedupe_failed", {"image": image_name},
+                            )
+
+                for converted in image_predictions:
                     confidence_value = converted["confidence"]
                     class_name = converted["class"]
                     total_detections += 1
@@ -271,6 +290,19 @@ class SahiUltralyticsPredictor(BasePredictor):
             kwargs["batch_size"] = int(params.get("batch_size", 1))
 
         return {key: value for key, value in kwargs.items() if key in supported_keys}
+
+    @staticmethod
+    def _get_image_size(image_path: str) -> tuple:
+        """Fast, header-only image size read — needed to convert duplicate
+        removal's pixel<->normalized coordinates. Returns (None, None) if the
+        file can't be read, so callers can safely skip dedup rather than fail
+        the whole prediction."""
+        try:
+            from PIL import Image
+            with Image.open(image_path) as img:
+                return img.size  # (width, height)
+        except Exception:
+            return None, None
 
     def _convert_object_prediction(self, object_prediction: Any) -> Dict[str, Any]:
         category = getattr(object_prediction, "category", None)
