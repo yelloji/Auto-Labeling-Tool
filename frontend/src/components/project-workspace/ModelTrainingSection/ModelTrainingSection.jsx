@@ -479,6 +479,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
             if (isValidValue(t.overlap_mask)) patch.overlap_mask = t.overlap_mask;
             if (isValidValue(t.mask_ratio)) patch.mask_ratio = t.mask_ratio;
             if (isValidValue(t.freeze)) patch.freeze = t.freeze;
+            if (isValidValue(t.multi_scale)) patch.multi_scale = t.multi_scale;
 
             // Hydrate Root/Train params that might be missing
             if (isValidValue(t.patience)) patch.patience = t.patience;
@@ -594,6 +595,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
           overlap_mask: form.overlap_mask,
           mask_ratio: form.mask_ratio,
           freeze: form.freeze,
+          multi_scale: form.multi_scale,
           device: form.device === 'remote' ? form.gpuIndex : (form.device === 'gpu' && typeof form.gpuIndex === 'number' ? `cuda:${form.gpuIndex}` : 'cpu'),
           patience: form.patience,
           save_period: form.save_period,
@@ -711,6 +713,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
     form.val_conf,
     form.val_plots,
     form.max_det,
+    form.multi_scale,
     form.datasetZipPath,
     form.classes,
     form.datasetReleaseDir,
@@ -1009,6 +1012,7 @@ const ModelTrainingSection = ({ projectId, project }) => {
                 overlap_mask={form.overlap_mask}
                 mask_ratio={form.mask_ratio}
                 freeze={form.freeze}
+                multi_scale={form.multi_scale}
                 val_iou={form.val_iou}
                 val_conf={form.val_conf}
                 val_plots={form.val_plots}

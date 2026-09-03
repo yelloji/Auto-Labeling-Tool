@@ -5,7 +5,7 @@ import { systemAPI, remoteNodesAPI } from '../../../../services/api';
 import { mergeTrainingGuideState } from '../trainingGuideState';
 
 
-export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, cache, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, copy_paste, erasing, single_cls, rect, overlap_mask, mask_ratio, freeze, val_iou, val_conf, val_plots, max_det, taskType, datasetSummary, disabled }) {
+export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecision, earlyStop, resume, device, gpuIndex, isDeveloper, onChange, optimizerMode, optimizer, lr0, lrf, momentum, weight_decay, patience, save_period, workers, cache, warmup_epochs, warmup_momentum, warmup_bias_lr, cos_lr, box, cls, dfl, mosaic, close_mosaic, mixup, hsv_h, hsv_s, hsv_v, flipud, fliplr, degrees, translate, scale, shear, perspective, copy_paste, erasing, single_cls, rect, overlap_mask, mask_ratio, freeze, multi_scale, val_iou, val_conf, val_plots, max_det, taskType, datasetSummary, disabled }) {
 
   const OPTIMIZER_PRESETS = {
     SGD: { lr0: 0.01, lrf: 0.1, momentum: 0.937, weight_decay: 0.0005 },
@@ -479,6 +479,13 @@ export default function PresetSection({ epochs, imgSize, batchSize, mixedPrecisi
               <Col span={6}><Form.Item label="Overlap Mask" tooltip="Merge masks into single image mask"><Switch checked={overlap_mask} onChange={(v) => onChange({ overlap_mask: v })} disabled={disabled} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Mask Ratio" tooltip="Mask downsample ratio"><InputNumber min={1} step={1} placeholder={4} value={mask_ratio} onChange={(v) => onChange({ mask_ratio: v })} disabled={disabled} /></Form.Item></Col>
               <Col span={6}><Form.Item label="Freeze Layers" tooltip="Freeze first N layers"><InputNumber min={0} step={1} placeholder={0} value={freeze} onChange={(v) => onChange({ freeze: v })} disabled={disabled} /></Form.Item></Col>
+              {isDeveloper && (
+                <Col span={6}>
+                  <Form.Item label="Multi-Scale" tooltip="Train on randomly varying input sizes each batch (helps mask/box boundary precision, slightly slower). Off by default.">
+                    <Switch checked={!!multi_scale} onChange={(v) => onChange({ multi_scale: v })} disabled={disabled} />
+                  </Form.Item>
+                </Col>
+              )}
             </Row>
           </Collapse.Panel>
           <Collapse.Panel header="Validation" key="val">
