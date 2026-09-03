@@ -37,6 +37,7 @@ import {
     FileImageOutlined,
     HddOutlined,
     LoadingOutlined,
+    QuestionCircleOutlined,
     PlayCircleOutlined,
     PlusOutlined,
     SearchOutlined,
@@ -45,7 +46,8 @@ import {
     UploadOutlined
 } from '@ant-design/icons';
 import ImageViewerModal from '../PredictionView/ImageViewerModal';
-import { projectsAPI, handleAPIError } from '../../../../services/api';
+import { projectsAPI, trainingAPI, handleAPIError } from '../../../../services/api';
+import TrainingReportModal from './TrainingReportModal';
 import './SahiPredictionView.css';
 
 const { Text, Title } = Typography;
@@ -391,6 +393,8 @@ const SahiPredictionView = ({ training }) => {
     }, [training?.id]);
 
     const projectId = training?.project_id || training?.projectId;
+
+    const [reportModalOpen, setReportModalOpen] = useState(false);
 
     const fetchProjectLabels = useCallback(async () => {
         if (!projectId) return;
@@ -1023,6 +1027,7 @@ const SahiPredictionView = ({ training }) => {
                         <Option value="any">Any Status</Option>
                         <Option value="pass"><CheckCircleOutlined style={{ color: '#52c41a' }} /> Verified Correct</Option>
                         <Option value="fail"><CloseCircleOutlined style={{ color: '#ff4d4f' }} /> Verified Wrong</Option>
+                        <Option value="doubt"><QuestionCircleOutlined style={{ color: '#fadb14' }} /> Doubtful</Option>
                         <Option value="unverified">Unverified Detections</Option>
                     </Select>
                 </div>
@@ -1451,6 +1456,12 @@ const SahiPredictionView = ({ training }) => {
                                 >
                                     Download Result
                                 </Button>
+                                <Button
+                                    size="small"
+                                    onClick={() => setReportModalOpen(true)}
+                                >
+                                    View Analytic Report
+                                </Button>
                             </Space>
                         </div>
                         {!selectedExp ? (
@@ -1522,6 +1533,15 @@ const SahiPredictionView = ({ training }) => {
                 duplicateMatchMap={{}}
                 sizeGroups={sizeGroups}
                 enableMissedInspection
+            />
+
+            <TrainingReportModal
+                open={reportModalOpen}
+                onClose={() => setReportModalOpen(false)}
+                projectId={projectId}
+                trainingId={training?.id}
+                trainingName={training?.name}
+                currentExperimentId={selectedExp?.id}
             />
         </div>
     );

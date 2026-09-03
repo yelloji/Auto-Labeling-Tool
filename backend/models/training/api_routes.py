@@ -3101,3 +3101,76 @@ async def get_missed_ground_truth(
         logger.error("errors.system", f"Error loading missed detections: {e}\n{error_details}", "missed_detections_error")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ── Analytics Report (PDF): dataset composition + per-image TP/FP/Doubt/Missing ──
+
+class AddExperimentToReportRequest(BaseModel):
+    experiment_id: str
+
+
+@router.get("/projects/{project_id}/training/{training_id}/report/status")
+def get_training_report_status(project_id: int, training_id: int, db: Session = Depends(get_db)):
+    from api.services.experiment_report_service import get_report_status
+    try:
+        return get_report_status(training_id, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/projects/{project_id}/training/{training_id}/report/data")
+def get_training_report_data(project_id: int, training_id: int, db: Session = Depends(get_db)):
+    from api.services.experiment_report_service import get_report_data
+    try:
+        return get_report_data(training_id, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/projects/{project_id}/training/{training_id}/report/addable-experiments")
+def get_addable_experiments(project_id: int, training_id: int, db: Session = Depends(get_db)):
+    from api.services.experiment_report_service import list_addable_experiments
+    try:
+        return list_addable_experiments(training_id, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/projects/{project_id}/training/{training_id}/report/can-add/{experiment_id}")
+def get_can_add_experiment_to_report(project_id: int, training_id: int, experiment_id: str, db: Session = Depends(get_db)):
+    from api.services.experiment_report_service import can_add_experiment
+    experiment = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    try:
+        return {"can_add": can_add_experiment(experiment, db)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/projects/{project_id}/training/{training_id}/report/add-experiment")
+def add_experiment_to_training_report(project_id: int, training_id: int, payload: AddExperimentToReportRequest, db: Session = Depends(get_db)):
+    from api.services.experiment_report_service import add_experiment_to_report
+    try:
+        pdf_path = add_experiment_to_report(training_id, payload.experiment_id, db)
+        return {"status": "success", "pdf_path": str(pdf_path)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("errors.system", f"Failed to add experiment to report: {str(e)}", "add_experiment_report_error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/projects/{project_id}/training/{training_id}/report/download")
+def download_training_report(project_id: int, training_id: int, db: Session = Depends(get_db)):
+    training = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not training or not training.run_dir:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    pdf_path = settings.BASE_DIR / training.run_dir / "report" / "report.pdf"
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="Report not generated yet")
+
+    return FileResponse(str(pdf_path), media_type="application/pdf", filename=f"{training.name}_report.pdf")
+

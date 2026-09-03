@@ -2473,6 +2473,32 @@ const ImageViewerModal = ({
                                                 }}>
                                                 ❌ FAIL
                                             </div>
+
+                                            {/* DOUBT Button */}
+                                            <div
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onVerify({
+                                                        image_name: fileName,
+                                                        class_name: displayClassName,
+                                                        bbox: d.bbox,
+                                                        status: 'doubt',
+                                                        experiment_id: experiment.id
+                                                    });
+                                                }}
+                                                style={{
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.65rem',
+                                                    fontWeight: 'bold',
+                                                    background: vStatus === 'doubt' ? 'rgba(250, 219, 20, 0.2)' : 'transparent',
+                                                    border: `1px solid ${vStatus === 'doubt' ? '#fadb14' : 'rgba(255,255,255,0.1)'}`,
+                                                    color: vStatus === 'doubt' ? '#fadb14' : 'rgba(255,255,255,0.3)',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s ease'
+                                                }}>
+                                                ❓ DOUBT
+                                            </div>
                                         </Space>}
 
                                         {/* Historical Hint Badge */}
@@ -2492,7 +2518,7 @@ const ImageViewerModal = ({
                                                                 <div key={idx} style={{ fontSize: '0.65rem', marginBottom: '4px', background: 'rgba(255,255,255,0.03)', padding: '2px 6px', borderRadius: '3px' }}>
                                                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                                                         <span style={{ color: '#fff' }}>{hv.training_name || 'Legacy'}</span>
-                                                                        <span style={{ color: hv.status === 'pass' ? '#52c41a' : '#ff4d4f', fontWeight: 'bold' }}>{hv.status.toUpperCase()}</span>
+                                                                        <span style={{ color: hv.status === 'pass' ? '#52c41a' : hv.status === 'doubt' ? '#fadb14' : '#ff4d4f', fontWeight: 'bold' }}>{hv.status.toUpperCase()}</span>
                                                                     </div>
                                                                     <div style={{ opacity: 0.5 }}>Expt: {hv.experiment_name || hv.experiment_id?.slice(0, 8)}</div>
                                                                 </div>
@@ -2546,6 +2572,19 @@ const ImageViewerModal = ({
                                         const boxW = Math.round(x2 - x1);
                                         const boxH = Math.round(y2 - y1);
 
+                                        const missedFileName = currentImage.split('/').pop();
+                                        const savedMissingVerification = verifications.find(v =>
+                                            v.experiment_id === experiment.id &&
+                                            v.status === 'missing' &&
+                                            (v.image_name === missedFileName) &&
+                                            v.class_name === missed.class_name &&
+                                            Math.abs(v.bbox[0] - x1) < 1.0 &&
+                                            Math.abs(v.bbox[1] - y1) < 1.0 &&
+                                            Math.abs(v.bbox[2] - x2) < 1.0 &&
+                                            Math.abs(v.bbox[3] - y2) < 1.0
+                                        );
+                                        const isMissedSaved = !!savedMissingVerification;
+
                                         return (
                                             <div
                                                 key={`missed-chip-${idx}`}
@@ -2575,6 +2614,23 @@ const ImageViewerModal = ({
                                                     </span>
                                                 </Text>
                                                 <Tag
+                                                    title={isMissedSaved ? 'Click to remove this saved mark' : 'Click to save as missing'}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (isMissedSaved) {
+                                                            if (savedMissingVerification?.id && onDeleteVerification) {
+                                                                onDeleteVerification(savedMissingVerification.id);
+                                                            }
+                                                            return;
+                                                        }
+                                                        onVerify({
+                                                            image_name: missedFileName,
+                                                            class_name: missed.class_name,
+                                                            bbox: missed.bbox,
+                                                            status: 'missing',
+                                                            experiment_id: experiment.id
+                                                        });
+                                                    }}
                                                     style={{
                                                         margin: 0,
                                                         height: '18px',
@@ -2582,12 +2638,13 @@ const ImageViewerModal = ({
                                                         borderRadius: '3px',
                                                         fontSize: '0.62rem',
                                                         fontWeight: 800,
-                                                        color: '#f0f0f0',
-                                                        border: '1px solid rgba(255,255,255,0.28)',
-                                                        background: 'rgba(255,255,255,0.08)'
+                                                        color: isMissedSaved ? '#ff8c00' : '#f0f0f0',
+                                                        border: `1px solid ${isMissedSaved ? '#ff8c00' : 'rgba(255,255,255,0.28)'}`,
+                                                        background: isMissedSaved ? 'rgba(255,140,0,0.16)' : 'rgba(255,255,255,0.08)',
+                                                        cursor: 'pointer'
                                                     }}
                                                 >
-                                                    MISSED
+                                                    {isMissedSaved ? 'SAVED ✕' : 'MISSED'}
                                                 </Tag>
                                             </div>
                                         );

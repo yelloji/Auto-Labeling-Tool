@@ -55,3 +55,6 @@ seaborn>=0.13.0
 # Image processing for transformation preview
 opencv-contrib-python>=4.8.0  # Additional OpenCV modules for advanced transformations
 scikit-image>=0.21.0  # Additional image processing utilities
+
+# Experiment analytics report (PDF)
+reportlab>=4.0.0

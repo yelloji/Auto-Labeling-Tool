@@ -1014,6 +1014,38 @@ export const trainingAPI = {
     const response = await api.post('/api/v1/training/config/resolve', { framework, task, overrides });
     return response.data;
   },
+  getReportStatus: async (projectId, trainingId) => {
+    const response = await api.get(`/api/v1/projects/${projectId}/training/${trainingId}/report/status`);
+    return response.data;
+  },
+  getReportData: async (projectId, trainingId) => {
+    const response = await api.get(`/api/v1/projects/${projectId}/training/${trainingId}/report/data`);
+    return response.data;
+  },
+  getAddableExperiments: async (projectId, trainingId) => {
+    const response = await api.get(`/api/v1/projects/${projectId}/training/${trainingId}/report/addable-experiments`);
+    return response.data;
+  },
+  canAddExperimentToReport: async (projectId, trainingId, experimentId) => {
+    const response = await api.get(`/api/v1/projects/${projectId}/training/${trainingId}/report/can-add/${experimentId}`);
+    return response.data;
+  },
+  addExperimentToReport: async (projectId, trainingId, experimentId) => {
+    const response = await api.post(`/api/v1/projects/${projectId}/training/${trainingId}/report/add-experiment`, { experiment_id: experimentId });
+    return response.data;
+  },
+  downloadReport: async (projectId, trainingId) => {
+    const response = await api.get(`/api/v1/projects/${projectId}/training/${trainingId}/report/download`, {
+      responseType: 'blob'
+    });
+    const contentDisposition = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+    let filename = `training_${trainingId}_report.pdf`;
+    if (contentDisposition) {
+      const match = /filename="?([^";]+)"?/i.exec(contentDisposition);
+      if (match && match[1]) filename = match[1];
+    }
+    return { blob: response.data, filename };
+  },
   datasetSummary: async ({ releaseDir, dataYamlPath }) => {
     const params = new URLSearchParams();
     if (releaseDir) params.append('release_dir', releaseDir);
