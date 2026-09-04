@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Typography, Select, Button, Spin, Empty, Tag, Space, Row, Col, Divider, Tooltip, Switch, InputNumber } from 'antd';
+import { Card, Typography, Select, Button, Spin, Empty, Tag, Space, Row, Col, Divider, Tooltip, Switch, InputNumber, Table } from 'antd';
 import { SwapOutlined, CheckCircleOutlined, CloseCircleOutlined, InfoCircleOutlined, PlusOutlined, MinusOutlined, WarningOutlined, LinkOutlined } from '@ant-design/icons';
 import { trainingAPI, projectsAPI } from '../../../../services/api';
 import DeltaGalleryModal from './DeltaGalleryModal';
@@ -1228,6 +1228,146 @@ const SahiPixelExperimentPanel = ({ label, stats, coverageMode }) => {
     );
 };
 
+const SAHI_STATUS_COLOR = { tp: '#3f8600', partial_missing: '#ad6800', missing: '#fa8c16' };
+const SAHI_STATUS_LABEL = { tp: 'TP', partial_missing: 'Partial Missing', missing: 'Missing' };
+
+const SahiPixelDetailTable = ({ baselineStats, challengerStats, coverageMode }) => {
+    // One row per (image, GT crack) — since both models are scored against the
+    // exact same GT set, baseline and challenger results for that same crack
+    // sit side by side in one row, instead of two separate blocks you'd have
+    // to scroll between to compare.
+    const challengerByKey = {};
+    for (const img of challengerStats.per_image) {
+        for (const gt of img.gt_results) {
+            challengerByKey[`${img.image_name}|${gt.gt_index}`] = gt;
+        }
+    }
+
+    // Both are "who's ahead for this crack" comparisons — kept as separate
+    // signals, not combined into one score, since coverage and fragment count
+    // measure different things: coverage is "how much was found," matched
+    // count is "how cleanly/confidently was it found."
+    const pickWinner = (b, c, higherIsBetter = false, lowerIsBetter = false) => {
+        if (b === null && c === null) return null;
+        if (b === null) return 'Challenger';
+        if (c === null) return 'Baseline';
+        if (b === c) return 'Tie';
+        if (higherIsBetter) return b > c ? 'Baseline' : 'Challenger';
+        if (lowerIsBetter) return b < c ? 'Baseline' : 'Challenger';
+        return null;
+    };
+
+    const rows = [];
+    for (const img of baselineStats.per_image) {
+        img.gt_results.forEach((baseGt, i) => {
+            const chalGt = challengerByKey[`${img.image_name}|${baseGt.gt_index}`];
+            const baseMatched = baseGt.matched_pred_indices.length;
+            const chalMatched = chalGt ? chalGt.matched_pred_indices.length : null;
+            const baseCoverage = baseGt[`coverage_${coverageMode}`];
+            const chalCoverage = chalGt ? chalGt[`coverage_${coverageMode}`] : null;
+            rows.push({
+                key: `${img.image_name}-${baseGt.gt_index}`,
+                image_name: img.image_name,
+                image_row_span: i === 0 ? img.gt_results.length : 0,
+                gt_index: baseGt.gt_index + 1,
+                base_matched: baseMatched,
+                base_coverage: baseCoverage,
+                base_status: baseGt.status,
+                chal_matched: chalMatched,
+                chal_coverage: chalCoverage,
+                chal_status: chalGt ? chalGt.status : null,
+                best_winner: pickWinner(baseCoverage, chalCoverage, true, false),
+                // 0-matched cases (missing) shouldn't win on "cleaner" — that's
+                // absence, not efficiency, so exclude them from this comparison.
+                cleaner_winner: (baseMatched > 0 && chalMatched !== null && chalMatched > 0)
+                    ? pickWinner(baseMatched, chalMatched, false, true)
+                    : null,
+            });
+        });
+    }
+
+    const tallyWins = (key) => {
+        const t = { Baseline: 0, Challenger: 0, Tie: 0 };
+        for (const r of rows) if (r[key] && t[r[key]] !== undefined) t[r[key]]++;
+        return t;
+    };
+    const bestTally = tallyWins('best_winner');
+    const cleanerTally = tallyWins('cleaner_winner');
+
+    const winnerTag = (w) => {
+        if (!w) return <Text type="secondary">N/A</Text>;
+        if (w === 'Tie') return <Tag>Tie</Tag>;
+        return <Tag color={w === 'Baseline' ? 'geekblue' : 'purple'}>{w}</Tag>;
+    };
+
+    const statusRender = (s) => s
+        ? <Tag color={SAHI_STATUS_COLOR[s]} style={{ color: '#fff' }}>{SAHI_STATUS_LABEL[s]}</Tag>
+        : <Text type="secondary">N/A</Text>;
+    const covRender = (v) => (v === null || v === undefined ? 'N/A' : `${(v * 100).toFixed(1)}%`);
+
+    const columns = [
+        {
+            title: 'Image', dataIndex: 'image_name', key: 'image_name', ellipsis: true, width: 220,
+            onCell: (record) => ({ rowSpan: record.image_row_span }),
+        },
+        { title: 'GT #', dataIndex: 'gt_index', key: 'gt_index', width: 60, align: 'center' },
+        {
+            title: 'Baseline', children: [
+                { title: 'Matched', dataIndex: 'base_matched', key: 'base_matched', width: 90, align: 'center' },
+                { title: 'Coverage', dataIndex: 'base_coverage', key: 'base_coverage', width: 100, align: 'center', render: covRender },
+                { title: 'Status', dataIndex: 'base_status', key: 'base_status', width: 140, align: 'center', render: statusRender },
+            ],
+        },
+        {
+            title: 'Challenger', children: [
+                { title: 'Matched', dataIndex: 'chal_matched', key: 'chal_matched', width: 90, align: 'center' },
+                { title: 'Coverage', dataIndex: 'chal_coverage', key: 'chal_coverage', width: 100, align: 'center', render: covRender },
+                { title: 'Status', dataIndex: 'chal_status', key: 'chal_status', width: 140, align: 'center', render: statusRender },
+            ],
+        },
+        {
+            title: 'Best', dataIndex: 'best_winner', key: 'best_winner', width: 110, align: 'center',
+            render: (w) => winnerTag(w),
+        },
+        {
+            title: 'Cleaner Detection', dataIndex: 'cleaner_winner', key: 'cleaner_winner', width: 130, align: 'center',
+            render: (w) => winnerTag(w),
+        },
+    ];
+
+    return (
+        <div style={{ marginTop: 20 }}>
+            <Title level={5}>Per-Image, Per-Crack Detail</Title>
+            <Text type="secondary">Each row is one real GT crack — Baseline and Challenger results for that same crack, side by side.</Text>
+
+            <div style={{ marginTop: 12, marginBottom: 12, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                <div>
+                    <Text strong style={{ fontSize: 13 }}>Best (coverage) totals: </Text>
+                    <Tag color="geekblue">Baseline {bestTally.Baseline}</Tag>
+                    <Tag color="purple">Challenger {bestTally.Challenger}</Tag>
+                    <Tag>Tie {bestTally.Tie}</Tag>
+                </div>
+                <div>
+                    <Text strong style={{ fontSize: 13 }}>Cleaner Detection totals: </Text>
+                    <Tag color="geekblue">Baseline {cleanerTally.Baseline}</Tag>
+                    <Tag color="purple">Challenger {cleanerTally.Challenger}</Tag>
+                    <Tag>Tie {cleanerTally.Tie}</Tag>
+                </div>
+            </div>
+
+            <Table
+                size="small"
+                style={{ marginTop: 10 }}
+                columns={columns}
+                dataSource={rows}
+                pagination={false}
+                scroll={{ y: 480 }}
+                bordered
+            />
+        </div>
+    );
+};
+
 const SahiPixelComparisonPanel = ({ data, coverageMode }) => {
     const modeLabel = { length: 'Length (gaps only)', width: 'Width (thickness)', total: 'Total (area, combined)' }[coverageMode];
     const baseAcc = data.baseline.metrics_by_mode[coverageMode].accuracy;
@@ -1254,6 +1394,7 @@ const SahiPixelComparisonPanel = ({ data, coverageMode }) => {
                     <SahiPixelExperimentPanel label="Challenger" stats={data.challenger} coverageMode={coverageMode} />
                 </Col>
             </Row>
+            <SahiPixelDetailTable baselineStats={data.baseline} challengerStats={data.challenger} coverageMode={coverageMode} />
         </div>
     );
 };
