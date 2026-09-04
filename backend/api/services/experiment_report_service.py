@@ -21,7 +21,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-_STAT_COLORS = {"tp": "#3f8600", "fp": "#cf1322", "doubt": "#ad8b00", "missing": "#d4630a"}
+_STAT_COLORS = {"tp": "#3f8600", "fp": "#cf1322", "doubt": "#ad8b00", "missing": "#d4630a", "partial_missing": "#ad6800"}
 
 
 def _parse_json(value, default):
@@ -117,7 +117,7 @@ def _both_metrics(totals: dict) -> tuple:
 
 
 def _combined_totals_and_metrics(sections: list) -> dict:
-    combined = {"tp": 0, "fp": 0, "doubt": 0, "missing": 0}
+    combined = {"tp": 0, "fp": 0, "doubt": 0, "missing": 0, "partial_missing": 0}
     for section in sections:
         for k in combined:
             combined[k] += section["totals"][k]
@@ -137,7 +137,7 @@ def _get_experiment_section(experiment: ModelExperiment, db: Session) -> dict:
 
     per_image = {}
     for r in rows:
-        entry = per_image.setdefault(r.image_name, {"image_name": r.image_name, "tp": 0, "fp": 0, "doubt": 0, "missing": 0})
+        entry = per_image.setdefault(r.image_name, {"image_name": r.image_name, "tp": 0, "fp": 0, "doubt": 0, "missing": 0, "partial_missing": 0})
         if r.status == "pass":
             entry["tp"] += 1
         elif r.status == "fail":
@@ -146,12 +146,14 @@ def _get_experiment_section(experiment: ModelExperiment, db: Session) -> dict:
             entry["doubt"] += 1
         elif r.status == "missing":
             entry["missing"] += 1
+        elif r.status == "partial_missing":
+            entry["partial_missing"] += 1
 
     per_image_list = sorted(per_image.values(), key=lambda x: x["image_name"])
 
-    totals = {"tp": 0, "fp": 0, "doubt": 0, "missing": 0}
+    totals = {"tp": 0, "fp": 0, "doubt": 0, "missing": 0, "partial_missing": 0}
     for entry in per_image_list:
-        for k in ("tp", "fp", "doubt", "missing"):
+        for k in ("tp", "fp", "doubt", "missing", "partial_missing"):
             totals[k] += entry[k]
 
     metrics_excluding_doubt, metrics_including_doubt = _both_metrics(totals)
@@ -254,14 +256,14 @@ def _render_pdf(pdf_path: Path, training: TrainingSession, composition: dict, se
     def stat_row(totals):
         """One row of big colored TP/FP/Doubt/Missing numbers, like the on-screen stat cards."""
         cells = []
-        for key, label in (("tp", "True Positive"), ("fp", "False Positive"), ("doubt", "Doubt"), ("missing", "Missing")):
+        for key, label in (("tp", "True Positive"), ("fp", "False Positive"), ("doubt", "Doubt"), ("missing", "Missing"), ("partial_missing", "Partial Missing")):
             color = colors.HexColor(_STAT_COLORS[key])
             value_style = ParagraphStyle(f"StatValue_{key}", parent=stat_value_style, textColor=color)
-            cells.append([Paragraph(label, stat_label_style), Paragraph(str(totals[key]), value_style)])
-        col_w = 105
+            cells.append([Paragraph(label, stat_label_style), Paragraph(str(totals.get(key, 0)), value_style)])
+        col_w = 84
         table = Table(
             [[c[0] for c in cells], [c[1] for c in cells]],
-            colWidths=[col_w] * 4, hAlign="LEFT"
+            colWidths=[col_w] * 5, hAlign="LEFT"
         )
         table.setStyle(TableStyle([
             ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#e0e0e0")),
@@ -353,7 +355,10 @@ def _render_pdf(pdf_path: Path, training: TrainingSession, composition: dict, se
         Paragraph('<font color="#cf1322"><b>FP</b></font> = false alarm, no crack there', normal),
     ], [
         Paragraph('<font color="#ad8b00"><b>Doubt</b></font> = unclear, maybe real or not', normal),
-        Paragraph('<font color="#d4630a"><b>Missing</b></font> = real crack, model missed it', normal),
+        Paragraph('<font color="#d4630a"><b>Missing</b></font> = real crack, model missed it entirely', normal),
+    ], [
+        Paragraph('<font color="#ad6800"><b>Partial Missing</b></font> = model found some of the crack, not all of it', normal),
+        Paragraph('', normal),
     ]]
     legend_table = Table(legend_rows, colWidths=[220, 220], hAlign="LEFT")
     legend_table.setStyle(TableStyle([
@@ -383,11 +388,11 @@ def _render_pdf(pdf_path: Path, training: TrainingSession, composition: dict, se
         story.append(metrics_block(section["metrics_excluding_doubt"], section["metrics_including_doubt"]))
         story.append(Spacer(1, 14))
 
-        img_rows = [["Image", "TP", "FP", "Doubt", "Missing"]]
+        img_rows = [["Image", "TP", "FP", "Doubt", "Missing", "Partial Missing"]]
         for img in section["per_image"]:
-            img_rows.append([img["image_name"], img["tp"], img["fp"], img["doubt"], img["missing"]])
+            img_rows.append([img["image_name"], img["tp"], img["fp"], img["doubt"], img["missing"], img.get("partial_missing", 0)])
         totals = section["totals"]
-        img_rows.append(["TOTAL", totals["tp"], totals["fp"], totals["doubt"], totals["missing"]])
+        img_rows.append(["TOTAL", totals["tp"], totals["fp"], totals["doubt"], totals["missing"], totals.get("partial_missing", 0)])
 
         img_table = Table(img_rows, hAlign="LEFT", repeatRows=1)
         img_table.setStyle(TableStyle([
@@ -447,5 +452,32 @@ def add_experiment_to_report(training_id: int, experiment_id: str, db: Session) 
     composition = _get_dataset_composition(training, db)
     pdf_path = report_dir / "report.pdf"
     _render_pdf(pdf_path, training, composition, sections)
+
+    return pdf_path
+
+
+def remove_experiment_from_report(training_id: int, experiment_id: str, db: Session) -> Path:
+    training = db.query(TrainingSession).filter(TrainingSession.id == training_id).first()
+    if not training:
+        raise ValueError("Training session not found")
+    if not training.run_dir:
+        raise ValueError("Training session has no run directory")
+
+    report_dir = settings.BASE_DIR / training.run_dir / "report"
+    sections_path = report_dir / "report_sections.json"
+
+    sections = _parse_json(sections_path.read_text(encoding="utf-8"), []) if sections_path.exists() else []
+    if not isinstance(sections, list):
+        sections = []
+
+    sections = [s for s in sections if s.get("experiment_id") != experiment_id]
+    sections_path.write_text(json.dumps(sections, indent=2), encoding="utf-8")
+
+    composition = _get_dataset_composition(training, db)
+    pdf_path = report_dir / "report.pdf"
+    if sections:
+        _render_pdf(pdf_path, training, composition, sections)
+    elif pdf_path.exists():
+        pdf_path.unlink()
 
     return pdf_path

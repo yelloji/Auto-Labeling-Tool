@@ -13,6 +13,7 @@ const TrainingReportModal = ({ open, onClose, projectId, trainingId, trainingNam
     const [addableExperiments, setAddableExperiments] = useState([]);
     const [selectedToAdd, setSelectedToAdd] = useState(null);
     const [adding, setAdding] = useState(false);
+    const [removingId, setRemovingId] = useState(null);
 
     const fetchAll = useCallback(async () => {
         if (!projectId || !trainingId) return;
@@ -51,6 +52,19 @@ const TrainingReportModal = ({ open, onClose, projectId, trainingId, trainingNam
             handleAPIError(error, 'Failed to add experiment to report');
         } finally {
             setAdding(false);
+        }
+    };
+
+    const handleRemove = async (experimentId) => {
+        setRemovingId(experimentId);
+        try {
+            await trainingAPI.removeExperimentFromReport(projectId, trainingId, experimentId);
+            message.success('Removed from report.');
+            fetchAll();
+        } catch (error) {
+            handleAPIError(error, 'Failed to remove experiment from report');
+        } finally {
+            setRemovingId(null);
         }
     };
 
@@ -122,7 +136,8 @@ const TrainingReportModal = ({ open, onClose, projectId, trainingId, trainingNam
                         <b>TP</b> = correctly detected &nbsp;&nbsp;
                         <b>FP</b> = false alarm, no crack there &nbsp;&nbsp;
                         <b>Doubt</b> = unclear, maybe real or not &nbsp;&nbsp;
-                        <b>Missing</b> = real crack, model missed it
+                        <b>Missing</b> = real crack, model missed it entirely &nbsp;&nbsp;
+                        <b>Partial Missing</b> = model found some of the crack, not all of it
                     </Text>
 
                     <Divider />
@@ -153,14 +168,25 @@ const TrainingReportModal = ({ open, onClose, projectId, trainingId, trainingNam
                     ) : (
                         sections.map((section) => (
                             <div key={section.experiment_id} style={{ marginBottom: 24 }}>
-                                <Title level={5} style={{ marginBottom: 4 }}>
-                                    {String(section.split).toUpperCase()} Set — {section.experiment_name} ({section.image_count} images)
-                                </Title>
+                                <Space style={{ marginBottom: 4 }}>
+                                    <Title level={5} style={{ margin: 0 }}>
+                                        {String(section.split).toUpperCase()} Set — {section.experiment_name} ({section.image_count} images)
+                                    </Title>
+                                    <Button
+                                        size="small"
+                                        danger
+                                        loading={removingId === section.experiment_id}
+                                        onClick={() => handleRemove(section.experiment_id)}
+                                    >
+                                        Remove from Report
+                                    </Button>
+                                </Space>
                                 <Row gutter={16} style={{ marginBottom: 12 }}>
-                                    <Col span={6}><Statistic title="True Positive" value={section.totals.tp} valueStyle={{ color: '#3f8600' }} /></Col>
-                                    <Col span={6}><Statistic title="False Positive" value={section.totals.fp} valueStyle={{ color: '#cf1322' }} /></Col>
-                                    <Col span={6}><Statistic title="Doubt" value={section.totals.doubt} valueStyle={{ color: '#d4b106' }} /></Col>
-                                    <Col span={6}><Statistic title="Missing" value={section.totals.missing} valueStyle={{ color: '#fa8c16' }} /></Col>
+                                    <Col span={5}><Statistic title="True Positive" value={section.totals.tp} valueStyle={{ color: '#3f8600' }} /></Col>
+                                    <Col span={5}><Statistic title="False Positive" value={section.totals.fp} valueStyle={{ color: '#cf1322' }} /></Col>
+                                    <Col span={5}><Statistic title="Doubt" value={section.totals.doubt} valueStyle={{ color: '#d4b106' }} /></Col>
+                                    <Col span={5}><Statistic title="Missing" value={section.totals.missing} valueStyle={{ color: '#fa8c16' }} /></Col>
+                                    <Col span={4}><Statistic title="Partial Missing" value={section.totals.partial_missing || 0} valueStyle={{ color: '#ad6800' }} /></Col>
                                 </Row>
                                 <Table
                                     size="small"
@@ -173,6 +199,7 @@ const TrainingReportModal = ({ open, onClose, projectId, trainingId, trainingNam
                                         { title: 'FP', dataIndex: 'fp', key: 'fp', align: 'center' },
                                         { title: 'Doubt', dataIndex: 'doubt', key: 'doubt', align: 'center' },
                                         { title: 'Missing', dataIndex: 'missing', key: 'missing', align: 'center' },
+                                        { title: 'Partial Missing', dataIndex: 'partial_missing', key: 'partial_missing', align: 'center' },
                                     ]}
                                     summary={() => (
                                         <Table.Summary.Row>
@@ -181,6 +208,7 @@ const TrainingReportModal = ({ open, onClose, projectId, trainingId, trainingNam
                                             <Table.Summary.Cell index={2} align="center"><b>{section.totals.fp}</b></Table.Summary.Cell>
                                             <Table.Summary.Cell index={3} align="center"><b>{section.totals.doubt}</b></Table.Summary.Cell>
                                             <Table.Summary.Cell index={4} align="center"><b>{section.totals.missing}</b></Table.Summary.Cell>
+                                            <Table.Summary.Cell index={5} align="center"><b>{section.totals.partial_missing || 0}</b></Table.Summary.Cell>
                                         </Table.Summary.Row>
                                     )}
                                 />

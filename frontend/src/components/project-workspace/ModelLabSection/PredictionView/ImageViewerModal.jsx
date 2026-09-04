@@ -2585,6 +2585,18 @@ const ImageViewerModal = ({
                                         );
                                         const isMissedSaved = !!savedMissingVerification;
 
+                                        const savedPartialMissingVerification = verifications.find(v =>
+                                            v.experiment_id === experiment.id &&
+                                            v.status === 'partial_missing' &&
+                                            (v.image_name === missedFileName) &&
+                                            v.class_name === missed.class_name &&
+                                            Math.abs(v.bbox[0] - x1) < 1.0 &&
+                                            Math.abs(v.bbox[1] - y1) < 1.0 &&
+                                            Math.abs(v.bbox[2] - x2) < 1.0 &&
+                                            Math.abs(v.bbox[3] - y2) < 1.0
+                                        );
+                                        const isPartialMissedSaved = !!savedPartialMissingVerification;
+
                                         return (
                                             <div
                                                 key={`missed-chip-${idx}`}
@@ -2645,6 +2657,39 @@ const ImageViewerModal = ({
                                                     }}
                                                 >
                                                     {isMissedSaved ? 'SAVED ✕' : 'MISSED'}
+                                                </Tag>
+                                                <Tag
+                                                    title={isPartialMissedSaved ? 'Click to remove this saved mark' : 'Click to save as partially missing (small part of the crack missed)'}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (isPartialMissedSaved) {
+                                                            if (savedPartialMissingVerification?.id && onDeleteVerification) {
+                                                                onDeleteVerification(savedPartialMissingVerification.id);
+                                                            }
+                                                            return;
+                                                        }
+                                                        onVerify({
+                                                            image_name: missedFileName,
+                                                            class_name: missed.class_name,
+                                                            bbox: missed.bbox,
+                                                            status: 'partial_missing',
+                                                            experiment_id: experiment.id
+                                                        });
+                                                    }}
+                                                    style={{
+                                                        margin: 0,
+                                                        height: '18px',
+                                                        lineHeight: '16px',
+                                                        borderRadius: '3px',
+                                                        fontSize: '0.62rem',
+                                                        fontWeight: 800,
+                                                        color: isPartialMissedSaved ? '#ad6800' : '#f0f0f0',
+                                                        border: `1px solid ${isPartialMissedSaved ? '#ad6800' : 'rgba(255,255,255,0.28)'}`,
+                                                        background: isPartialMissedSaved ? 'rgba(173,104,0,0.16)' : 'rgba(255,255,255,0.08)',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    {isPartialMissedSaved ? 'SAVED ✕' : 'PARTIAL'}
                                                 </Tag>
                                             </div>
                                         );
