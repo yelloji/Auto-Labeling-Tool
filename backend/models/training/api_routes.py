@@ -602,6 +602,40 @@ async def compare_experiments(
         logger.error("api.compare", f"Failed to compare experiments: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/experiments/compare-sahi-pixel")
+async def compare_experiments_sahi_pixel(
+    baseline_id: str,
+    challenger_id: str,
+    coverage_mode: str = "length",
+    full_coverage_threshold: float = 0.85,
+    db: Session = Depends(get_db)
+):
+    """
+    SAHI-aware comparison: uses real pixel-coverage GT matching (groups all
+    predictions belonging to one real crack, measures actual pixel/length/width
+    overlap) instead of the standard 1-GT-to-1-prediction matcher, which wrongly
+    flags real crack fragments (from SAHI tile splitting) as false positives.
+
+    coverage_mode: 'length' (default, gaps only, width-blind), 'width'
+    (thickness of what IS detected), or 'total' (raw pixel area, both combined).
+    full_coverage_threshold: coverage fraction (0-1) at/above which a GT crack
+    counts as TP rather than Partial Missing. Default 0.85 (85%).
+    """
+    from utils.sahi_comparison_engine import calculate_sahi_pixel_comparison
+    try:
+        result = calculate_sahi_pixel_comparison(
+            db, baseline_id, challenger_id, coverage_mode=coverage_mode,
+            full_coverage_threshold=full_coverage_threshold
+        )
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        return result
+    except HTTPException: raise
+    except Exception as e:
+        logger.error("api.compare_sahi_pixel", f"Failed to compute SAHI pixel comparison: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Training session upsert/get (identity fields)
 class SessionUpsert(BaseModel):
     project_id: int
@@ -3159,6 +3193,19 @@ def add_experiment_to_training_report(project_id: int, training_id: int, payload
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("errors.system", f"Failed to add experiment to report: {str(e)}", "add_experiment_report_error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/projects/{project_id}/training/{training_id}/report/remove-experiment")
+def remove_experiment_from_training_report(project_id: int, training_id: int, payload: AddExperimentToReportRequest, db: Session = Depends(get_db)):
+    from api.services.experiment_report_service import remove_experiment_from_report
+    try:
+        remove_experiment_from_report(training_id, payload.experiment_id, db)
+        return {"status": "success"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("errors.system", f"Failed to remove experiment from report: {str(e)}", "remove_experiment_report_error")
         raise HTTPException(status_code=500, detail=str(e))
 
 

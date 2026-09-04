@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Typography, Select, Button, Spin, Empty, Tag, Space, Row, Col, Divider, Tooltip, Switch } from 'antd';
+import { Card, Typography, Select, Button, Spin, Empty, Tag, Space, Row, Col, Divider, Tooltip, Switch, InputNumber } from 'antd';
 import { SwapOutlined, CheckCircleOutlined, CloseCircleOutlined, InfoCircleOutlined, PlusOutlined, MinusOutlined, WarningOutlined, LinkOutlined } from '@ant-design/icons';
 import { trainingAPI, projectsAPI } from '../../../../services/api';
 import DeltaGalleryModal from './DeltaGalleryModal';
@@ -655,6 +655,12 @@ const ComparisonEngineView = ({ currentTraining }) => {
     const [loading, setLoading] = useState(false);
     const [comparisonData, setComparisonData] = useState(null);
 
+    // SAHI pixel-coverage mode
+    const [sahiModeEnabled, setSahiModeEnabled] = useState(false);
+    const [coverageMode, setCoverageMode] = useState('length');
+    const [coverageThresholdPct, setCoverageThresholdPct] = useState(85);
+    const [sahiComparisonData, setSahiComparisonData] = useState(null);
+
     // Dataset Overlap
     const [overlapInfo, setOverlapInfo] = useState(null); // { common, totalA, totalB, totalC }
     const [overlapLoading, setOverlapLoading] = useState(false);
@@ -681,17 +687,19 @@ const ComparisonEngineView = ({ currentTraining }) => {
         fetch();
     }, [currentTraining]);
 
-    // Generic experiment fetcher
-    const fetchExps = async (tId, setExps) => {
+    // Generic experiment fetcher. In SAHI Pixel Mode, "sahi_prediction" runs
+    // are the only kind that apply, so they're included alongside normal ones.
+    const fetchExps = async (tId, setExps, allowSahi) => {
         if (!tId) { setExps([]); return; }
         try {
             const exps = await projectsAPI.getTrainingExperiments(tId);
-            setExps(exps.filter(e => e.experiment_type === 'prediction' && e.status === 'completed'));
+            const allowedTypes = allowSahi ? ['prediction', 'sahi_prediction'] : ['prediction'];
+            setExps(exps.filter(e => allowedTypes.includes(e.experiment_type) && e.status === 'completed'));
         } catch (e) { setExps([]); }
     };
 
-    useEffect(() => { fetchExps(baselineTrainingId, setBaselineExperiments); }, [baselineTrainingId]);
-    useEffect(() => { fetchExps(challengerTrainingId, setChallengerExperiments); }, [challengerTrainingId]);
+    useEffect(() => { fetchExps(baselineTrainingId, setBaselineExperiments, sahiModeEnabled); }, [baselineTrainingId, sahiModeEnabled]);
+    useEffect(() => { fetchExps(challengerTrainingId, setChallengerExperiments, sahiModeEnabled); }, [challengerTrainingId, sahiModeEnabled]);
     useEffect(() => { fetchExps(challengerCTrainingId, setChallengerCExperiments); }, [challengerCTrainingId]);
 
     // Calculate dataset overlap whenever selection changes
@@ -760,6 +768,21 @@ const ComparisonEngineView = ({ currentTraining }) => {
         if (!isCompareReady) return;
         setLoading(true);
         setComparisonData(null);
+        setSahiComparisonData(null);
+
+        if (sahiModeEnabled) {
+            try {
+                const sahiData = await projectsAPI.compareSahiPixel(baselineId, challengerId, coverageMode, coverageThresholdPct / 100);
+                setSahiComparisonData(sahiData);
+            } catch (err) {
+                console.error(err);
+                setSahiComparisonData({ error: err.response?.data?.detail || err.message || 'Failed to compare' });
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+
         try {
             const data = await projectsAPI.compareExperiments(
                 currentTraining.projectId,
@@ -950,6 +973,48 @@ const ComparisonEngineView = ({ currentTraining }) => {
                         {modelCEnabled ? 'Remove Model C' : 'Add a third model to compare (Model C)'}
                     </Text>
                 </div>
+
+                {/* Toggle SAHI Pixel Mode */}
+                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <Switch
+                        checked={sahiModeEnabled}
+                        onChange={(enabled) => { setSahiModeEnabled(enabled); setSahiComparisonData(null); setComparisonData(null); }}
+                        size="small"
+                    />
+                    <Tooltip title="Uses real pixel-coverage GT matching instead of box matching — groups all predictions belonging to one real crack (fixing the SAHI tile-fragmentation false-positive problem) and measures real coverage.">
+                        <Text type="secondary" style={{ fontSize: 13 }}>
+                            SAHI Pixel Mode {sahiModeEnabled ? '(on)' : '(off)'} <InfoCircleOutlined style={{ marginLeft: 4 }} />
+                        </Text>
+                    </Tooltip>
+                    {sahiModeEnabled && (
+                        <>
+                            <Text type="secondary" style={{ fontSize: 13, marginLeft: 12 }}>Coverage:</Text>
+                            <Select
+                                value={coverageMode}
+                                onChange={setCoverageMode}
+                                size="small"
+                                style={{ width: 160 }}
+                            >
+                                <Option value="length">Length (gaps only)</Option>
+                                <Option value="width">Width (thickness)</Option>
+                                <Option value="total">Total (area, combined)</Option>
+                            </Select>
+                            <Tooltip title="Coverage % at/above which a GT crack counts as TP rather than Partial Missing. Default 85%.">
+                                <Text type="secondary" style={{ fontSize: 13, marginLeft: 12 }}>TP threshold:</Text>
+                            </Tooltip>
+                            <InputNumber
+                                value={coverageThresholdPct}
+                                onChange={(v) => setCoverageThresholdPct(v ?? 85)}
+                                min={0}
+                                max={100}
+                                step={0.5}
+                                size="small"
+                                style={{ width: 80 }}
+                                addonAfter="%"
+                            />
+                        </>
+                    )}
+                </div>
             </div>
 
             <Divider />
@@ -961,6 +1026,19 @@ const ComparisonEngineView = ({ currentTraining }) => {
                     <Title level={4} style={{ marginTop: 16 }}>Running Detailed Delta Analysis...</Title>
                     <Text type="secondary">Matching bounding boxes across isolated model outputs.</Text>
                 </div>
+            ) : sahiModeEnabled ? (
+                sahiComparisonData ? (
+                    sahiComparisonData.error ? (
+                        <Empty description={`Error: ${sahiComparisonData.error}`} />
+                    ) : (
+                        <SahiPixelComparisonPanel data={sahiComparisonData} coverageMode={coverageMode} />
+                    )
+                ) : (
+                    <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description="Select a Baseline and Challenger model, then click Compare — SAHI Pixel Mode is on."
+                    />
+                )
             ) : comparisonData ? (
                 comparisonData.error ? (
                     <Empty description={`Error: ${comparisonData.error}`} />
@@ -1124,5 +1202,60 @@ const Statistic = ({ title, value, valueStyle }) => (
         <div style={{ fontSize: '24px', ...valueStyle }}>{value}</div>
     </div>
 );
+
+const fmtPct = (v) => (v === null || v === undefined ? 'N/A' : `${(v * 100).toFixed(1)}%`);
+
+const SahiPixelExperimentPanel = ({ label, stats, coverageMode }) => {
+    const m = stats.metrics_by_mode[coverageMode];
+    const t = m.totals;
+    return (
+        <Card size="small" bordered={false} style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.05)', height: '100%' }}>
+            <Title level={5} style={{ marginBottom: 2 }}>{label}</Title>
+            <Text type="secondary">{stats.experiment_name}</Text>
+            <Row gutter={12} style={{ marginTop: 16 }}>
+                <Col span={6}><Statistic title="True Positive" value={t.tp} valueStyle={{ color: '#3f8600' }} /></Col>
+                <Col span={6}><Statistic title="False Positive" value={t.fp} valueStyle={{ color: '#cf1322' }} /></Col>
+                <Col span={6}><Statistic title="Partial Missing" value={t.partial_missing} valueStyle={{ color: '#ad6800' }} /></Col>
+                <Col span={6}><Statistic title="Missing" value={t.missing} valueStyle={{ color: '#fa8c16' }} /></Col>
+            </Row>
+            <Divider style={{ margin: '16px 0' }} />
+            <Row gutter={12}>
+                <Col span={8}><Statistic title="Precision" value={fmtPct(m.precision)} /></Col>
+                <Col span={8}><Statistic title="Recall" value={fmtPct(m.recall)} /></Col>
+                <Col span={8}><Statistic title="Accuracy" value={fmtPct(m.accuracy)} /></Col>
+            </Row>
+        </Card>
+    );
+};
+
+const SahiPixelComparisonPanel = ({ data, coverageMode }) => {
+    const modeLabel = { length: 'Length (gaps only)', width: 'Width (thickness)', total: 'Total (area, combined)' }[coverageMode];
+    const baseAcc = data.baseline.metrics_by_mode[coverageMode].accuracy;
+    const chalAcc = data.challenger.metrics_by_mode[coverageMode].accuracy;
+    const accDelta = (baseAcc !== null && baseAcc !== undefined && chalAcc !== null && chalAcc !== undefined)
+        ? chalAcc - baseAcc : null;
+
+    return (
+        <div>
+            <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <Tag color="blue">Coverage mode: {modeLabel}</Tag>
+                <Tag>{data.common_image_count} common images</Tag>
+                {accDelta !== null && (
+                    <Tag color={accDelta > 0 ? 'success' : accDelta < 0 ? 'error' : 'default'}>
+                        Challenger accuracy {accDelta >= 0 ? '+' : ''}{(accDelta * 100).toFixed(1)}% vs baseline
+                    </Tag>
+                )}
+            </div>
+            <Row gutter={16}>
+                <Col span={12}>
+                    <SahiPixelExperimentPanel label="Baseline" stats={data.baseline} coverageMode={coverageMode} />
+                </Col>
+                <Col span={12}>
+                    <SahiPixelExperimentPanel label="Challenger" stats={data.challenger} coverageMode={coverageMode} />
+                </Col>
+            </Row>
+        </div>
+    );
+};
 
 export default ComparisonEngineView;

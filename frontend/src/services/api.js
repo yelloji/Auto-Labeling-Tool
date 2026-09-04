@@ -761,6 +761,12 @@ export const projectsAPI = {
     const response = await api.get(`/api/v1/experiments/compare`, { params });
     return response.data;
   },
+  compareSahiPixel: async (baselineId, challengerId, coverageMode = 'length', fullCoverageThreshold = 0.85) => {
+    const response = await api.get(`/api/v1/experiments/compare-sahi-pixel`, {
+      params: { baseline_id: baselineId, challenger_id: challengerId, coverage_mode: coverageMode, full_coverage_threshold: fullCoverageThreshold }
+    });
+    return response.data;
+  },
 };
 
 // ==================== IMAGE TRANSFORMATIONS API ====================
@@ -1032,6 +1038,10 @@ export const trainingAPI = {
   },
   addExperimentToReport: async (projectId, trainingId, experimentId) => {
     const response = await api.post(`/api/v1/projects/${projectId}/training/${trainingId}/report/add-experiment`, { experiment_id: experimentId });
+    return response.data;
+  },
+  removeExperimentFromReport: async (projectId, trainingId, experimentId) => {
+    const response = await api.post(`/api/v1/projects/${projectId}/training/${trainingId}/report/remove-experiment`, { experiment_id: experimentId });
     return response.data;
   },
   downloadReport: async (projectId, trainingId) => {
