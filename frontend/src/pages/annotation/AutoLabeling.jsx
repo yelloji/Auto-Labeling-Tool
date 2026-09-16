@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Button, Select, Slider, InputNumber, Tooltip, message, Spin, Tag, Empty, Progress, Switch,
@@ -165,6 +165,10 @@ const statusBorder = (imageId, savedIds, allPreds) => {
   return '3px solid transparent';
 };
 
+// 'project' = this project's own models, 'global' = shared app-wide models.
+// The API sends an authoritative `scope`; project_id is a fallback for older payloads.
+const scopeOf = (m) => m?.scope || (m?.project_id ? 'project' : 'global');
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 const AutoLabeling = () => {
@@ -178,6 +182,8 @@ const AutoLabeling = () => {
 
   const [models, setModels] = useState([]);
   const [selectedModelId, setSelectedModelId] = useState(null);
+  // which kind of model the picker lists: 'project' (this project's own) or 'global'
+  const [modelScope, setModelScope] = useState('project');
   const [confidence, setConfidence] = useState(0.50);
   const [iou, setIou] = useState(0.45);
 
@@ -193,11 +199,17 @@ const AutoLabeling = () => {
   // don't actually overlap — fixes long thin objects (cracks) that get cut
   // into pieces at tile boundaries that Merge Threshold alone can't combine.
   // 0 = off.
-  const [stitchDistance, setStitchDistance] = useState(30);
+  // Defaults to 0 (off) — the stitch geometry isn't accurate enough to trust
+  // yet, so it stays opt-in until that work is done.
+  const [stitchDistance, setStitchDistance] = useState(0);
   // Independent toggle: combine detections that truly overlap (real
   // duplicates of the same spot) into one. On by default. Off shows SAHI's
   // raw, untouched predictions for the overlap case.
   const [removeDuplicates, setRemoveDuplicates] = useState(true);
+  // How much two detections must overlap to count as the same spot, measured
+  // as shared_area / smaller_box_area (NOT IoU). 0.10 = overlap covers 10% of
+  // the smaller box.
+  const [duplicateOverlap, setDuplicateOverlap] = useState(0.10);
 
   const [draftAnnotations, setDraftAnnotations] = useState([]);
   const [allPredictions, setAllPredictions] = useState({});   // imageId → draft[]
@@ -255,8 +267,11 @@ const AutoLabeling = () => {
       const ready = list.filter(m => m.status === 'ready' || m.status === 'Ready' || !m.status);
       setModels(ready);
       if (ready.length > 0 && !selectedModelId) {
-        const trained = ready.find(m => m.type === 'trained' || m.is_project_model);
-        setSelectedModelId(trained?.id || ready[0].id);
+        const trained = ready.find(m => m.type === 'trained' || scopeOf(m) === 'project');
+        const initial = trained || ready[0];
+        setSelectedModelId(initial.id);
+        // open the picker on the tab the auto-selected model actually lives in
+        setModelScope(scopeOf(initial));
       }
     } catch {}
   }, [dataset?.project_id, selectedModelId]);
@@ -346,8 +361,9 @@ const AutoLabeling = () => {
     ...(predictionMode === 'sahi' ? {
       slice_height: sliceSize, slice_width: sliceSize, overlap_ratio: overlapRatio,
       stitch_distance: stitchDistance, remove_duplicates: removeDuplicates,
+      duplicate_overlap_fraction: duplicateOverlap,
     } : {}),
-  }), [selectedModelId, confidence, iou, predictionMode, sliceSize, overlapRatio, mergeThreshold, stitchDistance, removeDuplicates]);
+  }), [selectedModelId, confidence, iou, predictionMode, sliceSize, overlapRatio, mergeThreshold, stitchDistance, removeDuplicates, duplicateOverlap]);
 
   const runPreview = useCallback(async (imgOverride) => {
     const img = imgOverride || currentImage;
@@ -516,9 +532,12 @@ const AutoLabeling = () => {
     setIsDirty(true);
   }, [currentImage]); // no selectedAnnotation dep — uses ref to avoid stale closures
 
-  // Delete key removes the selected annotation
+  // Delete key removes the selected annotation.
+  // While the polygon tool is active, Backspace belongs to the canvas (it removes
+  // the last polygon point), so it must not delete the selected annotation here.
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (e.key === 'Backspace' && activeTool === 'polygon') return;
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAnnotation &&
           !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
         handleAnnotationDelete(selectedAnnotation.id);
@@ -526,7 +545,27 @@ const AutoLabeling = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedAnnotation, handleAnnotationDelete]);
+  }, [selectedAnnotation, handleAnnotationDelete, activeTool]);
+
+  // Shift+Z / Shift+Y — polygon POINT undo/redo while drawing, same as Manual Labeling.
+  // The canvas owns the polygon point history and listens on document for Backspace
+  // (remove last point) and Shift+Y (restore it), so Shift+Z is relayed to it the
+  // same way Manual Labeling does. Annotation-level undo is a separate concern.
+  useEffect(() => {
+    if (activeTool !== 'polygon') return;
+    const onKeyDown = (e) => {
+      if (!e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key.toLowerCase() !== 'z') return;
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      if (document.activeElement?.isContentEditable) return;
+      e.preventDefault();
+      document.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Backspace', code: 'Backspace', keyCode: 8, bubbles: true, cancelable: true,
+      }));
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeTool]);
 
   const handleRemovePrediction = handleAnnotationDelete;
 
@@ -545,7 +584,39 @@ const AutoLabeling = () => {
     setSelectedAnnotation(null);
   }, [images.length]);
 
+  // Left/Right arrow keys move between images
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      if (document.activeElement?.isContentEditable) return;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goTo(currentIndex - 1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goTo(currentIndex + 1);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [currentIndex, goTo]);
+
   // ── derived ───────────────────────────────────────────────────────────────
+
+  const projectModels = useMemo(() => models.filter(m => scopeOf(m) === 'project'), [models]);
+  const globalModels = useMemo(() => models.filter(m => scopeOf(m) === 'global'), [models]);
+  const visibleModels = modelScope === 'project' ? projectModels : globalModels;
+
+  // Switching scope must not leave a model from the other scope selected —
+  // fall back to the first model of the newly picked scope (or nothing).
+  const handleScopeChange = useCallback((scope) => {
+    setModelScope(scope);
+    const list = scope === 'project' ? projectModels : globalModels;
+    if (!list.some(m => m.id === selectedModelId)) {
+      setSelectedModelId(list[0]?.id ?? null);
+    }
+  }, [projectModels, globalModels, selectedModelId]);
 
   const savedCount = savedImageIds.size;
   const pendingCount = Object.values(allPredictions).filter(a => a.length > 0).length;
@@ -754,23 +825,35 @@ const AutoLabeling = () => {
         </div>
         <div style={S.divider} />
 
-        {/* Model picker */}
+        {/* Model scope — decides which models the picker below lists */}
+        <div style={S.modeToggle}>
+          <button style={S.modeBtn(modelScope === 'project')} onClick={() => handleScopeChange('project')}>
+            Local ({projectModels.length})
+          </button>
+          <button style={S.modeBtn(modelScope === 'global')} onClick={() => handleScopeChange('global')}>
+            Global ({globalModels.length})
+          </button>
+        </div>
+
+        {/* Model picker — only models of the selected scope */}
         <Select
           value={selectedModelId}
           onChange={setSelectedModelId}
-          placeholder="Select model…"
+          placeholder={modelScope === 'project' ? 'Select local model…' : 'Select global model…'}
           style={S.modelSelect}
           size="small"
           dropdownStyle={{ background: '#1e293b', border: '1px solid rgba(124,58,237,0.3)' }}
           notFoundContent={
-            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem' }}>No ready models</span>
+            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem' }}>
+              No {modelScope === 'project' ? 'local' : 'global'} models
+            </span>
           }
         >
-          {models.map(m => (
+          {visibleModels.map(m => (
             <Select.Option key={m.id} value={m.id}>
               <span style={{ fontWeight: 700 }}>{m.name}</span>
-              {m.is_project_model && (
-                <Tag color="purple" style={{ marginLeft: 5, fontSize: '0.6rem' }}>Project</Tag>
+              {m.type === 'trained' && (
+                <Tag color="purple" style={{ marginLeft: 5, fontSize: '0.6rem' }}>Trained</Tag>
               )}
             </Select.Option>
           ))}
@@ -980,6 +1063,32 @@ const AutoLabeling = () => {
                     SAHI — Remove Duplicates
                   </span>
                 </div>
+
+                {removeDuplicates && (
+                  <>
+                    <span style={{
+                      color: '#38bdf8', fontSize: '0.62rem', fontWeight: 900,
+                      display: 'block', margin: '8px 0 6px', letterSpacing: '0.06em',
+                    }} title="How much two detections must overlap to count as the same spot. Measured as shared area ÷ smaller box area (not IoU). Lower = merges more easily.">
+                      SAHI — Duplicate Overlap %
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                      <Slider min={1} max={100} step={1} value={Math.round(duplicateOverlap * 100)}
+                        onChange={v => setDuplicateOverlap(v / 100)}
+                        style={{ flex: 1, margin: 0 }}
+                        tooltip={{ formatter: v => `${v}%` }} />
+                      <InputNumber
+                        min={1} max={100} step={1} value={Math.round(duplicateOverlap * 100)}
+                        onChange={v => v != null && setDuplicateOverlap(Math.min(100, Math.max(1, v)) / 100)}
+                        formatter={v => `${v}%`} parser={v => parseInt(String(v).replace('%', ''), 10) || 0}
+                        size="small" controls={false}
+                        className="al-num-input sahi"
+                        style={{ width: 56, fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8',
+                          background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.3)',
+                          borderRadius: 6 }} />
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -1090,6 +1199,16 @@ const AutoLabeling = () => {
         {/* CENTER — canvas */}
         <div style={S.canvasWrap}>
           <div style={S.canvasToolbar}>
+            <span style={{
+              background: 'rgba(124,58,237,0.18)', border: '1px solid rgba(124,58,237,0.45)',
+              color: '#c4b5fd', borderRadius: 20, padding: '2px 11px',
+              fontSize: '0.78rem', fontWeight: 800, whiteSpace: 'nowrap',
+            }}>
+              {images.length ? currentIndex + 1 : 0} / {images.length}
+            </span>
+            <span style={{ color: 'rgba(255,255,255,0.28)', fontSize: '0.64rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+              ← → keys
+            </span>
             <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.68rem', fontWeight: 700 }}>
               {currentImage?.filename || '—'}
             </span>
@@ -1113,9 +1232,6 @@ const AutoLabeling = () => {
                 <CheckCircleOutlined style={{ fontSize: '0.7rem' }} /> Saved
               </span>
             )}
-            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.72rem' }}>
-              {currentIndex + 1} / {images.length}
-            </span>
           </div>
 
           <div style={S.canvasViewport}>
