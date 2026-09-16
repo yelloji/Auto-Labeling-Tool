@@ -187,6 +187,12 @@ const ImageViewerModal = ({
     const [fpIndices, setFpIndices] = useState([]); // Phase 7.2: Unmatched prediction indices (False Positives)
     const hasGroundTruth = experiment?.dataset_source && experiment.dataset_source !== 'upload';
 
+    // SAHI real pixel-coverage GT overlay — real crack shapes (not boxes),
+    // which predictions belong to which GT, coverage %, genuine FP flags.
+    const [sahiGtOverlay, setSahiGtOverlay] = useState(null);
+    const [showSahiGtLayer, setShowSahiGtLayer] = useState(false);
+    const [showSahiMissingLayer, setShowSahiMissingLayer] = useState(true);
+
     const currentIndex = images.indexOf(currentImage);
 
     React.useEffect(() => {
@@ -503,6 +509,28 @@ const ImageViewerModal = ({
 
         fetchMissedDetections();
     }, [currentImage, experiment, iouThreshold]);
+
+    React.useEffect(() => {
+        // Fetched whenever enableMissedInspection is on (SAHI context), not just
+        // when the visual layer toggles are on — this data also drives the real
+        // per-detection FP flag below, replacing the old greedy-matcher one.
+        if (!currentImage || !experiment?.id || !enableMissedInspection) {
+            setSahiGtOverlay(null);
+            return;
+        }
+        const fetchSahiOverlay = async () => {
+            try {
+                const { sahiGtOverlayAPI } = await import('../../../../services/api');
+                const fileName = currentImage.split('/').pop();
+                const data = await sahiGtOverlayAPI.getOverlay(experiment.id, fileName);
+                setSahiGtOverlay(data);
+            } catch (error) {
+                console.error('Error fetching SAHI GT overlay:', error);
+                setSahiGtOverlay(null);
+            }
+        };
+        fetchSahiOverlay();
+    }, [currentImage, experiment, enableMissedInspection]);
 
     React.useEffect(() => {
         return () => {
@@ -1488,6 +1516,55 @@ const ImageViewerModal = ({
                         </>
                     )}
 
+                    {/* SAHI real pixel-coverage GT overlay toggles: real crack shapes,
+                        not boxes, plus which predictions belong to which GT crack. */}
+                    {enableMissedInspection && (
+                        <>
+                            <Tooltip title="Show every real GT crack shape (not boxes) — green outline">
+                                <Button
+                                    className="premium-action-btn"
+                                    onClick={() => setShowSahiGtLayer(!showSahiGtLayer)}
+                                    style={{
+                                        background: showSahiGtLayer
+                                            ? 'linear-gradient(135deg, rgba(82,196,26,0.2) 0%, rgba(35,120,4,0.2) 100%)'
+                                            : 'rgba(0,0,0,0.3)',
+                                        border: `1px solid ${showSahiGtLayer ? '#52c41a' : 'rgba(255,255,255,0.1)'}`,
+                                        color: showSahiGtLayer ? '#52c41a' : '#666',
+                                        borderRadius: '8px',
+                                        padding: '4px 10px',
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        height: '28px',
+                                        letterSpacing: '0.6px'
+                                    }}
+                                >
+                                    GT SHAPES
+                                </Button>
+                            </Tooltip>
+                            <Tooltip title="Show real gap/coverage % for Partial Missing and Missing cracks, linked to their matched predictions">
+                                <Button
+                                    className="premium-action-btn"
+                                    onClick={() => setShowSahiMissingLayer(!showSahiMissingLayer)}
+                                    style={{
+                                        background: showSahiMissingLayer
+                                            ? 'linear-gradient(135deg, rgba(250,140,22,0.2) 0%, rgba(212,99,0,0.2) 100%)'
+                                            : 'rgba(0,0,0,0.3)',
+                                        border: `1px solid ${showSahiMissingLayer ? '#fa8c16' : 'rgba(255,255,255,0.1)'}`,
+                                        color: showSahiMissingLayer ? '#fa8c16' : '#666',
+                                        borderRadius: '8px',
+                                        padding: '4px 10px',
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        height: '28px',
+                                        letterSpacing: '0.6px'
+                                    }}
+                                >
+                                    COVERAGE
+                                </Button>
+                            </Tooltip>
+                        </>
+                    )}
+
                     <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)' }} />
 
                     <Tooltip title="Image Viewer Guide">
@@ -1961,9 +2038,15 @@ const ImageViewerModal = ({
                                         riskClass = 'medium-risk';
                                     }
 
-                                    // FALSE POSITIVE DETECTION: Override ONLY for the label background
-                                    // Use local fpIndices check (from verification API) OR flag on the detection object
-                                    const isPossibleFP = fpIndices.includes(allDets.indexOf(d)) || d.has_ground_truth_match === false;
+                                    // FALSE POSITIVE DETECTION: Override ONLY for the label background.
+                                    // In SAHI context, use the real pixel-coverage GT match (groups
+                                    // fragments of the same real crack) instead of the old greedy
+                                    // 1-GT-1-prediction matcher, which wrongly flags legitimate crack
+                                    // fragments as FP — that's the "confusing, not right" FP tag.
+                                    const detIndex = allDets.indexOf(d);
+                                    const isPossibleFP = (enableMissedInspection && sahiGtOverlay)
+                                        ? !!sahiGtOverlay.predictions[detIndex]?.is_fp
+                                        : (fpIndices.includes(detIndex) || d.has_ground_truth_match === false);
 
                                     let labelColor = riskColor;
                                     if (isPossibleFP) {
@@ -2178,6 +2261,106 @@ const ImageViewerModal = ({
                                         </g>
                                     );
                                 })}
+
+                                {/* SAHI real pixel-coverage GT overlay: real crack shapes (not boxes),
+                                    which predictions belong to which GT, coverage %, genuine FP flags. */}
+                                {sahiGtOverlay && (() => {
+                                    const SAHI_STATUS_COLOR = { tp: '#52c41a', partial_missing: '#fa8c16', missing: '#ff4d4f' };
+                                    const toPointsAttr = (poly) => poly.map(([x, y]) => `${x},${y}`).join(' ');
+                                    const centroid = (poly) => {
+                                        const n = poly.length || 1;
+                                        const sum = poly.reduce((acc, [x, y]) => [acc[0] + x, acc[1] + y], [0, 0]);
+                                        return [sum[0] / n, sum[1] / n];
+                                    };
+                                    return (
+                                        <g>
+                                            {showSahiGtLayer && sahiGtOverlay.gt_cracks.map((gt) => (
+                                                <polygon
+                                                    key={`sahi-gt-${gt.gt_index}`}
+                                                    points={toPointsAttr(gt.polygon)}
+                                                    fill="none"
+                                                    stroke={SAHI_STATUS_COLOR[gt.status]}
+                                                    strokeWidth={2 / scale}
+                                                    strokeDasharray={gt.status === 'tp' ? 'none' : `${6 / scale},${3 / scale}`}
+                                                    pointerEvents="none"
+                                                />
+                                            ))}
+
+                                            {showSahiMissingLayer && sahiGtOverlay.gt_cracks
+                                                .filter((gt) => gt.status !== 'tp')
+                                                .map((gt) => {
+                                                    const [cx, cy] = centroid(gt.polygon);
+                                                    const color = SAHI_STATUS_COLOR[gt.status];
+                                                    const pctLabel = `${(gt.coverage_length * 100).toFixed(0)}%`;
+                                                    return (
+                                                        <g key={`sahi-missing-${gt.gt_index}`}>
+                                                            {!showSahiGtLayer && (
+                                                                <polygon
+                                                                    points={toPointsAttr(gt.polygon)}
+                                                                    fill={`${color}33`}
+                                                                    stroke={color}
+                                                                    strokeWidth={2.5 / scale}
+                                                                    pointerEvents="none"
+                                                                />
+                                                            )}
+                                                            {gt.matched_pred_indices.map((predIdx) => {
+                                                                const pred = sahiGtOverlay.predictions[predIdx];
+                                                                if (!pred) return null;
+                                                                const [px, py] = centroid(pred.polygon);
+                                                                return (
+                                                                    <line
+                                                                        key={`sahi-link-${gt.gt_index}-${predIdx}`}
+                                                                        x1={cx} y1={cy} x2={px} y2={py}
+                                                                        stroke={color}
+                                                                        strokeWidth={1.5 / scale}
+                                                                        strokeDasharray={`${4 / scale},${3 / scale}`}
+                                                                        opacity={0.85}
+                                                                        pointerEvents="none"
+                                                                    />
+                                                                );
+                                                            })}
+                                                            {/* Counter-scaled group: fixed on-screen label size (28px tall)
+                                                                regardless of image zoom, instead of dividing every
+                                                                number by scale (which was shrinking to near-invisible). */}
+                                                            <g transform={`translate(${cx},${cy}) scale(${1 / scale})`}>
+                                                                <rect
+                                                                    x={-26} y={-14}
+                                                                    width={52} height={28}
+                                                                    rx={5}
+                                                                    fill="rgba(0,0,0,0.85)"
+                                                                    stroke={color}
+                                                                    strokeWidth={1.5}
+                                                                    pointerEvents="none"
+                                                                />
+                                                                <text
+                                                                    x={0} y={1}
+                                                                    textAnchor="middle"
+                                                                    dominantBaseline="central"
+                                                                    fill="#ffffff"
+                                                                    style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'monospace' }}
+                                                                    pointerEvents="none"
+                                                                >
+                                                                    {pctLabel}
+                                                                </text>
+                                                            </g>
+                                                        </g>
+                                                    );
+                                                })}
+
+                                            {sahiGtOverlay.predictions.filter((p) => p.is_fp).map((p) => (
+                                                <polygon
+                                                    key={`sahi-fp-${p.pred_index}`}
+                                                    points={toPointsAttr(p.polygon)}
+                                                    fill="rgba(255,77,79,0.18)"
+                                                    stroke="#ff4d4f"
+                                                    strokeWidth={2.5 / scale}
+                                                    strokeDasharray={`${5 / scale},${3 / scale}`}
+                                                    pointerEvents="none"
+                                                />
+                                            ))}
+                                        </g>
+                                    );
+                                })()}
                             </svg>
                         )}
                     </div>

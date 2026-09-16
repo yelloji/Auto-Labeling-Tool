@@ -1619,5 +1619,19 @@ export const missedDetectionsAPI = {
   }
 };
 
+export const sahiGtOverlayAPI = {
+  getOverlay: async (experimentId, imageName, coverageMode = 'length', fullCoverageThreshold = 0.85) => {
+    try {
+      const response = await api.get(`/api/v1/experiments/${experimentId}/sahi-gt-overlay`, {
+        params: { image_name: imageName, coverage_mode: coverageMode, full_coverage_threshold: fullCoverageThreshold }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to get SAHI GT overlay:', error);
+      return null;
+    }
+  }
+};
+
 
 export default api;

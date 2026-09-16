@@ -636,6 +636,36 @@ async def compare_experiments_sahi_pixel(
         logger.error("api.compare_sahi_pixel", f"Failed to compute SAHI pixel comparison: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/experiments/{experiment_id}/sahi-gt-overlay")
+async def get_experiment_sahi_gt_overlay(
+    experiment_id: str,
+    image_name: str,
+    coverage_mode: str = "length",
+    full_coverage_threshold: float = 0.85,
+    db: Session = Depends(get_db)
+):
+    """
+    Real GT polygons + pixel-coverage match result for one image in one
+    experiment — powers the live SAHI Prediction image viewer overlay: real
+    crack shapes (not boxes), which predictions belong to which GT, coverage
+    %, and genuine FP flags (a prediction that overlaps no GT at all).
+    """
+    from utils.sahi_gt_overlay import get_gt_overlay_for_image
+    try:
+        result = get_gt_overlay_for_image(
+            db, experiment_id, image_name, coverage_mode=coverage_mode,
+            full_coverage_threshold=full_coverage_threshold
+        )
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        return result
+    except HTTPException: raise
+    except Exception as e:
+        logger.error("api.sahi_gt_overlay", f"Failed to compute SAHI GT overlay: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Training session upsert/get (identity fields)
 class SessionUpsert(BaseModel):
     project_id: int
