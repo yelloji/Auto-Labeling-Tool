@@ -849,7 +849,7 @@ const ManagementSection = ({
                 <Text type="secondary" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{managementData?.unassigned?.count || 0} Datasets</Text>
               </div>
             }
-            style={{ height: '31.25rem', overflow: 'auto', borderRadius: '0.5rem' }}
+            style={{ height: 'calc(100vh - 11rem)', minHeight: '31.25rem', overflow: 'auto', borderRadius: '0.5rem' }}
             bodyStyle={{ padding: '0.75rem' }}
           >
             <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
@@ -903,7 +903,7 @@ const ManagementSection = ({
                 <Text type="secondary" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{managementData?.annotating?.count || 0} Datasets</Text>
               </div>
             }
-            style={{ height: '31.25rem', overflow: 'auto', borderRadius: '0.5rem' }}
+            style={{ height: 'calc(100vh - 11rem)', minHeight: '31.25rem', overflow: 'auto', borderRadius: '0.5rem' }}
             bodyStyle={{ padding: '0.75rem' }}
           >
             {managementData?.annotating?.datasets?.length > 0 ? (
@@ -939,7 +939,7 @@ const ManagementSection = ({
                 <Text type="secondary" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{managementData?.dataset?.count || 0} Datasets</Text>
               </div>
             }
-            style={{ height: '31.25rem', overflow: 'auto', borderRadius: '0.5rem' }}
+            style={{ height: 'calc(100vh - 11rem)', minHeight: '31.25rem', overflow: 'auto', borderRadius: '0.5rem' }}
             bodyStyle={{ padding: '0.75rem' }}
           >
             <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
