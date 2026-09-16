@@ -76,7 +76,8 @@ const DEFAULT_CONFIG = {
     // output is the default in Prediction; this is opt-in so real vs.
     // duplicate counts can be compared deliberately.
     remove_duplicates: false,
-    duplicate_overlap_fraction: 0.1
+    // Held in the form as a percent (10 = 10%); converted to a fraction on submit.
+    duplicate_overlap_fraction: 10
 };
 
 const DEFAULT_FILTERS = {
@@ -308,7 +309,11 @@ const SahiPredictionView = ({ training }) => {
             dataset_source: params.dataset_source || experiment?.dataset_source || 'dataset_images',
             split: params.split || defaultConfig.split,
             confidence: params.confidence ?? params.confidence_threshold ?? experiment?.confidence ?? 0.5,
-            task: params.task || defaultConfig.task
+            task: params.task || defaultConfig.task,
+            // Stored as a fraction (0.1); the form shows a percent (10).
+            duplicate_overlap_fraction: params.duplicate_overlap_fraction != null
+                ? Math.round(params.duplicate_overlap_fraction * 100)
+                : defaultConfig.duplicate_overlap_fraction
         });
     }, [defaultConfig, form]);
 
@@ -708,7 +713,15 @@ const SahiPredictionView = ({ training }) => {
     const handleRun = async () => {
         if (!training?.id) return;
         try {
-            const values = await form.validateFields();
+            const rawValues = await form.validateFields();
+            // Duplicate Overlap is entered as a percent (10 = 10%), but the backend
+            // takes a fraction — convert once here so every payload below is correct.
+            const values = {
+                ...rawValues,
+                duplicate_overlap_fraction: rawValues.duplicate_overlap_fraction != null
+                    ? rawValues.duplicate_overlap_fraction / 100
+                    : rawValues.duplicate_overlap_fraction,
+            };
             const name = values.name?.trim();
             if (!name || name.length < 3) {
                 message.warning('Name must be at least 3 characters');
@@ -1324,10 +1337,12 @@ const SahiPredictionView = ({ training }) => {
                                     <Form.Item
                                         name="duplicate_overlap_fraction"
                                         label="Duplicate Overlap %"
-                                        tooltip="How much two detections' boxes must overlap to be treated as duplicates and combined."
+                                        tooltip="How much two detections' boxes must overlap to be treated as duplicates and combined. Measured as shared area ÷ smaller box area (not IoU). Lower = merges more easily."
                                     >
                                         <InputNumber
-                                            min={0.05} max={1} step={0.05} precision={2}
+                                            min={1} max={100} step={1} precision={0}
+                                            formatter={(v) => `${v}%`}
+                                            parser={(v) => parseInt(String(v).replace('%', ''), 10) || 0}
                                             disabled={!watchedRemoveDuplicates}
                                         />
                                     </Form.Item>

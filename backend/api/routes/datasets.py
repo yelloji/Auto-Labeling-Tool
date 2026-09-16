@@ -18,7 +18,7 @@ from core.file_handler import file_handler
 from core.auto_labeler import auto_labeler
 from models.model_manager import model_manager
 from logging_system.professional_logger import get_professional_logger
-from utils.sahi_stitching import stitch_sahi_fragments
+from utils.sahi_stitching import stitch_sahi_fragments, DUPLICATE_OVERLAP_FRACTION
 
 # Initialize professional logger
 logger = get_professional_logger()
@@ -115,6 +115,10 @@ class AutoLabelSahiPreviewRequest(BaseModel):
     # Turning it off shows SAHI's raw, untouched predictions for the overlap
     # case — same pattern as stitch_distance=0 for the gap case.
     remove_duplicates: bool = True
+    # How much two detections must overlap to count as duplicates of the same
+    # spot, measured as shared_area / smaller_box_area (NOT IoU). 0.1 = the
+    # overlap covers 10% of the smaller box.
+    duplicate_overlap_fraction: float = DUPLICATE_OVERLAP_FRACTION
 
 
 @router.get("/", response_model=List[Dict[str, Any]])
@@ -806,6 +810,7 @@ async def preview_auto_label_sahi(
             predictions = stitch_sahi_fragments(
                 predictions, img_w, img_h, request.stitch_distance,
                 remove_duplicates=request.remove_duplicates,
+                duplicate_overlap_fraction=request.duplicate_overlap_fraction,
             )
         except Exception as e:
             logger.warning("errors.system", f"SAHI fragment stitching failed, using unstitched predictions: {e}",
