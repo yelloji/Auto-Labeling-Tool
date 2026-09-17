@@ -104,32 +104,22 @@ const DatasetSection = ({ projectId }) => {
       const datasetImages = response.images || [];
       setAllImages(datasetImages);
 
-      // Fetch all datasets (including empty ones) for complete dropdown
-      const datasetsResponse = await projectsAPI.getProjectDatasets(projectId);
-      const allDatasets = datasetsResponse.datasets || [];
-
-      // Extract dataset names from images
-      const datasetsWithImages = [...new Set(datasetImages.map(img => img.dataset_name))].filter(Boolean);
-
-      // Combine all dataset names (from both API calls) to ensure empty datasets appear
-      const allDatasetNames = [...new Set([
-        ...allDatasets.map(dataset => dataset.name),
-        ...datasetsWithImages
-      ])].filter(Boolean);
+      // Only datasets that actually have images in the dataset stage. Listing
+      // every dataset in the project puts names here whose images are still in
+      // Annotating or Unassigned, and selecting one filters this grid to empty.
+      const allDatasetNames = [...new Set(datasetImages.map(img => img.dataset_name))].filter(Boolean);
 
       setAvailableDatasets(allDatasetNames);
 
       // Note: Available classes will be updated based on filtered images in separate useEffect
 
       console.log('Dataset images loaded:', datasetImages.length);
-      console.log('All datasets loaded:', allDatasets.length);
       console.log('Available datasets:', allDatasetNames);
 
       logInfo('app.frontend.interactions', 'dataset_images_loading_success', 'Successfully loaded dataset images and datasets', {
         timestamp: new Date().toISOString(),
         projectId: projectId,
         imagesCount: datasetImages.length,
-        totalDatasetsCount: allDatasets.length,
         availableDatasetsCount: allDatasetNames.length
       });
     } catch (error) {
