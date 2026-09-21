@@ -11,38 +11,14 @@ predictions belong to which GT crack, coverage %, and genuine FP flags.
 import json
 from typing import Dict, List
 from sqlalchemy.orm import Session
-from database.models import ModelExperiment, Annotation, Image as DBImage
+from database.models import ModelExperiment
 from utils.sahi_gt_matching import match_predictions_to_gt, FULL_COVERAGE_THRESHOLD
+from utils.experiment_image_resolver import (
+    get_filename as _get_filename,
+    load_gt_polygons_for_experiment_image,
+)
 
 COVERAGE_MODES = ("length", "width", "total")
-
-
-def _get_filename(path: str) -> str:
-    return path.replace("\\", "/").split("/")[-1] if path else ""
-
-
-def _load_gt_polygons_for_image(db: Session, filename: str) -> List[list]:
-    """Real GT crack polygons (absolute pixel points) for one image.
-    Source: the `annotations` table (original, un-tiled images) — the same
-    source already used by the Analytic Report and Guide Bot review flow."""
-    rows = (
-        db.query(Annotation.segmentation)
-        .join(DBImage, Annotation.image_id == DBImage.id)
-        .filter(DBImage.filename == filename)
-        .all()
-    )
-    polygons: List[list] = []
-    for (seg_json,) in rows:
-        if not seg_json:
-            continue
-        try:
-            seg = json.loads(seg_json) if isinstance(seg_json, str) else seg_json
-        except Exception:
-            continue
-        points = [(pt["x"], pt["y"]) for pt in seg if "x" in pt and "y" in pt]
-        if len(points) >= 3:
-            polygons.append(points)
-    return polygons
 
 
 def get_gt_overlay_for_image(
@@ -66,7 +42,9 @@ def get_gt_overlay_for_image(
             return {"error": "Experiment not found."}
 
         filename = _get_filename(image_name)
-        gt_polygons = _load_gt_polygons_for_image(db, filename)
+        # Resolved by the md5 this experiment recorded, so a same-named photo
+        # from another shoot cannot contribute its cracks to this image.
+        gt_polygons = load_gt_polygons_for_experiment_image(db, experiment, image_name)
 
         predictions = experiment.predictions
         if isinstance(predictions, str):

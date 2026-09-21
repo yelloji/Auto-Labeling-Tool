@@ -11,8 +11,9 @@ splitting) as false positives.
 import json
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
-from database.models import ModelExperiment, Annotation, Image as DBImage
+from database.models import ModelExperiment
 from utils.sahi_gt_matching import match_predictions_to_gt, FULL_COVERAGE_THRESHOLD
+from utils.experiment_image_resolver import load_gt_polygons_for_experiment_image
 from logging_system.professional_logger import get_professional_logger
 
 logger = get_professional_logger()
@@ -24,30 +25,18 @@ def _get_filename(path: str) -> str:
     return path.replace("\\", "/").split("/")[-1] if path else ""
 
 
-def _load_gt_polygons_by_image(db: Session, image_filenames: set) -> Dict[str, List[list]]:
-    """Real GT crack polygons (absolute pixel points), keyed by image filename.
-    Source: the `annotations` table (original, un-tiled images) — the same
-    source already used by the Analytic Report and Guide Bot review flow."""
-    if not image_filenames:
-        return {}
-    rows = (
-        db.query(DBImage.filename, Annotation.segmentation)
-        .join(Annotation, Annotation.image_id == DBImage.id)
-        .filter(DBImage.filename.in_(image_filenames))
-        .all()
-    )
-    result: Dict[str, List[list]] = {}
-    for filename, seg_json in rows:
-        if not seg_json:
-            continue
-        try:
-            seg = json.loads(seg_json) if isinstance(seg_json, str) else seg_json
-        except Exception:
-            continue
-        points = [(pt["x"], pt["y"]) for pt in seg if "x" in pt and "y" in pt]
-        if len(points) >= 3:
-            result.setdefault(filename, []).append(points)
-    return result
+def _load_gt_polygons_by_image(db: Session, experiment, image_names: set) -> Dict[str, List[list]]:
+    """Real GT crack polygons (absolute pixel points), keyed by image name.
+
+    Each image is resolved through the md5 the experiment recorded, so a
+    same-named photograph from a different shoot cannot contribute its cracks
+    here. Keyed off the baseline experiment: both runs cover the same images,
+    and the baseline is the reference the comparison is stated against.
+    """
+    return {
+        name: load_gt_polygons_for_experiment_image(db, experiment, name)
+        for name in (image_names or set())
+    }
 
 
 def _load_pred_polygons_by_image(experiment: ModelExperiment) -> Dict[str, List[list]]:
@@ -176,7 +165,7 @@ def calculate_sahi_pixel_comparison(
         if not common_images:
             return {"error": "Baseline and challenger have no images in common — SAHI pixel comparison needs the same images in both."}
 
-        gt_by_image = _load_gt_polygons_by_image(db, common_images)
+        gt_by_image = _load_gt_polygons_by_image(db, baseline_exp, common_images)
 
         baseline_stats = _compute_experiment_pixel_stats(
             baseline_exp, gt_by_image, baseline_preds, common_images, coverage_mode, full_coverage_threshold

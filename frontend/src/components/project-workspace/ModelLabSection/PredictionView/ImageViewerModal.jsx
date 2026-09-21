@@ -382,6 +382,13 @@ const ImageViewerModal = ({
         setFocusedIndex(null);
         setFocusedMissedIndex(null);
         setIsImgLoading(true); // Guard ON - only when changing images
+        // Drop the previous image's overlay data immediately. Without this the
+        // old image's GT shapes and missed/FP boxes stay drawn over the new
+        // picture until its own fetches return, which reads as a lag and can
+        // briefly show cracks that belong to a different image.
+        setMissedDetections([]);
+        setFpIndices([]);
+        setSahiGtOverlay(null);
         loadStartTime.current = performance.now();
     }, [currentImage]);
 
@@ -487,6 +494,11 @@ const ImageViewerModal = ({
             return;
         }
 
+        // Navigating faster than the network means an earlier request can land
+        // after a later one; without this guard it would overwrite the current
+        // image's boxes with a previous image's.
+        let cancelled = false;
+
         const fetchMissedDetections = async () => {
             try {
                 const { missedDetectionsAPI } = await import('../../../../services/api');
@@ -496,11 +508,13 @@ const ImageViewerModal = ({
                     fileName,
                     iouThreshold
                 );
+                if (cancelled) return;
 
                 // data is now { missed: [], fp_indices: [] }
                 setMissedDetections(data.missed || []);
                 setFpIndices(data.fp_indices || []);
             } catch (error) {
+                if (cancelled) return;
                 console.error('Error fetching verification data:', error);
                 setMissedDetections([]);
                 setFpIndices([]);
@@ -508,6 +522,7 @@ const ImageViewerModal = ({
         };
 
         fetchMissedDetections();
+        return () => { cancelled = true; };
     }, [currentImage, experiment, iouThreshold]);
 
     React.useEffect(() => {
@@ -518,18 +533,22 @@ const ImageViewerModal = ({
             setSahiGtOverlay(null);
             return;
         }
+        let cancelled = false;
         const fetchSahiOverlay = async () => {
             try {
                 const { sahiGtOverlayAPI } = await import('../../../../services/api');
                 const fileName = currentImage.split('/').pop();
                 const data = await sahiGtOverlayAPI.getOverlay(experiment.id, fileName);
+                if (cancelled) return;
                 setSahiGtOverlay(data);
             } catch (error) {
+                if (cancelled) return;
                 console.error('Error fetching SAHI GT overlay:', error);
                 setSahiGtOverlay(null);
             }
         };
         fetchSahiOverlay();
+        return () => { cancelled = true; };
     }, [currentImage, experiment, enableMissedInspection]);
 
     React.useEffect(() => {

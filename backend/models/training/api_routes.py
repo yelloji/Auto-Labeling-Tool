@@ -2292,16 +2292,11 @@ async def get_experiment_original_image(
     # Search the project's current dataset images in the DB by filename.
     if not original_path and exp.experiment_type == "sahi_prediction" and exp.project_id:
         try:
-            requested_name = Path(filename).name
-            db_image = (
-                db.query(DBImage)
-                .join(Dataset, DBImage.dataset_id == Dataset.id)
-                .filter(
-                    Dataset.project_id == exp.project_id,
-                    DBImage.filename == requested_name,
-                )
-                .first()
-            )
+            from utils.experiment_image_resolver import resolve_experiment_image
+            # Resolved by the md5 the experiment recorded. The same filename can
+            # belong to a different photograph from another shoot, and serving
+            # that one would draw this image's cracks over the wrong picture.
+            db_image = resolve_experiment_image(db, exp, filename)
             if db_image and db_image.file_path:
                 raw = Path(db_image.file_path)
                 candidate = raw if raw.is_absolute() else (project_root / raw).resolve()
@@ -3007,23 +3002,11 @@ async def get_missed_ground_truth(
                 except (json.JSONDecodeError, ValueError):
                     image_metadata = {}
 
-            md5 = image_metadata.get("md5") if isinstance(image_metadata, dict) else None
-            candidates_query = (
-                db.query(DBImage)
-                .join(Dataset, DBImage.dataset_id == Dataset.id)
-                .filter(
-                    Dataset.project_id == experiment.project_id,
-                    DBImage.split_type == "dataset",
-                    DBImage.split_section.in_(["train", "val", "test"]),
-                )
-            )
-            filename_match = (DBImage.filename == image_name_only) | (DBImage.original_filename == image_name_only)
-            if md5:
-                candidates_query = candidates_query.filter((DBImage.image_hash_md5 == md5) | filename_match)
-            else:
-                candidates_query = candidates_query.filter(filename_match)
-
-            image_record = candidates_query.first()
+            from utils.experiment_image_resolver import resolve_experiment_image
+            # md5 decides which photograph this is. Matching on the filename as
+            # well would let a same-named image from another shoot answer, and
+            # the two have separately drawn labels.
+            image_record = resolve_experiment_image(db, experiment, image_name_only)
             if not image_record:
                 return {"missed": [], "fp_indices": list(range(len(image_predictions))), "matched_ious": []}
 
