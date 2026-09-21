@@ -241,6 +241,18 @@ class ModelManager:
                 "type": ModelType.INSTANCE_SEGMENTATION,
                 "model_name": "yolo26m-seg.pt",
             },
+            {
+                "id": "yolo26l",
+                "name": "YOLO26 Large",
+                "type": ModelType.OBJECT_DETECTION,
+                "model_name": "yolo26l.pt",
+            },
+            {
+                "id": "yolo26l-seg",
+                "name": "YOLO26 Large Segmentation",
+                "type": ModelType.INSTANCE_SEGMENTATION,
+                "model_name": "yolo26l-seg.pt",
+            },
         ]
 
         yolo_dir = self.models_dir / "yolo"
