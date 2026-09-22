@@ -30,6 +30,11 @@ const getImageHashFromMetadata = (value) => {
     return null;
 };
 
+// How long an image must be stayed on before its full-size original is
+// fetched. Short enough to be ready by the time anyone looks properly, long
+// enough that skimming through a folder downloads nothing.
+const FULL_IMAGE_DELAY_MS = 500;
+
 const MIN_VIEWER_SCALE = 0.5;
 const MAX_VIEWER_SCALE = 64;
 const clampViewerScale = (value) => Math.max(MIN_VIEWER_SCALE, Math.min(value, MAX_VIEWER_SCALE));
@@ -126,7 +131,19 @@ const ImageViewerModal = ({
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
 
     const [isImgLoading, setIsImgLoading] = useState(true); // New: Guard for sync
+    // False while the display-resolution preview stands in for the original.
+    const [showOriginal, setShowOriginal] = useState(false);
+    // Whether SOME picture is laid out on screen - preview or original. The
+    // overlay is positioned against that box, so this, not the arrival of the
+    // full-size file, is what it actually has to wait for.
+    const [imageReady, setImageReady] = useState(false);
+    // Lets zooming pull the full-size fetch forward instead of waiting out the
+    // delay - zoom is the moment the extra detail is actually wanted.
+    const wantFullImageNow = React.useRef(null);
     const [lastLoadTime, setLastLoadTime] = useState(0);
+    // How long the stand-in preview took to appear, shown next to the full
+    // image's time so the two are never confused for one another.
+    const [previewLoadTime, setPreviewLoadTime] = useState(0);
     const [hoveredIndex, setHoveredIndex] = useState(null); // New: Bidirectional bridge
     const [hoveredMissedIndex, setHoveredMissedIndex] = useState(null);
     const [focusedIndex, setFocusedIndex] = useState(null); // New: For toggle logic
@@ -382,6 +399,11 @@ const ImageViewerModal = ({
         setFocusedIndex(null);
         setFocusedMissedIndex(null);
         setIsImgLoading(true); // Guard ON - only when changing images
+        setShowOriginal(false); // back to the preview until the original arrives
+        setImageReady(false);   // nothing on screen yet, so nothing to draw on
+        setDimensions({ width: 0, height: 0 }); // never reuse the last image's size
+        setLastLoadTime(0);     // otherwise it keeps showing the previous image's time
+        setPreviewLoadTime(0);
         // Drop the previous image's overlay data immediately. Without this the
         // old image's GT shapes and missed/FP boxes stay drawn over the new
         // picture until its own fetches return, which reads as a lag and can
@@ -392,13 +414,74 @@ const ImageViewerModal = ({
         loadStartTime.current = performance.now();
     }, [currentImage]);
 
-    // Preload adjacent images so next/prev navigation feels instant
+    // The full-size original, fetched in the background behind the preview.
+    //
+    // These are ~17MB PNGs, and a browser only keeps a handful of connections
+    // open per server. Left to run, the originals of images merely passed
+    // through queue up and starve the small preview of the image actually being
+    // looked at - which is what made a cached 1MB preview take four seconds.
+    // So it is not started for an image being skimmed past, it is abandoned the
+    // moment the image changes, and it is decoded before it is shown so the
+    // swap is one frame rather than a picture painting itself in from the top.
+    React.useEffect(() => {
+        if (!currentImage || !experiment?.id) return;
+        let cancelled = false;
+        let full = null;
+
+        const begin = () => {
+            if (cancelled || full) return;
+            full = new window.Image();
+            full.onload = async () => {
+                if (cancelled) return;
+                try {
+                    // Wait for the pixels to be ready, not just the bytes.
+                    if (full.decode) await full.decode();
+                } catch (e) { /* decode is an optimisation; show it regardless */ }
+                if (cancelled) return;
+                setDimensions({ width: full.naturalWidth, height: full.naturalHeight });
+                setLastLoadTime(performance.now() - loadStartTime.current);
+                setShowOriginal(true);
+                setIsImgLoading(false);
+            };
+            full.onerror = () => {
+                if (!cancelled) setShowOriginal(true); // let the <img> report it
+            };
+            // Built here rather than read from `imageUrl`: that const is declared
+            // below this hook, so referencing it would hit the temporal dead zone.
+            full.src = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experiment.id}/original-image/${currentImage}`;
+        };
+
+        // Skimming past an image should cost nothing; staying on one should have
+        // the sharp version ready by the time it is wanted.
+        const timer = setTimeout(begin, FULL_IMAGE_DELAY_MS);
+        wantFullImageNow.current = begin;   // zooming jumps the queue
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+            wantFullImageNow.current = null;
+            // Abandoning the request frees the connection at once; without this
+            // the file keeps downloading and keeps blocking the next image.
+            if (full) { full.onload = null; full.onerror = null; full.src = ''; }
+        };
+    }, [currentImage, experiment?.id]);
+
+    // Zooming in is the point at which the preview's detail runs out, so it
+    // pulls the full-size fetch forward rather than waiting out the delay.
+    // Watched here in one place so every zoom path - buttons, wheel, keys -
+    // behaves the same.
+    React.useEffect(() => {
+        if (scale > 1 && wantFullImageNow.current) wantFullImageNow.current();
+    }, [scale]);
+
+    // Preload the neighbours' previews, not their originals: three ~17MB files
+    // per step competed with the image actually being waited for.
     React.useEffect(() => {
         if (!currentImage || !experiment?.id || !images.length) return;
         const idx = images.indexOf(currentImage);
         [images[idx + 1], images[idx - 1]].filter(Boolean).forEach((imgName) => {
             const pre = new window.Image();
-            pre.src = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experiment.id}/original-image/${imgName}`;
+            pre.src = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experiment.id}/original-image/${imgName}?preview=true`;
         });
     }, [currentImage, experiment?.id, images]);
 
@@ -541,6 +624,14 @@ const ImageViewerModal = ({
                 const data = await sahiGtOverlayAPI.getOverlay(experiment.id, fileName);
                 if (cancelled) return;
                 setSahiGtOverlay(data);
+                // The polygons are in original-image pixels, and the response
+                // carries that image's size. Taking it from here means the
+                // overlay no longer has to wait for the full-size file just to
+                // learn how big the picture is - it can sit on the preview,
+                // which is the same picture at a smaller size.
+                if (data?.image_width > 0 && data?.image_height > 0) {
+                    setDimensions({ width: data.image_width, height: data.image_height });
+                }
             } catch (error) {
                 if (cancelled) return;
                 console.error('Error fetching SAHI GT overlay:', error);
@@ -603,9 +694,24 @@ const ImageViewerModal = ({
     const selectAll = () => setSelectedIndices(filteredDets.map((_, i) => i));
     const selectNone = () => setSelectedIndices([]);
 
+    // These originals are ~17MB PNGs at 6560x4948, so the viewer paints a
+    // display-resolution preview straight away and swaps in the real file the
+    // moment it has arrived. What gets inspected and zoomed is always the
+    // original; the preview only fills the seconds it would otherwise be blank.
     const imageUrl = `${window.location.protocol}//${window.location.hostname}:12000/api/v1/experiments/${experiment.id}/original-image/${currentImage}`;
+    const previewUrl = `${imageUrl}?preview=true`;
 
+    // Only the original may set these. The preview is a smaller image, and its
+    // dimensions would misplace every overlay, which is drawn in original pixels.
     const handleImgLoad = (e) => {
+        setImageReady(true);   // a picture is on screen; the overlay can attach
+        if (!showOriginal) {
+            // The preview finished. Record when, but never let its smaller
+            // dimensions through — the overlays are drawn in original pixels,
+            // and their size comes from the server with the overlay data.
+            setPreviewLoadTime(performance.now() - loadStartTime.current);
+            return;
+        }
         const duration = performance.now() - loadStartTime.current;
         setLastLoadTime(duration);
         setIsImgLoading(false); // Guard OFF - Image is ready
@@ -1239,9 +1345,18 @@ const ImageViewerModal = ({
                         </Tag>
 
                         <Text style={{ color: '#888', fontSize: '0.75rem' }}>{currentIndex + 1} of {images.length}</Text>
-                        {lastLoadTime > 0 && (
-                            <Tag color="cyan" style={{ borderRadius: '4px', border: 'none', background: 'rgba(0, 255, 255, 0.1)', color: '#00ffff', fontSize: '10px' }}>
-                                Load: {lastLoadTime.toFixed(0)}ms
+                        {/* Which version is on screen. The preview stands in only
+                            while the full-size original downloads, so this says
+                            plainly when what you are looking at is the real file. */}
+                        {!showOriginal ? (
+                            <Tag style={{ borderRadius: '4px', border: 'none', background: 'rgba(250, 173, 20, 0.15)', color: '#faad14', fontSize: '10px' }}>
+                                Preview{previewLoadTime > 0 ? ` ${previewLoadTime.toFixed(0)}ms` : ''} — loading full image…
+                            </Tag>
+                        ) : (
+                            <Tag style={{ borderRadius: '4px', border: 'none', background: 'rgba(82, 196, 26, 0.15)', color: '#52c41a', fontSize: '10px' }}>
+                                Full resolution
+                                {previewLoadTime > 0 ? ` · preview ${previewLoadTime.toFixed(0)}ms` : ''}
+                                {lastLoadTime > 0 ? ` → full ${lastLoadTime.toFixed(0)}ms` : ''}
                             </Tag>
                         )}
                     </Space>
@@ -1938,7 +2053,11 @@ const ImageViewerModal = ({
                         }}
                     >
                         <img
-                            src={imageUrl}
+                            /* Never the original before the preview: showOriginal
+                               is only set once the full-size file has finished
+                               decoding, so every image follows the same order
+                               even when the browser already holds the original. */
+                            src={showOriginal ? imageUrl : previewUrl}
                             alt={currentImage}
                             onLoad={handleImgLoad}
                             onClick={() => {
@@ -1957,7 +2076,11 @@ const ImageViewerModal = ({
                         />
 
                         {/* SVG Dynamic Overlay - NATURALLY PERFECT ALIGNMENT */}
-                        {dimensions.width > 0 && !isImgLoading && (
+                        {/* Waits for a picture to be on screen, not specifically
+                            the full-size one: the preview is the same image and
+                            occupies the same box, so the overlay lands correctly
+                            on it and stays put when the original swaps in. */}
+                        {dimensions.width > 0 && imageReady && (
                             <svg
                                 ref={svgRef}
                                 className="detection-overlay-svg"

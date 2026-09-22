@@ -10,15 +10,22 @@ predictions belong to which GT crack, coverage %, and genuine FP flags.
 """
 import json
 from typing import Dict, List
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from database.models import ModelExperiment
 from utils.sahi_gt_matching import match_predictions_to_gt, FULL_COVERAGE_THRESHOLD
 from utils.experiment_image_resolver import (
     get_filename as _get_filename,
-    load_gt_polygons_for_experiment_image,
+    get_experiment_image_meta,
+    resolve_experiment_image,
+    load_gt_polygons,
 )
+from utils import overlay_cache
 
 COVERAGE_MODES = ("length", "width", "total")
+
+# Bump whenever the shape of the returned dict changes, so cached results from
+# an older shape are never served. 2 added image_width / image_height.
+OVERLAY_FORMAT = 2
 
 
 def get_gt_overlay_for_image(
@@ -37,14 +44,46 @@ def get_gt_overlay_for_image(
         if coverage_mode not in COVERAGE_MODES:
             return {"error": f"coverage_mode must be one of {COVERAGE_MODES}"}
 
-        experiment = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+        # `predictions` is several megabytes of JSON and a cache hit never looks
+        # at it, so it is deferred: SQLAlchemy fetches it lazily, on the first
+        # attribute access, which only happens when the overlay is recomputed.
+        # Loading it eagerly cost ~250ms on every request.
+        experiment = (
+            db.query(ModelExperiment)
+            .options(defer(ModelExperiment.predictions))
+            .filter(ModelExperiment.id == experiment_id)
+            .first()
+        )
         if not experiment:
             return {"error": "Experiment not found."}
 
         filename = _get_filename(image_name)
         # Resolved by the md5 this experiment recorded, so a same-named photo
         # from another shoot cannot contribute its cracks to this image.
-        gt_polygons = load_gt_polygons_for_experiment_image(db, experiment, image_name)
+        image_row = resolve_experiment_image(db, experiment, image_name)
+
+        # Rasterising and skeletonising the full-resolution masks costs ~700ms
+        # for a ~10KB answer that cannot change while the experiment stays
+        # completed, so it is computed once per label state. The key carries the
+        # label fingerprint, so editing a crack rebuilds it automatically.
+        # Only cache once the experiment is finished and the image is actually
+        # known: a running experiment keeps changing, and an unresolved image
+        # means something is wrong rather than that the answer is empty.
+        cacheable = experiment.status == "completed" and image_row is not None
+        cached_at = None
+        if cacheable:
+            # OVERLAY_FORMAT is part of the key, so adding a field to the result
+            # invalidates every stale entry instead of serving an older shape.
+            variant = f"v{OVERLAY_FORMAT}:{coverage_mode}:{full_coverage_threshold}"
+            fingerprint = overlay_cache.label_fingerprint(db, image_row)
+            cached_at = overlay_cache.cache_path(
+                experiment_id, image_name, fingerprint, variant,
+                getattr(experiment, "project_name", None))
+            hit = overlay_cache.read(cached_at)
+            if hit is not None:
+                return hit
+
+        gt_polygons = load_gt_polygons(db, image_row)
 
         predictions = experiment.predictions
         if isinstance(predictions, str):
@@ -98,13 +137,26 @@ def get_gt_overlay_for_image(
                 "is_fp": i in fp_set,
             })
 
-        return {
+        # The polygons below are in original-image pixels, so the viewer needs
+        # the original's size to place them. Sending it here means the overlay
+        # can be drawn over the stand-in preview immediately, instead of waiting
+        # for the full-size image just to learn how big it is.
+        meta = get_experiment_image_meta(experiment, image_name) or {}
+        img_w = (getattr(image_row, "width", None) if image_row else None) or meta.get("width")
+        img_h = (getattr(image_row, "height", None) if image_row else None) or meta.get("height")
+
+        result = {
             "image_name": filename,
             "coverage_mode": coverage_mode,
             "full_coverage_threshold": full_coverage_threshold,
+            "image_width": img_w,
+            "image_height": img_h,
             "gt_cracks": gt_cracks,
             "predictions": predictions_out,
         }
+        if cacheable:
+            overlay_cache.write(cached_at, result)
+        return result
 
     except Exception as e:
         from logging_system.professional_logger import get_professional_logger

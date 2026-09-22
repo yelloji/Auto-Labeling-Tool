@@ -2197,20 +2197,73 @@ async def get_gpu_status():
     return {"available": False, "utilization": 0, "memory_used_mb": 0, "memory_total_mb": 0, "device_name": "CPU"}
 
 
+def _project_image_cache_path(db, exp, original_path, kind: str, size: int = 0):
+    """Where a resized copy of one source image lives, keyed by the image's md5.
+
+    The md5 comes from the image row when it is known, and is otherwise computed
+    from the file, so images that were never registered still get a stable key.
+    Falls back to the file stem only if both fail, which merely loses sharing
+    between experiments rather than breaking the cache.
+    """
+    import hashlib
+    from utils import project_cache
+    from utils.experiment_image_resolver import resolve_experiment_image
+
+    md5 = None
+    try:
+        row = resolve_experiment_image(db, exp, original_path.name)
+        md5 = getattr(row, "image_hash_md5", None) if row else None
+    except Exception:
+        md5 = None
+    if not md5:
+        try:
+            h = hashlib.md5()
+            with open(original_path, "rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    h.update(chunk)
+            md5 = h.hexdigest()
+        except OSError:
+            md5 = original_path.stem
+
+    project = project_cache.resolve_project_name(exp) or "_unknown"
+    if kind == "preview":
+        return project_cache.preview_path(project, md5)
+    return project_cache.thumb_path(project, md5, size)
+
+
 @router.get("/experiments/{experiment_id}/original-image/{filename:path}")
 async def get_experiment_original_image(
     experiment_id: str, 
     filename: str, 
     download: bool = False,
     thumbnail: bool = False,
+    preview: bool = False,
     size: int = 256,
     db: Session = Depends(get_db)
 ):
     """
     Serve the clean, un-annotated original image for a prediction result.
     If download=True, force a 'Save As' dialog.
+
+    Three tiers, because these originals are ~17MB PNGs at 6560x4948:
+      thumbnail=True  small JPEG for the gallery grid (<=1024px)
+      preview=True    display-resolution JPEG for the viewer to paint
+                      immediately while the original is still arriving
+      neither         the untouched original, which is what the viewer
+                      ultimately shows and what zooming inspects
     """
-    exp = db.query(ModelExperiment).filter(ModelExperiment.id == experiment_id).first()
+    # Serving a picture needs this experiment's paths, never its predictions -
+    # and that column holds several megabytes of JSON. Loading it cost ~257ms of
+    # blocking work per request rather than ~17ms, on an async endpoint, so it
+    # stalled the whole server while the viewer asked for a preview, its two
+    # neighbours and the original. Deferred: it loads only if something reads it.
+    from sqlalchemy.orm import defer as _defer
+    exp = (
+        db.query(ModelExperiment)
+        .options(_defer(ModelExperiment.predictions))
+        .filter(ModelExperiment.id == experiment_id)
+        .first()
+    )
     if not exp:
         raise HTTPException(status_code=404, detail="Experiment not found")
         
@@ -2317,13 +2370,48 @@ async def get_experiment_original_image(
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
 
+    if preview:
+        # Painted first so the viewer is never blank. The original follows and
+        # replaces it, so this only ever affects what is on screen during the
+        # seconds the real file is still downloading - never what is inspected.
+        try:
+            PREVIEW_SIZE = 2560
+            # Keyed by the image's own md5 inside the project's cache folder: a
+            # resized copy depends on the photograph alone, so every experiment
+            # that uses this image shares one file instead of writing its own.
+            cached_preview = _project_image_cache_path(db, exp, original_path, "preview")
+            cached_preview.parent.mkdir(parents=True, exist_ok=True)
+
+            if not cached_preview.exists():
+                with Image.open(original_path) as img:
+                    if img.mode == "RGBA":
+                        bg = Image.new("RGB", img.size, (255, 255, 255))
+                        bg.paste(img, mask=img.split()[3])
+                        img = bg
+                    elif img.mode not in ("RGB", "L"):
+                        img = img.convert("RGB")
+                    img.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE), Image.Resampling.LANCZOS)
+                    img.save(cached_preview, format="JPEG", quality=88, optimize=True)
+
+            return FileResponse(str(cached_preview), media_type="image/jpeg")
+        except Exception as e:
+            logger.warning(
+                "errors.system",
+                f"Failed to generate preview for {filename}: {e}",
+                "prediction_preview_generation_failed",
+                {"experiment_id": experiment_id, "filename": filename}
+            )
+            # Fall through and serve the original: a missing preview should cost
+            # speed, never the image itself.
+
     if thumbnail:
         try:
             thumb_size = max(32, min(size, 1024))
-            # Store under BASE_DIR/thumb_cache/<experiment_id>/<size>/ — always writable in both dev and EXE
-            thumb_cache_dir = settings.BASE_DIR / "thumb_cache" / experiment_id / str(thumb_size)
-            thumb_cache_dir.mkdir(parents=True, exist_ok=True)
-            cached = thumb_cache_dir / (original_path.stem + ".jpg")
+            # Keyed by md5 inside the project's cache folder, same reasoning as
+            # the preview: keying by experiment stored the same picture once per
+            # experiment, which had already duplicated most of this cache.
+            cached = _project_image_cache_path(db, exp, original_path, "thumb", thumb_size)
+            cached.parent.mkdir(parents=True, exist_ok=True)
 
             if not cached.exists():
                 with Image.open(original_path) as img:
@@ -2422,13 +2510,22 @@ async def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
     # 4. Delete associated Human Verifications (cleanup matching records)
     db.query(HumanVerification).filter(HumanVerification.experiment_id == experiment_id).delete()
 
-    # Clean up thumbnail disk cache for this experiment
-    thumb_cache_exp = settings.BASE_DIR / "thumb_cache" / experiment_id
-    if thumb_cache_exp.exists():
-        try:
-            shutil.rmtree(thumb_cache_exp)
-        except Exception:
-            pass
+    # Drop this experiment's cached GT overlays. Previews and thumbnails are
+    # deliberately kept: they are keyed by the image's md5 and describe the
+    # photograph, not the experiment, so other experiments on the same images
+    # still need them.
+    from utils.overlay_cache import clear_experiment as clear_overlay_cache
+    clear_overlay_cache(experiment_id, getattr(exp, "project_name", None))
+
+    # Legacy per-experiment cache folders at the app root, from before these
+    # moved inside the project. Removed here so they drain away over time.
+    for legacy in ("thumb_cache", "preview_cache", "overlay_cache"):
+        old = settings.BASE_DIR / legacy / experiment_id
+        if old.exists():
+            try:
+                shutil.rmtree(old)
+            except Exception:
+                pass
 
     # 5. Delete the database record
     db.delete(exp)
@@ -2975,11 +3072,38 @@ async def get_missed_ground_truth(
 ):
     """Get ground truth objects that the model failed to detect."""
     from utils.ground_truth_loader import load_split_annotations, get_missed_detections
-    
-    # Get experiment
-    experiment = db.get(ModelExperiment, experiment_id)
+    from sqlalchemy.orm import defer
+    from utils import overlay_cache
+    from utils.experiment_image_resolver import resolve_experiment_image
+
+    # `predictions` is several megabytes and a cache hit never reads it, so it
+    # is deferred and loads lazily only when the answer has to be recomputed.
+    experiment = (
+        db.query(ModelExperiment)
+        .options(defer(ModelExperiment.predictions))
+        .filter(ModelExperiment.id == experiment_id)
+        .first()
+    )
     if not experiment:
         raise HTTPException(404, "Experiment not found")
+
+    # Same disk cache as the GT overlay: this answer is equally frozen once the
+    # experiment is complete, and equally expensive to recompute each time.
+    _missed_cache_at = None
+    if experiment.status == "completed":
+        try:
+            _row = resolve_experiment_image(db, experiment, image_name)
+            if _row is not None:
+                _missed_cache_at = overlay_cache.cache_path(
+                    experiment_id, image_name,
+                    overlay_cache.label_fingerprint(db, _row),
+                    f"missed:{iou_threshold}",
+                    getattr(experiment, "project_name", None))
+                _hit = overlay_cache.read(_missed_cache_at)
+                if _hit is not None:
+                    return _hit
+        except Exception:
+            _missed_cache_at = None   # never let caching break the endpoint
 
     if experiment.experiment_type == "sahi_prediction":
         try:
@@ -3031,7 +3155,7 @@ async def get_missed_ground_truth(
             }
             label_mapping = {ann.class_id: ann.class_name for ann in annotations}
 
-            return get_missed_detections(
+            _result = get_missed_detections(
                 annotations_dict,
                 image_key,
                 image_predictions,
@@ -3040,6 +3164,9 @@ async def get_missed_ground_truth(
                 label_mapping,
                 iou_threshold,
             )
+            if _missed_cache_at is not None:
+                overlay_cache.write(_missed_cache_at, _result)
+            return _result
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
