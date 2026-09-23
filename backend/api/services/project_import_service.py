@@ -247,31 +247,30 @@ def _rows(rows: Iterable[Dict[str, Any]]) -> list:
     return list(rows or [])
 
 
-def import_project_package(db: Session, package_path: Path, new_project_name: Optional[str] = None) -> Dict[str, Any]:
-    """Import a project package into the current app installation."""
-    with zipfile.ZipFile(package_path, "r") as zip_file:
-        manifest = _load_json_from_zip(zip_file, "manifest.json")
-        snapshot = _load_json_from_zip(zip_file, "database_snapshot.json")
+def _apply_project_tables_with_new_ids(
+    db: Session,
+    tables: Dict[str, list],
+    target_project_name: str,
+) -> Dict[str, Any]:
+    """
+    Create every database row for one imported or duplicated project, giving
+    each row a brand new id and rewriting every reference to the old ids and
+    the old project name to match. Commits as one transaction and returns the
+    new Project plus the full id_maps; raises on any failure and leaves the
+    transaction uncommitted, so the caller decides how to roll back and what
+    copied files to remove - this function never touches the filesystem.
 
-    validate_project_import_package(package_path, db)
-
-    tables = _snapshot_tables(snapshot)
+    Shared by import (fed rows parsed from an export's JSON snapshot) and
+    duplicate (fed rows read live from this database): one tested
+    implementation of the remapping, used by both, instead of two.
+    """
     project_rows = _rows(tables.get("projects"))
     if len(project_rows) != 1:
-        raise ProjectImportError("Export package must contain exactly one project row")
+        raise ProjectImportError("Expected exactly one project row to apply")
 
     old_project_row = project_rows[0]
     old_project_id = old_project_row["id"]
     old_project_name = old_project_row["name"]
-    target_project_name = _safe_folder_name(new_project_name or old_project_name)
-
-    if db.query(Project).filter(Project.name == target_project_name).first():
-        raise ProjectImportError(f'Project name already exists: "{target_project_name}". Please choose a new name.')
-    if _project_folder(target_project_name).exists():
-        raise ProjectImportError(f'Project folder already exists for "{target_project_name}". Please choose a new name.')
-
-    staging_dir = Path(tempfile.mkdtemp(prefix="project_import_", dir=Path(settings.TEMP_DIR)))
-    final_project_dir: Optional[Path] = None
 
     id_maps: Dict[str, Dict[Any, Any]] = {
         "projects": {},
@@ -286,9 +285,6 @@ def import_project_package(db: Session, package_path: Path, new_project_name: Op
     safe_id_maps = _json_safe_id_maps(id_maps)
 
     try:
-        final_project_dir, _ = _copy_project_files(package_path, manifest, target_project_name, staging_dir)
-
-        # The DB phase is one transaction. If anything fails, rollback and remove copied files.
         project_data = dict(old_project_row)
         project_data["id"] = _next_safe_project_id(db)
         project_data["name"] = target_project_name
@@ -432,18 +428,55 @@ def import_project_package(db: Session, package_path: Path, new_project_name: Op
             db.add(_make_instance(ImageVariant, data))
 
         db.commit()
+        return {"project": project, "id_maps": id_maps}
+    except Exception:
+        db.rollback()
+        raise
 
-        # The export carried each experiment's cached overlays under its old
-        # id. Now that every experiment has a new one, point the folders at it
-        # so that cache keeps working instead of sitting unused. Never allowed
-        # to affect the result: the import has already succeeded by this point,
-        # and any experiment left unrelinked just rebuilds its cache on first
-        # open, same as it always could.
-        try:
-            from utils.project_cache import relink_overlay_cache_ids
-            relink_overlay_cache_ids(target_project_name, id_maps["model_experiments"])
-        except Exception:
-            pass
+
+def _relink_cache_after_apply(target_project_name: str, id_maps: Dict[str, Dict[Any, Any]]) -> None:
+    """Point cached overlay folders at the new experiment ids. Never allowed to
+    affect the caller's result: the database rows have already committed by
+    the time this runs, and any experiment left unrelinked simply rebuilds its
+    cache on first open, same as it always could."""
+    try:
+        from utils.project_cache import relink_overlay_cache_ids
+        relink_overlay_cache_ids(target_project_name, id_maps["model_experiments"])
+    except Exception:
+        pass
+
+
+def import_project_package(db: Session, package_path: Path, new_project_name: Optional[str] = None) -> Dict[str, Any]:
+    """Import a project package into the current app installation."""
+    with zipfile.ZipFile(package_path, "r") as zip_file:
+        manifest = _load_json_from_zip(zip_file, "manifest.json")
+        snapshot = _load_json_from_zip(zip_file, "database_snapshot.json")
+
+    validate_project_import_package(package_path, db)
+
+    tables = _snapshot_tables(snapshot)
+    project_rows = _rows(tables.get("projects"))
+    if len(project_rows) != 1:
+        raise ProjectImportError("Export package must contain exactly one project row")
+
+    old_project_name = project_rows[0]["name"]
+    target_project_name = _safe_folder_name(new_project_name or old_project_name)
+
+    if db.query(Project).filter(Project.name == target_project_name).first():
+        raise ProjectImportError(f'Project name already exists: "{target_project_name}". Please choose a new name.')
+    if _project_folder(target_project_name).exists():
+        raise ProjectImportError(f'Project folder already exists for "{target_project_name}". Please choose a new name.')
+
+    staging_dir = Path(tempfile.mkdtemp(prefix="project_import_", dir=Path(settings.TEMP_DIR)))
+    final_project_dir: Optional[Path] = None
+
+    try:
+        final_project_dir, _ = _copy_project_files(package_path, manifest, target_project_name, staging_dir)
+
+        result = _apply_project_tables_with_new_ids(db, tables, target_project_name)
+        project, id_maps = result["project"], result["id_maps"]
+
+        _relink_cache_after_apply(target_project_name, id_maps)
 
         return {
             "success": True,
@@ -453,7 +486,6 @@ def import_project_package(db: Session, package_path: Path, new_project_name: Op
             "counts": snapshot.get("counts", {}),
         }
     except Exception:
-        db.rollback()
         if final_project_dir and final_project_dir.exists():
             shutil.rmtree(final_project_dir, ignore_errors=True)
         raise
