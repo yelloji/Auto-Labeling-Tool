@@ -66,6 +66,43 @@ def resolve_project_name(experiment) -> Optional[str]:
     return getattr(experiment, "project_name", None)
 
 
+def relink_overlay_cache_ids(project_name: str, id_map: dict) -> int:
+    """After an import gives every experiment a new id, rename its overlay
+    cache folder to match, so cache that traveled inside the export keeps
+    working instead of sitting on disk under an id nothing points to any more.
+
+    Only overlays need this: previews and thumbnails are keyed by the image's
+    md5, which import never changes, so they are already correctly linked.
+
+    Best-effort and silent about individual failures. Nothing depends on this
+    succeeding - a folder left unrenamed is simply an orphan, and the viewer
+    rebuilds that one experiment's cache on first use exactly as it would for
+    an experiment whose cache was never exported at all.
+    """
+    root = project_cache_dir(project_name) / "overlays"
+    if not root.is_dir():
+        return 0
+
+    relinked = 0
+    seen_old = set()
+    for old_id, new_id in id_map.items():
+        old_id, new_id = str(old_id), str(new_id)
+        if old_id in seen_old or old_id == new_id:
+            continue
+        seen_old.add(old_id)
+
+        old_dir = overlay_dir(project_name, old_id)
+        new_dir = overlay_dir(project_name, new_id)
+        if not old_dir.is_dir() or new_dir.exists():
+            continue
+        try:
+            old_dir.rename(new_dir)
+            relinked += 1
+        except OSError:
+            pass
+    return relinked
+
+
 def legacy_roots():
     """The old app-root cache folders, kept only so they can be removed."""
     return [settings.BASE_DIR / name for name in _LEGACY_ROOTS]

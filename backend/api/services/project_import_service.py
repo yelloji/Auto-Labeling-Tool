@@ -433,6 +433,18 @@ def import_project_package(db: Session, package_path: Path, new_project_name: Op
 
         db.commit()
 
+        # The export carried each experiment's cached overlays under its old
+        # id. Now that every experiment has a new one, point the folders at it
+        # so that cache keeps working instead of sitting unused. Never allowed
+        # to affect the result: the import has already succeeded by this point,
+        # and any experiment left unrelinked just rebuilds its cache on first
+        # open, same as it always could.
+        try:
+            from utils.project_cache import relink_overlay_cache_ids
+            relink_overlay_cache_ids(target_project_name, id_maps["model_experiments"])
+        except Exception:
+            pass
+
         return {
             "success": True,
             "project_id": project.id,
