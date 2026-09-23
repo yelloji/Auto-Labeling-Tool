@@ -161,6 +161,33 @@ def run_executor():
 
         persist_uploaded_sources(experiment, output_folder, project_root, db)
 
+        # Build what the image viewer will ask for, now, while this subprocess
+        # is still alive. The first open of an uncached image costs about a
+        # second and a half - the preview is rendered from a ~17MB PNG and both
+        # overlay passes rasterise full-resolution masks - and every result is
+        # cached, so doing it here means no image is ever slow to open.
+        # The experiment is already committed as completed, so the results page
+        # is usable throughout; this only fills in behind it.
+        try:
+            from utils.viewer_cache_warmer import warm_experiment_viewer_cache
+            warmed = warm_experiment_viewer_cache(db, experiment, logger)
+            logger.info(
+                "operations.training",
+                f"Viewer cache pre-built for {args.experiment_id}: "
+                f"{warmed['overlays']}/{warmed['images']} images, "
+                f"{warmed['previews']} previews, {warmed['thumbs']} thumbnails, "
+                f"{warmed['failed']} failed",
+                "viewer_cache_warmed",
+                warmed,
+            )
+        except Exception as warm_error:
+            # Never let this affect the prediction, which has already succeeded.
+            logger.warning(
+                "errors.system",
+                f"Viewer cache pre-build skipped for {args.experiment_id}: {warm_error}",
+                "viewer_cache_warm_skipped",
+            )
+
     except Exception as exc:
         print(f"SAHI prediction subprocess failed: {exc}", file=sys.stderr, flush=True)
         print(traceback.format_exc(), file=sys.stderr, flush=True)
