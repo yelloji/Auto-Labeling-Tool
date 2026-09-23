@@ -144,6 +144,11 @@ const ImageViewerModal = ({
     // How long the stand-in preview took to appear, shown next to the full
     // image's time so the two are never confused for one another.
     const [previewLoadTime, setPreviewLoadTime] = useState(0);
+    // The two overlay fetches, timed separately: without these the picture
+    // timings are visible but the outlines are not, and the outlines are half
+    // of what the viewer is waiting for.
+    const [gtLoadTime, setGtLoadTime] = useState(0);
+    const [missedLoadTime, setMissedLoadTime] = useState(0);
     const [hoveredIndex, setHoveredIndex] = useState(null); // New: Bidirectional bridge
     const [hoveredMissedIndex, setHoveredMissedIndex] = useState(null);
     const [focusedIndex, setFocusedIndex] = useState(null); // New: For toggle logic
@@ -404,6 +409,8 @@ const ImageViewerModal = ({
         setDimensions({ width: 0, height: 0 }); // never reuse the last image's size
         setLastLoadTime(0);     // otherwise it keeps showing the previous image's time
         setPreviewLoadTime(0);
+        setGtLoadTime(0);
+        setMissedLoadTime(0);
         // Drop the previous image's overlay data immediately. Without this the
         // old image's GT shapes and missed/FP boxes stay drawn over the new
         // picture until its own fetches return, which reads as a lag and can
@@ -592,6 +599,7 @@ const ImageViewerModal = ({
                     iouThreshold
                 );
                 if (cancelled) return;
+                setMissedLoadTime(performance.now() - loadStartTime.current);
 
                 // data is now { missed: [], fp_indices: [] }
                 setMissedDetections(data.missed || []);
@@ -623,6 +631,7 @@ const ImageViewerModal = ({
                 const fileName = currentImage.split('/').pop();
                 const data = await sahiGtOverlayAPI.getOverlay(experiment.id, fileName);
                 if (cancelled) return;
+                setGtLoadTime(performance.now() - loadStartTime.current);
                 setSahiGtOverlay(data);
                 // The polygons are in original-image pixels, and the response
                 // carries that image's size. Taking it from here means the
@@ -1345,25 +1354,32 @@ const ImageViewerModal = ({
                         </Tag>
 
                         <Text style={{ color: '#888', fontSize: '0.75rem' }}>{currentIndex + 1} of {images.length}</Text>
-                        {/* Which version is on screen. The preview stands in only
-                            while the full-size original downloads, so this says
-                            plainly when what you are looking at is the real file. */}
-                        {!showOriginal ? (
-                            <Tag style={{ borderRadius: '4px', border: 'none', background: 'rgba(250, 173, 20, 0.15)', color: '#faad14', fontSize: '10px' }}>
-                                Preview{previewLoadTime > 0 ? ` ${previewLoadTime.toFixed(0)}ms` : ''} — loading full image…
-                            </Tag>
-                        ) : (
-                            <Tag style={{ borderRadius: '4px', border: 'none', background: 'rgba(82, 196, 26, 0.15)', color: '#52c41a', fontSize: '10px' }}>
-                                Full resolution
-                                {previewLoadTime > 0 ? ` · preview ${previewLoadTime.toFixed(0)}ms` : ''}
-                                {lastLoadTime > 0 ? ` → full ${lastLoadTime.toFixed(0)}ms` : ''}
-                            </Tag>
-                        )}
                     </Space>
                 </div>
 
                 {/* RIGHT SIDE: PROACTIVE DUPLICATE INSIGHTS */}
-                <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* Which version is on screen. Kept on the right because the
+                        left column is the filename, which this used to sit under
+                        and collide with on a long name. */}
+                    {/* Every leg of the load, so one screenshot says which part
+                        was slow: the picture, the crack shapes, or the missed
+                        pass. All measured from the moment the image changed. */}
+                    <Tag style={{ margin: 0, borderRadius: '4px', border: 'none', background: 'rgba(255,255,255,0.06)', color: '#8c8c8c', fontSize: '10px', whiteSpace: 'nowrap' }}>
+                        {gtLoadTime > 0 ? `gt ${gtLoadTime.toFixed(0)}ms` : 'gt …'}
+                        {missedLoadTime > 0 ? ` · missed ${missedLoadTime.toFixed(0)}ms` : ' · missed …'}
+                    </Tag>
+                    {!showOriginal ? (
+                        <Tag style={{ margin: 0, borderRadius: '4px', border: 'none', background: 'rgba(250, 173, 20, 0.15)', color: '#faad14', fontSize: '10px', whiteSpace: 'nowrap' }}>
+                            Preview{previewLoadTime > 0 ? ` ${previewLoadTime.toFixed(0)}ms` : ''} — loading full image…
+                        </Tag>
+                    ) : (
+                        <Tag style={{ margin: 0, borderRadius: '4px', border: 'none', background: 'rgba(82, 196, 26, 0.15)', color: '#52c41a', fontSize: '10px', whiteSpace: 'nowrap' }}>
+                            Full resolution
+                            {previewLoadTime > 0 ? ` · preview ${previewLoadTime.toFixed(0)}ms` : ''}
+                            {lastLoadTime > 0 ? ` → full ${lastLoadTime.toFixed(0)}ms` : ''}
+                        </Tag>
+                    )}
                     {isDuplicate && (
                         <Tooltip title="Click to isolate all matching images in gallery">
                             <Tag
