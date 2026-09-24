@@ -1671,256 +1671,67 @@ async def clear_project_data(project_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{project_id}/duplicate", response_model=ProjectResponse)
 async def duplicate_project(project_id: str, db: Session = Depends(get_db)):
-    """Duplicate a project with all its datasets, images, and annotations"""
-    logger.info("app.backend", f"Starting project duplication operation", "project_duplication_start", {
+    """
+    Create a full, independent copy of a project on this same machine: every
+    dataset, image, annotation, release, training session, experiment and
+    model, each given a brand new id, with its own physical copy of every
+    file. The source project is only ever read from - never modified.
+    """
+    from api.services.project_duplicate_service import (
+        duplicate_project as _duplicate_project,
+        ProjectDuplicateError,
+    )
+
+    logger.info("app.backend", "Starting project duplication operation", "project_duplication_start", {
         "source_project_id": project_id,
         "endpoint": f"/projects/{project_id}/duplicate"
     })
-    
+
     try:
-        # Check if source project exists
-        logger.debug("app.database", f"Checking if source project {project_id} exists", "source_project_existence_check", {
-            "project_id": project_id
-        })
-        source_project = ProjectOperations.get_project(db, project_id)
-        if not source_project:
-            logger.warning("errors.validation", f"Source project {project_id} not found", "source_project_not_found", {
-                "project_id": project_id
-            })
-            raise HTTPException(status_code=404, detail="Project not found")
-        
-        logger.info("operations.operations", f"Project duplication validation successful", "project_duplication_validated", {
-            "source_project_name": source_project.name,
-            "source_project_id": project_id
-        })
-        
-        # Create new project with copied metadata
-        new_project_name = f"{source_project.name} (Copy)"
-        logger.debug("operations.operations", f"Creating new project with copied metadata", "new_project_creation_start", {
-            "new_project_name": new_project_name,
-            "source_project_name": source_project.name
-        })
-        
-        new_project = ProjectOperations.create_project(
-            db=db,
-            name=new_project_name,
-            description=source_project.description,
-            project_type=source_project.project_type,
-            default_model_id=source_project.default_model_id,
-            confidence_threshold=source_project.confidence_threshold,
-            iou_threshold=source_project.iou_threshold
-        )
-        
-        logger.info("operations.operations", f"New project created successfully in database", "new_project_created", {
-            "new_project_id": new_project.id,
-            "new_project_name": new_project_name,
-            "source_project_id": project_id
-        })
-        
-        # Create new project folder
-        source_project_folder = get_project_path(source_project.name)
-        new_project_folder = get_project_path(new_project_name)
-        new_project_folder.mkdir(parents=True, exist_ok=True)
-        
-        logger.debug("operations.operations", f"New project folder created", "new_project_folder_created", {
-            "folder_path": str(new_project_folder),
-            "new_project_name": new_project_name
-        })
-        
-        # Copy all files from source project folder to new project folder
-        try:
-            logger.info("operations.operations", f"Starting project folder content copying", "project_folder_copy_start", {
-                "source_folder": str(source_project_folder),
-                "destination_folder": str(new_project_folder)
-            })
-            
-            if source_project_folder.exists():
-                copied_files = 0
-                copied_folders = 0
-                
-                # Copy all files directly in the project folder (like Medical Image project)
-                for item in os.listdir(source_project_folder):
-                    source_item_path = os.path.join(source_project_folder, item)
-                    new_item_path = os.path.join(new_project_folder, item)
-                    
-                    if os.path.isfile(source_item_path):
-                        # Copy individual files (images)
-                        shutil.copy2(source_item_path, new_item_path)
-                        copied_files += 1
-                        logger.debug("operations.images", f"File copied successfully", "file_copy_success", {
-                            "source": source_item_path,
-                            "destination": new_item_path
-                        })
-                    elif os.path.isdir(source_item_path):
-                        # Copy dataset folders (like Project 1, Project 2)
-                        shutil.copytree(source_item_path, new_item_path)
-                        copied_folders += 1
-                        logger.debug("operations.operations", f"Folder copied successfully", "folder_copy_success", {
-                            "source": source_item_path,
-                            "destination": new_item_path
-                        })
-                        
-                logger.info("operations.operations", f"Project folder content copied successfully", "project_folder_copy_completed", {
-                    "source_folder": str(source_project_folder),
-                    "destination_folder": str(new_project_folder),
-                    "files_copied": copied_files,
-                    "folders_copied": copied_folders
-                })
-        except Exception as folder_error:
-            logger.warning("errors.system", f"Failed to copy project folder content", "project_folder_copy_failure", {
-                "source_folder": str(source_project_folder),
-                "destination_folder": str(new_project_folder),
-                "error": str(folder_error)
-            })
-        
-        # Get all datasets from source project
-        logger.debug("app.database", f"Fetching datasets from source project", "source_datasets_fetch", {
-            "source_project_id": project_id
-        })
-        source_datasets = DatasetOperations.get_datasets_by_project(db, project_id)
-        
-        logger.info("operations.datasets", f"Found {len(source_datasets)} datasets to duplicate", "datasets_count_for_duplication", {
+        result = _duplicate_project(db, project_id)
+    except ProjectDuplicateError as e:
+        logger.warning("errors.validation", f"Project duplication failed: {e}", "project_duplication_validation_failure", {
             "source_project_id": project_id,
-            "dataset_count": len(source_datasets)
+            "error": str(e),
         })
-        
-        # Copy each dataset with its images and annotations
-        for source_dataset in source_datasets:
-            logger.debug("operations.datasets", f"Duplicating dataset {source_dataset.id}", "individual_dataset_duplication_start", {
-                "source_dataset_id": source_dataset.id,
-                "source_dataset_name": source_dataset.name,
-                "new_project_id": new_project.id
-            })
-            
-            # Create new dataset
-            new_dataset = DatasetOperations.create_dataset(
-                db=db,
-                name=f"{source_dataset.name} (Copy)",
-                description=source_dataset.description,
-                project_id=new_project.id,
-                auto_label_enabled=source_dataset.auto_label_enabled,
-                model_id=source_dataset.model_id
-            )
-            
-            logger.debug("operations.datasets", f"New dataset created successfully", "new_dataset_created", {
-                "new_dataset_id": new_dataset.id,
-                "new_dataset_name": new_dataset.name,
-                "source_dataset_id": source_dataset.id
-            })
-            
-            # Copy all images and their annotations from source dataset
-            logger.debug("app.database", f"Fetching images for dataset {source_dataset.id}", "source_images_fetch", {
-                "source_dataset_id": source_dataset.id
-            })
-            source_images = ImageOperations.get_images_by_dataset(db, source_dataset.id, skip=0, limit=10000)
-            
-            logger.info("operations.images", f"Copying {len(source_images)} images from source dataset", "images_copy_start", {
-                "source_dataset_id": source_dataset.id,
-                "source_dataset_name": source_dataset.name,
-                "image_count": len(source_images)
-            })
-            
-            for source_image in source_images:
-                # Update file path for the new project
-                new_file_path = source_image.file_path.replace(source_project.name, new_project_name)
-                if source_dataset.name in source_image.file_path:
-                    new_file_path = new_file_path.replace(source_dataset.name, new_dataset.name)
-                
-                # Create new image record
-                new_image = ImageOperations.create_image(
-                    db=db,
-                    filename=source_image.filename,
-                    original_filename=source_image.original_filename,
-                    file_path=new_file_path,
-                    dataset_id=new_dataset.id,
-                    width=source_image.width,
-                    height=source_image.height,
-                    file_size=source_image.file_size,
-                    format=source_image.format
-                )
-                
-                logger.debug("operations.images", f"New image record created", "new_image_created", {
-                    "new_image_id": new_image.id,
-                    "new_file_path": new_file_path,
-                    "source_image_id": source_image.id
-                })
-                
-                # Copy annotations if they exist
-                logger.debug("app.database", f"Fetching annotations for image {source_image.id}", "source_annotations_fetch", {
-                    "source_image_id": source_image.id
-                })
-                source_annotations = AnnotationOperations.get_annotations_by_image(db, source_image.id)
-                
-                if source_annotations:
-                    logger.debug("operations.annotations", f"Copying {len(source_annotations)} annotations", "annotations_copy_start", {
-                        "source_image_id": source_image.id,
-                        "annotation_count": len(source_annotations)
-                    })
-                    
-                    for source_annotation in source_annotations:
-                        AnnotationOperations.create_annotation(
-                            db=db,
-                            image_id=new_image.id,
-                            class_name=source_annotation.class_name,
-                            class_id=source_annotation.class_id,
-                            x_min=source_annotation.x_min,
-                            y_min=source_annotation.y_min,
-                            x_max=source_annotation.x_max,
-                            y_max=source_annotation.y_max,
-                            confidence=source_annotation.confidence,
-                            segmentation=source_annotation.segmentation,
-                            is_auto_generated=source_annotation.is_auto_generated,
-                            model_id=source_annotation.model_id
-                        )
-                    
-                    logger.debug("operations.annotations", f"Annotations copied successfully", "annotations_copy_success", {
-                        "source_image_id": source_image.id,
-                        "new_image_id": new_image.id,
-                        "annotation_count": len(source_annotations)
-                    })
-        
-        # Get final statistics for the new project
-        logger.debug("app.database", f"Fetching final statistics for new project", "new_project_stats_fetch", {
-            "new_project_id": new_project.id
-        })
-        new_datasets = DatasetOperations.get_datasets_by_project(db, new_project.id)
-        total_datasets = len(new_datasets)
-        total_images = sum(dataset.total_images for dataset in new_datasets)
-        labeled_images = sum(dataset.labeled_images for dataset in new_datasets)
-        
-        logger.info("operations.operations", f"Project duplication completed successfully", "project_duplication_completed", {
-            "source_project_id": project_id,
-            "source_project_name": source_project.name,
-            "new_project_id": new_project.id,
-            "new_project_name": new_project_name,
-            "total_datasets": total_datasets,
-            "total_images": total_images,
-            "labeled_images": labeled_images
-        })
-        
-        return ProjectResponse(
-            id=new_project.id,
-            name=new_project.name,
-            description=new_project.description,
-            project_type=new_project.project_type,
-            default_model_id=new_project.default_model_id,
-            confidence_threshold=new_project.confidence_threshold,
-            iou_threshold=new_project.iou_threshold,
-            created_at=new_project.created_at,
-            updated_at=new_project.updated_at,
-            total_datasets=total_datasets,
-            total_images=total_images,
-            labeled_images=labeled_images
-        )
-        
-    except HTTPException:
-        raise
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error("errors.system", f"Project duplication operation failed", "project_duplication_failure", {
+        logger.error("errors.system", f"Project duplication operation failed: {e}", "project_duplication_failure", {
             "source_project_id": project_id,
             "error": str(e)
         })
         raise HTTPException(status_code=500, detail=f"Failed to duplicate project: {str(e)}")
+
+    new_project = ProjectOperations.get_project(db, result["project_id"])
+    new_datasets = DatasetOperations.get_datasets_by_project(db, new_project.id)
+    total_datasets = len(new_datasets)
+    total_images = sum(dataset.total_images for dataset in new_datasets)
+    labeled_images = sum(dataset.labeled_images for dataset in new_datasets)
+
+    logger.info("operations.operations", "Project duplication completed successfully", "project_duplication_completed", {
+        "source_project_id": project_id,
+        "new_project_id": new_project.id,
+        "new_project_name": new_project.name,
+        "total_datasets": total_datasets,
+        "total_images": total_images,
+        "labeled_images": labeled_images,
+        "counts": result.get("counts", {}),
+    })
+
+    return ProjectResponse(
+        id=new_project.id,
+        name=new_project.name,
+        description=new_project.description,
+        project_type=new_project.project_type,
+        default_model_id=new_project.default_model_id,
+        confidence_threshold=new_project.confidence_threshold,
+        iou_threshold=new_project.iou_threshold,
+        created_at=new_project.created_at,
+        updated_at=new_project.updated_at,
+        total_datasets=total_datasets,
+        total_images=total_images,
+        labeled_images=labeled_images
+    )
 
 
 class ProjectMergeRequest(BaseModel):

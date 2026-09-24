@@ -38,6 +38,9 @@ from database.models import (
     Release,
     TrainingSession,
 )
+from logging_system.professional_logger import get_professional_logger
+
+logger = get_professional_logger()
 
 
 SUPPORTED_FORMAT_VERSION = "1.0"
@@ -392,11 +395,29 @@ def _apply_project_tables_with_new_ids(
 
         for row in _rows(tables.get("model_experiments")):
             old_id = row["id"]
+            old_training_id = row["training_id"]
+            new_training_id = id_maps["training_sessions"].get(old_training_id)
+            if new_training_id is None:
+                # training_id is NOT NULL, so an experiment whose training
+                # session no longer exists (deleted earlier, without its
+                # experiments being cleaned up alongside it) has nothing valid
+                # to point at. Rather than fail the whole import/duplicate over
+                # data that was already broken before this ran, the experiment
+                # itself - already meaningless without a training to explain it
+                # - is left out, and everything else proceeds normally.
+                logger.warning(
+                    "errors.system",
+                    f"Skipping experiment {old_id!r}: its training session "
+                    f"{old_training_id!r} no longer exists in the source project",
+                    "project_apply_orphaned_experiment_skipped",
+                    {"experiment_id": old_id, "missing_training_id": old_training_id},
+                )
+                continue
             data = _rewrite_value(dict(row), old_project_name, target_project_name, safe_id_maps)
             data["id"] = _new_uuid()
             data["project_id"] = project.id
             data["project_name"] = target_project_name
-            data["training_id"] = id_maps["training_sessions"][row["training_id"]]
+            data["training_id"] = new_training_id
             db.add(_make_instance(ModelExperiment, data))
             id_maps["model_experiments"][old_id] = data["id"]
             id_maps["model_experiments"][str(old_id)] = data["id"]

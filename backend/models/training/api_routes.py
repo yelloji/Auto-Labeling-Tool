@@ -1418,16 +1418,43 @@ async def delete_training_session(
             
             # Get folder path
             training_dir = settings.PROJECTS_DIR / project.name / "model" / "training" / session.name
-            
+
+            # Every prediction/experiment made using this training lives, in
+            # practice, inside the training's own folder
+            # (model/training/<name>/experiments/...), so deleting that folder
+            # already destroys their real result files. Leaving their database
+            # rows behind describes results that no longer exist anywhere -
+            # they become dead weight that later crashes Export/Import/
+            # Duplicate the moment anything tries to look up the training they
+            # claim to belong to. Deleting a training deletes what depended on
+            # it, the same way deleting a whole project already does.
+            experiments = db.query(ModelExperiment).filter(
+                ModelExperiment.training_id == session.id
+            ).all()
+            experiment_ids = [exp.id for exp in experiments]
+
+            # human_verifications.experiment_id has no cascade of its own, so
+            # it has to be cleaned up explicitly too, one level further down.
+            if experiment_ids:
+                db.query(HumanVerification).filter(
+                    HumanVerification.experiment_id.in_(experiment_ids)
+                ).delete(synchronize_session=False)
+
+            for exp in experiments:
+                db.delete(exp)
+
             # Delete folder if exists
             if training_dir.exists():
                 shutil.rmtree(training_dir)
-            
+
             # Delete DB record
             db.delete(session)
             db.commit()
-            
-            return {"message": f"Training session '{session.name}' deleted successfully"}
+
+            return {
+                "message": f"Training session '{session.name}' deleted successfully",
+                "experiments_deleted": len(experiment_ids),
+            }
         else:
             # Unmanaged session - delete from FS only
             if not session_id.startswith("unmanaged_"):
